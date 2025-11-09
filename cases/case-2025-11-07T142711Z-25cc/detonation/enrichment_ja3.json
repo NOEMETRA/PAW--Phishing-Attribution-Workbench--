@@ -1,0 +1,21 @@
+{
+  "ja3_fingerprints": [],
+  "ja3s_fingerprints": [],
+  "client_identifications": [],
+  "server_identifications": [],
+  "handshake_patterns": {
+    "total_handshakes": 0,
+    "successful_handshakes": 0,
+    "failed_handshakes": 0,
+    "cipher_suite_distribution": {},
+    "tls_version_distribution": {},
+    "handshake_timings": []
+  },
+  "suspicious_activity": [],
+  "attribution_hints": {
+    "client_ecosystem": "unknown",
+    "server_infrastructure": "unknown",
+    "threat_indicators": [],
+    "correlation_keys": []
+  }
+}

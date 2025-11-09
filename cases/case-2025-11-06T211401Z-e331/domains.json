@@ -1,0 +1,15 @@
+{
+  "from_domain": {
+    "domain": "example.com",
+    "registrar": null,
+    "created": "1995-08-14T04:00:00Z",
+    "ns": [
+      "a.iana-servers.net",
+      "b.iana-servers.net"
+    ],
+    "mx": [
+      ""
+    ],
+    "nrd_days": 11042
+  }
+}

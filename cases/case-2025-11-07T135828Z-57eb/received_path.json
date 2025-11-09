@@ -1,0 +1,60 @@
+{
+  "ordered_hops": [
+    {
+      "raw": "from ra-becker.de (91.190.155.131) by DB1PEPF00039234.mail.protection.outlook.com (10.167.8.107) with Microsoft SMTP Server id 15.20.9275.10 via Frontend Transport; Wed, 5 Nov 2025 15:18:50 +0000",
+      "by": "DB1PEPF00039234.mail.protection.outlook.com",
+      "from": "ra-becker.de (91.190.155.131)",
+      "with": "Microsoft",
+      "helo": "",
+      "ip": "91.190.155.131",
+      "date": "2025-11-05T15:18:50+00:00",
+      "fqdn_ok": true,
+      "ptr": "phoenix.dancingbearscabin.com",
+      "role": "external_ingress",
+      "skew_s": 0,
+      "helo_ptr_match": false
+    },
+    {
+      "raw": "from DUZPR01CA0054.eurprd01.prod.exchangelabs.com (2603:10a6:10:469::10) by GVXP194MB2329.EURP194.PROD.OUTLOOK.COM (2603:10a6:150:1ff::10) with Microsoft SMTP Server (version=TLS1_2, cipher=TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384) id 15.20.9275.16; Wed, 5 Nov 2025 15:18:51 +0000",
+      "by": "GVXP194MB2329.EURP194.PROD.OUTLOOK.COM",
+      "from": "DUZPR01CA0054.eurprd01.prod.exchangelabs.com (2603:10a6:10:469::10)",
+      "with": "Microsoft",
+      "helo": "",
+      "ip": "2603:10a6:10:469::10",
+      "date": "2025-11-05T15:18:51+00:00",
+      "fqdn_ok": true,
+      "ptr": "",
+      "role": "external_ingress",
+      "skew_s": 1,
+      "helo_ptr_match": false
+    },
+    {
+      "raw": "from GVXP194MB2329.EURP194.PROD.OUTLOOK.COM (2603:10a6:150:1ff::10) by VI6PPF9F6C943AA.EURP194.PROD.OUTLOOK.COM with HTTPS; Wed, 5 Nov 2025 15:18:52 +0000",
+      "by": "VI6PPF9F6C943AA.EURP194.PROD.OUTLOOK.COM",
+      "from": "GVXP194MB2329.EURP194.PROD.OUTLOOK.COM (2603:10a6:150:1ff::10)",
+      "with": "HTTPS",
+      "helo": "",
+      "ip": "2603:10a6:150:1ff::10",
+      "date": "2025-11-05T15:18:52+00:00",
+      "fqdn_ok": true,
+      "ptr": "",
+      "role": "recipient_mx_internal",
+      "skew_s": 1,
+      "helo_ptr_match": false
+    },
+    {
+      "raw": "from DB1PEPF00039234.eurprd03.prod.outlook.com (2603:10a6:10:469:cafe::c4) by DUZPR01CA0054.outlook.office365.com (2603:10a6:10:469::10) with Microsoft SMTP Server (version=TLS1_3, cipher=TLS_AES_256_GCM_SHA384) id 15.20.9298.9 via Frontend Transport; Wed, 5 Nov 2025 15:19:08 +0000",
+      "by": "DUZPR01CA0054.outlook.office365.com",
+      "from": "DB1PEPF00039234.eurprd03.prod.outlook.com (2603:10a6:10:469:cafe::c4)",
+      "with": "Microsoft",
+      "helo": "",
+      "ip": "2603:10a6:10:469:cafe::c4",
+      "date": "2025-11-05T15:19:08+00:00",
+      "fqdn_ok": true,
+      "ptr": "",
+      "role": "recipient_mx_internal",
+      "skew_s": 16,
+      "helo_ptr_match": false
+    }
+  ]
+}

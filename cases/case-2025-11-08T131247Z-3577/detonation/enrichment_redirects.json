@@ -1,0 +1,50 @@
+{
+  "initial_url": "https://www.londonstockexchange.com\\",
+  "final_url": "https://www.londonstockexchange.com\\",
+  "chain": [
+    {
+      "url": "https://www.londonstockexchange.com\\",
+      "status_code": 200,
+      "response_time": 0.27320003509521484,
+      "headers": {
+        "Content-Type": "text/html; charset=utf-8",
+        "Transfer-Encoding": "chunked",
+        "Connection": "keep-alive",
+        "Date": "Sat, 08 Nov 2025 13:15:28 GMT",
+        "X-Powered-By": "Express",
+        "vary": "accept-encoding",
+        "Server": "nginx",
+        "content-encoding": "gzip",
+        "ETag": "W/\"5fc6-GLxAXzpXprs1HcoY3gbYmxGgvpE\"",
+        "X-Cache": "Miss from cloudfront",
+        "Via": "1.1 2aee56a73a73fcfc296b262659974188.cloudfront.net (CloudFront)",
+        "X-Amz-Cf-Pop": "CPH50-P2",
+        "X-Amz-Cf-Id": "6Ee_B59pBt3U3i8AfZcjhy80Qw83pGw2o6ncm_8XQtRCvp24d57Y_A==",
+        "X-XSS-Protection": "1; mode=block",
+        "X-Frame-Options": "SAMEORIGIN",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "X-Content-Type-Options": "nosniff",
+        "Strict-Transport-Security": "max-age=31536000"
+      },
+      "redirect_location": null,
+      "server": "nginx",
+      "content_type": "text/html; charset=utf-8",
+      "content_length": null
+    }
+  ],
+  "timing": {
+    "total_time": 0.27322840690612793,
+    "steps": 1,
+    "average_step_time": 0.27322840690612793
+  },
+  "utm_parameters": {},
+  "redirect_patterns": {},
+  "suspicious_indicators": [],
+  "attribution_hints": {
+    "domain_chain": [
+      "www.londonstockexchange.com\\"
+    ],
+    "unique_domains": 1
+  },
+  "errors": []
+}

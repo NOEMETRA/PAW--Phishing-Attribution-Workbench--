@@ -20,8 +20,8 @@ class TLSFingerprintAnalyzer:
         self.cert_cache = {}
 
     def analyze_certificate_chain(self, hostname: str, port: int = 443,
-                                timeout: int = 10) -> Dict[str, Any]:
-        """Analyze TLS certificate chain for a given hostname"""
+                                timeout: int = 10, max_retries: int = 3) -> Dict[str, Any]:
+        """Analyze TLS certificate chain for a given hostname with retry logic"""
         result = {
             'hostname': hostname,
             'port': port,
@@ -33,37 +33,67 @@ class TLSFingerprintAnalyzer:
             'errors': []
         }
 
-        try:
-            # Create SSL context
-            context = ssl.create_default_context()
-            context.check_hostname = False
-            context.verify_mode = ssl.CERT_NONE
+        import time
+        backoff_delays = [1, 2, 4]  # Exponential backoff: 1s, 2s, 4s
+        
+        for attempt in range(max_retries):
+            try:
+                # Create SSL context
+                context = ssl.create_default_context()
+                context.check_hostname = False
+                context.verify_mode = ssl.CERT_NONE
 
-            # Connect and get certificate
-            with socket.create_connection((hostname, port), timeout=timeout) as sock:
-                with context.wrap_socket(sock, server_hostname=hostname) as ssock:
-                    # Get certificate chain
-                    cert_chain = ssock.getpeercert(binary_form=True)
-                    if cert_chain:
-                        cert = x509.load_der_x509_certificate(cert_chain)
-                        result['certificates'].append(self._parse_certificate(cert))
+                # Connect and get certificate
+                with socket.create_connection((hostname, port), timeout=timeout) as sock:
+                    with context.wrap_socket(sock, server_hostname=hostname) as ssock:
+                        # Get certificate chain
+                        cert_chain = ssock.getpeercert(binary_form=True)
+                        if cert_chain:
+                            cert = x509.load_der_x509_certificate(cert_chain)
+                            result['certificates'].append(self._parse_certificate(cert))
 
-                    # Get peer certificate details
-                    peercert = ssock.getpeercert()
-                    if peercert:
-                        result['validation'] = {
-                            'has_expired': self._check_cert_expiry(peercert),
-                            'issuer': peercert.get('issuer'),
-                            'subject': peercert.get('subject'),
-                            'version': peercert.get('version'),
-                            'serial_number': str(peercert.get('serialNumber', '')),
-                            'not_before': peercert.get('notBefore'),
-                            'not_after': peercert.get('notAfter')
-                        }
-
-        except Exception as e:
-            result['errors'].append(f"Certificate analysis failed: {str(e)}")
-            logger.warning(f"TLS analysis failed for {hostname}:{port} - {e}")
+                        # Get peer certificate details
+                        peercert = ssock.getpeercert()
+                        if peercert:
+                            result['validation'] = {
+                                'has_expired': self._check_cert_expiry(peercert),
+                                'issuer': peercert.get('issuer'),
+                                'subject': peercert.get('subject'),
+                                'version': peercert.get('version'),
+                                'serial_number': str(peercert.get('serialNumber', '')),
+                                'not_before': peercert.get('notBefore'),
+                                'not_after': peercert.get('notAfter')
+                            }
+                # Success - break retry loop
+                break
+                
+            except socket.gaierror as e:
+                # DNS resolution failed (getaddrinfo)
+                msg = f"DNS resolution failed for {hostname}:{port} - {e}"
+                if attempt < max_retries - 1:
+                    delay = backoff_delays[min(attempt, len(backoff_delays)-1)]
+                    logger.info(f"{msg} - retrying in {delay}s (attempt {attempt+1}/{max_retries})")
+                    time.sleep(delay)
+                else:
+                    result['errors'].append(msg)
+                    logger.warning(f"{msg} - all retries exhausted")
+                    
+            except socket.timeout as e:
+                # Connection timeout
+                msg = f"Connection timeout for {hostname}:{port} - {e}"
+                if attempt < max_retries - 1:
+                    delay = backoff_delays[min(attempt, len(backoff_delays)-1)]
+                    logger.info(f"{msg} - retrying in {delay}s (attempt {attempt+1}/{max_retries})")
+                    time.sleep(delay)
+                else:
+                    result['errors'].append(msg)
+                    logger.warning(f"{msg} - all retries exhausted")
+                    
+            except Exception as e:
+                # Other errors - don't retry
+                result['errors'].append(f"Certificate analysis failed: {str(e)}")
+                logger.warning(f"TLS analysis failed for {hostname}:{port} - {e}")
+                break
 
         return result
 
@@ -255,7 +285,8 @@ class TLSFingerprintAnalyzer:
             formats = ','.join(str(f) for f in client_hello.get('ec_point_formats', []))
 
             ja3_string = f"{version},{ciphers},{extensions},{curves},{formats}"
-            ja3_hash = hashlib.md5(ja3_string.encode()).hexdigest()
+            # Use SHA-256 instead of MD5 (cryptographically broken)
+            ja3_hash = hashlib.sha256(ja3_string.encode()).hexdigest()
 
             return ja3_hash
 

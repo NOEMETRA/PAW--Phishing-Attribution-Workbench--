@@ -10,48 +10,116 @@ class InfrastructureMapper:
     
     def comprehensive_map(self, domain: str, ips: List[str]) -> Dict:
         """Mappa completa dell'infrastruttura"""
-        return {
-            'network_analysis': self._analyze_network(ips),
-            'service_detection': self._detect_services(ips),
-            'cdn_detection': self._detect_cdn(domain, ips),
-            'infrastructure_timeline': self._build_timeline(domain)
-        }
+        try:
+            # Validate inputs
+            if not ips or not isinstance(ips, list):
+                return {
+                    'status': 'error',
+                    'message': 'Invalid or empty IP list provided',
+                    'network_analysis': {},
+                    'service_detection': {},
+                    'cdn_detection': False,
+                    'infrastructure_timeline': []
+                }
+            
+            if not domain or not isinstance(domain, str):
+                return {
+                    'status': 'error',
+                    'message': 'Invalid domain provided',
+                    'network_analysis': {},
+                    'service_detection': {},
+                    'cdn_detection': False,
+                    'infrastructure_timeline': []
+                }
+            
+            return {
+                'network_analysis': self._analyze_network(ips),
+                'service_detection': self._detect_services(ips),
+                'cdn_detection': self._detect_cdn(domain, ips),
+                'infrastructure_timeline': self._build_timeline(domain)
+            }
+        except IndexError as e:
+            print(f"[infrastructure_mapper] IndexError in comprehensive_map: {e}")
+            return {
+                'status': 'error',
+                'message': f'Index error during mapping: {str(e)}',
+                'network_analysis': {},
+                'service_detection': {},
+                'cdn_detection': False,
+                'infrastructure_timeline': []
+            }
+        except Exception as e:
+            print(f"[infrastructure_mapper] Unexpected error in comprehensive_map: {e}")
+            return {
+                'status': 'error',
+                'message': f'Error during comprehensive mapping: {str(e)}',
+                'network_analysis': {},
+                'service_detection': {},
+                'cdn_detection': False,
+                'infrastructure_timeline': []
+            }
     
     def _analyze_network(self, ips: List[str]) -> Dict:
         """Analisi della rete criminale"""
+        if not ips:
+            return {}
+        
         network_data = {}
         for ip in ips:
-            # WHOIS information
-            whois_data = self._get_whois_info(ip)
-            # Port scanning (limitato)
-            open_ports = self._quick_port_scan(ip)
-            
-            network_data[ip] = {
-                'whois': whois_data,
-                'open_ports': open_ports,
-                'network_range': self._find_network_range(ip)
-            }
+            try:
+                # WHOIS information
+                whois_data = self._get_whois_info(ip)
+                # Port scanning (limitato)
+                open_ports = self._quick_port_scan(ip)
+                
+                network_data[ip] = {
+                    'whois': whois_data,
+                    'open_ports': open_ports,
+                    'network_range': self._find_network_range(ip)
+                }
+            except Exception as e:
+                print(f"[infrastructure_mapper] Error analyzing network for {ip}: {e}")
+                network_data[ip] = {
+                    'whois': {'error': str(e)},
+                    'open_ports': [],
+                    'network_range': self._find_network_range(ip)
+                }
         return network_data
     
     def _detect_services(self, ips: List[str]) -> Dict:
         """Rileva servizi in esecuzione"""
+        if not ips:
+            return {}
+        
         common_ports = [80, 443, 21, 22, 25, 53, 110, 143, 993, 995]
         services = {}
         
         for ip in ips:
-            services[ip] = []
-            for port in common_ports:
-                if self._check_port(ip, port):
-                    service = self._identify_service(ip, port)
-                    services[ip].append({
-                        'port': port,
-                        'service': service,
-                        'banner': self._get_banner(ip, port)
-                    })
+            try:
+                services[ip] = []
+                for port in common_ports:
+                    try:
+                        if self._check_port(ip, port):
+                            service = self._identify_service(ip, port)
+                            services[ip].append({
+                                'port': port,
+                                'service': service,
+                                'banner': self._get_banner(ip, port)
+                            })
+                    except Exception as e:
+                        print(f"[infrastructure_mapper] Error detecting service on {ip}:{port}: {e}")
+                        continue
+            except Exception as e:
+                print(f"[infrastructure_mapper] Error detecting services for {ip}: {e}")
+                services[ip] = []
+        
         return services
     
     def _detect_cdn(self, domain: str, ips: List[str]) -> bool:
         """Rileva se sta usando CDN (Cloudflare, Akamai, etc.)"""
+        if not ips or not domain:
+            return False
+        
         cdn_ips = [
             '104.16.0.0/12',  # Cloudflare
             '173.245.48.0/20', # Cloudflare
@@ -60,39 +128,57 @@ class InfrastructureMapper:
             '184.24.0.0/13'    # Akamai
         ]
         
-        for ip in ips:
-            for cdn_range in cdn_ips:
-                if self._ip_in_range(ip, cdn_range):
-                    return True
+        try:
+            for ip in ips:
+                for cdn_range in cdn_ips:
+                    if self._ip_in_range(ip, cdn_range):
+                        return True
+        except Exception as e:
+            print(f"[infrastructure_mapper] Error detecting CDN: {e}")
+        
         return False
     
     def _build_timeline(self, domain: str) -> List[Dict]:
         """Build real infrastructure timeline from multiple sources"""
+        if not domain:
+            return []
+        
         timeline = []
+        
+        try:
+            # 1. Get domain registration date from WHOIS
+            whois_data = self._get_whois_info(domain)
+            if whois_data and whois_data.get('creation_date'):
+                timeline.append({
+                    'date': whois_data['creation_date'],
+                    'event': 'Domain registered',
+                    'source': 'WHOIS'
+                })
 
-        # 1. Get domain registration date from WHOIS
-        whois_data = self._get_whois_info(domain)
-        if whois_data.get('creation_date'):
+            # 2. Get SSL certificate history from Certificate Transparency logs
+            ct_events = self._query_certificate_transparency(domain)
+            if ct_events and isinstance(ct_events, list):
+                timeline.extend(ct_events)
+
+            # 3. Add current analysis timestamp
+            from datetime import datetime
             timeline.append({
-                'date': whois_data['creation_date'],
-                'event': 'Domain registered',
-                'source': 'WHOIS'
+                'date': datetime.now().isoformat(),
+                'event': 'Infrastructure analysis performed',
+                'source': 'PAW Analysis'
             })
 
-        # 2. Get SSL certificate history from Certificate Transparency logs
-        ct_events = self._query_certificate_transparency(domain)
-        timeline.extend(ct_events)
-
-        # 3. Add current analysis timestamp
-        from datetime import datetime
-        timeline.append({
-            'date': datetime.now().isoformat(),
-            'event': 'Infrastructure analysis performed',
-            'source': 'PAW Analysis'
-        })
-
-        # Sort by date
-        timeline.sort(key=lambda x: x.get('date', ''), reverse=False)
+            # Sort by date (safely)
+            if timeline:
+                timeline.sort(key=lambda x: x.get('date', ''), reverse=False)
+        
+        except Exception as e:
+            print(f"[infrastructure_mapper] Error building timeline for {domain}: {e}")
+            timeline = [{
+                'date': 'Unknown',
+                'event': f'Timeline build failed: {str(e)}',
+                'source': 'Error'
+            }]
 
         return timeline
 
@@ -110,21 +196,28 @@ class InfrastructureMapper:
                 return []
 
             certs = response.json()
+            if not certs or not isinstance(certs, list):
+                return []
+            
             events = []
 
             # Process certificate data
             seen_dates = set()
             for cert in certs[:10]:  # Limit to 10 most recent
-                entry_timestamp = cert.get('entry_timestamp')
-                if entry_timestamp and entry_timestamp not in seen_dates:
-                    seen_dates.add(entry_timestamp)
-                    events.append({
-                        'date': entry_timestamp,
-                        'event': f"SSL certificate issued (Issuer: {cert.get('issuer_name', 'Unknown')})",
-                        'source': 'Certificate Transparency',
-                        'common_name': cert.get('common_name', domain),
-                        'serial_number': cert.get('serial_number', 'Unknown')
-                    })
+                try:
+                    entry_timestamp = cert.get('entry_timestamp') if isinstance(cert, dict) else None
+                    if entry_timestamp and entry_timestamp not in seen_dates:
+                        seen_dates.add(entry_timestamp)
+                        events.append({
+                            'date': entry_timestamp,
+                            'event': f"SSL certificate issued (Issuer: {cert.get('issuer_name', 'Unknown')})",
+                            'source': 'Certificate Transparency',
+                            'common_name': cert.get('common_name', domain),
+                            'serial_number': cert.get('serial_number', 'Unknown')
+                        })
+                except (KeyError, TypeError, IndexError) as e:
+                    print(f"[infrastructure_mapper] Error processing cert entry: {e}")
+                    continue
 
             return events
 
@@ -132,7 +225,8 @@ class InfrastructureMapper:
             # requests not available
             return []
         except Exception as e:
-            return [{'date': 'Unknown', 'event': f'CT query failed: {str(e)}', 'source': 'Error'}]
+            print(f"[infrastructure_mapper] Error querying Certificate Transparency: {e}")
+            return []
     
     def _get_whois_info(self, ip: str) -> Dict:
         """Real WHOIS lookup for IP address"""
@@ -240,12 +334,42 @@ class InfrastructureMapper:
             return "No banner"
     
     def _find_network_range(self, ip: str) -> str:
-        """Stima il range di rete"""
-        parts = ip.split('.')
-        return f"{parts[0]}.{parts[1]}.{parts[2]}.0/24"
+        """Stima il range di rete per IPv4 e IPv6"""
+        try:
+            if ':' in ip:  # IPv6
+                # Per IPv6, restituisci il /48 (primi 3 gruppi)
+                parts = ip.split(':')
+                if len(parts) >= 3:
+                    return f"{parts[0]}:{parts[1]}:{parts[2]}::/48"
+                else:
+                    return f"{ip}/128"  # Indirizzo singolo
+            else:  # IPv4
+                parts = ip.split('.')
+                if len(parts) >= 3:
+                    return f"{parts[0]}.{parts[1]}.{parts[2]}.0/24"
+                else:
+                    return f"{ip}/32"  # Indirizzo singolo
+        except (IndexError, ValueError) as e:
+            print(f"[infrastructure_mapper] Error finding network range for {ip}: {e}")
+            return f"{ip}/32"  # Fallback sicuro
     
     def _ip_in_range(self, ip: str, ip_range: str) -> bool:
-        """Controlla se IP è in un range specifico"""
-        # Implementazione semplificata
-        base_ip = ip_range.split('/')[0]
-        return ip.startswith('.'.join(base_ip.split('.')[:2]))
+        """Controlla se IP è in un range specifico (supporta IPv4 e IPv6)"""
+        try:
+            if ':' in ip:  # IPv6
+                # Per IPv6, controllo semplice basato sui primi gruppi
+                if '/' in ip_range:
+                    base_ip = ip_range.split('/')[0]
+                    base_parts = base_ip.split(':')[:3]  # Primi 3 gruppi
+                    ip_parts = ip.split(':')[:3]
+                    return base_parts == ip_parts
+                return False
+            else:  # IPv4
+                # Implementazione semplificata per IPv4
+                if '/' in ip_range:
+                    base_ip = ip_range.split('/')[0]
+                    return ip.startswith('.'.join(base_ip.split('.')[:2]))
+                return False
+        except (IndexError, ValueError) as e:
+            print(f"[infrastructure_mapper] Error checking IP range for {ip}: {e}")
+            return False

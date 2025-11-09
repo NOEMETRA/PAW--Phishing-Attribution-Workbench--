@@ -1,0 +1,15 @@
+{
+  "input.eml": "2e53b8ee951169fdd2f37db5f698389f2a6e09feb07966f97ca5dd63bf2c3f92",
+  "manifest.json": "f766d08b95772dfb551f8a9791eb9498c592e5d0201a928855bcdfb11fb6318e",
+  "headers.json": "2419a4ce68f2fb77a3afa7985014b326b895dd07e1d7a743fc98488c6608b0a8",
+  "deobfuscation_results.json": "41caa1308f9bf9ea6738a3ef63f65bc34a1b3c821b88d65cd333ece3e6c741ef",
+  "received_path.json": "4eb0aab5170fbd56c6dab8d98767058d1971ce0e4ff911bfafd619091fbd9b92",
+  "auth.json": "4abc74583dd6a6a8ec5950af1b179fba54275bdf7a6d59357625c45f0414b435",
+  "transmitting_server.json": "5892eb6ae1306b85fdd6d38443932148f5006d96518f26cbd2f11e4fc5531fc6",
+  "domains.json": "68e0792db0623151b752b860e7e3e2f4c30bbc822ba6db81cc6a98896441d09e",
+  "graphs/attribution.mmd": "d80f20e826212a2d968e2ad8da0cb3968fe67c47e65b22d61c045ac651cb0f2a",
+  "graphs/domain.mmd": "2f5401bed7e5c1805cb796a66e47180f9bca8742c32456857601785c8cee36a9",
+  "report/executive.md": "35909f9f160376a1e27a38cc1ac0714219ec8872e35a45c2596a86cf31aa0da4",
+  "report/technical.md": "bb87317559c0ad4e3c1e61c5feeaf46b6d1650860385707e8024bfc1947b4143",
+  "report/stix.json": "658ec2120bfefa043ff8b5e677ed279d46c916a6379c0d131261700bef55e14d"
+}

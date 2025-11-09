@@ -1,0 +1,35 @@
+{
+  "domain": "www.londonstockexchange.com\\",
+  "records": {
+    "A": [],
+    "AAAA": []
+  },
+  "cname_chain": [],
+  "nameservers": [],
+  "mx_records": [],
+  "txt_records": [],
+  "hosting_provider": {
+    "detected_provider": null,
+    "confidence": 0.0,
+    "indicators": []
+  },
+  "registrar_hints": {
+    "detected_registrar": null,
+    "confidence": 0.0,
+    "indicators": []
+  },
+  "reverse_dns": {},
+  "ip_ranges": {
+    "ranges": [],
+    "providers": [],
+    "geographic_hints": []
+  },
+  "attribution_hints": {
+    "infrastructure_type": "unknown",
+    "hosting_category": "unknown",
+    "risk_indicators": [],
+    "correlation_keys": [],
+    "domain_age_days": null
+  },
+  "errors": []
+}

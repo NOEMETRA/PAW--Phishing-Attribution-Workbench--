@@ -1176,7 +1176,8 @@ Infrastructure analysis identified {len(ips)} associated IP addresses using {len
 
             # 1. HTML Structure Analysis
             clean_html = re.sub(r'\s+', ' ', soup.prettify())
-            fingerprints['html_structure_hash'] = hashlib.md5(clean_html.encode()).hexdigest()
+            # Use SHA-256 instead of MD5 (cryptographically broken)
+            fingerprints['html_structure_hash'] = hashlib.sha256(clean_html.encode()).hexdigest()
             fingerprints['html_length'] = len(clean_html)
             fingerprints['has_forms'] = len(soup.find_all('form')) > 0
             fingerprints['has_scripts'] = len(soup.find_all('script')) > 0
@@ -1247,7 +1248,8 @@ Infrastructure analysis identified {len(ips)} associated IP addresses using {len
             for link in css_links:
                 href = link.get('href')
                 if href:
-                    css_hashes.append(hashlib.md5(href.encode()).hexdigest()[:8])
+                    # Use SHA-256 instead of MD5 (cryptographically broken)
+                    css_hashes.append(hashlib.sha256(href.encode()).hexdigest()[:8])
                     if href.startswith(('http://', 'https://', '//')):
                         external_resources.append(href)
 
@@ -1261,7 +1263,8 @@ Infrastructure analysis identified {len(ips)} associated IP addresses using {len
                     if src.startswith(('http://', 'https://', '//')):
                         external_resources.append(src)
 
-            fingerprints['css_references_hash'] = hashlib.md5(str(css_hashes).encode()).hexdigest()[:16]
+            # Use SHA-256 instead of MD5 (cryptographically broken)
+            fingerprints['css_references_hash'] = hashlib.sha256(str(css_hashes).encode()).hexdigest()[:16]
             fingerprints['css_count'] = len(css_links)
             fingerprints['image_count'] = len(images)
             fingerprints['external_resources'] = external_resources[:10]  # Limit to first 10

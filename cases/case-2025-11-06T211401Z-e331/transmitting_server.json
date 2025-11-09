@@ -1,0 +1,16 @@
+{
+  "ip": "",
+  "asn": null,
+  "org": null,
+  "cc": null,
+  "abuse": [],
+  "time_utc": null,
+  "helo": null,
+  "ptr": null,
+  "skew_s": 0,
+  "reputation": {
+    "score": 0,
+    "category": "unknown",
+    "sources": []
+  }
+}

@@ -1,0 +1,3181 @@
+{
+  "domain_api.londonstockexchange.com": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_www2.lseg.com": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_refinitiv.demdex.net": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_www.lseg.com": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_tzm.px-cloud.net": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_www.bloomberg.com": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_docs.londonstockexchange.com": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_www.googletagmanager.com": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_chart.hl.co.uk": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_fonts.googleapis.com": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_partners.tremorhub.com": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_www.londonstockexchange.com": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_collector-a.perimeterx.net": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_collector-px8fcgygk4.px-cloud.net": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_client.px-cloud.net": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_www.hl.co.uk": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_fonts.gstatic.com": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_refinitiv-widgets.financial.com": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_collector-px8fcgygk4.px-cdn.net": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_privacyportal-uk.onetrust.com": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_pixel.rubiconproject.com": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_px4.ads.linkedin.com": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_dpm.demdex.net": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_collector-px8fcgygk4.px-client.net": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_api.company-target.com": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_cm.g.doubleclick.net": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_tag.demandbase.com": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_assets.adobedtm.com": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_snap.licdn.com": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_logs.browser-intake-datadoghq.eu": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_geolocation.onetrust.com": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_online.hl.co.uk": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_px.ads.linkedin.com": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_sync-tm.everesttech.net": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_cdn-ukwest.onetrust.com": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_assets.bwbx.io": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_region1.google-analytics.com": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_pi.pardot.com": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_s2.adform.net": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_campers.diycarhire.com.au": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_images.hl.uk": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_ps.eyeota.net": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_cdn.jsdelivr.net": {
+    "threatfox": {
+      "domain_iocs": [
+        {
+          "id": "1617269",
+          "ioc": "https://cdn.jsdelivr.net/gh/documents-release/office/rules.js",
+          "threat_type": "payload_delivery",
+          "threat_type_desc": "Indicator that identifies a malware distribution server (payload delivery)",
+          "ioc_type": "url",
+          "ioc_type_desc": "URL that delivers a malware payload",
+          "malware": "unknown",
+          "malware_printable": "Unknown malware",
+          "malware_alias": null,
+          "malware_malpedia": "https://malpedia.caad.fkie.fraunhofer.de/details/unknown",
+          "confidence_level": 50,
+          "first_seen": "2025-10-17 10:47:43 UTC",
+          "last_seen": null,
+          "reference": "https://urlquery.net/report/0c253004-d457-4512-8b32-b423d8106005",
+          "reporter": "juroots",
+          "tags": [
+            "FakeCaptcha",
+            "URLQuery"
+          ],
+          "malware_samples": []
+        }
+      ],
+      "ip_iocs": {},
+      "malware_families": [
+        "unknown"
+      ]
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_har.com": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_a2.adform.net": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_id.rlcdn.com": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_captcha.px-cloud.net": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_privacyportal-de.onetrust.com": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_cm.everesttech.net": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_file.garden": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 4,
+      "pulses": [
+        {
+          "id": "6754e40ba04152b0f637f800",
+          "name": "URLHaus data - 07-12-2024",
+          "description": "",
+          "modified": "2025-01-07T00:02:14.438000",
+          "created": "2024-12-08T00:10:51.765000",
+          "tags": [
+            "32-bit",
+            "elf",
+            "mips",
+            "Mozi",
+            "arm",
+            "mirai",
+            "hajime",
+            "dll",
+            "Stealc",
+            "exe",
+            "WsgiDAV",
+            "x86-32",
+            "MeduzaStealer",
+            "cloudflare",
+            "opendir",
+            "webdav",
+            "apk",
+            "coper",
+            "Octo",
+            "Octo2",
+            "CoinMiner",
+            "bat",
+            "emotet",
+            "heodo",
+            "RedLineStealer",
+            "RemcosRAT",
+            "autoinject",
+            "Loki",
+            "Formbook",
+            "LummaStealer",
+            "infostealer",
+            "darkylock",
+            "Ransomware",
+            "dcrat",
+            "gafgyt",
+            "njRAT",
+            "BABADEDA",
+            "Cryxos",
+            "js",
+            "rustystealer",
+            "SnakeKeylogger",
+            "Socks5Systemz",
+            "orcusrat",
+            "AsyncRAT",
+            "script",
+            "ascii",
+            "meterpreter",
+            "xenorat",
+            "botnetdomain",
+            "censys",
+            "fbi.gov",
+            "moobot",
+            "sh",
+            "ua-wget"
+          ],
+          "references": [
+            "https://urlhaus.abuse.ch/browse/"
+          ],
+          "public": 1,
+          "adversary": "",
+          "targeted_countries": [],
+          "malware_families": [],
+          "attack_ids": [],
+          "industries": [],
+          "TLP": "green",
+          "cloned_from": null,
+          "export_count": 83,
+          "upvotes_count": 0,
+          "downvotes_count": 0,
+          "votes_count": 0,
+          "locked": false,
+          "pulse_source": "api",
+          "validator_count": 0,
+          "comment_count": 0,
+          "follower_count": 0,
+          "vote": 0,
+          "author": {
+            "username": "CyberHunterAutoFeed",
+            "id": "182496",
+            "avatar_url": "/otxapi/users/avatar_image/media/avatars/user_182496/resized/80/avatar_3b9c358f36.png",
+            "is_subscribed": false,
+            "is_following": false
+          },
+          "indicator_type_counts": {
+            "URL": 978,
+            "domain": 28,
+            "hostname": 104
+          },
+          "indicator_count": 1110,
+          "is_author": false,
+          "is_subscribing": null,
+          "subscriber_count": 1442,
+          "modified_text": "304 days ago ",
+          "is_modified": true,
+          "groups": [],
+          "in_group": false,
+          "threat_hunter_scannable": false,
+          "threat_hunter_has_agents": 1,
+          "related_indicator_type": "domain",
+          "related_indicator_is_active": 1
+        },
+        {
+          "id": "658a1a6e37b9e7db8da62973",
+          "name": "URLHaus data - 25-12-2023",
+          "description": "",
+          "modified": "2024-01-25T00:04:13.053000",
+          "created": "2023-12-26T00:12:30.695000",
+          "tags": [
+            "hajime",
+            "elf",
+            "Mozi",
+            "32-bit",
+            "mips",
+            "64",
+            "exe",
+            "64-bit",
+            "mirai",
+            "x86-64",
+            "SocGholish",
+            "BadBazaar",
+            "MarsStealer",
+            "trojan",
+            "jar",
+            "jat",
+            "32",
+            "LummaStealer",
+            "dropped-by-PrivateLoader",
+            "Stealc",
+            "N-W0rm",
+            "discord",
+            "infostealer",
+            "pwd-beta",
+            "4545",
+            "Password-protected",
+            "rar",
+            "arm"
+          ],
+          "references": [
+            "https://urlhaus.abuse.ch/browse/"
+          ],
+          "public": 1,
+          "adversary": "",
+          "targeted_countries": [],
+          "malware_families": [],
+          "attack_ids": [],
+          "industries": [],
+          "TLP": "green",
+          "cloned_from": null,
+          "export_count": 47,
+          "upvotes_count": 0,
+          "downvotes_count": 0,
+          "votes_count": 0,
+          "locked": false,
+          "pulse_source": "api",
+          "validator_count": 0,
+          "comment_count": 0,
+          "follower_count": 0,
+          "vote": 0,
+          "author": {
+            "username": "CyberHunterAutoFeed",
+            "id": "182496",
+            "avatar_url": "/otxapi/users/avatar_image/media/avatars/user_182496/resized/80/avatar_3b9c358f36.png",
+            "is_subscribed": false,
+            "is_following": false
+          },
+          "indicator_type_counts": {
+            "URL": 164,
+            "hostname": 3,
+            "domain": 5
+          },
+          "indicator_count": 172,
+          "is_author": false,
+          "is_subscribing": null,
+          "subscriber_count": 1443,
+          "modified_text": "652 days ago ",
+          "is_modified": true,
+          "groups": [],
+          "in_group": false,
+          "threat_hunter_scannable": false,
+          "threat_hunter_has_agents": 1,
+          "related_indicator_type": "domain",
+          "related_indicator_is_active": 1
+        },
+        {
+          "id": "6584d8d3adddbcfd8a3829d6",
+          "name": "URLHaus data - 21-12-2023",
+          "description": "",
+          "modified": "2024-01-21T00:03:33.056000",
+          "created": "2023-12-22T00:31:14.237000",
+          "tags": [
+            "elf",
+            "Mozi",
+            "32-bit",
+            "mips",
+            "32",
+            "Amadey",
+            "exe",
+            "hajime",
+            "SocGholish",
+            "vjw0rm",
+            "bashlite",
+            "gafgyt",
+            "sparc",
+            "arm",
+            "64",
+            "intel",
+            "PowerPC",
+            "mirai",
+            "motorola",
+            "renesas",
+            "jar",
+            "MarsStealer",
+            "ascii",
+            "7z",
+            "AgentTesla",
+            "FakeBat",
+            "Vidar",
+            "script",
+            "AsyncRAT",
+            "Formbook",
+            "js",
+            "dropped-by-PrivateLoader",
+            "Rhadamanthys",
+            "Socks5Systemz",
+            "risepro",
+            "encrypted",
+            "Pikabot",
+            "TA577",
+            "TR",
+            "zip",
+            "PrivateLoader",
+            "djvu",
+            "ddos",
+            "phorpiex",
+            "dll",
+            "PureCrypter",
+            "RedLineStealer",
+            "CoinMiner"
+          ],
+          "references": [
+            "https://urlhaus.abuse.ch/browse/"
+          ],
+          "public": 1,
+          "adversary": "",
+          "targeted_countries": [],
+          "malware_families": [],
+          "attack_ids": [],
+          "industries": [],
+          "TLP": "green",
+          "cloned_from": null,
+          "export_count": 63,
+          "upvotes_count": 0,
+          "downvotes_count": 0,
+          "votes_count": 0,
+          "locked": false,
+          "pulse_source": "api",
+          "validator_count": 0,
+          "comment_count": 0,
+          "follower_count": 0,
+          "vote": 0,
+          "author": {
+            "username": "CyberHunterAutoFeed",
+            "id": "182496",
+            "avatar_url": "/otxapi/users/avatar_image/media/avatars/user_182496/resized/80/avatar_3b9c358f36.png",
+            "is_subscribed": false,
+            "is_following": false
+          },
+          "indicator_type_counts": {
+            "URL": 429,
+            "hostname": 14,
+            "domain": 181
+          },
+          "indicator_count": 624,
+          "is_author": false,
+          "is_subscribing": null,
+          "subscriber_count": 1443,
+          "modified_text": "656 days ago ",
+          "is_modified": true,
+          "groups": [],
+          "in_group": false,
+          "threat_hunter_scannable": false,
+          "threat_hunter_has_agents": 1,
+          "related_indicator_type": "domain",
+          "related_indicator_is_active": 1
+        },
+        {
+          "id": "6583852ca849df35b1c3dcb2",
+          "name": "URLHaus data - 20-12-2023",
+          "description": "",
+          "modified": "2024-01-20T00:04:50.550000",
+          "created": "2023-12-21T00:22:04.384000",
+          "tags": [
+            "32-bit",
+            "elf",
+            "mips",
+            "Mozi",
+            "hajime",
+            "SocGholish",
+            "64",
+            "exe",
+            "js",
+            "dll",
+            "Pikabot",
+            "TR",
+            "SnakeKeylogger",
+            "script",
+            "AmNsA2",
+            "Lumma",
+            "LummaStealer",
+            "stealer",
+            "viaSmokeLoader",
+            "Loki",
+            "lokibot",
+            "url",
+            "zip",
+            "redir-302",
+            "TA577",
+            "AgentTesla",
+            "OriginBotnet",
+            "MarsStealer",
+            "32",
+            "arm",
+            "mirai",
+            "intel",
+            "Amadey",
+            "dropped-by-PrivateLoader",
+            "glupteba",
+            "smokeloader",
+            "jar",
+            "encrypted",
+            "GuLoader",
+            "doc",
+            "opendir",
+            "discord",
+            "infostealer",
+            "pwd-beta",
+            "Password-protected",
+            "rar",
+            "spoofme",
+            "CL",
+            "downloader",
+            "geo",
+            "Grandoreiro"
+          ],
+          "references": [
+            "https://urlhaus.abuse.ch/browse/"
+          ],
+          "public": 1,
+          "adversary": "",
+          "targeted_countries": [],
+          "malware_families": [],
+          "attack_ids": [],
+          "industries": [],
+          "TLP": "green",
+          "cloned_from": null,
+          "export_count": 63,
+          "upvotes_count": 0,
+          "downvotes_count": 0,
+          "votes_count": 0,
+          "locked": false,
+          "pulse_source": "api",
+          "validator_count": 0,
+          "comment_count": 0,
+          "follower_count": 0,
+          "vote": 0,
+          "author": {
+            "username": "CyberHunterAutoFeed",
+            "id": "182496",
+            "avatar_url": "/otxapi/users/avatar_image/media/avatars/user_182496/resized/80/avatar_3b9c358f36.png",
+            "is_subscribed": false,
+            "is_following": false
+          },
+          "indicator_type_counts": {
+            "URL": 318,
+            "hostname": 15,
+            "domain": 149
+          },
+          "indicator_count": 482,
+          "is_author": false,
+          "is_subscribing": null,
+          "subscriber_count": 1442,
+          "modified_text": "657 days ago ",
+          "is_modified": true,
+          "groups": [],
+          "in_group": false,
+          "threat_hunter_scannable": false,
+          "threat_hunter_has_agents": 1,
+          "related_indicator_type": "domain",
+          "related_indicator_is_active": 1
+        }
+      ],
+      "related_ips": []
+    }
+  },
+  "domain_dsum-sec.casalemedia.com": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_cdn.cookielaw.org": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_s.company-target.com": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  },
+  "domain_ipapi.co": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 16,
+      "pulses": [
+        {
+          "id": "688716977e80a4274f2eafa9",
+          "name": "LeadIQ  | The Smart B2B Prospecting Platform | Malware Packed | Agent Tesla & more",
+          "description": "Found in Bot joining Pulse.",
+          "modified": "2025-08-27T06:03:05.020000",
+          "created": "2025-07-28T06:20:07.660000",
+          "tags": [
+            "present jul",
+            "united",
+            "entries",
+            "search",
+            "moved",
+            "ip address",
+            "creation date",
+            "record value",
+            "date",
+            "showing",
+            "body",
+            "meta",
+            "passive dns",
+            "next associated",
+            "win32spigot apr",
+            "title error",
+            "ipv4 add",
+            "pulse pulses",
+            "urls",
+            "files",
+            "adaptivebee",
+            "worm",
+            "win32",
+            "urls show",
+            "date checked",
+            "url hostname",
+            "server response",
+            "google safe",
+            "results jul",
+            "location united",
+            "asn asnone",
+            "nameservers",
+            "less whois",
+            "registrar",
+            "csc corporate",
+            "status",
+            "servers",
+            "name servers",
+            "hostname",
+            "hostname add",
+            "a domains",
+            "script urls",
+            "unknown aaaa",
+            "technology one",
+            "script script",
+            "certificate",
+            "null",
+            "trojan",
+            "twitter",
+            "domain",
+            "files ip",
+            "address domain",
+            "ip related",
+            "pulses otx",
+            "virtool",
+            "http",
+            "present jun",
+            "present may",
+            "pulse submit",
+            "url analysis",
+            "reverse dns",
+            "australia asn",
+            "as55532 squiz",
+            "dns resolutions",
+            "overview ip",
+            "address",
+            "ipv4",
+            "iocs",
+            "data upload",
+            "extraction",
+            "ided iocs",
+            "failed",
+            "shaw",
+            "ail tvnas",
+            "rl irl",
+            "domain add",
+            "ostname add",
+            "verdict",
+            "show",
+            "types",
+            "type",
+            "indicator data",
+            "searc type",
+            "a indicator",
+            "data",
+            "select across",
+            "all pages",
+            "domain domain",
+            "checked url",
+            "hostname server",
+            "response ip",
+            "address google",
+            "safe browsing",
+            "msie",
+            "chrome",
+            "present dec",
+            "base",
+            "read c",
+            "port",
+            "destination",
+            "delete",
+            "copy",
+            "write",
+            "memcommit",
+            "cryptexportkey",
+            "invalid pointer",
+            "writeconsolea",
+            "learn",
+            "ck id",
+            "name tactics",
+            "suspicious",
+            "informative",
+            "command",
+            "spawns",
+            "defense evasion",
+            "t1480 execution",
+            "signing defense",
+            "copy md5",
+            "copy sha1",
+            "copy sha256",
+            "sha1",
+            "sha256",
+            "pattern match",
+            "size",
+            "ascii text",
+            "crlf line",
+            "mitre att",
+            "error",
+            "click",
+            "hybrid",
+            "local",
+            "path",
+            "starfield",
+            "strings",
+            "refresh",
+            "tools",
+            "onload",
+            "span",
+            "form",
+            "adversaries",
+            "windows nt",
+            "generic http",
+            "exe upload",
+            "inbound",
+            "outbound",
+            "yara detections",
+            "malware",
+            "expiration date",
+            "whois show",
+            "name andrew",
+            "bauer name",
+            "div id",
+            "beginstring",
+            "beginerror",
+            "script",
+            "general",
+            "cloud",
+            "find",
+            "footer",
+            "ninite feb",
+            "telper",
+            "ninite mar",
+            "ninite apr",
+            "trojandropper",
+            "mtb mar",
+            "url https",
+            "general full",
+            "security tls",
+            "software",
+            "resource hash",
+            "protocol h2",
+            "frankfurt",
+            "main",
+            "germany",
+            "input",
+            "skype",
+            "opciones",
+            "july",
+            "es form",
+            "dom name",
+            "post https",
+            "imagen",
+            "microsoft",
+            "iniciar sesin",
+            "value",
+            "variables",
+            "config",
+            "debug",
+            "loader",
+            "geturl",
+            "b function",
+            "addlistener",
+            "proof",
+            "amazon02",
+            "dk summary",
+            "amazon rsa",
+            "september",
+            "browsing",
+            "resource",
+            "asn16509",
+            "name value",
+            "queueprogress",
+            "timestamp input",
+            "status actions"
+          ],
+          "references": [],
+          "public": 1,
+          "adversary": "",
+          "targeted_countries": [],
+          "malware_families": [],
+          "attack_ids": [
+            {
+              "id": "T1045",
+              "name": "Software Packing",
+              "display_name": "T1045 - Software Packing"
+            },
+            {
+              "id": "T1082",
+              "name": "System Information Discovery",
+              "display_name": "T1082 - System Information Discovery"
+            },
+            {
+              "id": "T1057",
+              "name": "Process Discovery",
+              "display_name": "T1057 - Process Discovery"
+            },
+            {
+              "id": "T1071",
+              "name": "Application Layer Protocol",
+              "display_name": "T1071 - Application Layer Protocol"
+            },
+            {
+              "id": "T1105",
+              "name": "Ingress Tool Transfer",
+              "display_name": "T1105 - Ingress Tool Transfer"
+            },
+            {
+              "id": "T1480",
+              "name": "Execution Guardrails",
+              "display_name": "T1480 - Execution Guardrails"
+            },
+            {
+              "id": "T1553",
+              "name": "Subvert Trust Controls",
+              "display_name": "T1553 - Subvert Trust Controls"
+            },
+            {
+              "id": "T1562",
+              "name": "Impair Defenses",
+              "display_name": "T1562 - Impair Defenses"
+            }
+          ],
+          "industries": [],
+          "TLP": "green",
+          "cloned_from": null,
+          "export_count": 19,
+          "upvotes_count": 0,
+          "downvotes_count": 0,
+          "votes_count": 0,
+          "locked": false,
+          "pulse_source": "web",
+          "validator_count": 0,
+          "comment_count": 0,
+          "follower_count": 0,
+          "vote": 0,
+          "author": {
+            "username": "Q.Vashti",
+            "id": "337942",
+            "avatar_url": "https://otx.alienvault.com/assets/images/default-avatar.png",
+            "is_subscribed": false,
+            "is_following": false
+          },
+          "indicator_type_counts": {
+            "FileHash-MD5": 487,
+            "FileHash-SHA1": 461,
+            "URL": 10732,
+            "domain": 1672,
+            "email": 6,
+            "hostname": 3039,
+            "FileHash-SHA256": 2569,
+            "SSLCertFingerprint": 7
+          },
+          "indicator_count": 18973,
+          "is_author": false,
+          "is_subscribing": null,
+          "subscriber_count": 89,
+          "modified_text": "72 days ago ",
+          "is_modified": true,
+          "groups": [],
+          "in_group": false,
+          "threat_hunter_scannable": true,
+          "threat_hunter_has_agents": 1,
+          "related_indicator_type": "domain",
+          "related_indicator_is_active": 1
+        },
+        {
+          "id": "687d91b1a8f414040bfba430",
+          "name": "Spyware",
+          "description": "And I've been walking, talking\nBelieving the things that are true\nAnd I've been finding\nThe difference between right and wrong, bad and good\nSee me put things together\nPut them back where they belong\nWhen I look at each other\nHave I always been singing the same song?\n\nShe said\nThis is a perfect world\nRiding on an incline\nI'm staring in your face\nYou'll photograph mine\n\nI-I-I-I-I\nWhoo, ah-ha-ha\nHa-ha-ha-ha-ha-ha\n\nSomebody said that it happens all over the world\nI do believe that it's true (•o•)\n#spyware #MaaS #malvertizing #bullyfor$ #unethical #dangerous_tool",
+          "modified": "2025-08-20T00:01:59.498000",
+          "created": "2025-07-21T01:02:41.049000",
+          "tags": [
+            "serving ip",
+            "address",
+            "status",
+            "utc na",
+            "utc google",
+            "utc facebook",
+            "custom audience",
+            "tag manager",
+            "ua748443502",
+            "utc gtmwrp73mt",
+            "utc gsrdlm5jnx1",
+            "utc aw937838002",
+            "adsense na",
+            "connect",
+            "file type",
+            "status code",
+            "body length",
+            "kb body",
+            "sha256",
+            "powershell",
+            "b file",
+            "ta0004 defense",
+            "evasion ta0005",
+            "command",
+            "control ta0011",
+            "c0002 wininet",
+            "number",
+            "azure rsa",
+            "tls issuing",
+            "cus subject",
+            "stwa lredmond",
+            "corporation cus",
+            "algorithm",
+            "cndigicert sha2",
+            "secure server",
+            "ca odigicert",
+            "inc cus",
+            "subject",
+            "cnwe1 ogoogle",
+            "trust",
+            "cnmicrosoft ecc",
+            "update secure",
+            "server ca",
+            "omicrosoft",
+            "get http",
+            "request",
+            "windows nt",
+            "win64",
+            "khtml",
+            "gecko",
+            "response",
+            "united",
+            "search",
+            "creation date",
+            "expiration date",
+            "name servers",
+            "unknown soa",
+            "germany unknown",
+            "entries",
+            "pulse submit",
+            "url analysis",
+            "date"
+          ],
+          "references": [],
+          "public": 1,
+          "adversary": "",
+          "targeted_countries": [],
+          "malware_families": [],
+          "attack_ids": [],
+          "industries": [],
+          "TLP": "green",
+          "cloned_from": null,
+          "export_count": 8,
+          "upvotes_count": 0,
+          "downvotes_count": 0,
+          "votes_count": 0,
+          "locked": false,
+          "pulse_source": "web",
+          "validator_count": 0,
+          "comment_count": 0,
+          "follower_count": 0,
+          "vote": 0,
+          "author": {
+            "username": "Q.Vashti",
+            "id": "337942",
+            "avatar_url": "https://otx.alienvault.com/assets/images/default-avatar.png",
+            "is_subscribed": false,
+            "is_following": false
+          },
+          "indicator_type_counts": {
+            "domain": 304,
+            "hostname": 796,
+            "URL": 2590,
+            "FileHash-SHA256": 2735,
+            "FileHash-MD5": 253,
+            "FileHash-SHA1": 144,
+            "email": 1
+          },
+          "indicator_count": 6823,
+          "is_author": false,
+          "is_subscribing": null,
+          "subscriber_count": 88,
+          "modified_text": "79 days ago ",
+          "is_modified": true,
+          "groups": [],
+          "in_group": false,
+          "threat_hunter_scannable": true,
+          "threat_hunter_has_agents": 1,
+          "related_indicator_type": "domain",
+          "related_indicator_is_active": 1
+        },
+        {
+          "id": "687537de77f7d3994ca85d61",
+          "name": "Malware beacon • iOS recaptcha• Phishing • BotNet [byArek-BTC]",
+          "description": "",
+          "modified": "2025-07-14T17:01:18.729000",
+          "created": "2025-07-14T17:01:18.729000",
+          "tags": [
+            "legacy",
+            "as1101 descr",
+            "date",
+            "wim biemolt",
+            "surfnet bv",
+            "da utrecht",
+            "netherlands",
+            "ripe ncc",
+            "as1101 city",
+            "abuse contact",
+            "orgid",
+            "net192",
+            "net1920000",
+            "abuse",
+            "transferred",
+            "address",
+            "handle",
+            "address range",
+            "cidr",
+            "allocation type",
+            "status",
+            "whois server"
+          ],
+          "references": [],
+          "public": 1,
+          "adversary": "",
+          "targeted_countries": [],
+          "malware_families": [],
+          "attack_ids": [],
+          "industries": [],
+          "TLP": "green",
+          "cloned_from": "682fc42109bfc0e7a1273973",
+          "export_count": 1,
+          "upvotes_count": 0,
+          "downvotes_count": 0,
+          "votes_count": 0,
+          "locked": false,
+          "pulse_source": "web",
+          "validator_count": 0,
+          "comment_count": 0,
+          "follower_count": 0,
+          "vote": 0,
+          "author": {
+            "username": "Q.Vashti",
+            "id": "337942",
+            "avatar_url": "https://otx.alienvault.com/assets/images/default-avatar.png",
+            "is_subscribed": false,
+            "is_following": false
+          },
+          "indicator_type_counts": {
+            "FileHash-MD5": 90,
+            "FileHash-SHA1": 109,
+            "FileHash-SHA256": 705,
+            "URL": 43,
+            "domain": 10,
+            "hostname": 31,
+            "CIDR": 10,
+            "email": 3
+          },
+          "indicator_count": 1001,
+          "is_author": false,
+          "is_subscribing": null,
+          "subscriber_count": 87,
+          "modified_text": "116 days ago ",
+          "is_modified": false,
+          "groups": [],
+          "in_group": false,
+          "threat_hunter_scannable": true,
+          "threat_hunter_has_agents": 1,
+          "related_indicator_type": "domain",
+          "related_indicator_is_active": 1
+        },
+        {
+          "id": "6830ca10f16af5c6c7110161",
+          "name": "Malware Hosting || Apple browser agent transmits data to New Relic",
+          "description": "IOC (https://www.delphi.ai/bill-clinton)Title: Delphi: || application-name\nDelphi\nmask-icon\n/safari-pinned-tab.svg?v=2 (favicons is a line of code that loads another SVG image, one called safari-pinned-tab. svg . to support Safari's pinned tab functionality, which existed before other browsers had SVG favicon support.)||\n•142.251.143.202- exploit_source  |\t\t \n•185.199.108.133 - malware_hosting |\t\n*185.199.109.133 - malware_hosting. |\n•185.199.110.133 - malware_hosting | \nhttps://www.pornhub.com/gifs/search?search=tsara+lynn+brashears+lesbian -phishing |\n185.199.111.133\nmalware_hosting\t\n|| malicious features,, malicious code, .ai , exploit, spyware, apple monitoring nr-data.net > transmits data to New Relic, || IIOC may have expired or be parked.",
+          "modified": "2025-06-22T18:05:31.015000",
+          "created": "2025-05-23T19:18:40.395000",
+          "tags": [
+            "delphi meta",
+            "tags viewport",
+            "delphi maskicon",
+            "utc google",
+            "tag manager",
+            "gtmmszhw3t7",
+            "utc g3j5p98dsnr",
+            "utc linkedin",
+            "insight tag",
+            "date sun",
+            "gmt contenttype",
+            "connection",
+            "cachecontrol",
+            "slug",
+            "miss",
+            "server",
+            "status code",
+            "body length",
+            "kb body"
+          ],
+          "references": [],
+          "public": 1,
+          "adversary": "",
+          "targeted_countries": [],
+          "malware_families": [],
+          "attack_ids": [],
+          "industries": [],
+          "TLP": "green",
+          "cloned_from": null,
+          "export_count": 13,
+          "upvotes_count": 0,
+          "downvotes_count": 0,
+          "votes_count": 0,
+          "locked": false,
+          "pulse_source": "web",
+          "validator_count": 0,
+          "comment_count": 0,
+          "follower_count": 0,
+          "vote": 0,
+          "author": {
+            "username": "Q.Vashti",
+            "id": "337942",
+            "avatar_url": "https://otx.alienvault.com/assets/images/default-avatar.png",
+            "is_subscribed": false,
+            "is_following": false
+          },
+          "indicator_type_counts": {
+            "FileHash-MD5": 120,
+            "FileHash-SHA1": 120,
+            "FileHash-SHA256": 579,
+            "URL": 8,
+            "domain": 12,
+            "hostname": 45
+          },
+          "indicator_count": 884,
+          "is_author": false,
+          "is_subscribing": null,
+          "subscriber_count": 87,
+          "modified_text": "138 days ago ",
+          "is_modified": true,
+          "groups": [],
+          "in_group": false,
+          "threat_hunter_scannable": true,
+          "threat_hunter_has_agents": 1,
+          "related_indicator_type": "domain",
+          "related_indicator_is_active": 1
+        },
+        {
+          "id": "682fc42109bfc0e7a1273973",
+          "name": "Malware beacon / iOS recaptcha / Phishing / botnet -forced redirect",
+          "description": "• hexlax_malbeacon (researcher)\nMalware adversary illuminated.\nDESCRIPTION: An adversary coming from this source IP address controlled a botnet.\nTags: #malware #adversary #attribution\nMore Information: https://MalBeacon.com IP (Google sorry index-iOS) 192.42.116.194 (inetnum: 192.42.116.172 - 192.42.116.223\nnetname: TOR-EXIT-NTH\ndescr: https://nothingtohide.nl)",
+          "modified": "2025-06-22T00:03:14.783000",
+          "created": "2025-05-23T00:41:05.213000",
+          "tags": [
+            "legacy",
+            "as1101 descr",
+            "date",
+            "wim biemolt",
+            "surfnet bv",
+            "da utrecht",
+            "netherlands",
+            "ripe ncc",
+            "as1101 city",
+            "abuse contact",
+            "orgid",
+            "net192",
+            "net1920000",
+            "abuse",
+            "transferred",
+            "address",
+            "handle",
+            "address range",
+            "cidr",
+            "allocation type",
+            "status",
+            "whois server"
+          ],
+          "references": [],
+          "public": 1,
+          "adversary": "",
+          "targeted_countries": [],
+          "malware_families": [],
+          "attack_ids": [],
+          "industries": [],
+          "TLP": "green",
+          "cloned_from": null,
+          "export_count": 15,
+          "upvotes_count": 0,
+          "downvotes_count": 0,
+          "votes_count": 0,
+          "locked": false,
+          "pulse_source": "web",
+          "validator_count": 0,
+          "comment_count": 0,
+          "follower_count": 0,
+          "vote": 0,
+          "author": {
+            "username": "Q.Vashti",
+            "id": "337942",
+            "avatar_url": "https://otx.alienvault.com/assets/images/default-avatar.png",
+            "is_subscribed": false,
+            "is_following": false
+          },
+          "indicator_type_counts": {
+            "FileHash-MD5": 90,
+            "FileHash-SHA1": 109,
+            "FileHash-SHA256": 705,
+            "URL": 43,
+            "domain": 10,
+            "hostname": 31,
+            "CIDR": 10,
+            "email": 3
+          },
+          "indicator_count": 1001,
+          "is_author": false,
+          "is_subscribing": null,
+          "subscriber_count": 87,
+          "modified_text": "138 days ago ",
+          "is_modified": true,
+          "groups": [],
+          "in_group": false,
+          "threat_hunter_scannable": true,
+          "threat_hunter_has_agents": 1,
+          "related_indicator_type": "domain",
+          "related_indicator_is_active": 1
+        },
+        {
+          "id": "682bef60c4841f09773d1c7f",
+          "name": "Expanded: Close proximity RMS module attack. Critical infrastructure affected. Medical, Business, Legal., Religious institutions",
+          "description": "Close proximity hacking tool used following stalking event. Connecting to device attacks other devices and critical systems.\nPegasusLoader expanded. \nCritical Issues \niOS is now an unidentifiable device.\nDuckDuckGo Search engine\nhas emoji arrows \nIOS default Google search engine has overlay and continuous flooding of bad traffic. Severe DNS  issue. Botnet involvement, height priority messages intercepted. \nExcessive abuse of Mitre T1480 Execution Gaurdrails .Geopfencing. Targets attacked by illegal PegasusLoader.exe cannot use iOS devices as designed paid the same price as everyone. \n\nI can’t explain how iCloud  only backs up to unknown devices. Users have zero control of any technology devices or content.\nThreat actors have remotely rebuilt device infrastructure  / architecture.\n-Team 8",
+          "modified": "2025-06-19T02:03:50.197000",
+          "created": "2025-05-20T02:56:31.741000",
+          "tags": [
+            "win32 exe",
+            "file type",
+            "name file",
+            "text state",
+            "text",
+            "text geoip6",
+            "csv geoip",
+            "get https",
+            "dns resolutions",
+            "number",
+            "cnwe1 ogoogle",
+            "trust",
+            "cus subject",
+            "response"
+          ],
+          "references": [],
+          "public": 1,
+          "adversary": "",
+          "targeted_countries": [],
+          "malware_families": [],
+          "attack_ids": [],
+          "industries": [],
+          "TLP": "green",
+          "cloned_from": null,
+          "export_count": 27,
+          "upvotes_count": 0,
+          "downvotes_count": 0,
+          "votes_count": 0,
+          "locked": false,
+          "pulse_source": "web",
+          "validator_count": 0,
+          "comment_count": 0,
+          "follower_count": 0,
+          "vote": 0,
+          "author": {
+            "username": "Q.Vashti",
+            "id": "337942",
+            "avatar_url": "https://otx.alienvault.com/assets/images/default-avatar.png",
+            "is_subscribed": false,
+            "is_following": false
+          },
+          "indicator_type_counts": {
+            "FileHash-MD5": 71,
+            "FileHash-SHA1": 176,
+            "FileHash-SHA256": 3815,
+            "URL": 2239,
+            "domain": 850,
+            "hostname": 906
+          },
+          "indicator_count": 8057,
+          "is_author": false,
+          "is_subscribing": null,
+          "subscriber_count": 89,
+          "modified_text": "141 days ago ",
+          "is_modified": true,
+          "groups": [],
+          "in_group": false,
+          "threat_hunter_scannable": true,
+          "threat_hunter_has_agents": 1,
+          "related_indicator_type": "domain",
+          "related_indicator_is_active": 1
+        },
+        {
+          "id": "682be3ca66569d4a2855faec",
+          "name": "Critical iOS Update / Privacy Mode/ Locked down resistant Pegasus",
+          "description": "PegasusLoader | Endangered target -\nBrilliantly executed malevolence towards a crime victim for what reason? Targets name censored on OTX.\nCritical-Capture Wi-Fi password by Joe Security | High Priority Malicious-Tor Client/Browser Execution by frack113 Potential Product Reconnaissance Via Wmic.EXE by Nasreddine Bencherchali |\n| Suspicious DNS Query for IP Lookup Service APIs by Brandon George (blog post), Thomas Patzke | Hardware Model Reconnaissance Via Wmic.EXE by Florian Roth (Nextron Systems)\n| Suspicious Network Connection to IP Lookup Service APIs by Janantha Marasinghe, Nasreddine Bencherchali (Nextron Systems)\n|  PSScriptPolicyTest Creation By Uncommon Process by Nasreddine Bencherchali (Nextron Systems)\n|  WMIC Loading Scripting Libraries by Roberto Rodriguez (Cyb3rWard0g), OTR (Open Threat Research)\n| Non Interactive PowerShell Process Spawned by Roberto Rodriguez @Cyb3rWard0g (rule), oscd.community (improvements) Suspicious PowerShell Get Current User by frack113",
+          "modified": "2025-06-19T01:04:18.874000",
+          "created": "2025-05-20T02:07:05.466000",
+          "tags": [
+            "type indicator",
+            "role title",
+            "added active",
+            "related pulses",
+            "url https",
+            "filehashmd5",
+            "filehashsha1",
+            "filehashsha256",
+            "ipv4",
+            "netherlands",
+            "united",
+            "france",
+            "germany",
+            "search",
+            "get https"
+          ],
+          "references": [],
+          "public": 1,
+          "adversary": "",
+          "targeted_countries": [],
+          "malware_families": [],
+          "attack_ids": [
+            {
+              "id": "T1140",
+              "name": "Deobfuscate/Decode Files or Information",
+              "display_name": "T1140 - Deobfuscate/Decode Files or Information"
+            },
+            {
+              "id": "T1056",
+              "name": "Input Capture",
+              "display_name": "T1056 - Input Capture"
+            }
+          ],
+          "industries": [],
+          "TLP": "green",
+          "cloned_from": null,
+          "export_count": 23,
+          "upvotes_count": 0,
+          "downvotes_count": 0,
+          "votes_count": 0,
+          "locked": false,
+          "pulse_source": "web",
+          "validator_count": 0,
+          "comment_count": 0,
+          "follower_count": 0,
+          "vote": 0,
+          "author": {
+            "username": "Q.Vashti",
+            "id": "337942",
+            "avatar_url": "https://otx.alienvault.com/assets/images/default-avatar.png",
+            "is_subscribed": false,
+            "is_following": false
+          },
+          "indicator_type_counts": {
+            "URL": 596,
+            "hostname": 211,
+            "FileHash-MD5": 18,
+            "FileHash-SHA1": 10,
+            "FileHash-SHA256": 330,
+            "domain": 77
+          },
+          "indicator_count": 1242,
+          "is_author": false,
+          "is_subscribing": null,
+          "subscriber_count": 86,
+          "modified_text": "141 days ago ",
+          "is_modified": true,
+          "groups": [],
+          "in_group": false,
+          "threat_hunter_scannable": true,
+          "threat_hunter_has_agents": 1,
+          "related_indicator_type": "domain",
+          "related_indicator_is_active": 1
+        },
+        {
+          "id": "682bd9d6b37f681e59299779",
+          "name": "iOS Critical PegasusLoader.exe on updated iOS devices",
+          "description": "PegasusLoader.exe | Google ‘sorry index’ Network\n89.58.0.0/18\nnetcup GmbH |\nFile: 0b8ca8067df54ce44de3708ae6df57f1873dd1d1037e9d50aef128c78e4c9c83)\nCrowdsourced Sigma Rules:\nCritical! Matches rule Capture Wi-Fi password by Joe Security\n\n***targeted individual",
+          "modified": "2025-06-19T00:01:44.092000",
+          "created": "2025-05-20T01:24:36.769000",
+          "tags": [],
+          "references": [],
+          "public": 1,
+          "adversary": "",
+          "targeted_countries": [],
+          "malware_families": [],
+          "attack_ids": [
+            {
+              "id": "T1140",
+              "name": "Deobfuscate/Decode Files or Information",
+              "display_name": "T1140 - Deobfuscate/Decode Files or Information"
+            }
+          ],
+          "industries": [],
+          "TLP": "green",
+          "cloned_from": null,
+          "export_count": 22,
+          "upvotes_count": 0,
+          "downvotes_count": 0,
+          "votes_count": 0,
+          "locked": false,
+          "pulse_source": "web",
+          "validator_count": 0,
+          "comment_count": 0,
+          "follower_count": 0,
+          "vote": 0,
+          "author": {
+            "username": "Q.Vashti",
+            "id": "337942",
+            "avatar_url": "https://otx.alienvault.com/assets/images/default-avatar.png",
+            "is_subscribed": false,
+            "is_following": false
+          },
+          "indicator_type_counts": {
+            "FileHash-MD5": 54,
+            "FileHash-SHA1": 173,
+            "FileHash-SHA256": 740,
+            "URL": 205,
+            "domain": 49,
+            "hostname": 193
+          },
+          "indicator_count": 1414,
+          "is_author": false,
+          "is_subscribing": null,
+          "subscriber_count": 85,
+          "modified_text": "141 days ago ",
+          "is_modified": true,
+          "groups": [],
+          "in_group": false,
+          "threat_hunter_scannable": true,
+          "threat_hunter_has_agents": 1,
+          "related_indicator_type": "domain",
+          "related_indicator_is_active": 1
+        },
+        {
+          "id": "682c02573458f2e8e4f5b20a",
+          "name": "Exploring RDS module Pegasus attack",
+          "description": "Malware Behavior Catalog Tree\nAnti-Behavioral Analysis\nOB0001\nDebugger Detection |\nB0001\nMemory Breakpoints |\nB0001.009\nDebugger Evasion |\nB0002\nGuard Pages | \nB0002.008\nDefense Evasion |\nOB0006\nHide Artifacts |\nE1564\nImpact | \nOB0008\nExploitation for Client Execution |\nE1203\nWindows Utilities |\nE1203.m06\nExecution\nOB0009\nInstall Additional Program\nB0023\nCommand and Scripting Interpreter\nE1059\nExploitation for Client Execution\nE1203\nWindows Utilities\nE1203.m06\nPersistence\nOB0012\nHide Artifacts\nE1564\nMemory\nOC0002\nChange Memory Protection\nC0008\nCommunication\nOC0006\nHTTP Communication\nC0002\n\nMITRE ATT&CK Tactics and Techniques\nExecution\nTA0002\nPersistence\nTA0003\nPrivilege Escalation\nTA0004\nDefense Evasion\nTA0005\nDiscovery\nTA0007\nCollection\n|TA0009\nCommand and Control\n TA0011\nExecution Gaurdrails\nMALWARE TROJAN EVADER\n#calls-wmi  #detect-debug-environment  #long-sleeps #tunneling #pegasusloader\nSigma Rules\n#critical  #highmalaware  #trojan  #evader #executed #ios #active #nonphone #radiophone",
+          "modified": "2025-06-18T00:04:44.401000",
+          "created": "2025-05-20T04:17:26.743000",
+          "tags": [
+            "url https",
+            "indicator role",
+            "title added",
+            "active related",
+            "pulses url",
+            "entries",
+            "get https",
+            "response",
+            "dns resolutions"
+          ],
+          "references": [],
+          "public": 1,
+          "adversary": "",
+          "targeted_countries": [],
+          "malware_families": [],
+          "attack_ids": [],
+          "industries": [],
+          "TLP": "green",
+          "cloned_from": null,
+          "export_count": 22,
+          "upvotes_count": 0,
+          "downvotes_count": 0,
+          "votes_count": 0,
+          "locked": false,
+          "pulse_source": "web",
+          "validator_count": 0,
+          "comment_count": 0,
+          "follower_count": 0,
+          "vote": 0,
+          "author": {
+            "username": "Q.Vashti",
+            "id": "337942",
+            "avatar_url": "https://otx.alienvault.com/assets/images/default-avatar.png",
+            "is_subscribed": false,
+            "is_following": false
+          },
+          "indicator_type_counts": {
+            "URL": 7,
+            "domain": 7,
+            "hostname": 2,
+            "FileHash-SHA256": 46
+          },
+          "indicator_count": 62,
+          "is_author": false,
+          "is_subscribing": null,
+          "subscriber_count": 85,
+          "modified_text": "142 days ago ",
+          "is_modified": true,
+          "groups": [],
+          "in_group": false,
+          "threat_hunter_scannable": true,
+          "threat_hunter_has_agents": 1,
+          "related_indicator_type": "domain",
+          "related_indicator_is_active": 1
+        },
+        {
+          "id": "65caca061fbb7674de86ec7b",
+          "name": "Invicta Stealer",
+          "description": "Invicta Stealer is equipped to steal data from most locations of a system which makes it a dangerous threat.\nLink found in https://house.mo.com",
+          "modified": "2024-03-14T01:01:47.115000",
+          "created": "2024-02-13T01:46:46.969000",
+          "tags": [
+            "ssl certificate",
+            "whois record",
+            "contacted",
+            "historical ssl",
+            "resolutions",
+            "communicating",
+            "whois whois",
+            "subdomains",
+            "referrer",
+            "problems",
+            "core",
+            "startpage",
+            "june",
+            "passive dns",
+            "urls",
+            "domain",
+            "otx telemetry",
+            "body",
+            "gmt content",
+            "x adblock",
+            "scan endpoints",
+            "all octoseek",
+            "hostname",
+            "date",
+            "encrypt",
+            "threat roundup",
+            "october",
+            "november",
+            "march",
+            "february",
+            "apple ios",
+            "april",
+            "tsara brashears",
+            "copy",
+            "hacktool",
+            "phishing",
+            "metro",
+            "crypto",
+            "installer",
+            "awful",
+            "united",
+            "unknown",
+            "germany unknown",
+            "search",
+            "servers",
+            "registrar",
+            "name servers",
+            "status",
+            "next",
+            "moved",
+            "address",
+            "creation date",
+            "showing",
+            "ipv4",
+            "pulse submit",
+            "url analysis",
+            "accept",
+            "aaaa",
+            "record type",
+            "ttl value",
+            "html document",
+            "ascii text",
+            "anchor hrefs",
+            "hrefs",
+            "anchor",
+            "anchor href",
+            "threat",
+            "paste",
+            "iocs",
+            "analyze",
+            "hostnames",
+            "url https",
+            "sample",
+            "server",
+            "code",
+            "registry domain",
+            "dnssec",
+            "registrar url",
+            "registrar whois",
+            "iana id",
+            "registrar abuse",
+            "tech email",
+            "fake update",
+            "utilizes new",
+            "idat loader",
+            "stealc",
+            "urls http",
+            "isadultno",
+            "adposbottom",
+            "adformatplain",
+            "adnetworks",
+            "quasar rat",
+            "ip detections",
+            "country",
+            "cellbrite",
+            "execution",
+            "pegasus",
+            "malware",
+            "agent tesla",
+            "attack",
+            "ukraine",
+            "silent",
+            "invicta stealer",
+            "redline stealer",
+            "orcus rat",
+            "files",
+            "germany asn",
+            "as196763",
+            "a domains",
+            "redacted for",
+            "record value",
+            "for privacy",
+            "emails",
+            "name",
+            "contacted urls",
+            "bundled",
+            "de indicators",
+            "domains",
+            "hashes",
+            "gmbh version",
+            "status page",
+            "service privacy",
+            "legal",
+            "impressum",
+            "pulse pulses",
+            "location united",
+            "open",
+            "cookie",
+            "customer",
+            "0 report",
+            "sea alt",
+            "certificate",
+            "#targeting",
+            "#discordwallets",
+            "house.mo.gov"
+          ],
+          "references": [
+            "https://www.facebooksunglassshop.com/",
+            "CVE-2017-0147 • CVE-2023-4966 • CVE-2023-22518",
+            "https://ispy-official.com/ X Cache: Redirect from cloudfront Via: 1.1 030fe0607711293dda988e571617a9f2.cloudfront.net CloudFront X Amz Cf",
+            "Pop: HIO50 C1 X Amz Cf Id: Jt aBPO2nI3Nt D0E4nzqpun66btDLhJ41kQwhDASrIukoWyUOWE1w==",
+            "apple.com-auth.eu [Find apple] | https://applemusic-spotlight.myunidays.com/US/en-US? [compromise via apple media]",
+            "http://init-p01st.push.apple.com/bag [= Google.com.uy modified browser - malicious] apple.com-auth.eu • appleid.apple.com-auth.eu•",
+            "https://itunes.apple.com/app/apple-store/id284815942/us/app/samsung-galaxy-watch-gear-s/id1117310635 [apple media compromise. Pega behavior?]",
+            "all-live.secure2storeapple.xxianzi.com • https://www.symbios.pk/apple-ipod-5-32gb",
+            "http://m.xiang5.com/keyword/17655.html&ht=%E9%98%BF%E6%BD%BC%E5%B0%8F%E8%AF%B4%E5%9C%A8%E7%BA%BF%E9%98%85%E8%AF%BB%E5%85%8D%E8%B4%B9%E9%98%85%E8%AF%BB_%E9%98%BF%E6%BD%BC%E5%B0%8F%E8%AF%B4%E5%9C%A8%E7%BA%BF%E9%98%85%E8%AF%BB%E5%85%A8%E6%9C%AC%E6%97%A0%E5%BC%B9%E7%AA%97-%E9%A6%99%E7%BD%91%E5%B0%8F%E8%AF%B4%E6%89%8B%E6%9C%BA%E7%89%88&uaddr=https:/www.sogou.com/link?url=58p16RfDRLtDzo-0AEmfJoGs8rDRUEq4ejjohgXqBYnQGuHk6xSRXg..&h=1080&w=1920&cd=24&lg=zh-CN&ua=mozilla/5.0%20(windows%20nt%2010.0;%20win64;%20x64)%20",
+            "Tracking: mailtrack.io • nr-data.net • tracking.bullseyeedu.com • https://smtp.mail.pentrack.com • tracking.vetsindexes.com",
+            "Remote threats: http://watchhers.net/index.php • http://eye.infunvip.com/appinterface/other/login.remote",
+            "https://plussizedesi.com/wp-content/uploads/2022/07/SniperGhostWarrior2BlackBox_Version_Download_INSTALL.pdf",
+            "https://www.pornhub.com/gifs/search?search=tsara+lynn+brashears+lesbian [ iOS unlocker & password decryption]",
+            "https://www.anyxxxtube.net/search-porn/tsara-brashears/ [ phishing • apple collection]",
+            "https://wallpapers-nature.com/tsara-brashears/tse1-mm-bing-net",
+            "wallpapers-nature.com",
+            "https://wallpapers-nature.com/%20tsara-brashears/urlscan-io",
+            "https://wallpapers-nature.com/tsara-brashears/urlscan-io",
+            "hello-world-mute-unit-3072.a-rahimi-farahani.workers.dev",
+            "edgedl.me.gvt1.com",
+            "Link found in https://house.mo.com"
+          ],
+          "public": 1,
+          "adversary": "",
+          "targeted_countries": [
+            "United States of America"
+          ],
+          "malware_families": [
+            {
+              "id": "Invicta Stealer",
+              "display_name": "Invicta Stealer",
+              "target": null
+            },
+            {
+              "id": "HackTool",
+              "display_name": "HackTool",
+              "target": null
+            },
+            {
+              "id": "Quasar RAT",
+              "display_name": "Quasar RAT",
+              "target": null
+            },
+            {
+              "id": "Pegasus",
+              "display_name": "Pegasus",
+              "target": null
+            },
+            {
+              "id": "RedLine Stealer",
+              "display_name": "RedLine Stealer",
+              "target": null
+            },
+            {
+              "id": "Orcus RAT",
+              "display_name": "Orcus RAT",
+              "target": null
+            },
+            {
+              "id": "Silent",
+              "display_name": "Silent",
+              "target": null
+            }
+          ],
+          "attack_ids": [],
+          "industries": [
+            "Government",
+            "Civil Society",
+            "Technology"
+          ],
+          "TLP": "white",
+          "cloned_from": null,
+          "export_count": 65,
+          "upvotes_count": 0,
+          "downvotes_count": 0,
+          "votes_count": 0,
+          "locked": false,
+          "pulse_source": "web",
+          "validator_count": 0,
+          "comment_count": 0,
+          "follower_count": 0,
+          "vote": 0,
+          "author": {
+            "username": "OctoSeek",
+            "id": "243548",
+            "avatar_url": "/otxapi/users/avatar_image/media/avatars/user_243548/resized/80/avatar_3b9c358f36.png",
+            "is_subscribed": false,
+            "is_following": false
+          },
+          "indicator_type_counts": {
+            "FileHash-MD5": 153,
+            "FileHash-SHA1": 145,
+            "FileHash-SHA256": 3848,
+            "CVE": 3,
+            "URL": 8291,
+            "domain": 2541,
+            "hostname": 3034,
+            "email": 13
+          },
+          "indicator_count": 18028,
+          "is_author": false,
+          "is_subscribing": null,
+          "subscriber_count": 215,
+          "modified_text": "603 days ago ",
+          "is_modified": true,
+          "groups": [],
+          "in_group": false,
+          "threat_hunter_scannable": true,
+          "threat_hunter_has_agents": 1,
+          "related_indicator_type": "domain",
+          "related_indicator_is_active": 1
+        },
+        {
+          "id": "65708a78e8b64037edbd6a88",
+          "name": "json iPhone app data 30-3-2022 2/3",
+          "description": "",
+          "modified": "2023-12-06T14:51:36.819000",
+          "created": "2023-12-06T14:51:36.819000",
+          "tags": [],
+          "references": [],
+          "public": 1,
+          "adversary": "",
+          "targeted_countries": [],
+          "malware_families": [],
+          "attack_ids": [],
+          "industries": [],
+          "TLP": "green",
+          "cloned_from": null,
+          "export_count": 2,
+          "upvotes_count": 0,
+          "downvotes_count": 0,
+          "votes_count": 0,
+          "locked": false,
+          "pulse_source": "api",
+          "validator_count": 0,
+          "comment_count": 0,
+          "follower_count": 0,
+          "vote": 0,
+          "author": {
+            "username": "StreamMiningEx",
+            "id": "262917",
+            "avatar_url": "https://otx.alienvault.com/assets/images/default-avatar.png",
+            "is_subscribed": false,
+            "is_following": false
+          },
+          "indicator_type_counts": {
+            "CVE": 1,
+            "FileHash-SHA256": 5234,
+            "hostname": 1530,
+            "domain": 306,
+            "URL": 1478,
+            "FileHash-MD5": 46
+          },
+          "indicator_count": 8595,
+          "is_author": false,
+          "is_subscribing": null,
+          "subscriber_count": 103,
+          "modified_text": "702 days ago ",
+          "is_modified": false,
+          "groups": [],
+          "in_group": false,
+          "threat_hunter_scannable": true,
+          "threat_hunter_has_agents": 1,
+          "related_indicator_type": "domain",
+          "related_indicator_is_active": 1
+        },
+        {
+          "id": "65707f3f51e635c843c1f5b9",
+          "name": "www.centergate.com",
+          "description": "",
+          "modified": "2023-12-06T14:03:43.279000",
+          "created": "2023-12-06T14:03:43.279000",
+          "tags": [],
+          "references": [],
+          "public": 1,
+          "adversary": "",
+          "targeted_countries": [],
+          "malware_families": [],
+          "attack_ids": [],
+          "industries": [],
+          "TLP": "green",
+          "cloned_from": null,
+          "export_count": 2,
+          "upvotes_count": 0,
+          "downvotes_count": 0,
+          "votes_count": 0,
+          "locked": false,
+          "pulse_source": "api",
+          "validator_count": 0,
+          "comment_count": 0,
+          "follower_count": 0,
+          "vote": 0,
+          "author": {
+            "username": "StreamMiningEx",
+            "id": "262917",
+            "avatar_url": "https://otx.alienvault.com/assets/images/default-avatar.png",
+            "is_subscribed": false,
+            "is_following": false
+          },
+          "indicator_type_counts": {
+            "CVE": 2,
+            "hostname": 949,
+            "FileHash-SHA256": 1386,
+            "URL": 2014,
+            "domain": 417,
+            "FileHash-MD5": 1,
+            "email": 1,
+            "FileHash-SHA1": 1
+          },
+          "indicator_count": 4771,
+          "is_author": false,
+          "is_subscribing": null,
+          "subscriber_count": 102,
+          "modified_text": "702 days ago ",
+          "is_modified": false,
+          "groups": [],
+          "in_group": false,
+          "threat_hunter_scannable": true,
+          "threat_hunter_has_agents": 1,
+          "related_indicator_type": "domain",
+          "related_indicator_is_active": 1
+        },
+        {
+          "id": "65707eab85e2a9a917487148",
+          "name": "Centergate.com",
+          "description": "",
+          "modified": "2023-12-06T14:01:15.794000",
+          "created": "2023-12-06T14:01:15.794000",
+          "tags": [],
+          "references": [],
+          "public": 1,
+          "adversary": "",
+          "targeted_countries": [],
+          "malware_families": [],
+          "attack_ids": [],
+          "industries": [],
+          "TLP": "green",
+          "cloned_from": null,
+          "export_count": 2,
+          "upvotes_count": 0,
+          "downvotes_count": 0,
+          "votes_count": 0,
+          "locked": false,
+          "pulse_source": "api",
+          "validator_count": 0,
+          "comment_count": 0,
+          "follower_count": 0,
+          "vote": 0,
+          "author": {
+            "username": "StreamMiningEx",
+            "id": "262917",
+            "avatar_url": "https://otx.alienvault.com/assets/images/default-avatar.png",
+            "is_subscribed": false,
+            "is_following": false
+          },
+          "indicator_type_counts": {
+            "CVE": 2,
+            "hostname": 810,
+            "FileHash-SHA256": 1327,
+            "URL": 2177,
+            "domain": 453,
+            "FileHash-MD5": 1,
+            "email": 1,
+            "FileHash-SHA1": 1
+          },
+          "indicator_count": 4772,
+          "is_author": false,
+          "is_subscribing": null,
+          "subscriber_count": 102,
+          "modified_text": "702 days ago ",
+          "is_modified": false,
+          "groups": [],
+          "in_group": false,
+          "threat_hunter_scannable": true,
+          "threat_hunter_has_agents": 1,
+          "related_indicator_type": "domain",
+          "related_indicator_is_active": 1
+        },
+        {
+          "id": "624894564dad1a51f309f237",
+          "name": "json iPhone app data 30-3-2022 2/3",
+          "description": "",
+          "modified": "2022-05-02T00:00:42.176000",
+          "created": "2022-04-02T18:22:14.190000",
+          "tags": [
+            "appinitiated",
+            "google llc",
+            "akamai",
+            "twitter",
+            "corporation",
+            "fastly",
+            "hubspot",
+            "new relic",
+            "teads",
+            "luxenbourg",
+            "facebook"
+          ],
+          "references": [],
+          "public": 1,
+          "adversary": "",
+          "targeted_countries": [],
+          "malware_families": [],
+          "attack_ids": [],
+          "industries": [],
+          "TLP": "white",
+          "cloned_from": null,
+          "export_count": 3,
+          "upvotes_count": 0,
+          "downvotes_count": 0,
+          "votes_count": 0,
+          "locked": false,
+          "pulse_source": "web",
+          "validator_count": 0,
+          "comment_count": 0,
+          "follower_count": 0,
+          "vote": 0,
+          "author": {
+            "username": "dorkingbeauty1",
+            "id": "80137",
+            "avatar_url": "https://otx.alienvault.com/assets/images/default-avatar.png",
+            "is_subscribed": false,
+            "is_following": false
+          },
+          "indicator_type_counts": {
+            "URL": 1478,
+            "hostname": 1530,
+            "domain": 306,
+            "FileHash-SHA256": 5234,
+            "CVE": 1,
+            "FileHash-MD5": 46
+          },
+          "indicator_count": 8595,
+          "is_author": false,
+          "is_subscribing": null,
+          "subscriber_count": 387,
+          "modified_text": "1285 days ago ",
+          "is_modified": true,
+          "groups": [],
+          "in_group": false,
+          "threat_hunter_scannable": true,
+          "threat_hunter_has_agents": 1,
+          "related_indicator_type": "domain",
+          "related_indicator_is_active": 1
+        },
+        {
+          "id": "6218f5b29464e15d018f8721",
+          "name": "www.centergate.com",
+          "description": "",
+          "modified": "2022-03-27T00:00:39.057000",
+          "created": "2022-02-25T15:28:50.343000",
+          "tags": [
+            "whois record",
+            "whois",
+            "ssl certificate"
+          ],
+          "references": [],
+          "public": 1,
+          "adversary": "",
+          "targeted_countries": [
+            "United States of America"
+          ],
+          "malware_families": [
+            {
+              "id": "Ransom:Win32/CVE-2017-0147.A",
+              "display_name": "Ransom:Win32/CVE-2017-0147.A",
+              "target": "/malware/Ransom:Win32/CVE-2017-0147.A"
+            },
+            {
+              "id": "Win.Ransomware.WannaCry-6313787-0",
+              "display_name": "Win.Ransomware.WannaCry-6313787-0",
+              "target": null
+            },
+            {
+              "id": "Backdoor:Win32/Prorat.AZ",
+              "display_name": "Backdoor:Win32/Prorat.AZ",
+              "target": "/malware/Backdoor:Win32/Prorat.AZ"
+            },
+            {
+              "id": "Win.Trojan.Prorat-45",
+              "display_name": "Win.Trojan.Prorat-45",
+              "target": null
+            },
+            {
+              "id": "Win32:Agent-QJD\\ [Trj]",
+              "display_name": "Win32:Agent-QJD\\ [Trj]",
+              "target": null
+            }
+          ],
+          "attack_ids": [],
+          "industries": [],
+          "TLP": "white",
+          "cloned_from": null,
+          "export_count": 11,
+          "upvotes_count": 0,
+          "downvotes_count": 0,
+          "votes_count": 0,
+          "locked": false,
+          "pulse_source": "web",
+          "validator_count": 0,
+          "comment_count": 0,
+          "follower_count": 0,
+          "vote": 0,
+          "author": {
+            "username": "Kailula4",
+            "id": "131997",
+            "avatar_url": "https://otx.alienvault.com/assets/images/default-avatar.png",
+            "is_subscribed": false,
+            "is_following": false
+          },
+          "indicator_type_counts": {
+            "hostname": 949,
+            "URL": 2014,
+            "domain": 417,
+            "FileHash-SHA256": 1386,
+            "CVE": 2,
+            "FileHash-MD5": 1,
+            "email": 1,
+            "FileHash-SHA1": 1
+          },
+          "indicator_count": 4771,
+          "is_author": false,
+          "is_subscribing": null,
+          "subscriber_count": 390,
+          "modified_text": "1321 days ago ",
+          "is_modified": true,
+          "groups": [],
+          "in_group": false,
+          "threat_hunter_scannable": true,
+          "threat_hunter_has_agents": 1,
+          "related_indicator_type": "domain",
+          "related_indicator_is_active": 1
+        },
+        {
+          "id": "6211ee3ffa661501f2caa803",
+          "name": "Centergate.com",
+          "description": "",
+          "modified": "2022-03-25T00:03:52.440000",
+          "created": "2022-02-20T07:31:11.659000",
+          "tags": [
+            "whois",
+            "whois record",
+            "redacted for",
+            "date",
+            "tucows domains",
+            "server",
+            "privacy tech",
+            "tucows",
+            "iana id",
+            "registrar abuse",
+            "registrar whois",
+            "code",
+            "win32 exe",
+            "detections type",
+            "name",
+            "dns replication",
+            "subdomains",
+            "communicating",
+            "files referring",
+            "domain status",
+            "ranks rank",
+            "value ingestion",
+            "time cisco",
+            "umbrella",
+            "utc statvoo",
+            "utc alexa",
+            "dns records",
+            "record type",
+            "submission",
+            "links community",
+            "history first",
+            "analysis",
+            "utc http",
+            "response final",
+            "url http",
+            "ip address",
+            "status code",
+            "body length"
+          ],
+          "references": [],
+          "public": 1,
+          "adversary": "",
+          "targeted_countries": [],
+          "malware_families": [],
+          "attack_ids": [],
+          "industries": [],
+          "TLP": "white",
+          "cloned_from": null,
+          "export_count": 9,
+          "upvotes_count": 0,
+          "downvotes_count": 0,
+          "votes_count": 0,
+          "locked": false,
+          "pulse_source": "web",
+          "validator_count": 0,
+          "comment_count": 0,
+          "follower_count": 0,
+          "vote": 0,
+          "author": {
+            "username": "Kailula4",
+            "id": "131997",
+            "avatar_url": "https://otx.alienvault.com/assets/images/default-avatar.png",
+            "is_subscribed": false,
+            "is_following": false
+          },
+          "indicator_type_counts": {
+            "URL": 2177,
+            "FileHash-SHA256": 1327,
+            "hostname": 810,
+            "domain": 453,
+            "CVE": 2,
+            "email": 1,
+            "FileHash-SHA1": 1,
+            "FileHash-MD5": 1
+          },
+          "indicator_count": 4772,
+          "is_author": false,
+          "is_subscribing": null,
+          "subscriber_count": 390,
+          "modified_text": "1323 days ago ",
+          "is_modified": true,
+          "groups": [],
+          "in_group": false,
+          "threat_hunter_scannable": true,
+          "threat_hunter_has_agents": 1,
+          "related_indicator_type": "domain",
+          "related_indicator_is_active": 1
+        }
+      ],
+      "related_ips": []
+    }
+  },
+  "ip_intelligence": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {
+        "34.197.182.24": {
+          "error": "no_result"
+        },
+        "3.174.18.110": {
+          "error": "no_result"
+        },
+        "34.149.135.19": {
+          "error": "no_result"
+        },
+        "172.67.69.226": {
+          "error": "no_result"
+        },
+        "2600:9000:28e5:4a00:15:54e6:cb40:93a1": {
+          "error": "no_result"
+        },
+        "37.157.4.21": {
+          "error": "no_result"
+        },
+        "2a02:26f0:3b:296::1e80": {
+          "error": "no_result"
+        },
+        "2606:4700::6810:aee2": {
+          "error": "no_result"
+        },
+        "2600:9000:28e5:5e00:15:54e6:cb40:93a1": {
+          "error": "no_result"
+        },
+        "3.174.18.42": {
+          "error": "no_result"
+        },
+        "3.174.18.38": {
+          "error": "no_result"
+        },
+        "2600:1f10:4ce4:4a01:86b3:d442:5b98:87fb": {
+          "error": "no_result"
+        },
+        "18.173.5.79": {
+          "error": "no_result"
+        },
+        "34.247.240.25": {
+          "error": "no_result"
+        },
+        "3.174.18.84": {
+          "error": "no_result"
+        },
+        "2a02:26f0:3b:2a4::1e80": {
+          "error": "no_result"
+        },
+        "2a06:98c1:310d::ac40:9b77": {
+          "error": "no_result"
+        },
+        "3.127.178.105": {
+          "error": "no_result"
+        },
+        "2600:1f10:4ce4:4a05:6ed4:c031:360e:a1ed": {
+          "error": "no_result"
+        },
+        "216.239.34.36": {
+          "error": "no_result"
+        },
+        "2a00:1450:400f:801::2008": {
+          "error": "no_result"
+        },
+        "2606:4700:20::681a:82c": {
+          "error": "no_result"
+        },
+        "216.239.32.36": {
+          "error": "no_result"
+        },
+        "2a00:1450:400f:804::2003": {
+          "error": "no_result"
+        },
+        "3.174.18.4": {
+          "error": "no_result"
+        },
+        "3.248.153.53": {
+          "error": "no_result"
+        },
+        "2600:9000:2574:9c00:2:2fdd:fc0:93a1": {
+          "error": "no_result"
+        },
+        "2600:9000:28e5:2400:15:54e6:cb40:93a1": {
+          "error": "no_result"
+        },
+        "69.175.109.122": {
+          "error": "no_result"
+        },
+        "217.110.116.41": {
+          "error": "no_result"
+        },
+        "3.174.18.83": {
+          "error": "no_result"
+        },
+        "46.51.175.46": {
+          "error": "no_result"
+        },
+        "69.173.156.148": {
+          "error": "no_result"
+        },
+        "150.171.22.12": {
+          "error": "no_result"
+        },
+        "44.196.115.120": {
+          "error": "no_result"
+        },
+        "2600:9000:28e5:9a00:15:54e6:cb40:93a1": {
+          "error": "no_result"
+        },
+        "3.234.168.42": {
+          "error": "no_result"
+        },
+        "2600:9000:2574:e200:2:2fdd:fc0:93a1": {
+          "error": "no_result"
+        },
+        "172.64.147.68": {
+          "error": "no_result"
+        },
+        "3.174.18.92": {
+          "error": "no_result"
+        },
+        "2620:1ec:50::12": {
+          "error": "no_result"
+        },
+        "3.174.18.57": {
+          "error": "no_result"
+        },
+        "2a06:98c1:3104::6812:2089": {
+          "error": "no_result"
+        },
+        "46.137.183.39": {
+          "error": "no_result"
+        },
+        "2600:9000:28e5:4200:15:54e6:cb40:93a1": {
+          "error": "no_result"
+        },
+        "104.26.8.44": {
+          "error": "no_result"
+        },
+        "3.174.18.68": {
+          "error": "no_result"
+        },
+        "172.67.72.163": {
+          "error": "no_result"
+        },
+        "2a0b:7e00:202:2701::5": {
+          "error": "no_result"
+        },
+        "54.156.13.80": {
+          "error": "no_result"
+        },
+        "185.167.164.48": {
+          "error": "no_result"
+        },
+        "95.209.205.145": {
+          "error": "no_result"
+        },
+        "23.40.108.224": {
+          "error": "no_result"
+        },
+        "69.173.156.149": {
+          "error": "no_result"
+        },
+        "3.174.18.9": {
+          "error": "no_result"
+        },
+        "2606:4700::6812:572a": {
+          "error": "no_result"
+        },
+        "2600:1f10:4ce4:4a01:1212:6b9:41:681a": {
+          "error": "no_result"
+        },
+        "150.171.22.14": {
+          "error": "no_result"
+        },
+        "2600:9000:2574:6000:2:2fdd:fc0:93a1": {
+          "error": "no_result"
+        },
+        "52.212.4.177": {
+          "error": "no_result"
+        },
+        "3.174.18.12": {
+          "error": "no_result"
+        },
+        "2600:9000:2574:5000:2:2fdd:fc0:93a1": {
+          "error": "no_result"
+        },
+        "104.26.6.5": {
+          "error": "no_result"
+        },
+        "185.167.164.38": {
+          "error": "no_result"
+        },
+        "52.51.65.221": {
+          "error": "no_result"
+        },
+        "104.18.26.193": {
+          "error": "no_result"
+        },
+        "2600:9000:28e5:3200:15:54e6:cb40:93a1": {
+          "error": "no_result"
+        },
+        "35.173.41.114": {
+          "error": "no_result"
+        },
+        "2606:4700:20::681a:92c": {
+          "error": "no_result"
+        },
+        "2606:4700::6810:afe2": {
+          "error": "no_result"
+        },
+        "34.250.174.184": {
+          "error": "no_result"
+        },
+        "3.174.18.127": {
+          "error": "no_result"
+        },
+        "54.158.196.145": {
+          "error": "no_result"
+        },
+        "2606:4700:20::681a:705": {
+          "error": "no_result"
+        },
+        "3.174.18.37": {
+          "error": "no_result"
+        },
+        "52.200.121.164": {
+          "error": "no_result"
+        },
+        "142.250.74.34": {
+          "error": "no_result"
+        },
+        "95.209.205.169": {
+          "error": "no_result"
+        },
+        "199.232.42.49": {
+          "error": "no_result"
+        },
+        "2600:9000:2574:7e00:2:2fdd:fc0:93a1": {
+          "error": "no_result"
+        },
+        "54.166.68.88": {
+          "error": "no_result"
+        },
+        "142.250.74.40": {
+          "error": "no_result"
+        },
+        "2a00:1450:400f:804::200a": {
+          "error": "no_result"
+        },
+        "104.26.9.44": {
+          "error": "no_result"
+        },
+        "108.128.19.110": {
+          "error": "no_result"
+        },
+        "3.174.18.67": {
+          "error": "no_result"
+        },
+        "18.173.5.50": {
+          "error": "no_result"
+        },
+        "199.232.41.73": {
+          "error": "no_result"
+        },
+        "18.173.5.20": {
+          "error": "no_result"
+        },
+        "2600:1f10:4ce4:4a03:3af0:80bc:670b:6990": {
+          "error": "no_result"
+        },
+        "2600:1f10:4ce4:4a02:8e9:90a7:8e89:68ae": {
+          "error": "no_result"
+        },
+        "185.167.164.53": {
+          "error": "no_result"
+        },
+        "107.23.171.68": {
+          "error": "no_result"
+        },
+        "216.58.211.3": {
+          "error": "no_result"
+        },
+        "104.18.40.188": {
+          "error": "no_result"
+        },
+        "3.174.18.126": {
+          "error": "no_result"
+        },
+        "2600:1901:0:a9f9::": {
+          "error": "no_result"
+        },
+        "81.145.150.132": {
+          "error": "no_result"
+        },
+        "104.16.174.226": {
+          "error": "no_result"
+        },
+        "34.120.250.63": {
+          "error": "no_result"
+        },
+        "2a02:aa6:440:5::5fd1:cd2a": {
+          "error": "no_result"
+        },
+        "104.18.86.42": {
+          "error": "no_result"
+        },
+        "2600:9000:2574:d600:2:2fdd:fc0:93a1": {
+          "error": "no_result"
+        },
+        "2606:4700:20::ac43:48a3": {
+          "error": "no_result"
+        },
+        "2600:9000:2574:e800:2:2fdd:fc0:93a1": {
+          "error": "no_result"
+        },
+        "2606:4700:20::ac43:45e2": {
+          "error": "no_result"
+        },
+        "2600:1f10:4ce4:4a02:d10e:9bd:db09:7abb": {
+          "error": "no_result"
+        },
+        "217.11.198.129": {
+          "error": "no_result"
+        },
+        "104.26.7.5": {
+          "error": "no_result"
+        },
+        "104.16.175.226": {
+          "error": "no_result"
+        },
+        "3.174.18.46": {
+          "error": "no_result"
+        },
+        "172.64.155.119": {
+          "error": "no_result"
+        },
+        "18.173.5.44": {
+          "error": "no_result"
+        },
+        "54.83.52.116": {
+          "error": "no_result"
+        },
+        "34.36.73.246": {
+          "error": "no_result"
+        },
+        "18.173.5.112": {
+          "error": "no_result"
+        },
+        "52.20.238.45": {
+          "error": "no_result"
+        },
+        "142.250.74.10": {
+          "error": "no_result"
+        },
+        "3.174.18.26": {
+          "error": "no_result"
+        },
+        "104.18.87.42": {
+          "error": "no_result"
+        },
+        "2600:9000:28e5:ae00:15:54e6:cb40:93a1": {
+          "error": "no_result"
+        },
+        "52.73.45.185": {
+          "error": "no_result"
+        },
+        "2001:4860:4802:34::36": {
+          "error": "no_result"
+        },
+        "2600:9000:28e5:4600:15:54e6:cb40:93a1": {
+          "error": "no_result"
+        },
+        "34.96.71.22": {
+          "error": "no_result"
+        },
+        "3.174.18.89": {
+          "error": "no_result"
+        },
+        "18.173.5.64": {
+          "error": "no_result"
+        },
+        "18.173.5.70": {
+          "error": "no_result"
+        },
+        "2600:9000:2574:4c00:2:2fdd:fc0:93a1": {
+          "error": "no_result"
+        },
+        "3.174.18.104": {
+          "error": "no_result"
+        },
+        "2600:1f10:4ce4:4a05:ef39:1e7d:8ea0:2f17": {
+          "error": "no_result"
+        },
+        "3.174.18.90": {
+          "error": "no_result"
+        },
+        "54.72.18.6": {
+          "error": "no_result"
+        },
+        "2606:4700:20::681a:605": {
+          "error": "no_result"
+        },
+        "104.18.27.193": {
+          "error": "no_result"
+        },
+        "3.174.18.64": {
+          "error": "no_result"
+        },
+        "18.173.5.125": {
+          "error": "no_result"
+        },
+        "3.174.18.97": {
+          "error": "no_result"
+        },
+        "2606:4700::6812:562a": {
+          "error": "no_result"
+        },
+        "18.202.12.79": {
+          "error": "no_result"
+        },
+        "2001:4860:4802:32::36": {
+          "error": "no_result"
+        },
+        "2600:1f10:4ce4:4a03:63ff:df6f:f28d:d263": {
+          "error": "no_result"
+        },
+        "52.49.89.34": {
+          "error": "no_result"
+        },
+        "54.208.80.38": {
+          "error": "no_result"
+        },
+        "3.174.18.124": {
+          "error": "no_result"
+        },
+        "199.232.41.40": {
+          "error": "no_result"
+        },
+        "2a02:aa6:440:5::5fd1:cd23": {
+          "error": "no_result"
+        },
+        "35.244.174.68": {
+          "error": "no_result"
+        },
+        "104.18.32.137": {
+          "error": "no_result"
+        }
+      },
+      "malware_families": [],
+      "error": "missing_search_term"
+    },
+    "alienvault": {
+      "error": "400 Client Error: BAD REQUEST for url: https://prod-otxp-web.otx.alienvault.io/api/v1/indicators/domain/general"
+    }
+  }
+}

@@ -50,36 +50,6 @@ class GeographicReporter:
         # Analyze geographic distribution
         geo_stats = self._analyze_geographic_distribution(victims)
 
-        # Optionally remove excluded countries from the stats/visualizations
-        if exclude_countries:
-            exclude_set = {c.lower() for c in exclude_countries}
-
-            # Filter country counts
-            geo_stats['countries'] = {k: v for k, v in geo_stats['countries'].items()
-                                      if k and k.lower() not in exclude_set}
-
-            # Filter regions and cities where the country is prefixed like "Country - Region"
-            geo_stats['regions'] = {k: v for k, v in geo_stats['regions'].items()
-                                    if k and k.split(' - ')[0].lower() not in exclude_set}
-
-            geo_stats['cities'] = {k: v for k, v in geo_stats['cities'].items()
-                                   if k and k.split(' - ')[0].lower() not in exclude_set}
-
-            # Filter interaction types per country
-            filtered_interaction = {}
-            for int_type, countries in geo_stats['interaction_types'].items():
-                filtered_countries = {country: cnt for country, cnt in countries.items()
-                                      if country and country.lower() not in exclude_set}
-                if filtered_countries:
-                    filtered_interaction[int_type] = filtered_countries
-            geo_stats['interaction_types'] = filtered_interaction
-
-            # Filter attacker/victim country lists and coordinates
-            geo_stats['attacker_countries'] = [c for c in geo_stats['attacker_countries'] if c.lower() not in exclude_set]
-            geo_stats['victim_countries'] = [c for c in geo_stats['victim_countries'] if c.lower() not in exclude_set]
-            geo_stats['total_countries'] = len(geo_stats['countries'])
-            geo_stats['coordinates'] = [pt for pt in geo_stats.get('coordinates', []) if pt.get('country','').lower() not in exclude_set]
-
         # Generate visualizations
         visualizations = self._generate_visualizations(geo_stats)
 
@@ -100,97 +70,34 @@ class GeographicReporter:
 
         return report
 
+
     def _get_victim_data(self, case_id: str = None, min_confidence: float = 0.0) -> List[Dict]:
-        """Get victim data from database."""
-        if not self.db:
-            # Return mock data for testing
-            return self._get_mock_victim_data()
+        """Retrieve victim data from the database."""
+        query = "SELECT * FROM victims WHERE interaction_confidence >= ?"
+        params = [min_confidence]
 
-        try:
-            victims = self.db.get_victim_intelligence()
-            filtered_victims = []
+        if case_id:
+            query += " AND case_id = ?"
+            params.append(case_id)
 
-            for victim in victims:
-                # Apply filters
-                if case_id and victim.get('case_id') != case_id:
-                    continue
+        cursor = self.db.execute(query, params)
+        rows = cursor.fetchall()
 
-                confidence = victim.get('interaction_confidence', 0.0)
-                if confidence < min_confidence:
-                    continue
+        victims = []
+        for row in rows:
+            victim = dict(row)
+            # Parse geolocation JSON field
+            geo_data = victim.get('geolocation_data')
+            if geo_data:
+                try:
+                    victim['geolocation_data'] = json.loads(geo_data)
+                except json.JSONDecodeError:
+                    victim['geolocation_data'] = {}
+            else:
+                victim['geolocation_data'] = {}
+            victims.append(victim)
 
-                # Must have geolocation data
-                if not victim.get('geolocation_data'):
-                    continue
-
-                filtered_victims.append(victim)
-
-            return filtered_victims
-
-        except Exception as e:
-            print(f"❌ Errore recupero dati vittime: {e}")
-            return []
-
-    def _get_mock_victim_data(self) -> List[Dict]:
-        """Return mock victim data for testing."""
-        return [
-            {
-                'id': 1,
-                'victim_ip': '192.168.1.100',
-                'interaction_type': 'victim',
-                'interaction_confidence': 0.8,
-                'geolocation_data': {
-                    'country': 'Italy',
-                    'countryCode': 'IT',
-                    'region': 'Lazio',
-                    'city': 'Rome',
-                    'lat': 41.9028,
-                    'lon': 12.4964
-                }
-            },
-            {
-                'id': 2,
-                'victim_ip': '185.220.101.1',
-                'interaction_type': 'attacker',
-                'interaction_confidence': 0.9,
-                'geolocation_data': {
-                    'country': 'Russia',
-                    'countryCode': 'RU',
-                    'region': 'Moscow',
-                    'city': 'Moscow',
-                    'lat': 55.7558,
-                    'lon': 37.6176
-                }
-            },
-            {
-                'id': 3,
-                'victim_ip': '91.193.75.123',
-                'interaction_type': 'attacker',
-                'interaction_confidence': 0.7,
-                'geolocation_data': {
-                    'country': 'Netherlands',
-                    'countryCode': 'NL',
-                    'region': 'North Holland',
-                    'city': 'Amsterdam',
-                    'lat': 52.3676,
-                    'lon': 4.9041
-                }
-            },
-            {
-                'id': 4,
-                'victim_ip': '8.8.8.8',
-                'interaction_type': 'suspicious',
-                'interaction_confidence': 0.6,
-                'geolocation_data': {
-                    'country': 'United States',
-                    'countryCode': 'US',
-                    'region': 'California',
-                    'city': 'Mountain View',
-                    'lat': 37.3861,
-                    'lon': -122.084
-                }
-            }
-        ]
+        return victims
 
     def _analyze_geographic_distribution(self, victims: List[Dict]) -> Dict[str, Any]:
         """Analyze geographic distribution of victims."""
@@ -485,8 +392,7 @@ class GeographicReporter:
             print(f"❌ Errore generazione HTML: {e}")
 
 
-def generate_geographic_report_cli(case_id: str = None, min_confidence: float = 0.0,
-                                   output_format: str = 'both', exclude_countries: Optional[List[str]] = None):
+def generate_geographic_report_cli(case_id: str = None, min_confidence: float = 0.0, output_format: str = 'both'):
     """CLI function to generate geographic reports."""
     try:
         reporter = GeographicReporter()
@@ -495,7 +401,7 @@ def generate_geographic_report_cli(case_id: str = None, min_confidence: float = 
         print(f"📊 Confidenza minima: {min_confidence}")
         print(f"📁 Formato output: {output_format}")
 
-        report = reporter.generate_geographic_report(case_id, min_confidence, exclude_countries)
+        report = reporter.generate_geographic_report(case_id, min_confidence)
 
         if report['status'] == 'success':
             print("✅ Report generato con successo!")
@@ -507,8 +413,7 @@ def generate_geographic_report_cli(case_id: str = None, min_confidence: float = 
             if report['summary']['attacker_countries']:
                 print(f"🎯 Attaccanti principali: {', '.join(report['summary']['attacker_countries'][:3])}")
         else:
-            # Some reports use 'message' for failure reasons; fall back to get()
-            print(f"❌ {report.get('message', 'Errore sconosciuto')}")
+            print(f"❌ {report['message']}")
 
     except Exception as e:
         print(f"❌ Errore generazione report: {e}")
@@ -520,7 +425,6 @@ if __name__ == "__main__":
     print("=" * 40)
 
     reporter = GeographicReporter()
-    # default: no exclusions when run interactively
     report = reporter.generate_geographic_report()
 
     print("\n📊 Risultati Test:")

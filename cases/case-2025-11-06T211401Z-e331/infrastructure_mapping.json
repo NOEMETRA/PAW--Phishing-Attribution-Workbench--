@@ -1,0 +1,171 @@
+{
+  "network_analysis": {
+    "149.28.227.54": {
+      "whois": {
+        "registrar": "ENOM, INC.",
+        "organization": "Whois Privacy Protection Service, Inc.",
+        "creation_date": "2022-03-10 16:58:11+00:00",
+        "expiration_date": "2027-03-10 16:58:11+00:00",
+        "updated_date": "2022-03-10 17:35:32+00:00",
+        "name_servers": [
+          "NS1.VULTR.COM",
+          "NS2.VULTR.COM"
+        ],
+        "emails": [
+          "abuse@enom.com",
+          "svwhbytgd@whoisprivacyprotect.com"
+        ],
+        "address": [
+          "PO Box 639",
+          "C/O vultrusercontent.com"
+        ],
+        "city": "Kirkland",
+        "state": "WA",
+        "country": "US"
+      },
+      "open_ports": [
+        80,
+        443
+      ],
+      "network_range": "149.28.227.0/24"
+    },
+    "108.61.73.182": {
+      "whois": {
+        "registrar": "ENOM, INC.",
+        "organization": "Whois Privacy Protection Service, Inc.",
+        "creation_date": "2022-03-10 16:58:11+00:00",
+        "expiration_date": "2027-03-10 16:58:11+00:00",
+        "updated_date": "2022-03-10 17:35:32+00:00",
+        "name_servers": [
+          "NS1.VULTR.COM",
+          "NS2.VULTR.COM"
+        ],
+        "emails": [
+          "abuse@enom.com",
+          "svwhbytgd@whoisprivacyprotect.com"
+        ],
+        "address": [
+          "PO Box 639",
+          "C/O vultrusercontent.com"
+        ],
+        "city": "Kirkland",
+        "state": "WA",
+        "country": "US"
+      },
+      "open_ports": [
+        80,
+        443
+      ],
+      "network_range": "108.61.73.0/24"
+    }
+  },
+  "service_detection": {
+    "149.28.227.54": [
+      {
+        "port": 80,
+        "service": "HTTP",
+        "banner": "HTTP/1.0 308 Permanent Redirect\r\nConnection: close\r\nLocation: https:///\r\nServer: Caddy\r\nDate: Thu, 06 Nov 2025 21:15:25 GMT\r\n\r\n"
+      },
+      {
+        "port": 443,
+        "service": "HTTPS",
+        "banner": "HTTP/1.0 400 Bad Request\r\n\r\nClient sent an HTTP request to an HTTPS server.\n"
+      }
+    ],
+    "108.61.73.182": [
+      {
+        "port": 80,
+        "service": "HTTP",
+        "banner": "HTTP/1.0 308 Permanent Redirect\r\nConnection: close\r\nLocation: https:///\r\nServer: Caddy\r\nDate: Thu, 06 Nov 2025 21:15:42 GMT\r\n\r\n"
+      },
+      {
+        "port": 443,
+        "service": "HTTPS",
+        "banner": "HTTP/1.0 400 Bad Request\r\n\r\nClient sent an HTTP request to an HTTPS server.\n"
+      }
+    ]
+  },
+  "cdn_detection": false,
+  "infrastructure_timeline": [
+    {
+      "date": "2025-10-13T05:21:46.763",
+      "event": "SSL certificate issued (Issuer: C=US, O=Let's Encrypt, CN=E7)",
+      "source": "Certificate Transparency",
+      "common_name": "malicious.com",
+      "serial_number": "065ffa1d5a81cfb1b4c299b3f99b832732cf"
+    },
+    {
+      "date": "2025-10-13T05:21:48.833",
+      "event": "SSL certificate issued (Issuer: C=US, O=Let's Encrypt, CN=E7)",
+      "source": "Certificate Transparency",
+      "common_name": "malicious.com",
+      "serial_number": "065ffa1d5a81cfb1b4c299b3f99b832732cf"
+    },
+    {
+      "date": "2025-10-13T08:21:56.674",
+      "event": "SSL certificate issued (Issuer: C=US, O=Let's Encrypt, CN=E7)",
+      "source": "Certificate Transparency",
+      "common_name": "www.malicious.com",
+      "serial_number": "05e7a71360ad2003e9758a74b366e79e8303"
+    },
+    {
+      "date": "2025-10-13T08:21:56.981",
+      "event": "SSL certificate issued (Issuer: C=US, O=Let's Encrypt, CN=E7)",
+      "source": "Certificate Transparency",
+      "common_name": "www.malicious.com",
+      "serial_number": "05e7a71360ad2003e9758a74b366e79e8303"
+    },
+    {
+      "date": "2025-10-13T13:59:17.491",
+      "event": "SSL certificate issued (Issuer: C=US, O=Let's Encrypt, CN=E7)",
+      "source": "Certificate Transparency",
+      "common_name": "malicious.com",
+      "serial_number": "05c58797cbcc1576db2695f2a9e102f8e462"
+    },
+    {
+      "date": "2025-10-13T13:59:17.772",
+      "event": "SSL certificate issued (Issuer: C=US, O=Let's Encrypt, CN=E7)",
+      "source": "Certificate Transparency",
+      "common_name": "malicious.com",
+      "serial_number": "05c58797cbcc1576db2695f2a9e102f8e462"
+    },
+    {
+      "date": "2025-10-15T05:02:18.592",
+      "event": "SSL certificate issued (Issuer: C=US, O=Let's Encrypt, CN=E7)",
+      "source": "Certificate Transparency",
+      "common_name": "www.malicious.com",
+      "serial_number": "05585a3ec68b67235431ed5d819a007dc409"
+    },
+    {
+      "date": "2025-10-15T05:02:18.808",
+      "event": "SSL certificate issued (Issuer: C=US, O=Let's Encrypt, CN=E7)",
+      "source": "Certificate Transparency",
+      "common_name": "www.malicious.com",
+      "serial_number": "05585a3ec68b67235431ed5d819a007dc409"
+    },
+    {
+      "date": "2025-10-15T13:02:27.103",
+      "event": "SSL certificate issued (Issuer: C=US, O=Let's Encrypt, CN=E7)",
+      "source": "Certificate Transparency",
+      "common_name": "malicious.com",
+      "serial_number": "06fe08cf71c990fcedf6d689d83d0005cf5f"
+    },
+    {
+      "date": "2025-10-15T13:02:27.189",
+      "event": "SSL certificate issued (Issuer: C=US, O=Let's Encrypt, CN=E7)",
+      "source": "Certificate Transparency",
+      "common_name": "malicious.com",
+      "serial_number": "06fe08cf71c990fcedf6d689d83d0005cf5f"
+    },
+    {
+      "date": "2025-11-06T22:16:00.686532",
+      "event": "Infrastructure analysis performed",
+      "source": "PAW Analysis"
+    },
+    {
+      "date": "[datetime.datetime(1998, 8, 7, 4, 0, tzinfo=tzoffset('UTC', 0)), datetime.datetime(1998, 8, 6, 23, 0, tzinfo=tzoffset('UTC', 0))]",
+      "event": "Domain registered",
+      "source": "WHOIS"
+    }
+  ]
+}

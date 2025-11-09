@@ -865,63 +865,6 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
             except Exception as e:
                 print(f"[criminal_hunter] failed: {e}")
 
-            # 🚀 NUOVO: Integrazione Infrastructure Mapper per mappatura avanzata
-            print("[infrastructure_mapper] starting advanced network mapping...")
-            try:
-                mapper = InfrastructureMapper()
-                
-                # Raccogli tutti gli IP dall'analisi C2
-                all_ips = []
-                for ep in endpoints:
-                    ips = ep.get("ips", [])
-                    if isinstance(ips, list):
-                        all_ips.extend(ips)
-                
-                # Rimuovi duplicati
-                all_ips = list(set(all_ips))
-                
-                if all_ips and len(all_ips) > 0:
-                    # Prendi il dominio principale dalla campagna
-                    target_domain = ""
-                    for ep in endpoints:
-                        host = ep.get("host", "")
-                        if host and "." in host:
-                            target_domain = host
-                            break
-                    
-                    # Fallback: usa il primo URL detonato
-                    if not target_domain and urls and isinstance(urls, list) and len(urls) > 0:
-                        from urllib.parse import urlparse
-                        try:
-                            parsed = urlparse(urls[0])
-                            target_domain = parsed.netloc or ""
-                        except:
-                            pass
-                    
-                    if target_domain:
-                        try:
-                            infra_map = mapper.comprehensive_map(target_domain, all_ips)
-                            if infra_map:
-                                write_json(os.path.join(case_dir, "infrastructure_mapping.json"), infra_map)
-                                print(f"[infrastructure_mapper] completed mapping for {len(all_ips)} IPs")
-                                
-                                # Integra nell'attribution matrix
-                                matrix_file = os.path.join(case_dir, "attribution_matrix.json")
-                                if os.path.exists(matrix_file):
-                                    matrix_data = read_json(matrix_file) or {}
-                                    matrix_data["infrastructure_mapping"] = infra_map
-                                    write_json(matrix_file, matrix_data)
-                                    print("[infrastructure_mapper] integrated into attribution matrix")
-                        except Exception as map_err:
-                            print(f"[infrastructure_mapper] comprehensive_map failed: {map_err}")
-                    else:
-                        print("[infrastructure_mapper] No target domain found, skipping mapping")
-                else:
-                    print("[infrastructure_mapper] No IPs found for mapping, skipping")
-                            
-            except Exception as e:
-                print(f"[infrastructure_mapper] failed: {e}")
-
             # 🚀 NUOVO: Integrazione Enrich Last Hunt per arricchimento SSL e banner
             print("[enrich_last_hunt] starting SSL certificate and banner enrichment...")
             try:
@@ -998,6 +941,63 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
                         
             except Exception as e:
                 print(f"[enrich_last_hunt] failed: {e}")
+
+            # 🚀 INFRASTRUCTURE MAPPER: Eseguito DOPO enrich_last_hunt per avere SSL/banners disponibili
+            print("[infrastructure_mapper] starting advanced network mapping (post-enrichment)...")
+            try:
+                mapper = InfrastructureMapper()
+                
+                # Raccogli tutti gli IP dall'analisi C2
+                all_ips = []
+                for ep in endpoints:
+                    ips = ep.get("ips", [])
+                    if isinstance(ips, list):
+                        all_ips.extend(ips)
+                
+                # Rimuovi duplicati
+                all_ips = list(set(all_ips))
+                
+                if all_ips and len(all_ips) > 0:
+                    # Prendi il dominio principale dalla campagna
+                    target_domain = ""
+                    for ep in endpoints:
+                        host = ep.get("host", "")
+                        if host and "." in host:
+                            target_domain = host
+                            break
+                    
+                    # Fallback: usa il primo URL detonato
+                    if not target_domain and urls and isinstance(urls, list) and len(urls) > 0:
+                        from urllib.parse import urlparse
+                        try:
+                            parsed = urlparse(urls[0])
+                            target_domain = parsed.netloc or ""
+                        except:
+                            pass
+                    
+                    if target_domain:
+                        try:
+                            infra_map = mapper.comprehensive_map(target_domain, all_ips)
+                            if infra_map:
+                                write_json(os.path.join(case_dir, "infrastructure_mapping.json"), infra_map)
+                                print(f"[infrastructure_mapper] completed mapping for {len(all_ips)} IPs with enriched data")
+                                
+                                # Integra nell'attribution matrix
+                                matrix_file = os.path.join(case_dir, "attribution_matrix.json")
+                                if os.path.exists(matrix_file):
+                                    matrix_data = read_json(matrix_file) or {}
+                                    matrix_data["infrastructure_mapping"] = infra_map
+                                    write_json(matrix_file, matrix_data)
+                                    print("[infrastructure_mapper] integrated into attribution matrix")
+                        except Exception as map_err:
+                            print(f"[infrastructure_mapper] comprehensive_map failed: {map_err}")
+                    else:
+                        print("[infrastructure_mapper] No target domain found, skipping mapping")
+                else:
+                    print("[infrastructure_mapper] No IPs found for mapping, skipping")
+                            
+            except Exception as e:
+                print(f"[infrastructure_mapper] failed: {e}")
 
     # Merge canary hits → attacker_visit
     hits = os.path.join(case_dir, "canary", "hits.jsonl")
@@ -1799,8 +1799,11 @@ def analyze_web_content(domain: str) -> list:
 
         import re
 
+        # SSL verification from environment
+        verify_ssl = os.getenv('PAW_VERIFY_SSL', 'true').lower() == 'true'
+
         # Scarica la pagina principale
-        response = requests.get(f"https://{domain}", timeout=10, verify=False)
+        response = requests.get(f"https://{domain}", timeout=10, verify=verify_ssl)
         soup = BeautifulSoup(response.text, 'html.parser')
 
         # Cerca collegamenti nascosti in JavaScript

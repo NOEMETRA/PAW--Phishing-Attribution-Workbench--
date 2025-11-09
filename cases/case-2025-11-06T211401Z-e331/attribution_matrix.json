@@ -1,0 +1,876 @@
+{
+  "case_id": "case-2025-11-06T211401Z-e331",
+  "timestamp": "2025-11-06T21:16:41Z",
+  "intelligence_modules": {
+    "criminal_hunter": [
+      {
+        "target_domain": "malicious.com",
+        "criminal_analysis": {
+          "target_domain": "malicious.com",
+          "real_ips": [
+            {
+              "ip": "149.28.227.54",
+              "technique": "direct_dns",
+              "confidence": "high"
+            },
+            {
+              "ip": "108.61.73.182",
+              "technique": "subdomain_enum",
+              "confidence": "medium",
+              "source": "www.malicious.com"
+            },
+            {
+              "ip": "172.64.52.32",
+              "technique": "dns_ns",
+              "confidence": "medium",
+              "source": "ns1.sawsells.com"
+            }
+          ],
+          "infrastructure": {
+            "primary_domain": "malicious.com",
+            "primary_ip": "149.28.227.54",
+            "total_ips_found": 3,
+            "related_domains": [
+              "149.28.227.54.vultrusercontent.com"
+            ],
+            "open_ports": [
+              80,
+              443
+            ],
+            "techniques_applied": 3,
+            "advanced_analysis": {
+              "temporal_patterns": {
+                "dns_ttl": 1,
+                "ttl_category": "low",
+                "evasion_potential": "high"
+              },
+              "infrastructure_reuse": {
+                "ip_class": "B",
+                "is_cloud_provider": "unknown",
+                "reuse_potential": "medium"
+              },
+              "content_fingerprinting": {
+                "server_header": "Caddy",
+                "content_type": "text/html",
+                "security_headers": [
+                  "Content-Security-Policy",
+                  "Strict-Transport-Security",
+                  "X-Content-Type-Options",
+                  "X-Frame-Options",
+                  "X-Sveltekit-Page"
+                ]
+              },
+              "ttl_analysis": {}
+            }
+          },
+          "threat_intel": {
+            "threat_actor": "Unknown Cybercrime Group",
+            "confidence": 0.2,
+            "campaigns": [
+              "Generic Phishing"
+            ],
+            "risk_score": 20,
+            "campaign_type": "Generic Phishing"
+          },
+          "le_package": {
+            "package_version": "2.0",
+            "generated_at": "2025-11-06T22:14:54.298311",
+            "executive_summary": "PHISHING INFRASTRUCTURE ANALYSIS REPORT\n\nTarget Domain: malicious.com\nThreat Actor: Unknown Cybercrime Group\nAttribution Confidence: 20.0%\nCampaign Type: Generic Phishing\nAnalysis Date: 2025-11-06 22:14:54 UTC\n\nSUMMARY:\nInfrastructure analysis identified 3 associated IP addresses using 3 discovery techniques.\nMEDIUM CONFIDENCE - additional investigation recommended.",
+            "technical_evidence": {
+              "target_domain": "malicious.com",
+              "ip_addresses": [
+                {
+                  "ip_address": "149.28.227.54",
+                  "discovery_technique": "direct_dns",
+                  "confidence_level": "high",
+                  "asn": {},
+                  "geolocation": {
+                    "country": "Unknown",
+                    "org": "Unknown"
+                  },
+                  "additional_metadata": {}
+                },
+                {
+                  "ip_address": "108.61.73.182",
+                  "discovery_technique": "subdomain_enum",
+                  "confidence_level": "medium",
+                  "asn": {},
+                  "geolocation": {
+                    "country": "Unknown",
+                    "org": "Unknown"
+                  },
+                  "additional_metadata": {
+                    "source": "www.malicious.com"
+                  }
+                },
+                {
+                  "ip_address": "172.64.52.32",
+                  "discovery_technique": "dns_ns",
+                  "confidence_level": "medium",
+                  "asn": {},
+                  "geolocation": {
+                    "country": "Unknown",
+                    "org": "Unknown"
+                  },
+                  "additional_metadata": {
+                    "source": "ns1.sawsells.com"
+                  }
+                }
+              ],
+              "infrastructure_summary": {
+                "primary_domain": "malicious.com",
+                "primary_ip": "149.28.227.54",
+                "total_ips_found": 3,
+                "related_domains": [
+                  "149.28.227.54.vultrusercontent.com"
+                ],
+                "open_ports": [
+                  80,
+                  443
+                ],
+                "techniques_applied": 3,
+                "advanced_analysis": {
+                  "temporal_patterns": {
+                    "dns_ttl": 1,
+                    "ttl_category": "low",
+                    "evasion_potential": "high"
+                  },
+                  "infrastructure_reuse": {
+                    "ip_class": "B",
+                    "is_cloud_provider": "unknown",
+                    "reuse_potential": "medium"
+                  },
+                  "content_fingerprinting": {
+                    "server_header": "Caddy",
+                    "content_type": "text/html",
+                    "security_headers": [
+                      "Content-Security-Policy",
+                      "Strict-Transport-Security",
+                      "X-Content-Type-Options",
+                      "X-Frame-Options",
+                      "X-Sveltekit-Page"
+                    ]
+                  },
+                  "ttl_analysis": {}
+                }
+              },
+              "threat_intelligence": {
+                "threat_actor": "Unknown Cybercrime Group",
+                "confidence": 0.2,
+                "campaigns": [
+                  "Generic Phishing"
+                ],
+                "attribution_notes": [],
+                "infrastructure_features": {}
+              },
+              "collection_metadata": {
+                "techniques_used": [
+                  "direct_dns",
+                  "subdomain_enum",
+                  "dns_ns"
+                ],
+                "total_ips_discovered": 3,
+                "analysis_completeness": "Partial"
+              }
+            },
+            "investigation_notes": [
+              "Discovered 3 IP addresses using 3 techniques",
+              "Threat actor identified as: Unknown Cybercrime Group (confidence: 20.0%)"
+            ],
+            "recommendations": [
+              "LOW PRIORITY: Additional evidence collection needed",
+              "No HTTPS - likely credential harvesting, prioritize user notification"
+            ],
+            "abuse_contacts": [],
+            "legal_disclaimer": "This report is generated for lawful investigation purposes only. All data collected using authorized techniques."
+          },
+          "infrastructure_clusters": {
+            "asn_clusters": {
+              "unknown": {
+                "ips": [
+                  "149.28.227.54",
+                  "108.61.73.182",
+                  "172.64.52.32"
+                ],
+                "provider": "unknown"
+              }
+            },
+            "ip_range_clusters": {},
+            "cloud_provider_clusters": {},
+            "geographic_clusters": {}
+          },
+          "campaign_correlation": {
+            "similar_domains": [],
+            "shared_infrastructure": [],
+            "temporal_patterns": {},
+            "technique_patterns": []
+          },
+          "operational_fingerprints": {
+            "server_configuration": {
+              "server_header": "Caddy",
+              "server_type": "unknown",
+              "uniqueness_score": 0.3,
+              "version_pattern": "unknown",
+              "all_response_headers": {
+                "Connection": "close",
+                "Location": "https://malicious.com/",
+                "Server": "Caddy",
+                "Date": "Thu, 06 Nov 2025 21:15:06 GMT"
+              }
+            },
+            "http_headers_pattern": {
+              "security_headers": [],
+              "custom_headers": [],
+              "has_cookies": false,
+              "fingerprint_score": 0.0
+            },
+            "dns_patterns": {
+              "dns_records": {
+                "A": [
+                  "149.28.227.54",
+                  "108.61.73.182"
+                ],
+                "AAAA": [],
+                "MX": [],
+                "TXT": [],
+                "NS": [
+                  "ns2.sawsells.com.",
+                  "ns1.sawsells.com."
+                ],
+                "CNAME": [],
+                "SOA": [
+                  "ns1.sawsells.com. hostmaster.sawsells.com. 2025101516 10800 3600 604800 1200"
+                ],
+                "SRV": [],
+                "PTR": []
+              },
+              "ttl_analysis_error": "Failed to analyze TTL",
+              "reverse_dns": {
+                "149.28.227.54": "149.28.227.54.vultrusercontent.com.",
+                "108.61.73.182": "108.61.73.182.vultrusercontent.com."
+              },
+              "dnssec_enabled": false
+            },
+            "ssl_patterns": {
+              "ssl_analysis_error": "[SSL: TLSV1_ALERT_INTERNAL_ERROR] tlsv1 alert internal error (_ssl.c:1028)"
+            },
+            "content_patterns": {
+              "successful_method": "HEAD_http_80",
+              "final_url": "https://malicious.com/",
+              "status_code": 200,
+              "html_structure_hash": "d41d8cd98f00b204e9800998ecf8427e",
+              "html_length": 0,
+              "has_forms": false,
+              "has_scripts": false,
+              "js_patterns": [],
+              "obfuscation_indicators": [],
+              "suspicious_js_patterns": [],
+              "total_scripts": 0,
+              "css_references_hash": "d751713988987e93",
+              "css_count": 0,
+              "image_count": 0,
+              "external_resources": [],
+              "external_resources_count": 0,
+              "form_structures": [],
+              "forms_count": 0,
+              "phishing_indicators": [],
+              "page_title": "",
+              "meta_description": "",
+              "suspicious_content_words": [],
+              "cookie_analysis": {
+                "count": 0,
+                "names": [],
+                "has_session_cookies": false
+              },
+              "security_headers": {
+                "Content-Security-Policy": "frame-ancestors 'none'",
+                "X-Content-Type-Options": "nosniff",
+                "X-Frame-Options": "DENY"
+              },
+              "custom_headers": {
+                "X-Sveltekit-Page": "true"
+              },
+              "response_headers_count": 11
+            },
+            "network_behavior": {
+              "tcp_connection_time": 0.141,
+              "http_banner": "HTTP/1.1 308 Permanent Redirect\r\nConnection: close\r\nLocation: https://example.com/\r\nServer: Caddy\r\nDate: Thu, 06 Nov 2025 21:14:56 GMT\r\n\r\n",
+              "banner_response_time": 0.131,
+              "http_status_line": "HTTP/1.1 308 Permanent Redirect",
+              "server_header_raw": "Caddy",
+              "ssl_error": "[SSL: TLSV1_ALERT_INTERNAL_ERROR] tlsv1 alert internal error (_ssl.c:1028)",
+              "ssl_has_certificate": false,
+              "open_ports": [
+                80,
+                443
+              ],
+              "ports_scanned": 10
+            },
+            "behavioral_patterns": {
+              "current_utc_hour": 22,
+              "current_day": "Thursday",
+              "activity_pattern": "night_activity",
+              "activity_score": 0.3,
+              "domain_complexity": {
+                "length": 13,
+                "vowel_ratio": 0.462,
+                "digit_ratio": 0.0,
+                "special_char_ratio": 0.077,
+                "entropy_score": 3.085,
+                "is_suspicious_length": false
+              },
+              "suspicious_domain_patterns": []
+            },
+            "composite_fingerprint": {
+              "hash": "1ed8eaf59e5da61b7285c52c6802e1a713aa8607369d69d954db92b1554d3228",
+              "components": 7,
+              "uniqueness_score": 0.0
+            }
+          },
+          "timestamp": "2025-11-06T22:15:05.832070",
+          "techniques_used": [
+            "direct_dns",
+            "subdomain_enum",
+            "dns_ns"
+          ]
+        }
+      },
+      {
+        "target_domain": "maiicious.com",
+        "criminal_analysis": {
+          "target_domain": "maiicious.com",
+          "real_ips": [],
+          "infrastructure": {
+            "primary_domain": "maiicious.com",
+            "status": "no_ips",
+            "techniques_applied": 0
+          },
+          "threat_intel": {
+            "threat_actor": "Unknown",
+            "confidence": 0.0,
+            "campaigns": [],
+            "risk_score": 0
+          },
+          "le_package": {
+            "package_version": "2.0",
+            "generated_at": "2025-11-06T22:15:07.185386",
+            "executive_summary": "PHISHING INFRASTRUCTURE ANALYSIS REPORT\n\nTarget Domain: maiicious.com\nThreat Actor: Unknown\nAttribution Confidence: 0.0%\nCampaign Type: Unknown\nAnalysis Date: 2025-11-06 22:15:07 UTC\n\nSUMMARY:\nInfrastructure analysis identified 0 associated IP addresses using 0 discovery techniques.\nMEDIUM CONFIDENCE - additional investigation recommended.",
+            "technical_evidence": {
+              "target_domain": "maiicious.com",
+              "ip_addresses": [],
+              "infrastructure_summary": {
+                "primary_domain": "maiicious.com",
+                "status": "no_ips",
+                "techniques_applied": 0
+              },
+              "threat_intelligence": {
+                "threat_actor": "Unknown",
+                "confidence": 0.0,
+                "campaigns": [],
+                "attribution_notes": [],
+                "infrastructure_features": {}
+              },
+              "collection_metadata": {
+                "techniques_used": [],
+                "total_ips_discovered": 0,
+                "analysis_completeness": "Limited"
+              }
+            },
+            "investigation_notes": [
+              "Discovered 0 IP addresses using 0 techniques",
+              "Threat actor identified as: Unknown (confidence: 0.0%)"
+            ],
+            "recommendations": [
+              "LOW PRIORITY: Additional evidence collection needed",
+              "No HTTPS - likely credential harvesting, prioritize user notification"
+            ],
+            "abuse_contacts": [],
+            "legal_disclaimer": "This report is generated for lawful investigation purposes only. All data collected using authorized techniques."
+          },
+          "infrastructure_clusters": {
+            "asn_clusters": {},
+            "ip_range_clusters": {},
+            "cloud_provider_clusters": {},
+            "geographic_clusters": {}
+          },
+          "campaign_correlation": {
+            "similar_domains": [],
+            "shared_infrastructure": [],
+            "temporal_patterns": {},
+            "technique_patterns": []
+          },
+          "operational_fingerprints": {
+            "server_configuration": {
+              "server_error": "[Errno 11001] getaddrinfo failed"
+            },
+            "http_headers_pattern": {
+              "headers_error": "[Errno 11001] getaddrinfo failed"
+            },
+            "dns_patterns": {
+              "dns_records": {
+                "A": [],
+                "AAAA": [],
+                "MX": [],
+                "TXT": [],
+                "NS": [],
+                "CNAME": [],
+                "SOA": [],
+                "SRV": [],
+                "PTR": []
+              },
+              "reverse_dns": {},
+              "dnssec_enabled": false
+            },
+            "ssl_patterns": {},
+            "content_patterns": {
+              "error": "All HTTP requests failed",
+              "error_type": "connection_failed",
+              "attempted_methods": [
+                "HEAD_http_80_error",
+                "GET_http_80_error",
+                "HEAD_https_443_error"
+              ]
+            },
+            "network_behavior": {},
+            "behavioral_patterns": {
+              "current_utc_hour": 22,
+              "current_day": "Thursday",
+              "activity_pattern": "night_activity",
+              "activity_score": 0.3,
+              "domain_complexity": {
+                "length": 13,
+                "vowel_ratio": 0.538,
+                "digit_ratio": 0.0,
+                "special_char_ratio": 0.077,
+                "entropy_score": 2.873,
+                "is_suspicious_length": false
+              },
+              "suspicious_domain_patterns": []
+            },
+            "composite_fingerprint": {
+              "hash": "7ac042a47ac9d27e8e1cdabf4154081b2ed92f7032aa032475364ed1aeedd415",
+              "components": 5,
+              "uniqueness_score": 0.0
+            }
+          },
+          "timestamp": "2025-11-06T22:15:07.542645",
+          "techniques_used": []
+        }
+      }
+    ],
+    "infrastructure_mapper": {
+      "network_analysis": {
+        "149.28.227.54": {
+          "whois": {
+            "registrar": "ENOM, INC.",
+            "organization": "Whois Privacy Protection Service, Inc.",
+            "creation_date": "2022-03-10 16:58:11+00:00",
+            "expiration_date": "2027-03-10 16:58:11+00:00",
+            "updated_date": "2022-03-10 17:35:32+00:00",
+            "name_servers": [
+              "NS1.VULTR.COM",
+              "NS2.VULTR.COM"
+            ],
+            "emails": [
+              "abuse@enom.com",
+              "svwhbytgd@whoisprivacyprotect.com"
+            ],
+            "address": [
+              "PO Box 639",
+              "C/O vultrusercontent.com"
+            ],
+            "city": "Kirkland",
+            "state": "WA",
+            "country": "US"
+          },
+          "open_ports": [
+            80,
+            443
+          ],
+          "network_range": "149.28.227.0/24"
+        },
+        "108.61.73.182": {
+          "whois": {
+            "registrar": "ENOM, INC.",
+            "organization": "Whois Privacy Protection Service, Inc.",
+            "creation_date": "2022-03-10 16:58:11+00:00",
+            "expiration_date": "2027-03-10 16:58:11+00:00",
+            "updated_date": "2022-03-10 17:35:32+00:00",
+            "name_servers": [
+              "NS1.VULTR.COM",
+              "NS2.VULTR.COM"
+            ],
+            "emails": [
+              "abuse@enom.com",
+              "svwhbytgd@whoisprivacyprotect.com"
+            ],
+            "address": [
+              "PO Box 639",
+              "C/O vultrusercontent.com"
+            ],
+            "city": "Kirkland",
+            "state": "WA",
+            "country": "US"
+          },
+          "open_ports": [
+            80,
+            443
+          ],
+          "network_range": "108.61.73.0/24"
+        }
+      },
+      "service_detection": {
+        "149.28.227.54": [
+          {
+            "port": 80,
+            "service": "HTTP",
+            "banner": "HTTP/1.0 308 Permanent Redirect\r\nConnection: close\r\nLocation: https:///\r\nServer: Caddy\r\nDate: Thu, 06 Nov 2025 21:15:25 GMT\r\n\r\n"
+          },
+          {
+            "port": 443,
+            "service": "HTTPS",
+            "banner": "HTTP/1.0 400 Bad Request\r\n\r\nClient sent an HTTP request to an HTTPS server.\n"
+          }
+        ],
+        "108.61.73.182": [
+          {
+            "port": 80,
+            "service": "HTTP",
+            "banner": "HTTP/1.0 308 Permanent Redirect\r\nConnection: close\r\nLocation: https:///\r\nServer: Caddy\r\nDate: Thu, 06 Nov 2025 21:15:42 GMT\r\n\r\n"
+          },
+          {
+            "port": 443,
+            "service": "HTTPS",
+            "banner": "HTTP/1.0 400 Bad Request\r\n\r\nClient sent an HTTP request to an HTTPS server.\n"
+          }
+        ]
+      },
+      "cdn_detection": false,
+      "infrastructure_timeline": [
+        {
+          "date": "2025-10-13T05:21:46.763",
+          "event": "SSL certificate issued (Issuer: C=US, O=Let's Encrypt, CN=E7)",
+          "source": "Certificate Transparency",
+          "common_name": "malicious.com",
+          "serial_number": "065ffa1d5a81cfb1b4c299b3f99b832732cf"
+        },
+        {
+          "date": "2025-10-13T05:21:48.833",
+          "event": "SSL certificate issued (Issuer: C=US, O=Let's Encrypt, CN=E7)",
+          "source": "Certificate Transparency",
+          "common_name": "malicious.com",
+          "serial_number": "065ffa1d5a81cfb1b4c299b3f99b832732cf"
+        },
+        {
+          "date": "2025-10-13T08:21:56.674",
+          "event": "SSL certificate issued (Issuer: C=US, O=Let's Encrypt, CN=E7)",
+          "source": "Certificate Transparency",
+          "common_name": "www.malicious.com",
+          "serial_number": "05e7a71360ad2003e9758a74b366e79e8303"
+        },
+        {
+          "date": "2025-10-13T08:21:56.981",
+          "event": "SSL certificate issued (Issuer: C=US, O=Let's Encrypt, CN=E7)",
+          "source": "Certificate Transparency",
+          "common_name": "www.malicious.com",
+          "serial_number": "05e7a71360ad2003e9758a74b366e79e8303"
+        },
+        {
+          "date": "2025-10-13T13:59:17.491",
+          "event": "SSL certificate issued (Issuer: C=US, O=Let's Encrypt, CN=E7)",
+          "source": "Certificate Transparency",
+          "common_name": "malicious.com",
+          "serial_number": "05c58797cbcc1576db2695f2a9e102f8e462"
+        },
+        {
+          "date": "2025-10-13T13:59:17.772",
+          "event": "SSL certificate issued (Issuer: C=US, O=Let's Encrypt, CN=E7)",
+          "source": "Certificate Transparency",
+          "common_name": "malicious.com",
+          "serial_number": "05c58797cbcc1576db2695f2a9e102f8e462"
+        },
+        {
+          "date": "2025-10-15T05:02:18.592",
+          "event": "SSL certificate issued (Issuer: C=US, O=Let's Encrypt, CN=E7)",
+          "source": "Certificate Transparency",
+          "common_name": "www.malicious.com",
+          "serial_number": "05585a3ec68b67235431ed5d819a007dc409"
+        },
+        {
+          "date": "2025-10-15T05:02:18.808",
+          "event": "SSL certificate issued (Issuer: C=US, O=Let's Encrypt, CN=E7)",
+          "source": "Certificate Transparency",
+          "common_name": "www.malicious.com",
+          "serial_number": "05585a3ec68b67235431ed5d819a007dc409"
+        },
+        {
+          "date": "2025-10-15T13:02:27.103",
+          "event": "SSL certificate issued (Issuer: C=US, O=Let's Encrypt, CN=E7)",
+          "source": "Certificate Transparency",
+          "common_name": "malicious.com",
+          "serial_number": "06fe08cf71c990fcedf6d689d83d0005cf5f"
+        },
+        {
+          "date": "2025-10-15T13:02:27.189",
+          "event": "SSL certificate issued (Issuer: C=US, O=Let's Encrypt, CN=E7)",
+          "source": "Certificate Transparency",
+          "common_name": "malicious.com",
+          "serial_number": "06fe08cf71c990fcedf6d689d83d0005cf5f"
+        },
+        {
+          "date": "2025-11-06T22:16:00.686532",
+          "event": "Infrastructure analysis performed",
+          "source": "PAW Analysis"
+        },
+        {
+          "date": "[datetime.datetime(1998, 8, 7, 4, 0, tzinfo=tzoffset('UTC', 0)), datetime.datetime(1998, 8, 6, 23, 0, tzinfo=tzoffset('UTC', 0))]",
+          "event": "Domain registered",
+          "source": "WHOIS"
+        }
+      ]
+    },
+    "enrich_last_hunt": [
+      {
+        "ip": "108.61.73.182",
+        "host": "malicious.com",
+        "ssl_certificate": {},
+        "service_banners": {
+          "80": "HTTP/1.0 308 Permanent Redirect\r\nConnection: close\r\nLocation: https://108.61.73.182/\r\nServer: Caddy\r\nDate: Thu, 06 Nov 2025 21:16:02 GMT\r\n\r\n"
+        },
+        "reverse_dns": {
+          "ptr": "108.61.73.182.vultrusercontent.com",
+          "aliases": [],
+          "addrs": [
+            "108.61.73.182"
+          ]
+        },
+        "whois": {
+          "registrar": "GoDaddy.com, LLC",
+          "organization": null,
+          "creation_date": "1998-08-07T04:00:00Z",
+          "raw": "   Domain Name: MALICIOUS.COM\r\n   Registry Domain ID: 2343024_DOMAIN_COM-VRSN\r\n   Registrar WHOIS Server: whois.godaddy.com\r\n   Registrar URL: http://www.godaddy.com\r\n   Updated Date: 2025-05-31T22:14:29Z\r\n   Creation Date: 1998-08-07T04:00:00Z\r\n   Registry Expiry Date: 2026-08-06T04:00:00Z\r\n   Registrar: GoDaddy.com, LLC\r\n   Registrar IANA ID: 146\r\n   Registrar Abuse Contact Email: abuse@godaddy.com\r\n   Registrar Abuse Contact Phone: 480-624-2505\r\n   Domain Status: clientDeleteProhibited https:"
+        },
+        "asn_info": {
+          "asn": "20473",
+          "prefix": "108.61.64.0/19",
+          "country": "US",
+          "registry": "arin",
+          "allocated": "2010-12-08"
+        }
+      },
+      {
+        "ip": "149.28.227.54",
+        "host": "malicious.com",
+        "ssl_certificate": {},
+        "service_banners": {
+          "80": "HTTP/1.0 308 Permanent Redirect\r\nConnection: close\r\nLocation: https://149.28.227.54/\r\nServer: Caddy\r\nDate: Thu, 06 Nov 2025 21:16:21 GMT\r\n\r\n"
+        },
+        "reverse_dns": {
+          "ptr": "149.28.227.54.vultrusercontent.com",
+          "aliases": [],
+          "addrs": [
+            "149.28.227.54"
+          ]
+        },
+        "whois": {
+          "registrar": "GoDaddy.com, LLC",
+          "organization": null,
+          "creation_date": "1998-08-07T04:00:00Z",
+          "raw": "   Domain Name: MALICIOUS.COM\r\n   Registry Domain ID: 2343024_DOMAIN_COM-VRSN\r\n   Registrar WHOIS Server: whois.godaddy.com\r\n   Registrar URL: http://www.godaddy.com\r\n   Updated Date: 2025-05-31T22:14:29Z\r\n   Creation Date: 1998-08-07T04:00:00Z\r\n   Registry Expiry Date: 2026-08-06T04:00:00Z\r\n   Registrar: GoDaddy.com, LLC\r\n   Registrar IANA ID: 146\r\n   Registrar Abuse Contact Email: abuse@godaddy.com\r\n   Registrar Abuse Contact Phone: 480-624-2505\r\n   Domain Status: clientDeleteProhibited https:"
+        },
+        "asn_info": {
+          "asn": "20473",
+          "prefix": "149.28.224.0/20",
+          "country": "US",
+          "registry": "arin",
+          "allocated": "2018-05-04"
+        }
+      }
+    ],
+    "threat_intelligence": {
+      "domain_maiicious.com": {
+        "virustotal": {
+          "domain_score": "Unknown",
+          "ip_scores": {},
+          "last_analysis": "Unknown"
+        },
+        "abuseipdb": {},
+        "alienvault": {
+          "pulse_count": "Unknown",
+          "related_ips": []
+        },
+        "threatfox": {
+          "iocs": [],
+          "malware_families": []
+        }
+      },
+      "domain_example.com": {
+        "virustotal": {
+          "domain_score": "Unknown",
+          "ip_scores": {},
+          "last_analysis": "Unknown"
+        },
+        "abuseipdb": {},
+        "alienvault": {
+          "pulse_count": "Unknown",
+          "related_ips": []
+        },
+        "threatfox": {
+          "iocs": [],
+          "malware_families": []
+        }
+      },
+      "domain_malicious.com": {
+        "virustotal": {
+          "domain_score": "Unknown",
+          "ip_scores": {},
+          "last_analysis": "Unknown"
+        },
+        "abuseipdb": {},
+        "alienvault": {
+          "pulse_count": "Unknown",
+          "related_ips": []
+        },
+        "threatfox": {
+          "iocs": [],
+          "malware_families": []
+        }
+      },
+      "ip_intelligence": {
+        "virustotal": {
+          "domain_score": "Unknown",
+          "ip_scores": {
+            "149.28.227.54": "Unknown",
+            "108.61.73.182": "Unknown"
+          },
+          "last_analysis": "Unknown"
+        },
+        "abuseipdb": {
+          "149.28.227.54": {
+            "abuse_confidence": "Unknown",
+            "reports": "Unknown",
+            "country": "Unknown"
+          },
+          "108.61.73.182": {
+            "abuse_confidence": "Unknown",
+            "reports": "Unknown",
+            "country": "Unknown"
+          }
+        },
+        "alienvault": {
+          "pulse_count": "Unknown",
+          "related_ips": []
+        },
+        "threatfox": {
+          "iocs": [],
+          "malware_families": []
+        }
+      }
+    },
+    "c2_infrastructure": [
+      {
+        "host": "malicious.com",
+        "ip": "108.61.73.182",
+        "asn": 20473,
+        "org": "AS-VULTR, US",
+        "country": "US",
+        "asn_country": "US",
+        "ptr": "108.61.73.182.vultrusercontent.com",
+        "abuse_contacts": [],
+        "reputation": {
+          "score": 0,
+          "category": "clean",
+          "sources": [
+            "asn_registered_in:US"
+          ]
+        }
+      }
+    ],
+    "phishing_kit_analysis": {
+      "c2_servers": [],
+      "callback_domains": [],
+      "exfiltration_endpoints": [],
+      "obfuscated_code": [],
+      "suspicious_patterns": [],
+      "risk_level": "low",
+      "patterns": {
+        "malware_family": "unknown",
+        "campaign_indicators": [],
+        "attacker_fingerprint": {
+          "obfuscation_technique": "none",
+          "c2_protocol": "http",
+          "exfiltration_method": "post",
+          "target_industry": "generic"
+        },
+        "similar_campaigns": []
+      }
+    }
+  },
+  "campaign_analysis": {
+    "campaign_origin": {
+      "campaign_origin": {},
+      "sending_patterns": [],
+      "infrastructure_hints": [],
+      "attribution_confidence": "low"
+    },
+    "detonation_endpoints": [
+      {
+        "host": "malicious.com",
+        "ips": [
+          "108.61.73.182",
+          "149.28.227.54"
+        ],
+        "count": 8,
+        "methods": [
+          "GET"
+        ],
+        "content_types": []
+      },
+      {
+        "host": "maiicious.com",
+        "ips": [],
+        "count": 2,
+        "methods": [
+          "GET"
+        ],
+        "content_types": []
+      }
+    ],
+    "domains": {
+      "from_domain": {
+        "domain": "example.com",
+        "registrar": null,
+        "created": "1995-08-14T04:00:00Z",
+        "ns": [
+          "a.iana-servers.net",
+          "b.iana-servers.net"
+        ],
+        "mx": [
+          ""
+        ],
+        "nrd_days": 11042
+      }
+    },
+    "transmitting_server": {
+      "ip": "",
+      "asn": null,
+      "org": null,
+      "cc": null,
+      "abuse": [],
+      "time_utc": null,
+      "helo": null,
+      "ptr": null,
+      "skew_s": 0,
+      "reputation": {
+        "score": 0,
+        "category": "unknown",
+        "sources": []
+      }
+    }
+  },
+  "operator_hypothesis": {
+    "confidence": 0.0,
+    "hypothesis": "Analysis in progress",
+    "evidence_count": 0
+  }
+}

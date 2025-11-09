@@ -1,0 +1,67 @@
+{
+  "domain": "malicious.com",
+  "records": {
+    "A": [
+      {
+        "value": "108.61.73.182",
+        "ttl": null
+      },
+      {
+        "value": "149.28.227.54",
+        "ttl": null
+      }
+    ],
+    "AAAA": []
+  },
+  "cname_chain": [],
+  "nameservers": [
+    {
+      "value": "ns1.sawsells.com.",
+      "ttl": null
+    },
+    {
+      "value": "ns2.sawsells.com.",
+      "ttl": null
+    }
+  ],
+  "mx_records": [],
+  "txt_records": [],
+  "hosting_provider": {
+    "detected_provider": null,
+    "confidence": 0.0,
+    "indicators": []
+  },
+  "registrar_hints": {
+    "detected_registrar": null,
+    "confidence": 0.0,
+    "indicators": []
+  },
+  "reverse_dns": {
+    "108.61.73.182": {
+      "hostname": "108.61.73.182.vultrusercontent.com",
+      "matches_domain": false
+    },
+    "149.28.227.54": {
+      "hostname": "149.28.227.54.vultrusercontent.com",
+      "matches_domain": false
+    }
+  },
+  "ip_ranges": {
+    "ranges": [],
+    "providers": [],
+    "geographic_hints": [
+      "United States (US) / New Jersey, Piscataway - The Constant Company"
+    ]
+  },
+  "attribution_hints": {
+    "infrastructure_type": "unknown",
+    "hosting_category": "unknown",
+    "risk_indicators": [],
+    "correlation_keys": [
+      "ns:ns1.sawsells.com.",
+      "ns:ns2.sawsells.com."
+    ],
+    "domain_age_days": 9955
+  },
+  "errors": []
+}

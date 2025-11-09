@@ -1,0 +1,47 @@
+{
+  "forms": [
+    {
+      "index": 0,
+      "method": "get",
+      "action": "",
+      "enctype": "",
+      "inputs": [
+        {
+          "type": "text",
+          "name": "quick-search",
+          "id": "quick-search-input",
+          "placeholder": "Search for quotes, news, documents",
+          "value": "",
+          "required": false,
+          "field_type": null,
+          "payment_relevance": "none"
+        }
+      ],
+      "field_types": {},
+      "payment_indicators": [],
+      "suspicious_elements": []
+    }
+  ],
+  "payment_processors": [],
+  "suspicious_patterns": [],
+  "attribution_hints": {
+    "payment_ecosystem": "unknown",
+    "merchant_category": "unknown",
+    "risk_indicators": [],
+    "correlation_keys": []
+  },
+  "form_summary": {
+    "total_forms": 1,
+    "forms_by_method": {
+      "get": 1
+    },
+    "total_inputs": 1,
+    "input_types": {
+      "text": 1
+    },
+    "field_type_distribution": {},
+    "payment_forms": 0,
+    "suspicious_forms": 0
+  },
+  "errors": []
+}

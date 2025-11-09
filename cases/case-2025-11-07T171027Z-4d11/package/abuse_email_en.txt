@@ -1,0 +1,11 @@
+Hello Security Team,
+
+We observed a likely compromised mailbox sending phishing emails:
+- Sender:      Deltag Og Vind       <newsletterbfjav@har.com> (Domain: har.com)
+- DKIM: pass (d=); Received path consistent with your MX
+- First external hop: 91.190.155.131 at UTC 2025-11-05T15:18:50+00:00
+
+Evidence attached. Suggested actions: reset credentials/MFA; review send logs; check transport rules.
+
+—
+Case-ID: 2025-11-07T171027Z-4d11 | Generated: 2025-11-07T18:36:54Z | Evidence Root (BLAKE3): 0412d1544011dd4d47ae5471a71483c0b81957d05c22883f8add37df2ac6ba15

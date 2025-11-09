@@ -1,0 +1,19 @@
+[
+  {
+    "host": "malicious.com",
+    "ip": "108.61.73.182",
+    "asn": 20473,
+    "org": "AS-VULTR, US",
+    "country": "US",
+    "asn_country": "US",
+    "ptr": "108.61.73.182.vultrusercontent.com",
+    "abuse_contacts": [],
+    "reputation": {
+      "score": 0,
+      "category": "clean",
+      "sources": [
+        "asn_registered_in:US"
+      ]
+    }
+  }
+]

@@ -1,0 +1,58 @@
+[
+  {
+    "ip": "108.61.73.182",
+    "host": "malicious.com",
+    "ssl_certificate": {},
+    "service_banners": {
+      "80": "HTTP/1.0 308 Permanent Redirect\r\nConnection: close\r\nLocation: https://108.61.73.182/\r\nServer: Caddy\r\nDate: Thu, 06 Nov 2025 21:16:02 GMT\r\n\r\n"
+    },
+    "reverse_dns": {
+      "ptr": "108.61.73.182.vultrusercontent.com",
+      "aliases": [],
+      "addrs": [
+        "108.61.73.182"
+      ]
+    },
+    "whois": {
+      "registrar": "GoDaddy.com, LLC",
+      "organization": null,
+      "creation_date": "1998-08-07T04:00:00Z",
+      "raw": "   Domain Name: MALICIOUS.COM\r\n   Registry Domain ID: 2343024_DOMAIN_COM-VRSN\r\n   Registrar WHOIS Server: whois.godaddy.com\r\n   Registrar URL: http://www.godaddy.com\r\n   Updated Date: 2025-05-31T22:14:29Z\r\n   Creation Date: 1998-08-07T04:00:00Z\r\n   Registry Expiry Date: 2026-08-06T04:00:00Z\r\n   Registrar: GoDaddy.com, LLC\r\n   Registrar IANA ID: 146\r\n   Registrar Abuse Contact Email: abuse@godaddy.com\r\n   Registrar Abuse Contact Phone: 480-624-2505\r\n   Domain Status: clientDeleteProhibited https:"
+    },
+    "asn_info": {
+      "asn": "20473",
+      "prefix": "108.61.64.0/19",
+      "country": "US",
+      "registry": "arin",
+      "allocated": "2010-12-08"
+    }
+  },
+  {
+    "ip": "149.28.227.54",
+    "host": "malicious.com",
+    "ssl_certificate": {},
+    "service_banners": {
+      "80": "HTTP/1.0 308 Permanent Redirect\r\nConnection: close\r\nLocation: https://149.28.227.54/\r\nServer: Caddy\r\nDate: Thu, 06 Nov 2025 21:16:21 GMT\r\n\r\n"
+    },
+    "reverse_dns": {
+      "ptr": "149.28.227.54.vultrusercontent.com",
+      "aliases": [],
+      "addrs": [
+        "149.28.227.54"
+      ]
+    },
+    "whois": {
+      "registrar": "GoDaddy.com, LLC",
+      "organization": null,
+      "creation_date": "1998-08-07T04:00:00Z",
+      "raw": "   Domain Name: MALICIOUS.COM\r\n   Registry Domain ID: 2343024_DOMAIN_COM-VRSN\r\n   Registrar WHOIS Server: whois.godaddy.com\r\n   Registrar URL: http://www.godaddy.com\r\n   Updated Date: 2025-05-31T22:14:29Z\r\n   Creation Date: 1998-08-07T04:00:00Z\r\n   Registry Expiry Date: 2026-08-06T04:00:00Z\r\n   Registrar: GoDaddy.com, LLC\r\n   Registrar IANA ID: 146\r\n   Registrar Abuse Contact Email: abuse@godaddy.com\r\n   Registrar Abuse Contact Phone: 480-624-2505\r\n   Domain Status: clientDeleteProhibited https:"
+    },
+    "asn_info": {
+      "asn": "20473",
+      "prefix": "149.28.224.0/20",
+      "country": "US",
+      "registry": "arin",
+      "allocated": "2018-05-04"
+    }
+  }
+]

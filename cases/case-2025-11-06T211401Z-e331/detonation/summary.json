@@ -1,0 +1,66 @@
+{
+  "visited": [
+    "http://malicious.com/payload.exe"
+  ],
+  "downloads": [],
+  "endpoints": [
+    {
+      "host": "malicious.com",
+      "ips": [
+        "149.28.227.54",
+        "108.61.73.182"
+      ],
+      "count": 8,
+      "methods": [
+        "GET"
+      ],
+      "content_types": []
+    },
+    {
+      "host": "maiicious.com",
+      "ips": [],
+      "count": 2,
+      "methods": [
+        "GET"
+      ],
+      "content_types": []
+    }
+  ],
+  "phishing_kit": {
+    "url": "http://malicious.com/payload.exe",
+    "html_hash": "1dfd73ad26111334fa81e8d1377736142362c82e6b9e45ca3a73217f23a8aedb",
+    "resources": [],
+    "static_analysis": {
+      "telegram_ids": [],
+      "email_addresses": [],
+      "code_comments": [],
+      "suspicious_patterns": []
+    },
+    "kit_hash": "1dfd73ad26111334fa81e8d1377736142362c82e6b9e45ca3a73217f23a8aedb"
+  },
+  "enrichment": {
+    "url": "http://malicious.com/payload.exe",
+    "timestamp": "2025-11-08T13:09:18.005533",
+    "enrichment_files": {
+      "trackers": "enrichment_trackers.json",
+      "tls_fingerprints": "enrichment_tls.json",
+      "redirect_chains": "enrichment_redirects.json",
+      "dns_enrichment": "enrichment_dns.json",
+      "ja3_fingerprints": "enrichment_ja3.json",
+      "form_analysis": "enrichment_forms.json",
+      "attribution_matrix": "attribution_matrix.json"
+    },
+    "status": "completed"
+  },
+  "pcap": null,
+  "observe_only": true,
+  "policy": {
+    "observe_only": true,
+    "blocked_methods": [
+      "DELETE",
+      "PATCH",
+      "POST",
+      "PUT"
+    ]
+  }
+}

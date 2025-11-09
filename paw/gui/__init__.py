@@ -1,3 +1,4 @@
-"""paw.gui package"""
+"""paw.gui package - GUI interface for PAW"""
 
-__all__ = ["tk_gui"]
+# Placeholder for new GUI implementation
+__all__ = []

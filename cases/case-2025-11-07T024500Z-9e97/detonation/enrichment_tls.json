@@ -1,0 +1,38 @@
+{
+  "hostname": "campers.diycarhire.com.au",
+  "port": 443,
+  "certificates": [
+    {
+      "subject": {
+        "common_name": "taosdesertoak.com",
+        "organization_name": null,
+        "country": null
+      },
+      "issuer": {
+        "common_name": "R11",
+        "organization_name": "Let's Encrypt",
+        "country": "US"
+      },
+      "validity": {
+        "not_before": "2025-07-11T09:21:34+00:00",
+        "not_after": "2025-10-09T09:21:33+00:00"
+      },
+      "serial_number": "545810656143637323718436582345838270985505",
+      "version": "v3",
+      "signature_algorithm": "sha256WithRSAEncryption",
+      "public_key": {
+        "type": "RSA",
+        "size": 2048
+      },
+      "public_key_der": "30820122300d06092a864886f70d01010105000382010f003082010a0282010100c06dd9a0f758c0ee499173ff9c7b58472d6d73c0813c320021fd22b5b31fd1bf0e4063c2152acf4488eed8d8048453e440217ffe18c3d6a649af3271427d179a07ae24c30332a0904a6fb36c9a3ef210ccf0e303ef51054d20cac61a3663966ad1be9ff0e88efc6907813338b226ac62e4810977c69cb2b9ef608a2fc26aaad063726fcffcfefdc8712f59fd1642745915052ecf94bf4b680e0864fcde38635957e62c94c5c1359bde3cf501e7b943ee5d5d0132047c03e1398255aff097280f400fd853ff1664651731dfbc523e99e17cfffe8b25e189902e3fc4795680f8f11d8906126c95eea4d44697a45a1c09a4a245758f6ffed04dffa83c3d764bcd9f0203010001",
+      "spki_hash": "3d2ac98ed5bd3659d02a61883e80f030cbac8675fdc498f175623220403ca0d2",
+      "fingerprint_sha256": "2a4622bb9a5bb7cf80f471b56d740f0383df103fa226efdf452a46517ea309c3",
+      "fingerprint_sha1": "d824f3459dd2f62cef431f3131da0a7034f6b386"
+    }
+  ],
+  "fingerprints": {},
+  "spki_hashes": {},
+  "issuer_info": {},
+  "validation": {},
+  "errors": []
+}

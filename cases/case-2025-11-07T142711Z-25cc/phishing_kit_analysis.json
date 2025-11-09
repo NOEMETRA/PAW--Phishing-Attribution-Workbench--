@@ -1,0 +1,19 @@
+{
+  "c2_servers": [],
+  "callback_domains": [],
+  "exfiltration_endpoints": [],
+  "obfuscated_code": [],
+  "suspicious_patterns": [],
+  "risk_level": "low",
+  "patterns": {
+    "malware_family": "unknown",
+    "campaign_indicators": [],
+    "attacker_fingerprint": {
+      "obfuscation_technique": "none",
+      "c2_protocol": "http",
+      "exfiltration_method": "post",
+      "target_industry": "generic"
+    },
+    "similar_campaigns": []
+  }
+}

@@ -49,6 +49,12 @@ def generate_abuse_package(case_dir, Lang="en"):
         "from_addr": headers.get("from",""),
         "from_domain": doms.get("from_domain",{}).get("domain","")
     }
+    # Backwards-compatibility: some templates expect 'your_mx' (first MX of target domain)
+    try:
+        mx_list = doms.get('from_domain', {}).get('mx', []) or []
+        ctx['your_mx'] = mx_list[0] if len(mx_list) > 0 else ''
+    except Exception:
+        ctx['your_mx'] = ''
     tmpl_dir = os.path.join(os.path.dirname(__file__), "..","templates")
     if decision.startswith("Likely malicious"):
         tmpl = "abuse_en_takedown.txt" if Lang.startswith("en") else "abuse_it_takedown.txt"

@@ -1,0 +1,343 @@
+{
+  "case_id": "case-2025-11-06T211401Z-e331",
+  "generated": [
+    {
+      "domain": "malicious.com",
+      "dns": {
+        "domain": "malicious.com",
+        "records": {
+          "A": [
+            {
+              "value": "108.61.73.182",
+              "ttl": null
+            },
+            {
+              "value": "149.28.227.54",
+              "ttl": null
+            }
+          ],
+          "AAAA": []
+        },
+        "cname_chain": [],
+        "nameservers": [
+          {
+            "value": "ns1.sawsells.com.",
+            "ttl": null
+          },
+          {
+            "value": "ns2.sawsells.com.",
+            "ttl": null
+          }
+        ],
+        "mx_records": [],
+        "txt_records": [],
+        "hosting_provider": {
+          "detected_provider": null,
+          "confidence": 0.0,
+          "indicators": []
+        },
+        "registrar_hints": {
+          "detected_registrar": null,
+          "confidence": 0.0,
+          "indicators": []
+        },
+        "reverse_dns": {
+          "108.61.73.182": {
+            "hostname": "108.61.73.182.vultrusercontent.com",
+            "matches_domain": false
+          },
+          "149.28.227.54": {
+            "hostname": "149.28.227.54.vultrusercontent.com",
+            "matches_domain": false
+          }
+        },
+        "ip_ranges": {
+          "ranges": [],
+          "providers": [],
+          "geographic_hints": [
+            "United States (US) / New Jersey, Piscataway - The Constant Company"
+          ]
+        },
+        "attribution_hints": {
+          "infrastructure_type": "unknown",
+          "hosting_category": "unknown",
+          "risk_indicators": [],
+          "correlation_keys": [
+            "ns:ns1.sawsells.com.",
+            "ns:ns2.sawsells.com."
+          ],
+          "domain_age_days": 9954
+        },
+        "errors": []
+      },
+      "threat_intel": {
+        "threatfox": {
+          "domain_iocs": [],
+          "ip_iocs": {
+            "108.61.73.182": {
+              "error": "no_result"
+            },
+            "149.28.227.54": {
+              "error": "no_result"
+            }
+          },
+          "malware_families": [],
+          "error": "no_result"
+        },
+        "alienvault": {
+          "pulse_count": 4,
+          "pulses": [
+            {
+              "id": "65498f2bdc6c276175b2712f",
+              "name": "sawbrokers.com",
+              "description": "",
+              "modified": "2025-06-13T03:33:18.608000",
+              "created": "2023-11-07T01:13:15.874000",
+              "tags": [],
+              "references": [
+                "https://www.virustotal.com/graph/gbdbdca3a57b946a5a43796917a66660f3f6cbe6ce5294391b796321f861aaae0"
+              ],
+              "public": 1,
+              "adversary": "",
+              "targeted_countries": [],
+              "malware_families": [],
+              "attack_ids": [],
+              "industries": [],
+              "TLP": "white",
+              "cloned_from": null,
+              "export_count": 19,
+              "upvotes_count": 0,
+              "downvotes_count": 0,
+              "votes_count": 0,
+              "locked": false,
+              "pulse_source": "web",
+              "validator_count": 0,
+              "comment_count": 0,
+              "follower_count": 0,
+              "vote": 0,
+              "author": {
+                "username": "skocherhan",
+                "id": "249290",
+                "avatar_url": "/otxapi/users/avatar_image/media/avatars/user_249290/resized/80/avatar_3b9c358f36.png",
+                "is_subscribed": false,
+                "is_following": false
+              },
+              "indicator_type_counts": {
+                "hostname": 21,
+                "URL": 63,
+                "FileHash-MD5": 70,
+                "FileHash-SHA1": 67,
+                "FileHash-SHA256": 419,
+                "domain": 20
+              },
+              "indicator_count": 660,
+              "is_author": false,
+              "is_subscribing": null,
+              "subscriber_count": 158,
+              "modified_text": "147 days ago ",
+              "is_modified": true,
+              "groups": [],
+              "in_group": false,
+              "threat_hunter_scannable": true,
+              "threat_hunter_has_agents": 1,
+              "related_indicator_type": "domain",
+              "related_indicator_is_active": 1
+            },
+            {
+              "id": "63d81cc3cfe44adf58d6a367",
+              "name": "Inquest LAbs",
+              "description": "",
+              "modified": "2023-03-01T19:14:58.335000",
+              "created": "2023-01-30T19:38:43.994000",
+              "tags": [
+                "atomspam",
+                "arie olshtein",
+                "n executive",
+                "n initially",
+                "july",
+                "trickgate",
+                "cobalt strike",
+                "server foundnc2",
+                "https",
+                "bperbanca",
+                "vidar",
+                "powershell",
+                "aeon",
+                "stealer",
+                "pixel",
+                "banco",
+                "malware",
+                "enterprise",
+                "chaos"
+              ],
+              "references": [
+                "https://labs.inquest.net/api/iocdb/list"
+              ],
+              "public": 1,
+              "adversary": "",
+              "targeted_countries": [],
+              "malware_families": [],
+              "attack_ids": [],
+              "industries": [],
+              "TLP": "white",
+              "cloned_from": null,
+              "export_count": 6,
+              "upvotes_count": 0,
+              "downvotes_count": 0,
+              "votes_count": 0,
+              "locked": false,
+              "pulse_source": "web",
+              "validator_count": 0,
+              "comment_count": 0,
+              "follower_count": 0,
+              "vote": 0,
+              "author": {
+                "username": "kidfire123",
+                "id": "211524",
+                "avatar_url": "https://otx.alienvault.com/assets/images/default-avatar.png",
+                "is_subscribed": false,
+                "is_following": false
+              },
+              "indicator_type_counts": {
+                "URL": 607,
+                "FileHash-MD5": 39,
+                "FileHash-SHA1": 45,
+                "FileHash-SHA256": 68,
+                "CVE": 16,
+                "domain": 314,
+                "hostname": 54
+              },
+              "indicator_count": 1143,
+              "is_author": false,
+              "is_subscribing": null,
+              "subscriber_count": 42,
+              "modified_text": "981 days ago ",
+              "is_modified": true,
+              "groups": [],
+              "in_group": false,
+              "threat_hunter_scannable": true,
+              "threat_hunter_has_agents": 1,
+              "related_indicator_type": "domain",
+              "related_indicator_is_active": 1
+            },
+            {
+              "id": "63d6f2123ba9a66c8b96f4a1",
+              "name": "MAlware BAzar + Inquest labs",
+              "description": "",
+              "modified": "2023-02-28T22:02:05.352000",
+              "created": "2023-01-29T22:24:18.931000",
+              "tags": [
+                "greg lesnewich",
+                "macho"
+              ],
+              "references": [],
+              "public": 1,
+              "adversary": "",
+              "targeted_countries": [],
+              "malware_families": [],
+              "attack_ids": [],
+              "industries": [],
+              "TLP": "white",
+              "cloned_from": null,
+              "export_count": 6,
+              "upvotes_count": 0,
+              "downvotes_count": 0,
+              "votes_count": 0,
+              "locked": false,
+              "pulse_source": "web",
+              "validator_count": 0,
+              "comment_count": 0,
+              "follower_count": 0,
+              "vote": 0,
+              "author": {
+                "username": "kidfire123",
+                "id": "211524",
+                "avatar_url": "https://otx.alienvault.com/assets/images/default-avatar.png",
+                "is_subscribed": false,
+                "is_following": false
+              },
+              "indicator_type_counts": {
+                "URL": 280,
+                "FileHash-MD5": 26,
+                "FileHash-SHA1": 12,
+                "FileHash-SHA256": 35,
+                "domain": 273,
+                "hostname": 48
+              },
+              "indicator_count": 674,
+              "is_author": false,
+              "is_subscribing": null,
+              "subscriber_count": 43,
+              "modified_text": "982 days ago ",
+              "is_modified": true,
+              "groups": [],
+              "in_group": false,
+              "threat_hunter_scannable": true,
+              "threat_hunter_has_agents": 1,
+              "related_indicator_type": "domain",
+              "related_indicator_is_active": 1
+            },
+            {
+              "id": "63d57ffc66474888e3d7b231",
+              "name": "Inquest Labs IOCS",
+              "description": "The full set of results from the second round of the 2016 World Security Forum..  £1.5m of funding has been announced by Kasperslky update, the company that developed the security software.",
+              "modified": "2023-02-27T20:03:10.799000",
+              "created": "2023-01-28T20:05:16.021000",
+              "tags": [
+                "l374"
+              ],
+              "references": [],
+              "public": 1,
+              "adversary": "",
+              "targeted_countries": [],
+              "malware_families": [],
+              "attack_ids": [],
+              "industries": [],
+              "TLP": "white",
+              "cloned_from": null,
+              "export_count": 8,
+              "upvotes_count": 0,
+              "downvotes_count": 0,
+              "votes_count": 0,
+              "locked": false,
+              "pulse_source": "web",
+              "validator_count": 0,
+              "comment_count": 0,
+              "follower_count": 0,
+              "vote": 0,
+              "author": {
+                "username": "satyagunupuru",
+                "id": "220559",
+                "avatar_url": "https://otx.alienvault.com/assets/images/default-avatar.png",
+                "is_subscribed": false,
+                "is_following": false
+              },
+              "indicator_type_counts": {
+                "URL": 427,
+                "FileHash-MD5": 19,
+                "FileHash-SHA1": 8,
+                "FileHash-SHA256": 31,
+                "domain": 356,
+                "email": 1,
+                "hostname": 41
+              },
+              "indicator_count": 883,
+              "is_author": false,
+              "is_subscribing": null,
+              "subscriber_count": 37,
+              "modified_text": "983 days ago ",
+              "is_modified": true,
+              "groups": [],
+              "in_group": false,
+              "threat_hunter_scannable": true,
+              "threat_hunter_has_agents": 1,
+              "related_indicator_type": "domain",
+              "related_indicator_is_active": 1
+            }
+          ],
+          "related_ips": []
+        }
+      }
+    }
+  ]
+}

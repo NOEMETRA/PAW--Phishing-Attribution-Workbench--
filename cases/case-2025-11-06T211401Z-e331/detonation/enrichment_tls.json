@@ -1,0 +1,38 @@
+{
+  "hostname": "malicious.com",
+  "port": 443,
+  "certificates": [
+    {
+      "subject": {
+        "common_name": "malicious.com",
+        "organization_name": null,
+        "country": null
+      },
+      "issuer": {
+        "common_name": "E7",
+        "organization_name": "Let's Encrypt",
+        "country": "US"
+      },
+      "validity": {
+        "not_before": "2025-10-13T13:00:47+00:00",
+        "not_after": "2026-01-11T13:00:46+00:00"
+      },
+      "serial_number": "502777289891981050504780241846359182337122",
+      "version": "v3",
+      "signature_algorithm": "ecdsa-with-SHA384",
+      "public_key": {
+        "type": "ECDSA",
+        "curve": "secp256r1"
+      },
+      "public_key_der": "3059301306072a8648ce3d020106082a8648ce3d03010703420004c0c3f0be489b3f5cc99cfeb52eb2784dfbc4c59e6f0cdd47e3e9816106ff7d27d9e6beca22574ad21b7efef4bbd31d5e547063e6b4d42a8b1d1c0a4e0e4072cf",
+      "spki_hash": "f133d68caf6eea3b6401eb8778186e0644bde3488a435182d99d01252ef9464c",
+      "fingerprint_sha256": "baad5f70e94e563bd8dace817dcb725437c70455cc3f376eb031eb61cd03bc3a",
+      "fingerprint_sha1": "784c8f1c3ebe1f29ae272d4f77c07a8c19dafa3f"
+    }
+  ],
+  "fingerprints": {},
+  "spki_hashes": {},
+  "issuer_info": {},
+  "validation": {},
+  "errors": []
+}

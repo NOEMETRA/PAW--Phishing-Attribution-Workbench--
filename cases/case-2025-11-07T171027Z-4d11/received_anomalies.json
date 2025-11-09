@@ -1,0 +1,12 @@
+{
+  "non_monotonic_dates": false,
+  "private_ip_before_boundary": false,
+  "invalid_fqdn_count": 0,
+  "impossible_negative_skew": false,
+  "ip_fqdn_mismatch": false,
+  "suspicious_relay_chain": false,
+  "missing_auth_headers": false,
+  "timestamp_manipulation": false,
+  "spoofing_patterns": [],
+  "auth_failures": []
+}

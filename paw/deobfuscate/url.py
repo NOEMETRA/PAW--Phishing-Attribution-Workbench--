@@ -9,6 +9,8 @@ import base64
 from urllib.parse import unquote, urlparse
 from typing import Dict, List, Any, Optional
 
+import requests
+
 # Optional homoglyph normalization layer (if available in package)
 try:
     from .homoglyph import HomoglyphDetector
@@ -277,29 +279,42 @@ class URLDeobfuscator:
         return result_url
 
     def _analyze_url_shorteners(self, url: str) -> str:
-        """Analizza URL shortener (placeholder per future implementazioni)"""
-        # Per ora solo identifica shortener comuni
-        shortener_domains = [
+        """Riconosce e risolve URL shortener reali."""
+        shortener_hosts = {
             'bit.ly', 'tinyurl.com', 'goo.gl', 't.co', 'ow.ly',
-            'buff.ly', 'adf.ly', 'is.gd', 'v.gd', 's.coop'
-        ]
+            'buff.ly', 'adf.ly', 'is.gd', 'v.gd', 's.coop',
+            'lnkd.in', 'trib.al', 'eepurl.com', 'shorte.st', 'cutt.ly'
+        }
+
         try:
             parsed = urlparse(url)
-            netloc = parsed.netloc or ''
-            # sanitize common IPv6 oddities
-            if netloc.startswith('[') and ']' in netloc:
-                host = netloc.split(']')[0] + ']'
-            else:
-                host = netloc
+            host = parsed.netloc.lower()
+            host = host.split(':')[0]
 
-            if any(s in host for s in shortener_domains):
-                # don't expand automatically here
-                return url
-        except Exception:
-            # parsing error — return original URL
-            return url
+            if host in shortener_hosts:
+                expanded = self._expand_short_url(url)
+                return expanded or url
+        except Exception as exc:
+            logger.debug("Shortener analysis failed for %s: %s", url, exc)
 
         return url
+
+    def _expand_short_url(self, url: str) -> Optional[str]:
+        """Segui i redirect per ottenere la destinazione finale di uno short link."""
+        session = requests.Session()
+        try:
+            response = session.head(url, allow_redirects=True, timeout=10)
+            if response.history:
+                return response.url
+
+            # Alcuni shortener non rispondono a HEAD, esegui GET leggera
+            response = session.get(url, allow_redirects=True, timeout=10)
+            if response.history:
+                return response.url
+        except requests.RequestException as exc:
+            logger.debug("Short URL expansion failed for %s: %s", url, exc)
+
+        return None
 
     def _decode_hex_escapes(self, url: str) -> str:
         """Decodifica escape hex nel formato \\xHH"""

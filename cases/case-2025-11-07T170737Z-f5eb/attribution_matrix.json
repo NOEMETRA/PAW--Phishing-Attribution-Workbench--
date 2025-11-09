@@ -1,0 +1,107 @@
+{
+  "case_id": "case-2025-11-07T170737Z-f5eb",
+  "timestamp": "2025-11-07T17:07:54Z",
+  "intelligence_modules": {
+    "criminal_hunter": {},
+    "infrastructure_mapper": {},
+    "enrich_last_hunt": {},
+    "threat_intelligence": {
+      "domain_har.com": {
+        "threatfox": {
+          "domain_iocs": [],
+          "ip_iocs": {},
+          "malware_families": [],
+          "error": "no_result"
+        },
+        "alienvault": {
+          "pulse_count": 0,
+          "pulses": [],
+          "related_ips": []
+        }
+      }
+    },
+    "c2_infrastructure": {},
+    "phishing_kit_analysis": {}
+  },
+  "campaign_analysis": {
+    "campaign_origin": {
+      "campaign_origin": {
+        "detected_types": [
+          "business_email_compromise"
+        ],
+        "likely_source": "compromised_server_DUZPR01CA0054.eurprd01.prod.exchangelabs.com"
+      },
+      "sending_patterns": [
+        "non_ms_origin_server"
+      ],
+      "infrastructure_hints": [
+        "Non-Microsoft origin server: DUZPR01CA0054.eurprd01.prod.exchangelabs.com (2603:10a6:10:469::10)"
+      ],
+      "attribution_confidence": "very_high",
+      "infrastructure_chain": {
+        "infrastructure_chain": [
+          {
+            "type": "ssl_error",
+            "message": "[Errno 11001] getaddrinfo failed",
+            "risk": "unknown"
+          }
+        ],
+        "upstream_connections": [
+          {
+            "type": "web_error",
+            "message": "HTTPSConnectionPool(host='duzpr01ca0054.eurprd01.prod.exchangelabs.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError(\"<urllib3.connection.HTTPSConnection object at 0x00000215811CA120>: Failed to resolve 'duzpr01ca0054.eurprd01.prod.exchangelabs.com' ([Errno 11001] getaddrinfo failed)\"))",
+            "risk": "unknown"
+          }
+        ],
+        "threat_intelligence": [],
+        "risk_assessment": "high"
+      }
+    },
+    "detonation_endpoints": [],
+    "domains": {
+      "from_domain": {
+        "domain": "har.com",
+        "registrar": null,
+        "created": "1995-11-14T05:00:00Z",
+        "ns": [
+          "ns-1380.awsdns-44.org",
+          "ns-1987.awsdns-56.co.uk",
+          "ns-229.awsdns-28.com",
+          "ns-612.awsdns-12.net"
+        ],
+        "mx": [
+          "har-com.mail.protection.outlook.com"
+        ],
+        "nrd_days": 10951
+      }
+    },
+    "transmitting_server": {
+      "ip": "91.190.155.131",
+      "asn": 63473,
+      "org": "HOSTHATCH, US",
+      "cc": "SE",
+      "abuse": [
+        {
+          "type": "email",
+          "value": "abuse@prinode.com"
+        }
+      ],
+      "time_utc": "2025-11-05T15:18:50+00:00",
+      "helo": "",
+      "ptr": "phoenix.dancingbearscabin.com",
+      "skew_s": 0,
+      "reputation": {
+        "score": 0,
+        "category": "clean",
+        "sources": [
+          "asn_registered_in:SE"
+        ]
+      }
+    }
+  },
+  "operator_hypothesis": {
+    "confidence": 0.0,
+    "hypothesis": "Analysis in progress",
+    "evidence_count": 0
+  }
+}

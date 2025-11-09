@@ -12,15 +12,18 @@ logger = logging.getLogger(__name__)
 class RedirectChainAnalyzer:
     """Analyze HTTP redirect chains for attribution patterns"""
 
-    def __init__(self, timeout: int = 30, max_redirects: int = 10):
+    def __init__(self, timeout: int = 30, max_redirects: int = 10, verify_ssl: bool = True):
         self.timeout = timeout
         self.max_redirects = max_redirects
         self.session = requests.Session()
-        # Disable SSL verification for analysis
-        self.session.verify = False
-        # Suppress SSL warnings
-        import urllib3
-        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+        # SSL verification configurable via environment or parameter
+        import os
+        self.verify_ssl = verify_ssl if verify_ssl is not None else os.getenv('PAW_VERIFY_SSL', 'true').lower() == 'true'
+        self.session.verify = self.verify_ssl
+        if not self.verify_ssl:
+            logger.warning("SSL verification is DISABLED - only use for controlled analysis environments")
+            import urllib3
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
     def analyze_redirect_chain(self, url: str, headers: Dict[str, str] = None) -> Dict[str, Any]:
         """Analyze complete redirect chain from initial URL"""

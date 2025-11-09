@@ -1,0 +1,64 @@
+{
+  "deobfuscated_artifacts": {
+    "text": {
+      "final_text": "CIick here: http://maIicious.com/payIoad.exe Test phishing",
+      "transformations": [
+        {
+          "technique": "character_substitution",
+          "from": "Click here: http://malicious.com/payload.exe\r\n Test phishing",
+          "to": "CIick here: http://maIicious.com/payIoad.exe\r\n Test phishing",
+          "description": "Sostituzione caratteri simili (homoglyphs)"
+        },
+        {
+          "technique": "case_correction",
+          "from": "CIick here: http://maIicious.com/payIoad.exe\r\n Test phishing",
+          "to": "CIick here: http://maIicious.com/payIoad.exe Test phishing",
+          "description": "Correzione maiuscole/minuscole sospette"
+        }
+      ],
+      "suspicion_indicators": [
+        "character_substitution",
+        "case_correction"
+      ],
+      "suspicion_score": 0.4
+    },
+    "urls": [
+      {
+        "original_url": "http://malicious.com/payload.exe",
+        "final_url": "http://malicious.com/payload.exe",
+        "transformations": [],
+        "suspicion_indicators": [],
+        "suspicion_score": 0.0,
+        "is_changed": false
+      },
+      {
+        "original_url": "malicious.com/payload.exe",
+        "final_url": "malicious.com/payload.exe",
+        "transformations": [],
+        "suspicion_indicators": [],
+        "suspicion_score": 0.0,
+        "is_changed": false
+      }
+    ]
+  },
+  "transformations": [
+    {
+      "technique": "character_substitution",
+      "from": "Click here: http://malicious.com/payload.exe\r\n Test phishing",
+      "to": "CIick here: http://maIicious.com/payIoad.exe\r\n Test phishing",
+      "description": "Sostituzione caratteri simili (homoglyphs)"
+    },
+    {
+      "technique": "case_correction",
+      "from": "CIick here: http://maIicious.com/payIoad.exe\r\n Test phishing",
+      "to": "CIick here: http://maIicious.com/payIoad.exe Test phishing",
+      "description": "Correzione maiuscole/minuscole sospette"
+    }
+  ],
+  "suspicion_score": 0.4,
+  "techniques_detected": [
+    "case_correction",
+    "character_substitution"
+  ],
+  "complexity_rating": "high"
+}

@@ -1,0 +1,23 @@
+[
+  {
+    "host": "malicious.com",
+    "ips": [
+      "108.61.73.182",
+      "149.28.227.54"
+    ],
+    "count": 8,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "maiicious.com",
+    "ips": [],
+    "count": 2,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  }
+]

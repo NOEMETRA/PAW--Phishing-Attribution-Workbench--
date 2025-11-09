@@ -1,0 +1,21 @@
+{
+  "forms": [],
+  "payment_processors": [],
+  "suspicious_patterns": [],
+  "attribution_hints": {
+    "payment_ecosystem": "unknown",
+    "merchant_category": "unknown",
+    "risk_indicators": [],
+    "correlation_keys": []
+  },
+  "form_summary": {
+    "total_forms": 0,
+    "forms_by_method": {},
+    "total_inputs": 0,
+    "input_types": {},
+    "field_type_distribution": {},
+    "payment_forms": 0,
+    "suspicious_forms": 0
+  },
+  "errors": []
+}

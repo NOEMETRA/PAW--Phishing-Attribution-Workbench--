@@ -138,8 +138,8 @@ class JA3FingerprintAnalyzer:
             # Create JA3 string
             ja3_string = f"{version},{cipher_str},{extension_str},{curve_str},{format_str}"
 
-            # Create MD5 hash
-            ja3_hash = hashlib.md5(ja3_string.encode()).hexdigest()
+            # Create SHA-256 hash (MD5 is cryptographically broken)
+            ja3_hash = hashlib.sha256(ja3_string.encode()).hexdigest()
 
             return ja3_hash
 
@@ -161,8 +161,8 @@ class JA3FingerprintAnalyzer:
             # Create JA3S string
             ja3s_string = f"{version},{cipher},{extension_str}"
 
-            # Create MD5 hash
-            ja3s_hash = hashlib.md5(ja3s_string.encode()).hexdigest()
+            # Create SHA-256 hash (MD5 is cryptographically broken)
+            ja3s_hash = hashlib.sha256(ja3s_string.encode()).hexdigest()
 
             return ja3s_hash
 

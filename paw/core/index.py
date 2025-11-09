@@ -58,7 +58,8 @@ def upsert_case(case_dir: str, origin: dict, headers: dict, dominfo: dict, score
     subject = headers.get("subject", "")
     received_lines = " ".join(headers.get("received", []))
     content = f"{subject} {headers.get('from', '')} {received_lines}".encode()
-    simhash_val = hashlib.md5(content).hexdigest()[:16]  # Store as hex string
+    # Use SHA-256 instead of MD5 (cryptographically broken)
+    simhash_val = hashlib.sha256(content).hexdigest()[:16]  # Store first 16 chars as hex string
     
     # Insert/update case
     conn.execute("""
@@ -100,5 +101,6 @@ def query_recent(by: str, value: str, days: int = 30) -> list:
 
 def simhash(text: str) -> str:
     """Generate 64-bit simhash from text as hex string."""
-    h = hashlib.md5(text.encode())
+    # Use SHA-256 instead of MD5 (cryptographically broken)
+    h = hashlib.sha256(text.encode())
     return h.hexdigest()[:16]

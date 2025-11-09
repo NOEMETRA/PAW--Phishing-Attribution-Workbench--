@@ -1,0 +1,80 @@
+{
+  "domain_maiicious.com": {
+    "virustotal": {
+      "domain_score": "Unknown",
+      "ip_scores": {},
+      "last_analysis": "Unknown"
+    },
+    "abuseipdb": {},
+    "alienvault": {
+      "pulse_count": "Unknown",
+      "related_ips": []
+    },
+    "threatfox": {
+      "iocs": [],
+      "malware_families": []
+    }
+  },
+  "domain_example.com": {
+    "virustotal": {
+      "domain_score": "Unknown",
+      "ip_scores": {},
+      "last_analysis": "Unknown"
+    },
+    "abuseipdb": {},
+    "alienvault": {
+      "pulse_count": "Unknown",
+      "related_ips": []
+    },
+    "threatfox": {
+      "iocs": [],
+      "malware_families": []
+    }
+  },
+  "domain_malicious.com": {
+    "virustotal": {
+      "domain_score": "Unknown",
+      "ip_scores": {},
+      "last_analysis": "Unknown"
+    },
+    "abuseipdb": {},
+    "alienvault": {
+      "pulse_count": "Unknown",
+      "related_ips": []
+    },
+    "threatfox": {
+      "iocs": [],
+      "malware_families": []
+    }
+  },
+  "ip_intelligence": {
+    "virustotal": {
+      "domain_score": "Unknown",
+      "ip_scores": {
+        "149.28.227.54": "Unknown",
+        "108.61.73.182": "Unknown"
+      },
+      "last_analysis": "Unknown"
+    },
+    "abuseipdb": {
+      "149.28.227.54": {
+        "abuse_confidence": "Unknown",
+        "reports": "Unknown",
+        "country": "Unknown"
+      },
+      "108.61.73.182": {
+        "abuse_confidence": "Unknown",
+        "reports": "Unknown",
+        "country": "Unknown"
+      }
+    },
+    "alienvault": {
+      "pulse_count": "Unknown",
+      "related_ips": []
+    },
+    "threatfox": {
+      "iocs": [],
+      "malware_families": []
+    }
+  }
+}

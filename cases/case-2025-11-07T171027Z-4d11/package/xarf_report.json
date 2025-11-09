@@ -1,0 +1,46 @@
+{
+  "x-arf-version": "1.0",
+  "schema": "io.paw.abuse-report",
+  "category": "abuse",
+  "report-id": "2025-11-07T171027Z-4d11",
+  "reporter": "abuse@example.com",
+  "reported-time": "2025-11-07T18:36:54Z",
+  "arrival-date": "2025-11-05T15:18:50+00:00",
+  "source": {
+    "ip": "91.190.155.131",
+    "asn": 63473,
+    "country": "SE",
+    "organization": "HOSTHATCH, US",
+    "ptr": "phoenix.dancingbearscabin.com",
+    "helo": ""
+  },
+  "reported-from": {
+    "domain": "har.com",
+    "email": "     Deltag Og Vind       <newsletterbfjav@har.com>",
+    "registrar": null,
+    "created": "1995-11-14T05:00:00Z",
+    "nameservers": [
+      "ns-1380.awsdns-44.org",
+      "ns-1987.awsdns-56.co.uk",
+      "ns-229.awsdns-28.com",
+      "ns-612.awsdns-12.net"
+    ],
+    "mx": [
+      "har-com.mail.protection.outlook.com"
+    ]
+  },
+  "authentication": {
+    "spf": "pass",
+    "dkim": [],
+    "dmarc": "pass"
+  },
+  "scoring": {
+    "decision": "Campaign pattern detected - Likely malicious infrastructure",
+    "bk_score": 0.17,
+    "mixed_flag": false
+  },
+  "evidence": {
+    "root_hash": "0412d1544011dd4d47ae5471a71483c0b81957d05c22883f8add37df2ac6ba15",
+    "headers": ""
+  }
+}

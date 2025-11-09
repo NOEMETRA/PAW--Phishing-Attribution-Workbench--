@@ -1,0 +1,58 @@
+{
+  "domain": "campers.diycarhire.com.au",
+  "records": {
+    "A": [
+      {
+        "value": "69.175.109.122",
+        "ttl": null
+      }
+    ],
+    "AAAA": []
+  },
+  "cname_chain": [
+    {
+      "domain": "campers.diycarhire.com.au",
+      "cname_target": "global.imallgeo.net.",
+      "depth": 0
+    }
+  ],
+  "nameservers": [],
+  "mx_records": [],
+  "txt_records": [
+    {
+      "value": "\"v=spf1 include:dganz.com -all\"",
+      "ttl": null,
+      "strings": [
+        "763d7370663120696e636c7564653a6467616e7a2e636f6d202d616c6c"
+      ]
+    }
+  ],
+  "hosting_provider": {
+    "detected_provider": null,
+    "confidence": 0.0,
+    "indicators": []
+  },
+  "registrar_hints": {
+    "detected_registrar": null,
+    "confidence": 0.0,
+    "indicators": []
+  },
+  "reverse_dns": {
+    "69.175.109.122": {
+      "hostname": "taosdesertoak.com",
+      "matches_domain": false
+    }
+  },
+  "ip_ranges": {
+    "ranges": [],
+    "providers": [],
+    "geographic_hints": []
+  },
+  "attribution_hints": {
+    "infrastructure_type": "unknown",
+    "hosting_category": "unknown",
+    "risk_indicators": [],
+    "correlation_keys": []
+  },
+  "errors": []
+}

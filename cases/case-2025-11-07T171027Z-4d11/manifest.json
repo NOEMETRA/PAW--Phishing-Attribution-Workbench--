@@ -1,0 +1,15 @@
+{
+  "case_id": "2025-11-07T171027Z-4d11",
+  "created_utc": "2025-11-07T17:10:27Z",
+  "inputs": [
+    {
+      "path": "input.eml",
+      "blake3": "2e53b8ee951169fdd2f37db5f698389f2a6e09feb07966f97ca5dd63bf2c3f92",
+      "size": 24612
+    }
+  ],
+  "policy": {
+    "no_egress": false
+  },
+  "deobfuscation_weight": 0.3
+}

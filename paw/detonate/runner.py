@@ -1,5 +1,5 @@
 # paw/detonate/runner.py
-import os, json, time, shutil, subprocess, socket, hashlib, requests
+import os, json, time, shutil, subprocess, socket, hashlib, requests, logging
 from contextlib import contextmanager
 from datetime import datetime
 from urllib.parse import urlparse
@@ -15,7 +15,16 @@ from ..core.ja3_fingerprinting import JA3FingerprintAnalyzer
 from ..core.form_analysis import FormAnalyzer
 from ..core.attribution_matrix import AttributionMatrix
 
+logger = logging.getLogger(__name__)
+
 BLOCK_METHODS = {"POST","PUT","PATCH","DELETE"}
+
+# SSL verification setting (configurable)
+VERIFY_SSL = os.getenv('PAW_VERIFY_SSL', 'true').lower() == 'true'
+if not VERIFY_SSL:
+    logger.warning("SSL verification is DISABLED - only use for controlled analysis environments")
+    import urllib3
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 def extract_phishing_kit(page, det_dir: str, url: str) -> dict:
     """Extract the complete phishing kit from the page."""
@@ -51,7 +60,7 @@ def extract_phishing_kit(page, det_dir: str, url: str) -> dict:
             src = script.get_attribute("src")
             if src and src.startswith(("http://", "https://")):
                 try:
-                    response = requests.get(src, timeout=10, verify=False)
+                    response = requests.get(src, timeout=10, verify=VERIFY_SSL)
                     if response.status_code == 200:
                         filename = os.path.basename(src.split("?")[0]) or f"script_{len(resources)}.js"
                         filepath = os.path.join(kit_dir, filename)
@@ -72,7 +81,7 @@ def extract_phishing_kit(page, det_dir: str, url: str) -> dict:
             href = css.get_attribute("href")
             if href and href.startswith(("http://", "https://")):
                 try:
-                    response = requests.get(href, timeout=10, verify=False)
+                    response = requests.get(href, timeout=10, verify=VERIFY_SSL)
                     if response.status_code == 200:
                         filename = os.path.basename(href.split("?")[0]) or f"style_{len(resources)}.css"
                         filepath = os.path.join(kit_dir, filename)
@@ -93,7 +102,7 @@ def extract_phishing_kit(page, det_dir: str, url: str) -> dict:
             src = img.get_attribute("src")
             if src and src.startswith(("http://", "https://")):
                 try:
-                    response = requests.get(src, timeout=10, verify=False)
+                    response = requests.get(src, timeout=10, verify=VERIFY_SSL)
                     if response.status_code == 200:
                         filename = os.path.basename(src.split("?")[0]) or f"image_{len(resources)}.png"
                         filepath = os.path.join(kit_dir, filename)
@@ -310,7 +319,9 @@ def _extract_urls_from_case(case_id: str):
     return case_dir, urls
 
 def run_detonation(url: str|None, case_id: str|None, timeout: int=35, capture_pcap: bool=False, headless: bool=True, observe_only: bool=True):
-    assert url or case_id, "--url oppure --case richiesto"
+    # Validate required parameters (don't use assert - can be disabled with -O)
+    if not url and not case_id:
+        raise ValueError("Either --url or --case is required (--url oppure --case richiesto)")
     if case_id:
         case_dir, urls = _extract_urls_from_case(case_id)
         if url: urls.insert(0, url)

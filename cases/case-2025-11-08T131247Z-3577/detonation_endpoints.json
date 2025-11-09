@@ -1,0 +1,714 @@
+[
+  {
+    "host": "campers.diycarhire.com.au",
+    "ips": [
+      "69.175.109.122"
+    ],
+    "count": 8,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "file.garden",
+    "ips": [
+      "2606:4700:20::681a:605",
+      "2606:4700:20::ac43:48a3",
+      "2606:4700:20::681a:705",
+      "104.26.7.5",
+      "104.26.6.5",
+      "172.67.72.163"
+    ],
+    "count": 6,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "www.londonstockexchange.com",
+    "ips": [
+      "3.174.18.92",
+      "3.174.18.46",
+      "3.174.18.38",
+      "3.174.18.26"
+    ],
+    "count": 722,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "tag.demandbase.com",
+    "ips": [
+      "3.174.18.89",
+      "3.174.18.42",
+      "3.174.18.67",
+      "3.174.18.126"
+    ],
+    "count": 12,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "api.londonstockexchange.com",
+    "ips": [
+      "3.174.18.97",
+      "3.174.18.64",
+      "3.174.18.38",
+      "3.174.18.57"
+    ],
+    "count": 35,
+    "methods": [
+      "GET",
+      "POST"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "id.rlcdn.com",
+    "ips": [
+      "35.244.174.68"
+    ],
+    "count": 12,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "s.company-target.com",
+    "ips": [
+      "34.96.71.22"
+    ],
+    "count": 12,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "api.company-target.com",
+    "ips": [
+      "3.174.18.83",
+      "3.174.18.4",
+      "3.174.18.9",
+      "3.174.18.90"
+    ],
+    "count": 8,
+    "methods": [
+      "GET",
+      "POST"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "dsum-sec.casalemedia.com",
+    "ips": [
+      "104.18.27.193",
+      "104.18.26.193"
+    ],
+    "count": 4,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "partners.tremorhub.com",
+    "ips": [
+      "2600:1f10:4ce4:4a01:86b3:d442:5b98:87fb",
+      "2600:1f10:4ce4:4a00:ca60:9f0e:dc8d:6ab3",
+      "2600:1f10:4ce4:4a00:b603:4088:7b0d:ac7b",
+      "2600:1f10:4ce4:4a01:1212:6b9:41:681a",
+      "2600:1f10:4ce4:4a02:d10e:9bd:db09:7abb",
+      "2600:1f10:4ce4:4a02:8e9:90a7:8e89:68ae",
+      "2600:1f10:4ce4:4a05:6ed4:c031:360e:a1ed",
+      "2600:1f10:4ce4:4a05:ef39:1e7d:8ea0:2f17",
+      "44.196.115.120",
+      "3.93.120.193",
+      "54.208.80.38",
+      "3.234.168.42",
+      "54.83.52.116",
+      "54.166.68.88",
+      "52.200.121.164",
+      "52.20.238.45"
+    ],
+    "count": 2,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "pixel.rubiconproject.com",
+    "ips": [
+      "69.173.156.148",
+      "69.173.156.149"
+    ],
+    "count": 2,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "refinitiv-widgets.financial.com",
+    "ips": [
+      "217.110.116.41"
+    ],
+    "count": 6,
+    "methods": [
+      "POST"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "assets.adobedtm.com",
+    "ips": [
+      "2a02:26f0:3b:296::1e80",
+      "2a02:26f0:3b:2a4::1e80",
+      "23.40.108.224"
+    ],
+    "count": 74,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "docs.londonstockexchange.com",
+    "ips": [
+      "18.173.5.79",
+      "18.173.5.112",
+      "18.173.5.44",
+      "18.173.5.20"
+    ],
+    "count": 158,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "dpm.demdex.net",
+    "ips": [
+      "54.74.9.54",
+      "54.171.90.88",
+      "54.77.152.76",
+      "54.77.175.174",
+      "52.214.146.225",
+      "52.209.44.16",
+      "108.128.19.110",
+      "63.32.155.75"
+    ],
+    "count": 8,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "snap.licdn.com",
+    "ips": [
+      "2a02:aa6:440:5::5fd1:cd23",
+      "2a02:aa6:440:5::5fd1:cd2a",
+      "95.209.205.145",
+      "95.209.205.169"
+    ],
+    "count": 12,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "cdn.cookielaw.org",
+    "ips": [
+      "2606:4700::6812:572a",
+      "2606:4700::6812:562a",
+      "104.18.87.42",
+      "104.18.86.42"
+    ],
+    "count": 140,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "px.ads.linkedin.com",
+    "ips": [
+      "2620:1ec:50::12",
+      "150.171.22.12"
+    ],
+    "count": 42,
+    "methods": [
+      "GET",
+      "POST"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "refinitiv.demdex.net",
+    "ips": [
+      "54.77.152.76",
+      "46.137.183.39",
+      "54.74.9.54",
+      "63.32.155.75",
+      "52.51.65.221",
+      "52.16.67.149",
+      "34.247.240.25",
+      "108.128.19.110"
+    ],
+    "count": 2,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "cm.everesttech.net",
+    "ips": [
+      "54.72.18.6",
+      "18.202.12.79",
+      "99.80.151.178"
+    ],
+    "count": 2,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "geolocation.onetrust.com",
+    "ips": [
+      "2a06:98c1:310d::ac40:9b77",
+      "2a06:98c1:3104::6812:2089",
+      "104.18.32.137",
+      "172.64.155.119"
+    ],
+    "count": 18,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "cm.g.doubleclick.net",
+    "ips": [
+      "142.250.74.130"
+    ],
+    "count": 4,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "px4.ads.linkedin.com",
+    "ips": [
+      "150.171.22.14"
+    ],
+    "count": 10,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "ps.eyeota.net",
+    "ips": [
+      "52.57.150.20"
+    ],
+    "count": 2,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "sync-tm.everesttech.net",
+    "ips": [
+      "199.232.42.49"
+    ],
+    "count": 32,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "pi.pardot.com",
+    "ips": [
+      "107.23.171.68",
+      "52.73.45.185",
+      "54.158.196.145",
+      "34.197.182.24",
+      "54.156.13.80"
+    ],
+    "count": 24,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "www2.lseg.com",
+    "ips": [
+      "172.64.147.68",
+      "104.18.40.188"
+    ],
+    "count": 12,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "logs.browser-intake-datadoghq.eu",
+    "ips": [
+      "2600:1901:0:a9f9::",
+      "34.149.135.19"
+    ],
+    "count": 5,
+    "methods": [
+      "POST"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "privacyportal-de.onetrust.com",
+    "ips": [
+      "2a06:98c1:3104::6812:2089",
+      "2a06:98c1:310d::ac40:9b77",
+      "104.18.32.137",
+      "172.64.155.119"
+    ],
+    "count": 1,
+    "methods": [
+      "POST"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "www.lseg.com",
+    "ips": [
+      "2600:9000:2574:ae00:2:2fdd:fc0:93a1",
+      "2600:9000:2574:7800:2:2fdd:fc0:93a1",
+      "2600:9000:2574:cc00:2:2fdd:fc0:93a1",
+      "2600:9000:2574:d800:2:2fdd:fc0:93a1",
+      "2600:9000:2574:3800:2:2fdd:fc0:93a1",
+      "2600:9000:2574:3000:2:2fdd:fc0:93a1",
+      "2600:9000:2574:e800:2:2fdd:fc0:93a1",
+      "2600:9000:2574:bc00:2:2fdd:fc0:93a1",
+      "18.173.5.64",
+      "18.173.5.125",
+      "18.173.5.70",
+      "18.173.5.50"
+    ],
+    "count": 64,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "ipapi.co",
+    "ips": [
+      "2606:4700:20::681a:92c",
+      "2606:4700:20::ac43:45e2",
+      "2606:4700:20::681a:82c",
+      "104.26.9.44",
+      "104.26.8.44",
+      "172.67.69.226"
+    ],
+    "count": 1,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "www.hl.co.uk",
+    "ips": [
+      "3.174.18.68",
+      "3.174.18.110",
+      "3.174.18.127",
+      "3.174.18.12"
+    ],
+    "count": 50,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "cdn-ukwest.onetrust.com",
+    "ips": [
+      "2a06:98c1:310d::ac40:9b77",
+      "2a06:98c1:3104::6812:2089",
+      "104.18.32.137",
+      "172.64.155.119"
+    ],
+    "count": 20,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "fonts.googleapis.com",
+    "ips": [
+      "2a00:1450:400f:803::200a",
+      "142.250.74.138"
+    ],
+    "count": 2,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "chart.hl.co.uk",
+    "ips": [
+      "217.11.198.129"
+    ],
+    "count": 4,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "cdn.jsdelivr.net",
+    "ips": [
+      "2a04:4e42:200::485",
+      "2a04:4e42:400::485",
+      "2a04:4e42:600::485",
+      "2a04:4e42::485",
+      "151.101.1.229",
+      "151.101.65.229",
+      "151.101.129.229",
+      "151.101.193.229"
+    ],
+    "count": 2,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "online.hl.co.uk",
+    "ips": [
+      "195.188.217.215"
+    ],
+    "count": 8,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "www.googletagmanager.com",
+    "ips": [
+      "2a00:1450:400f:80c::2008",
+      "172.217.21.168"
+    ],
+    "count": 8,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "images.hl.uk",
+    "ips": [
+      "2600:9000:28e5:5e00:15:54e6:cb40:93a1",
+      "2600:9000:28e5:2000:15:54e6:cb40:93a1",
+      "2600:9000:28e5:c00:15:54e6:cb40:93a1",
+      "2600:9000:28e5:9800:15:54e6:cb40:93a1",
+      "2600:9000:28e5:6200:15:54e6:cb40:93a1",
+      "2600:9000:28e5:f200:15:54e6:cb40:93a1",
+      "2600:9000:28e5:f000:15:54e6:cb40:93a1",
+      "2600:9000:28e5:e800:15:54e6:cb40:93a1",
+      "3.174.18.84",
+      "3.174.18.124",
+      "3.174.18.104",
+      "3.174.18.37"
+    ],
+    "count": 32,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "fonts.gstatic.com",
+    "ips": [
+      "2a00:1450:400f:80d::2003",
+      "142.250.74.131"
+    ],
+    "count": 4,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "privacyportal-uk.onetrust.com",
+    "ips": [
+      "2a06:98c1:3104::6812:2089",
+      "2a06:98c1:310d::ac40:9b77",
+      "104.18.32.137",
+      "172.64.155.119"
+    ],
+    "count": 1,
+    "methods": [
+      "POST"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "www.bloomberg.com",
+    "ips": [
+      "199.232.41.73"
+    ],
+    "count": 4,
+    "methods": [
+      "GET",
+      "POST"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "captcha.px-cloud.net",
+    "ips": [
+      "199.232.41.40"
+    ],
+    "count": 2,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "assets.bwbx.io",
+    "ips": [
+      "199.232.41.73"
+    ],
+    "count": 4,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "client.px-cloud.net",
+    "ips": [
+      "199.232.41.40"
+    ],
+    "count": 2,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "a2.adform.net",
+    "ips": [
+      "185.167.164.52",
+      "185.167.164.40"
+    ],
+    "count": 6,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "tzm.px-cloud.net",
+    "ips": [
+      "34.36.73.246"
+    ],
+    "count": 2,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "collector-px8fcgygk4.px-cloud.net",
+    "ips": [
+      "34.120.250.63"
+    ],
+    "count": 2,
+    "methods": [
+      "POST"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "s2.adform.net",
+    "ips": [
+      "2a0b:7e00:101:907::7",
+      "37.157.2.250"
+    ],
+    "count": 2,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "region1.google-analytics.com",
+    "ips": [
+      "2001:4860:4802:34::36",
+      "2001:4860:4802:32::36",
+      "216.239.32.36",
+      "216.239.34.36"
+    ],
+    "count": 1,
+    "methods": [
+      "POST"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "collector-a.perimeterx.net",
+    "ips": [
+      "34.120.250.63"
+    ],
+    "count": 2,
+    "methods": [
+      "GET"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "collector-px8fcgygk4.px-client.net",
+    "ips": [
+      "34.120.250.63"
+    ],
+    "count": 2,
+    "methods": [
+      "POST"
+    ],
+    "content_types": []
+  },
+  {
+    "host": "collector-px8fcgygk4.px-cdn.net",
+    "ips": [
+      "34.120.250.63"
+    ],
+    "count": 1,
+    "methods": [
+      "POST"
+    ],
+    "content_types": []
+  }
+]

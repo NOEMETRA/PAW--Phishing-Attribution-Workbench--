@@ -1,0 +1,170 @@
+{
+  "source_url": "https://www.londonstockexchange.com\\",
+  "trackers_found": [
+    {
+      "type": "google_analytics",
+      "name": "Google Analytics",
+      "category": "analytics",
+      "id": "g-rgb",
+      "pattern": "G-[A-Z0-9]+"
+    },
+    {
+      "type": "google_analytics",
+      "name": "Google Analytics",
+      "category": "analytics",
+      "id": "g-rgb",
+      "pattern": "G-[A-Z0-9]+"
+    },
+    {
+      "type": "google_analytics",
+      "name": "Google Analytics",
+      "category": "analytics",
+      "id": "g-text",
+      "pattern": "G-[A-Z0-9]+"
+    },
+    {
+      "type": "google_analytics",
+      "name": "Google Analytics",
+      "category": "analytics",
+      "id": "g-text",
+      "pattern": "G-[A-Z0-9]+"
+    },
+    {
+      "type": "google_analytics",
+      "name": "Google Analytics",
+      "category": "analytics",
+      "id": "g-text",
+      "pattern": "G-[A-Z0-9]+"
+    },
+    {
+      "type": "google_analytics",
+      "name": "Google Analytics",
+      "category": "analytics",
+      "id": "g-text",
+      "pattern": "G-[A-Z0-9]+"
+    },
+    {
+      "type": "google_analytics",
+      "name": "Google Analytics",
+      "category": "analytics",
+      "id": "g-text",
+      "pattern": "G-[A-Z0-9]+"
+    },
+    {
+      "type": "google_analytics",
+      "name": "Google Analytics",
+      "category": "analytics",
+      "id": "g-lseg",
+      "pattern": "G-[A-Z0-9]+"
+    },
+    {
+      "type": "google_analytics",
+      "name": "Google Analytics",
+      "category": "analytics",
+      "id": "g-version",
+      "pattern": "G-[A-Z0-9]+"
+    },
+    {
+      "type": "google_analytics",
+      "name": "Google Analytics",
+      "category": "analytics",
+      "id": "g-server",
+      "pattern": "G-[A-Z0-9]+"
+    },
+    {
+      "type": "google_analytics",
+      "name": "Google Analytics",
+      "category": "analytics",
+      "id": "g-lseg",
+      "pattern": "G-[A-Z0-9]+"
+    },
+    {
+      "type": "google_analytics",
+      "name": "Google Analytics",
+      "category": "analytics",
+      "id": "g-lseg",
+      "pattern": "G-[A-Z0-9]+"
+    },
+    {
+      "type": "google_analytics",
+      "name": "Google Analytics",
+      "category": "analytics",
+      "id": "g-lseg",
+      "pattern": "G-[A-Z0-9]+"
+    },
+    {
+      "type": "google_analytics",
+      "name": "Google Analytics",
+      "category": "analytics",
+      "id": "g-lseg",
+      "pattern": "G-[A-Z0-9]+"
+    },
+    {
+      "type": "google_analytics",
+      "name": "Google Analytics",
+      "category": "analytics",
+      "id": "g-lseg",
+      "pattern": "G-[A-Z0-9]+"
+    },
+    {
+      "type": "google_analytics",
+      "name": "Google Analytics",
+      "category": "analytics",
+      "id": "g-lseg",
+      "pattern": "G-[A-Z0-9]+"
+    },
+    {
+      "type": "google_analytics",
+      "name": "Google Analytics",
+      "category": "analytics",
+      "id": "g-lseg",
+      "pattern": "G-[A-Z0-9]+"
+    },
+    {
+      "type": "google_analytics",
+      "name": "Google Analytics",
+      "category": "analytics",
+      "id": "g-lseg",
+      "pattern": "G-[A-Z0-9]+"
+    },
+    {
+      "type": "google_analytics",
+      "name": "Google Analytics",
+      "category": "analytics",
+      "id": "g-lseg",
+      "pattern": "G-[A-Z0-9]+"
+    },
+    {
+      "type": "google_analytics",
+      "name": "Google Analytics",
+      "category": "analytics",
+      "id": "g-lseg",
+      "pattern": "G-[A-Z0-9]+"
+    }
+  ],
+  "total_trackers": 20,
+  "categories": {
+    "analytics": [
+      "g-rgb",
+      "g-rgb",
+      "g-text",
+      "g-text",
+      "g-text",
+      "g-text",
+      "g-text",
+      "g-lseg",
+      "g-version",
+      "g-server",
+      "g-lseg",
+      "g-lseg",
+      "g-lseg",
+      "g-lseg",
+      "g-lseg",
+      "g-lseg",
+      "g-lseg",
+      "g-lseg",
+      "g-lseg",
+      "g-lseg"
+    ]
+  }
+}

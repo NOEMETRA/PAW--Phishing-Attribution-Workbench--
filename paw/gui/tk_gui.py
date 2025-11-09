@@ -91,6 +91,9 @@ class PawTkGui:
         self._stop_read = False
         self.email_enabled = False
         self.current_process = None  # For tracking running analysis
+        self._enrichment_proc = None
+        self._enrichment_thread = None
+        self._enrichment_cancelled = False
 
         # Initialize status variables BEFORE creating tabs
         self.status_var = StringVar(value="🟢 Ready - All systems operational")
@@ -130,6 +133,9 @@ class PawTkGui:
 
         # Geographic Tab
         self.create_geographic_tab()
+
+        # Enrichment Tab
+        self.create_enrichment_tab()
 
         # Monitoring Tab
         self.create_monitoring_tab()
@@ -226,7 +232,7 @@ class PawTkGui:
         self.stix_var = BooleanVar()
         self.abuse_var = BooleanVar()
         self.forensic_var = BooleanVar()
-        self.no_egress_var = BooleanVar(value=True)  # Safe default
+        self.no_egress_var = BooleanVar(value=False)  # Allow network contact by default
 
         Label(inner_options, text="🔧 Export Options:", bg='#f8f9fa', font=self.title_font).grid(row=0, column=2, sticky=W, padx=(20,0), pady=5)
 
@@ -1152,13 +1158,11 @@ class PawTkGui:
         """Run a command in a separate thread with real-time output"""
         self.status_var.set(f"Running {operation_name}...")
         text_widget.insert(END, "Running: {' '.join(cmd)}\n\n")
-    text_widget.insert(END, "⚠️ Note: PAW's detailed progress output is not shown in GUI.\n")
-    text_widget.insert(END, "   Use terminal for full output (example): paw analyze --lang da file.eml\n")
-    text_widget.insert(END, "   Note: `paw quick` is a fast preset and does NOT accept --lang. Use `paw analyze` to pass language.\n\n")
+        text_widget.insert(END, "⚠️ Note: PAW's detailed progress output is not shown in GUI.\n")
+        text_widget.insert(END, "   Use terminal for full output (example): paw analyze --lang da file.eml\n")
+        text_widget.insert(END, "   Note: `paw quick` is a fast preset and does NOT accept --lang. Use `paw analyze` to pass language.\n\n")
         text_widget.insert(END, "⏳ Starting analysis process...\n")
-        text_widget.see(END)
-        
-        # Disable the run button, enable stop button
+        text_widget.see(END)        # Disable the run button, enable stop button
         if operation_name == "Analysis":
             if hasattr(self, 'run_analysis_btn'):
                 self.run_analysis_btn.config(state='disabled')
@@ -1167,147 +1171,112 @@ class PawTkGui:
         
         def run_in_thread():
             try:
-                # Use Popen for real-time output
-                # Adjust timeout based on analysis type
-                if operation_name == "Analysis":
-                    if "quick" in cmd:
-                        timeout_seconds = 60  # 1 minute for quick analysis
-                    elif "forensic" in cmd:
-                        timeout_seconds = 900  # 15 minutes for forensic
-                    else:
-                        timeout_seconds = 600  # 10 minutes for full analysis (increased for testing)
-                else:
-                    timeout_seconds = 60
-                # Force UTF-8 encoding to handle Unicode characters (fixes 'charmap' codec errors on Windows)
-                env = os.environ.copy()
-                env['PYTHONIOENCODING'] = 'utf-8'
-                
-                process = subprocess.Popen(
+            # Use Popen for real-time output
+            # No timeout limit - analysis can run indefinitely
+            env = os.environ.copy()
+            env['PYTHONIOENCODING'] = 'utf-8'                process = subprocess.Popen(
                     cmd, 
                     stdout=subprocess.PIPE, 
-                    stderr=subprocess.PIPE, 
-                    text=True, 
-                    encoding='utf-8',
-                    errors='replace',  # Replace characters that can't be decoded instead of crashing
-                    cwd=os.getcwd(),
-                    bufsize=1,  # Line buffered
-                    universal_newlines=True,
-                    env=env
-                )
+                stderr=subprocess.PIPE, 
+                text=True, 
+                encoding='utf-8',
+                errors='replace',  # Replace characters that can't be decoded instead of crashing
+                cwd=os.getcwd(),
+                bufsize=1,  # Line buffered
+                universal_newlines=True,
+                env=env
+            )
+            
+            # Save reference to current process for stopping
+            if operation_name == "Analysis":
+                self.current_process = process
+            
+            def update_status(msg):
+                def _update():
+                    text_widget.insert(END, msg)
+                    text_widget.see(END)
+                self.root.after(0, _update)
+            
+            update_status("✅ Process started successfully\n")
+            update_status("📊 Reading output in real-time...\n\n")
+            
+            # Read output in real-time
+            def read_output():
+                stdout_lines = 0
+                stderr_lines = 0
                 
-                # Save reference to current process for stopping
-                if operation_name == "Analysis":
-                    self.current_process = process
+                while True:
+                    # Read from stdout
+                    output = process.stdout.readline()
+                    if output:
+                        stdout_lines += 1
+                        def update_output():
+                            text_widget.insert(END, f"[STDOUT] {output}")
+                            text_widget.see(END)
+                        self.root.after(0, update_output)
+                    
+                    # Read from stderr  
+                    error = process.stderr.readline()
+                    if error:
+                        stderr_lines += 1
+                        def update_error():
+                            text_widget.insert(END, f"[STDERR] {error}")
+                            text_widget.see(END)
+                        self.root.after(0, update_error)
+                    
+                    # Check if process is done
+                    if output == '' and error == '' and process.poll() is not None:
+                        break
+                    
+                    # Small delay to prevent busy waiting
+                    time.sleep(0.01)
                 
-                def update_status(msg):
-                    def _update():
-                        text_widget.insert(END, msg)
+                # Read any remaining output
+                remaining_stdout = process.stdout.read()
+                if remaining_stdout:
+                    def update_remaining():
+                        text_widget.insert(END, f"[STDOUT] {remaining_stdout}")
                         text_widget.see(END)
-                    self.root.after(0, _update)
+                    self.root.after(0, update_remaining)
                 
-                update_status("✅ Process started successfully\n")
-                update_status("📊 Reading output in real-time...\n\n")
+                remaining_stderr = process.stderr.read()
+                if remaining_stderr:
+                    def update_remaining_err():
+                        text_widget.insert(END, f"[STDERR] {remaining_stderr}")
+                        text_widget.see(END)
+                    self.root.after(0, update_remaining_err)
                 
-                # Read output in real-time
-                def read_output():
-                    stdout_lines = 0
-                    stderr_lines = 0
+                # Check return code and update status
+                return_code = process.poll()
+                def update_final_status():
+                    text_widget.insert(END, f"\n📈 Analysis Summary:\n")
+                    text_widget.insert(END, f"   • STDOUT lines: {stdout_lines}\n")
+                    text_widget.insert(END, f"   • STDERR lines: {stderr_lines}\n")
+                    text_widget.insert(END, f"   • Exit code: {return_code}\n\n")
                     
-                    while True:
-                        # Read from stdout
-                        output = process.stdout.readline()
-                        if output:
-                            stdout_lines += 1
-                            def update_output():
-                                text_widget.insert(END, f"[STDOUT] {output}")
-                                text_widget.see(END)
-                            self.root.after(0, update_output)
-                        
-                        # Read from stderr  
-                        error = process.stderr.readline()
-                        if error:
-                            stderr_lines += 1
-                            def update_error():
-                                text_widget.insert(END, f"[STDERR] {error}")
-                                text_widget.see(END)
-                            self.root.after(0, update_error)
-                        
-                        # Check if process is done
-                        if output == '' and error == '' and process.poll() is not None:
-                            break
-                        
-                        # Small delay to prevent busy waiting
-                        time.sleep(0.01)
+                    if return_code == 0:
+                        self.status_var.set(f"{operation_name} completed successfully")
+                        text_widget.insert(END, "✅ Analysis completed successfully!\n")
+                    else:
+                        self.status_var.set(f"{operation_name} failed (exit code {return_code})")
+                        text_widget.insert(END, f"❌ Analysis failed with exit code {return_code}\n")
                     
-                    # Read any remaining output
-                    remaining_stdout = process.stdout.read()
-                    if remaining_stdout:
-                        def update_remaining():
-                            text_widget.insert(END, f"[STDOUT] {remaining_stdout}")
-                            text_widget.see(END)
-                        self.root.after(0, update_remaining)
-                    
-                    remaining_stderr = process.stderr.read()
-                    if remaining_stderr:
-                        def update_remaining_err():
-                            text_widget.insert(END, f"[STDERR] {remaining_stderr}")
-                            text_widget.see(END)
-                        self.root.after(0, update_remaining_err)
-                    
-                    # Check return code and update status
-                    return_code = process.poll()
-                    def update_final_status():
-                        text_widget.insert(END, f"\n📈 Analysis Summary:\n")
-                        text_widget.insert(END, f"   • STDOUT lines: {stdout_lines}\n")
-                        text_widget.insert(END, f"   • STDERR lines: {stderr_lines}\n")
-                        text_widget.insert(END, f"   • Exit code: {return_code}\n\n")
-                        
-                        if return_code == 0:
-                            self.status_var.set(f"{operation_name} completed successfully")
-                            text_widget.insert(END, "✅ Analysis completed successfully!\n")
-                        else:
-                            self.status_var.set(f"{operation_name} failed (exit code {return_code})")
-                            text_widget.insert(END, f"❌ Analysis failed with exit code {return_code}\n")
-                        
-                        # Re-enable run button, disable stop button
-                        if operation_name == "Analysis":
-                            if hasattr(self, 'run_analysis_btn'):
-                                self.run_analysis_btn.config(state='normal')
-                            if hasattr(self, 'stop_analysis_btn'):
-                                self.stop_analysis_btn.config(state='disabled')
-                            self.current_process = None
-                    
-                    self.root.after(0, update_final_status)
+                    # Re-enable run button, disable stop button
+                    if operation_name == "Analysis":
+                        if hasattr(self, 'run_analysis_btn'):
+                            self.run_analysis_btn.config(state='normal')
+                        if hasattr(self, 'stop_analysis_btn'):
+                            self.stop_analysis_btn.config(state='disabled')
+                        self.current_process = None
                 
-                # Start reading output in a separate thread
-                output_thread = threading.Thread(target=read_output, daemon=True)
-                output_thread.start()
-                
-                # Wait for process with timeout
-                try:
-                    process.wait(timeout=timeout_seconds)
-                except subprocess.TimeoutExpired:
-                    process.terminate()
-                    try:
-                        process.wait(timeout=5)  # Give it 5 seconds to terminate gracefully
-                    except subprocess.TimeoutExpired:
-                        process.kill()  # Force kill if it doesn't terminate
-                    
-                    def update_timeout():
-                        text_widget.insert(END, f"\n⚠️ TIMEOUT: Command took longer than {timeout_seconds} seconds and was terminated.\n")
-                        text_widget.insert(END, "This might indicate the analysis is taking too long or got stuck.\n")
-                        text_widget.insert(END, "Try using 'quick' analysis or check the command manually in terminal.\n")
-                        self.status_var.set(f"{operation_name} timed out")
-                        # Re-enable run button, disable stop button
-                        if operation_name == "Analysis":
-                            if hasattr(self, 'run_analysis_btn'):
-                                self.run_analysis_btn.config(state='normal')
-                            if hasattr(self, 'stop_analysis_btn'):
-                                self.stop_analysis_btn.config(state='disabled')
-                            self.current_process = None
-                    
-                    self.root.after(0, update_timeout)
-                
+                self.root.after(0, update_final_status)
+            
+            # Start reading output in a separate thread
+            output_thread = threading.Thread(target=read_output, daemon=True)
+            output_thread.start()
+            
+            # Wait for process (no timeout - let it run indefinitely)
+            process.wait()
             except Exception as e:
                 def update_error():
                     text_widget.insert(END, f"❌ Error running command: {e}\n")
@@ -1573,7 +1542,7 @@ class PawTkGui:
         case = self.geo_case_var.get().strip()
         case_filter = None if case == 'All Cases' else case
         
-        cmd = [sys.executable, '-m', 'paw', 'geographic', 'analyze']
+        cmd = [sys.executable, '-m', 'paw', 'geographic', 'report']
         if case_filter:
             cmd.extend(['--case', case_filter])
         
@@ -1704,6 +1673,420 @@ class PawTkGui:
             self.geo_text.insert(END, f"📂 Opened: {reports_dir}\n")
         except Exception as e:
             messagebox.showerror("Error", f"Failed to open folder: {e}")
+
+    # ===== ENRICHMENT TAB METHODS =====
+    def create_enrichment_tab(self):
+        """Create Enrichment Tab for DNS analysis, threat intel, and correlation"""
+        tab = Frame(self.notebook, bg='#f8f9fa')
+        self.notebook.add(tab, text="🔬 Enrichment")
+
+        # ===== SECTION 1: RUN ENRICHMENT =====
+        f_run = LabelFrame(tab, text="🚀 Run Enrichment")
+        f_run.pack(fill=X, padx=15, pady=10)
+
+        inner_run = Frame(f_run, bg='#f8f9fa')
+        inner_run.pack(fill=X, padx=10, pady=10)
+
+        Label(inner_run, text="📂 Cases Directory:", bg='#f8f9fa', font=self.title_font).pack(side=LEFT, padx=(0,10))
+        self.enrichment_cases_dir = StringVar(value="cases")
+        Entry(inner_run, textvariable=self.enrichment_cases_dir, width=30, font=('Segoe UI', 9)).pack(side=LEFT, padx=(0,10))
+
+        Button(inner_run, text="🔍 Browse", command=self.browse_enrichment_cases,
+               bg='#6c757d', fg='white', font=self.button_font, relief='flat', padx=10).pack(side=LEFT, padx=5)
+
+        Button(inner_run, text="▶️ Run Enrichment", command=self.run_enrichment_all_cases,
+               bg='#28a745', fg='white', font=self.button_font, relief='flat', padx=15).pack(side=LEFT, padx=5)
+
+        Button(inner_run, text="⏹️ Stop", command=self.stop_enrichment,
+               bg='#dc3545', fg='white', font=self.button_font, relief='flat', padx=15).pack(side=LEFT, padx=5)
+
+        # Progress display
+        inner_progress = Frame(f_run, bg='#f8f9fa')
+        inner_progress.pack(fill=X, padx=10, pady=(0,10))
+
+        Label(inner_progress, text="Progress:", bg='#f8f9fa', font=self.title_font).pack(side=LEFT, padx=(0,10))
+        self.enrichment_progress_var = StringVar(value="Ready")
+        Label(inner_progress, textvariable=self.enrichment_progress_var, bg='#f8f9fa', fg='#0078d4',
+              font=('Segoe UI', 9, 'bold')).pack(side=LEFT)
+
+        # ===== SECTION 2: VIEW ENRICHMENT RESULTS =====
+        f_view = LabelFrame(tab, text="📊 Enrichment Results")
+        f_view.pack(fill=BOTH, expand=True, padx=15, pady=10)
+
+        # Filter controls
+        filter_frame = Frame(f_view, bg='#f8f9fa')
+        filter_frame.pack(fill=X, padx=10, pady=10)
+
+        Label(filter_frame, text="🔎 Filter by Case:", bg='#f8f9fa', font=self.title_font).pack(side=LEFT, padx=(0,10))
+        self.enrichment_case_filter = StringVar(value="All Cases")
+        case_combo = ttk.Combobox(filter_frame, textvariable=self.enrichment_case_filter, width=25, font=('Segoe UI', 9), state='readonly')
+        case_combo.pack(side=LEFT, padx=(0,15))
+        self._update_enrichment_case_combo(case_combo)
+
+        Label(filter_frame, text="🔎 Filter by Domain:", bg='#f8f9fa', font=self.title_font).pack(side=LEFT, padx=(0,10))
+        self.enrichment_domain_filter = StringVar()
+        Entry(filter_frame, textvariable=self.enrichment_domain_filter, width=30, font=('Segoe UI', 9)).pack(side=LEFT, padx=(0,15))
+
+        Button(filter_frame, text="🔄 Refresh", command=self.refresh_enrichment_results,
+               bg='#17a2b8', fg='white', font=self.button_font, relief='flat', padx=15).pack(side=LEFT, padx=5)
+
+        # Results display with scrollbar
+        results_frame = Frame(f_view, bg='#f8f9fa')
+        results_frame.pack(fill=BOTH, expand=True, padx=10, pady=(0,10))
+
+        Label(results_frame, text="📋 Enrichment Data:", bg='#f8f9fa', font=self.title_font).pack(anchor=NW)
+
+        self.enrichment_results_text = scrolledtext.ScrolledText(results_frame, height=15, font=('Consolas', 8),
+                                                                 bg='#ffffff', fg='#2c3e50', insertbackground='#0078d4')
+        self.enrichment_results_text.pack(fill=BOTH, expand=True, pady=(5,0))
+
+        # ===== SECTION 3: EXPORT & ACTIONS =====
+        f_actions = LabelFrame(tab, text="⚙️ Actions")
+        f_actions.pack(fill=X, padx=15, pady=10)
+
+        actions_frame = Frame(f_actions, bg='#f8f9fa')
+        actions_frame.pack(fill=X, padx=10, pady=10)
+
+        Button(actions_frame, text="📥 Import to DB", command=self.import_enrichment_to_db,
+               bg='#0078d4', fg='white', font=self.button_font, relief='flat', padx=15).pack(side=LEFT, padx=5)
+
+        Button(actions_frame, text="📊 Generate Triage Report", command=self.generate_triage_report_gui,
+               bg='#6f42c1', fg='white', font=self.button_font, relief='flat', padx=15).pack(side=LEFT, padx=5)
+
+        Button(actions_frame, text="➕ Add to Campaigns", command=self.add_enriched_to_campaigns,
+               bg='#28a745', fg='white', font=self.button_font, relief='flat', padx=15).pack(side=LEFT, padx=5)
+
+        Button(actions_frame, text="💾 Export CSV", command=self.export_enrichment_csv,
+               bg='#17a2b8', fg='white', font=self.button_font, relief='flat', padx=15).pack(side=LEFT, padx=5)
+
+        Button(actions_frame, text="📄 View Report", command=self.view_triage_report,
+               bg='#fd7e14', fg='white', font=self.button_font, relief='flat', padx=15).pack(side=LEFT, padx=5)
+
+        # ===== SECTION 4: THREAT INTELLIGENCE DETAILS =====
+        f_threat = LabelFrame(tab, text="🚨 Threat Intelligence")
+        f_threat.pack(fill=X, padx=15, pady=10)
+
+        threat_frame = Frame(f_threat, bg='#f8f9fa')
+        threat_frame.pack(fill=X, padx=10, pady=10)
+
+        Label(threat_frame, text="Select a domain from results to view detailed threat intelligence", 
+              bg='#f8f9fa', fg='#666', font=('Segoe UI', 9)).pack(anchor=NW)
+
+        self.enrichment_threat_text = scrolledtext.ScrolledText(threat_frame, height=8, font=('Consolas', 8),
+                                                                bg='#ffffff', fg='#2c3e50', insertbackground='#0078d4')
+        self.enrichment_threat_text.pack(fill=BOTH, expand=True, pady=(5,0))
+
+        # Bind text selection to show threat intel
+        self.enrichment_results_text.bind('<<Change>>', self.on_enrichment_result_selected)
+
+    def browse_enrichment_cases(self):
+        """Browse for cases directory"""
+        dirname = filedialog.askdirectory(title="Select Cases Directory")
+        if dirname:
+            self.enrichment_cases_dir.set(dirname)
+
+    def _update_enrichment_case_combo(self, combo_widget):
+        """Update case combo box with available cases"""
+        try:
+            cases_dir = self.enrichment_cases_dir.get()
+            if not os.path.exists(cases_dir):
+                combo_widget['values'] = ["All Cases"]
+                return
+            
+            cases = [d for d in os.listdir(cases_dir) if os.path.isdir(os.path.join(cases_dir, d)) and d.startswith('case-')]
+            combo_widget['values'] = ["All Cases"] + sorted(cases)
+        except Exception as e:
+            print(f"Error updating case combo: {e}")
+
+    def run_enrichment_all_cases(self):
+        """Run enrichment on all cases in directory"""
+        cases_dir = self.enrichment_cases_dir.get().strip()
+        if not cases_dir or not os.path.exists(cases_dir):
+            messagebox.showerror("Error", "Please select a valid cases directory")
+            return
+
+        if self._enrichment_proc and self._enrichment_proc.poll() is None:
+            messagebox.showwarning("Enrichment Running", "An enrichment job is already running. Stop it before starting a new one.")
+            return
+
+        cases_dir = os.path.abspath(cases_dir)
+        self._enrichment_cancelled = False
+
+        def enrichment_worker():
+            try:
+                self.enrichment_progress_var.set("Starting enrichment...")
+                cmd = [sys.executable, 'run_enrichment_cases.py', '--cases-dir', cases_dir]
+                self._log(f"🚀 Starting enrichment: {' '.join(cmd)}")
+                self._enrichment_proc = subprocess.Popen(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    bufsize=1
+                )
+
+                while True:
+                    if not self._enrichment_proc:
+                        break
+                    line = self._enrichment_proc.stdout.readline()
+                    if not line:
+                        break
+                    line = line.strip()
+                    if not line:
+                        continue
+                    preview = (line[:80] + '...') if len(line) > 80 else line
+                    self.enrichment_progress_var.set(f"Running: {preview}")
+                    self._log(f"🔎 {line}")
+
+                return_code = self._enrichment_proc.wait()
+                stderr_output = ""
+                if self._enrichment_proc.stderr:
+                    stderr_output = self._enrichment_proc.stderr.read().strip()
+
+                if self._enrichment_cancelled:
+                    self.enrichment_progress_var.set("⏹️ Enrichment cancelled")
+                    self._log("⏹️ Enrichment cancelled by user")
+                elif return_code == 0:
+                    self.enrichment_progress_var.set("✅ Enrichment complete!")
+                    self._log("✅ Enrichment completed successfully")
+                    self.refresh_enrichment_results()
+                else:
+                    error_msg = stderr_output or "Unknown error"
+                    self.enrichment_progress_var.set("⚠️ Enrichment failed")
+                    self._log(f"⚠️ Enrichment error ({return_code}): {error_msg}")
+            except Exception as e:
+                self.enrichment_progress_var.set(f"⚠️ Error: {str(e)[:80]}")
+                self._log(f"⚠️ Enrichment error: {e}")
+            finally:
+                if self._enrichment_proc:
+                    if self._enrichment_proc.stdout:
+                        self._enrichment_proc.stdout.close()
+                    if self._enrichment_proc.stderr:
+                        self._enrichment_proc.stderr.close()
+                self._enrichment_proc = None
+                self._enrichment_thread = None
+                self._enrichment_cancelled = False
+
+        self._enrichment_thread = threading.Thread(target=enrichment_worker, daemon=True)
+        self._enrichment_thread.start()
+
+    def stop_enrichment(self):
+        """Stop running enrichment (if implemented)"""
+        if not self._enrichment_proc or self._enrichment_proc.poll() is not None:
+            messagebox.showinfo("Info", "No enrichment job is currently running")
+            return
+
+        self._log("⏹️ Stop requested for enrichment job")
+        self._enrichment_cancelled = True
+        self.enrichment_progress_var.set("Stopping enrichment...")
+        try:
+            self._enrichment_proc.terminate()
+            self._enrichment_proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            self._log("⚠️ Enrichment did not stop in time, killing process")
+            self._enrichment_proc.kill()
+        finally:
+            messagebox.showinfo("Info", "Enrichment stopped")
+
+    def refresh_enrichment_results(self):
+        """Refresh enrichment results from database"""
+        try:
+            from paw.sentinel.database import CampaignDatabase
+            
+            db = CampaignDatabase()
+            case_filter = self.enrichment_case_filter.get()
+            if case_filter == "All Cases":
+                case_filter = None
+            
+            domain_filter = self.enrichment_domain_filter.get().strip()
+            
+            enrichments = db.list_enrichments(case_id=case_filter, limit=1000)
+            
+            self.enrichment_results_text.delete('1.0', END)
+            
+            if not enrichments:
+                self.enrichment_results_text.insert(END, "No enrichment results found")
+                return
+            
+            # Filter by domain if specified
+            if domain_filter:
+                enrichments = [e for e in enrichments if domain_filter.lower() in e['domain'].lower()]
+            
+            # Display results
+            self.enrichment_results_text.insert(END, f"Found {len(enrichments)} enrichment records\n\n")
+            
+            for idx, enrichment in enumerate(enrichments, 1):
+                case_id = enrichment.get('case_id', 'N/A')
+                domain = enrichment.get('domain', 'N/A')
+                data = enrichment.get('enrichment', {})
+                
+                self.enrichment_results_text.insert(END, f"[{idx}] {domain} (Case: {case_id})\n")
+                
+                # DNS info
+                dns = data.get('dns', {})
+                records = dns.get('records', {})
+                ips = [r['value'] for r in records.get('A', [])]
+                if ips:
+                    self.enrichment_results_text.insert(END, f"     IPs: {', '.join(ips)}\n")
+                
+                # GeoIP
+                geoip = dns.get('ip_ranges', {}).get('geographic_hints', [])
+                if geoip:
+                    self.enrichment_results_text.insert(END, f"     Location: {geoip[0]}\n")
+                
+                # Threat intel
+                threat_intel = data.get('threat_intel', {})
+                tfo = threat_intel.get('threatfox', {})
+                ovx = threat_intel.get('alienvault', {})
+                
+                tfo_count = len(tfo.get('domain_iocs', []))
+                ovx_count = ovx.get('pulse_count', 0)
+                
+                if tfo_count > 0 or ovx_count > 0:
+                    self.enrichment_results_text.insert(END, f"     ⚠️ Threat Intel: ThreatFox={tfo_count} IOCs, AlienVault={ovx_count} pulses\n")
+                
+                self.enrichment_results_text.insert(END, "\n")
+            
+            self._log(f"✅ Loaded {len(enrichments)} enrichment results")
+            
+        except Exception as e:
+            self.enrichment_results_text.delete('1.0', END)
+            self.enrichment_results_text.insert(END, f"Error loading enrichments: {e}")
+            self._log(f"❌ Error refreshing enrichments: {e}")
+
+    def import_enrichment_to_db(self):
+        """Import enrichment results to database"""
+        try:
+            cases_dir = self.enrichment_cases_dir.get().strip()
+            if not cases_dir or not os.path.exists(cases_dir):
+                messagebox.showerror("Error", "Please select a valid cases directory")
+                return
+            
+            cmd = [sys.executable, 'tools/import_enrichment.py', '--db', 'PAW/sentinel.db', '--cases', cases_dir]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+            
+            if result.returncode == 0:
+                messagebox.showinfo("Success", f"Import complete!\n\n{result.stdout}")
+                self._log(f"✅ Enrichment imported successfully")
+                self.refresh_enrichment_results()
+            else:
+                messagebox.showerror("Error", f"Import failed:\n{result.stderr}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Import error: {e}")
+
+    def generate_triage_report_gui(self):
+        """Generate triage report CSV"""
+        try:
+            cmd = [sys.executable, 'generate_triage_report.py', 'PAW/sentinel.db', 'enrichment_triage_report.csv']
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+            
+            if result.returncode == 0:
+                messagebox.showinfo("Success", f"Report generated!\n\n{result.stdout}")
+                self._log(f"✅ Triage report generated")
+            else:
+                messagebox.showerror("Error", f"Report generation failed:\n{result.stderr}")
+        except Exception as e:
+            messagebox.showerror("Error", f"Report error: {e}")
+
+    def view_triage_report(self):
+        """View generated triage report"""
+        try:
+            report_file = 'enrichment_triage_report.csv'
+            if not os.path.exists(report_file):
+                messagebox.showwarning("Not Found", "Generate report first")
+                return
+            
+            # Open with default application
+            if sys.platform == 'win32':
+                os.startfile(report_file)
+            elif sys.platform == 'darwin':
+                subprocess.run(['open', report_file])
+            else:
+                subprocess.run(['xdg-open', report_file])
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to open report: {e}")
+
+    def export_enrichment_csv(self):
+        """Export current enrichment results to CSV"""
+        try:
+            from paw.sentinel.database import CampaignDatabase
+            import csv
+            
+            filename = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("CSV files", "*.csv")])
+            if not filename:
+                return
+            
+            db = CampaignDatabase()
+            enrichments = db.list_enrichments(limit=1000)
+            
+            if not enrichments:
+                messagebox.showwarning("Info", "No enrichment data to export")
+                return
+            
+            with open(filename, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow(['Case ID', 'Domain', 'Resolved IPs', 'Location', 'ThreatFox IOCs', 'AlienVault Pulses'])
+                
+                for enrichment in enrichments:
+                    case_id = enrichment['case_id']
+                    domain = enrichment['domain']
+                    data = enrichment['enrichment']
+                    
+                    dns = data.get('dns', {})
+                    ips = [r['value'] for r in dns.get('records', {}).get('A', [])]
+                    geoip = dns.get('ip_ranges', {}).get('geographic_hints', [])
+                    
+                    threat_intel = data.get('threat_intel', {})
+                    tfo_count = len(threat_intel.get('threatfox', {}).get('domain_iocs', []))
+                    ovx_count = threat_intel.get('alienvault', {}).get('pulse_count', 0)
+                    
+                    writer.writerow([
+                        case_id,
+                        domain,
+                        ','.join(ips) if ips else 'N/A',
+                        geoip[0] if geoip else 'N/A',
+                        tfo_count,
+                        ovx_count
+                    ])
+            
+            messagebox.showinfo("Success", f"Exported to {filename}")
+            self._log(f"✅ Exported enrichment to CSV")
+        except Exception as e:
+            messagebox.showerror("Error", f"Export failed: {e}")
+
+    def add_enriched_to_campaigns(self):
+        """Add enriched domains to monitoring campaigns"""
+        try:
+            from paw.sentinel.database import CampaignDatabase
+            
+            db = CampaignDatabase()
+            enrichments = db.list_enrichments(limit=1000)
+            
+            if not enrichments:
+                messagebox.showwarning("Info", "No enrichment data to add")
+                return
+            
+            added = 0
+            for enrichment in enrichments:
+                case_id = enrichment['case_id']
+                domain = enrichment['domain']
+                
+                # Add as campaign (only if using HTTP/HTTPS)
+                if domain.startswith('http://') or domain.startswith('https://'):
+                    try:
+                        db.add_campaign(case_id, domain, {'source': 'enrichment', 'type': 'dns_enriched'})
+                        added += 1
+                    except Exception as e:
+                        print(f"Error adding campaign for {domain}: {e}")
+            
+            messagebox.showinfo("Success", f"Added {added} domains to monitoring campaigns")
+            self._log(f"✅ Added {added} enriched domains to campaigns")
+        except Exception as e:
+            messagebox.showerror("Error", f"Error adding campaigns: {e}")
+
+    def on_enrichment_result_selected(self, event=None):
+        """Show threat intelligence details when domain is selected"""
+        pass
 
 
 def main():

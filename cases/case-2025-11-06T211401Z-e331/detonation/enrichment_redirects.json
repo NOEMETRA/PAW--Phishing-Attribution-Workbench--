@@ -1,0 +1,77 @@
+{
+  "initial_url": "http://malicious.com/payload.exe",
+  "final_url": "https://malicious.com/",
+  "chain": [
+    {
+      "url": "http://malicious.com/payload.exe",
+      "status_code": 308,
+      "response_time": 0.2692739963531494,
+      "headers": {
+        "Connection": "close",
+        "Location": "https://malicious.com/payload.exe",
+        "Server": "Caddy",
+        "Date": "Sat, 08 Nov 2025 13:09:18 GMT",
+        "Content-Length": "0"
+      },
+      "redirect_location": "https://malicious.com/payload.exe",
+      "server": "Caddy",
+      "content_type": null,
+      "content_length": "0"
+    },
+    {
+      "url": "https://malicious.com/payload.exe",
+      "status_code": 302,
+      "response_time": 0.41214680671691895,
+      "headers": {
+        "Alt-Svc": "h3=\":443\"; ma=2592000",
+        "Location": "https://malicious.com/",
+        "Server": "Caddy",
+        "Date": "Sat, 08 Nov 2025 13:09:19 GMT",
+        "Content-Length": "0"
+      },
+      "redirect_location": "https://malicious.com/",
+      "server": "Caddy",
+      "content_type": null,
+      "content_length": "0"
+    },
+    {
+      "url": "https://malicious.com/",
+      "status_code": 200,
+      "response_time": 0.13204717636108398,
+      "headers": {
+        "Alt-Svc": "h3=\":443\"; ma=2592000",
+        "Content-Length": "7564",
+        "Content-Security-Policy": "frame-ancestors 'none'",
+        "Content-Type": "text/html",
+        "Date": "Sat, 08 Nov 2025 13:09:19 GMT",
+        "Etag": "\"5o5gki\"",
+        "Server": "Caddy",
+        "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "X-Sveltekit-Page": "true"
+      },
+      "redirect_location": null,
+      "server": "Caddy",
+      "content_type": "text/html",
+      "content_length": "7564"
+    }
+  ],
+  "timing": {
+    "total_time": 0.8135769367218018,
+    "steps": 3,
+    "average_step_time": 0.2711923122406006
+  },
+  "utm_parameters": {},
+  "redirect_patterns": {},
+  "suspicious_indicators": [],
+  "attribution_hints": {
+    "domain_chain": [
+      "malicious.com",
+      "malicious.com",
+      "malicious.com"
+    ],
+    "unique_domains": 1
+  },
+  "errors": []
+}

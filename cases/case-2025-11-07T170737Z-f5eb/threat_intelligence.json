@@ -1,0 +1,15 @@
+{
+  "domain_har.com": {
+    "threatfox": {
+      "domain_iocs": [],
+      "ip_iocs": {},
+      "malware_families": [],
+      "error": "no_result"
+    },
+    "alienvault": {
+      "pulse_count": 0,
+      "pulses": [],
+      "related_ips": []
+    }
+  }
+}

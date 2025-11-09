@@ -1,0 +1,206 @@
+Received: from GVXP194MB2329.EURP194.PROD.OUTLOOK.COM (2603:10a6:150:1ff::10)
+ by VI6PPF9F6C943AA.EURP194.PROD.OUTLOOK.COM with HTTPS; Wed, 5 Nov 2025
+ 15:18:52 +0000
+Received: from DUZPR01CA0054.eurprd01.prod.exchangelabs.com
+ (2603:10a6:10:469::10) by GVXP194MB2329.EURP194.PROD.OUTLOOK.COM
+ (2603:10a6:150:1ff::10) with Microsoft SMTP Server (version=TLS1_2,
+ cipher=TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384) id 15.20.9275.16; Wed, 5 Nov
+ 2025 15:18:51 +0000
+Received: from DB1PEPF00039234.eurprd03.prod.outlook.com
+ (2603:10a6:10:469:cafe::c4) by DUZPR01CA0054.outlook.office365.com
+ (2603:10a6:10:469::10) with Microsoft SMTP Server (version=TLS1_3,
+ cipher=TLS_AES_256_GCM_SHA384) id 15.20.9298.9 via Frontend Transport; Wed, 5
+ Nov 2025 15:19:08 +0000
+Authentication-Results: spf=pass (sender IP is 91.190.155.131)
+ smtp.mailfrom=mcentral.har.com; dkim=pass (signature was verified)
+ header.d=phoenix.dancingbearscabin.com;dmarc=pass action=none
+ header.from=har.com;compauth=pass reason=100
+Received-SPF: Pass (protection.outlook.com: domain of mcentral.har.com
+ designates 91.190.155.131 as permitted sender)
+ receiver=protection.outlook.com; client-ip=91.190.155.131; helo=ra-becker.de;
+ pr=C
+Received: from ra-becker.de (91.190.155.131) by
+ DB1PEPF00039234.mail.protection.outlook.com (10.167.8.107) with Microsoft
+ SMTP Server id 15.20.9275.10 via Frontend Transport; Wed, 5 Nov 2025 15:18:50
+ +0000
+X-IncomingTopHeaderMarker: OriginalChecksum:23D1F26E5446BC3FA65B537371C7CFD75E2D9327CD0535C569F19B596378DE78;UpperCasedChecksum:F9B4C3F3B8671662EB27FB0239AEBBABD731F8015B3EAE4DC6E90907B2E7C51F;SizeAsReceived:1375;Count:20
+DKIM-Signature: v=1; a=rsa-sha1; c=relaxed/relaxed; s=selector1; d=phoenix.dancingbearscabin.com;
+ h=From:sender:Subject:To:Cc:Message-ID:Content-Type:Date:MIME-Version;
+ bh=Oe8vMfnT1NCDrkbR2WE05+fXvL4=;
+ b=NN2EIt/639nFuUq/yNPwzYSZ8S1vz9APKnYKet1M5Ve+HxbpvGENXR6gwwF08gZC6WI1dmK9eeM/
+   29HDUk4hmjVqC9dN5yD9OV3G+9j311yx8Hbwr8Jk9XYy2mPluM4Amub3cCmVZyjSoWqXneMJPkbF
+   HcwSbWEdX0ez9GBTF/A=
+From: """""     Deltag Og Vind      """<newsletterbfjav@har.com>
+sender: """""      Deltag Og Vind     """"", è<newsletterbfjav@har.com>
+Subject: Re: =?UTF-8?b?R8OmdCByaWd0aWd0IG9nIHZpbmQgQm9ybmhvbG0h?= __ID:#RWYP-MS3Z-0UEF
+To: dacangs@hotmail.it
+Cc: dacangs@hotmail.it
+Message-ID: <X0X7NL839WCL.5QA6NROYE1FV@5QA6NROYE1FV.eurprd05.prod.outlook.com>
+Content-Type: multipart/mixed; boundary="2lSZrTVbaej7UHeqBgLm1aQzbBVOAW"
+X-MSGID: d94ea65dafe683f8dce018066b48f0c7
+Date: Wed, 05 Nov 2025 15:18:50 +0000 (UTC)
+Return-Path: return.gjwdcve@har.com
+X-Complaints-To: abuse@jnaproductions.com
+X-Abuse: abuse@jnaproductions.com
+Feedback-ID: cq69c:480k4:rf1bw:jnaproductions.com
+X-Mailer: CID5274ohfzdahwec71phld
+X-Report-Abuse: https://:jnaproductions.com/contact/abuse/?u=3g49050m5xtso1r57vsykihwy&id=5274ohfzda&e=hwec71phld
+X-Feedback-ID: aiwfm:r248e:yyrt8:jnaproductions.com
+X-IncomingHeaderCount: 20
+X-MS-Exchange-Organization-ExpirationStartTime: 05 Nov 2025 15:18:50.8446
+ (UTC)
+X-MS-Exchange-Organization-ExpirationStartTimeReason: OriginalSubmit
+X-MS-Exchange-Organization-ExpirationInterval: 1:00:00:00.0000000
+X-MS-Exchange-Organization-ExpirationIntervalReason: OriginalSubmit
+X-MS-Exchange-Organization-Network-Message-Id: c4469243-086b-40ca-8c7e-08de1c7e9ff7
+X-EOPAttributedMessage: 0
+X-EOPTenantAttributedMessage: 84df9e7f-e9f6-40af-b435-aaaaaaaaaaaa:0
+X-MS-Exchange-Organization-MessageDirectionality: Incoming
+X-MS-PublicTrafficType: Email
+X-MS-TrafficTypeDiagnostic: DB1PEPF00039234:EE_|GVXP194MB2329:EE_|VI6PPF9F6C943AA:EE_
+X-MS-Exchange-Organization-AuthSource: DB1PEPF00039234.eurprd03.prod.outlook.com
+X-MS-Exchange-Organization-AuthAs: Anonymous
+X-MS-UserLastLogonTime: 11/5/2025 3:05:05 PM
+X-MS-Office365-Filtering-Correlation-Id: c4469243-086b-40ca-8c7e-08de1c7e9ff7
+X-MS-Exchange-EOPDirect: true
+X-Sender-IP: 91.190.155.131
+X-SID-PRA: NEWSLETTERBFJAV@HAR.COM
+X-SID-Result: PASS
+X-MS-Exchange-Organization-SCL: 1
+X-Microsoft-Antispam: BCL:0;ARA:1444111002|1680799066|3151999006|970799057|29080799003|58200799018|9000799056|2700799029|47200799021|13020799006|9400799040|9800799015|1474299035|7402599021|32080799003|10300799035|461199028|1380799030|1360799030|1370799030|1602099012|34101999003|3412199025|440099028|4302099013|1290799030|18021999003|30041999003;
+X-MS-Exchange-CrossTenant-OriginalArrivalTime: 05 Nov 2025 15:18:50.7426
+ (UTC)
+X-MS-Exchange-CrossTenant-Network-Message-Id: c4469243-086b-40ca-8c7e-08de1c7e9ff7
+X-MS-Exchange-CrossTenant-Id: 84df9e7f-e9f6-40af-b435-aaaaaaaaaaaa
+X-MS-Exchange-CrossTenant-AuthSource: DB1PEPF00039234.eurprd03.prod.outlook.com
+X-MS-Exchange-CrossTenant-AuthAs: Anonymous
+X-MS-Exchange-CrossTenant-FromEntityHeader: Internet
+X-MS-Exchange-CrossTenant-RMS-PersistedConsumerOrg: 00000000-0000-0000-0000-000000000000
+X-MS-Exchange-Transport-CrossTenantHeadersStamped: GVXP194MB2329
+X-MS-Exchange-Transport-EndToEndLatency: 00:00:01.7115819
+X-MS-Exchange-Processed-By-BccFoldering: 15.20.9275.015
+X-Microsoft-Antispam-Mailbox-Delivery:
+	ucf:0;jmr:0;ex:0;auth:1;dest:I;ENG:(5062000311)(920221119095)(90000117)(920221120095)(90005022)(91005020)(91035115)(9050020)(9100341)(944500132)(2008001181)(2008121020)(4810010)(4910033)(9575002)(10195002)(9320005)(120001);
+X-Message-Delivery: Vj0xLjE7dXM9MDtsPTA7YT0wO0Q9MTtHRD0xO1NDTD0z
+X-Microsoft-Antispam-Message-Info:
+	=?utf-8?B?WHBCendwOXdZZmVVZ3AzMmVrTjNYQTNWNFRaQ3ZPNk8va1VNNENKcG1yaEpS?=
+ =?utf-8?B?SkNZbWZDWlhYdUh5MmRNeHZ1OGczeUdnQ0EwRGJtTjYvMFUxcGIzZmU5ZjNH?=
+ =?utf-8?B?WmdFUWU3TEErcFNVNlJuL2svcDU0eFBYMWZleVQxZlVTQ2syWllQaUtieEd3?=
+ =?utf-8?B?T0lrdGg3OGtYMzNMWVJjdVMzTVR4c3N6RlMxMk51d0tTRmxkSWcydnJHQUtu?=
+ =?utf-8?B?SFlsQkQ3Zldvei91SkNCWEhzNEpZRjJxN3RaaEsrQ2c3dnRXb3RBK2NxU3dl?=
+ =?utf-8?B?dzREVVkwR2VLTzJpSGhMcTNabTBIc2dYZUwxcERqemcyRXVvUm1RaHQrM2Nu?=
+ =?utf-8?B?dkZXZFZqbThXRzFaS0RFVHorQlZEaHNLZXltRDY4WXM4RjFDaTdaUmo4cEZ3?=
+ =?utf-8?B?U1pjQ0xxU2gwbFZ2dVNodUNKUkU5azg1SHNSRk5Yakd1MlNubEpiRnk2Wjkz?=
+ =?utf-8?B?cFg3R3lBZXpIWHNheGxuaERHaExIam9lZ2tPNDRSNE4wRVpCcXgvKy9xakd4?=
+ =?utf-8?B?dUpjNjBBUFY2SVVXbzVJRitTOG1HMDJEOHJzV0FxYXE5QVprMGJsczJHOGRT?=
+ =?utf-8?B?bU9xbnhxendsbkV5UjJzUFlnUzhPN1VEN1lQUFpVWS8zSzF2NE9ad0l4M0Zy?=
+ =?utf-8?B?M2NyL0RiN3R5N01JYVV5UTVSUHNxampYSmNiMXdzVURkNFRWWXQ2QkhqeHl0?=
+ =?utf-8?B?VXg4bWZITWZjUlo5UVJpZjRGTHMyeHlIY2Q2Ky9ncUt0QTRTZG13clQ2T2pk?=
+ =?utf-8?B?aFV0MzhLRjNiN2ZsYnVFQkplbFVlUldoQ3RWQitIT3dGVVFaQTdHanhrNk54?=
+ =?utf-8?B?T3Z3a2RYVlk1Q2w3d2NZZFhFMkVtNVphb3FDMk1lRzBiQUJJWDlpM1RybG9z?=
+ =?utf-8?B?S0t3dzhINXVuNTViSjBxcUk3NUVjWWlpL0NwZ2hQTHZ3WGl3S1JhZ29saElr?=
+ =?utf-8?B?dm9LS2djV252Q0ZFRXhLOXoydXFuYVVUOU9XZ2U5MHRaWWpLaEMzalhqTXQ3?=
+ =?utf-8?B?Z3RMaVowUFNoTmZnMktBSTNVOHkwWVdhSHkya0tTWE1qY1VaT1dJYTEzRjZh?=
+ =?utf-8?B?MEtzRk9SbzdNM3FHaEFjVVRtQjhKeUJCSWNVZTM2S0NqWFAyYWxKamxJa2w0?=
+ =?utf-8?B?Y05PUjYxcnU2UkttZ09XeiszN2tqM21tV21RUEVLaTRhd1Bsa1dlTVJyczhZ?=
+ =?utf-8?B?RjNuUlZhSUsrT2c3OTNqczk3ckd5akJ1WjMwLzc2aWl3OExCZ0hlc1FYMmpH?=
+ =?utf-8?B?c3dENXZHVWJNRThNd3BGdXlJR2dYRlBQMzdPOE9HRmMyWEFJa1lOOTNTRTA5?=
+ =?utf-8?B?aTRldlYvalRGWEFBYlBiTlFHSld1VVVHYXVXL1VXT0VjVmREQ1JSK2VHeGZj?=
+ =?utf-8?B?U2wrY0FNK0FxN1hBWkZMQVdtcU1vb1lNdFdGT0JDdDNleU5iMmRVTWNSZ05K?=
+ =?utf-8?B?eU4zb2Z5eGlCUHNjVm56b1VHYkthR1BHQVpXdTR5VzNqQU1XSWJDRFRaN3B4?=
+ =?utf-8?B?K3dKNGVsMCt5angxVHNLOWUzTWpEa3NLc2YzZWVNMnlzUG5JdXdtNFZ6bG1I?=
+ =?utf-8?B?UG9BWXYrQ0NzUlRYTjRGaDRqblVDUFZldE1JRGtTM0R4OEZKSHhyYVFGQW1W?=
+ =?utf-8?B?U01NSGlyUHNiNG04RTd5NjFLYy9KdldpamFUV1hrMkFvVU5zckZ1dk1uNU1H?=
+ =?utf-8?B?M2lIT2VxdnBuZ1dzYTBjbUxERHJWVTF4dXM3VEZ4Nlk3WkVPNU8rNkExR1Z6?=
+ =?utf-8?B?MXUyVHMweExQaUdoWTErQVRpenAydEhFdVZJSWdWeUc5aXFQZVFMd2JYMXJY?=
+ =?utf-8?B?UG15TTFETGk0SnNJSklxeXpFSk9pU1JndE9LaHhvcnJVWFgzaFlVU0NaWUkv?=
+ =?utf-8?B?bnVaVGpPUnBSSUk0TnJjNzVxYXEyL0w0K1lpejRhZzY5K0xxMlEvTnZTRW5v?=
+ =?utf-8?B?WnBHaFRLYXorWFF4bW11cmdJRlpyblN1aFBUZ0k1Q012VWJtYmNiTGNSZzMx?=
+ =?utf-8?B?TDdVaWVkdVB6T2txaFk2L05wSjljZ2dJRVhvUFYvL3ZJZ3BGbkRYaHNCckZX?=
+ =?utf-8?B?SGVCZWR3Kzd1eEN2bG5nYWVUdWx6T2RvV09mbHp1elRLeXo1VU1qcU01M1hy?=
+ =?utf-8?B?MDVLT1ZCK2ovT0xXZHhPV2k0OVJzUVdSNWxWZkt0Z1MyTDFzS3JidjFtRmZp?=
+ =?utf-8?B?Q3QwS1JES3dZUWpvUllNNFA2VjZYTThpSFB3T0hLR0ozdXJ2TnF2d3JOWnN2?=
+ =?utf-8?B?T1ZtdGlwa2ZNeDlzOUNjOUVickZHY1QwSGI4U1psQW1kcWtpNTFrSTZhY2Jz?=
+ =?utf-8?B?U1ZrUDR1UDZ4eHp2OUJhQUxaTHg2Qmx3TEdSMlUwWkF5Z29sN2xWMzZiRkZZ?=
+ =?utf-8?B?ZGhWSzYwc1hidFJseEpRaTVWbWZDalpaZmZKVk9TRmYzTjBnVDcyNUZQR2hY?=
+ =?utf-8?B?d3ZjaUJYdytvUGVCNzZwSlFxTXcvQVVBWTBaYnp3R2M2STViYWRKQWdtejJl?=
+ =?utf-8?B?QTR6SkhBMGlXY1VzUkJ0Mm9zSmJvT1VhWGp1VGs5aUljM0hiTDhtbDFleDdp?=
+ =?utf-8?B?QW1WK3huZWlYczJ0U0l0QUhyUmlrNWRIWUVSU2N3a0d4QlBaTDl2eGFNQjJW?=
+ =?utf-8?B?T2liZHZJU3RROE5sUVdjYkFCNDVoajlnZmVidFA0dk9JUjI2NTJ4WmYvSEV4?=
+ =?utf-8?B?akw2cm82UkNjbEVqeEZhT0ZqdlQ5REUxVjg3T3c4UWRpbUpoTDJ2SVlMYWxi?=
+ =?utf-8?B?VGpkZkdyNXdlQUVDc05qdmtYTDk5UkdzVHRSNFJreDRHUkJ2TmpJakdpbTdN?=
+ =?utf-8?B?SUFWU0x6RzVNTlVBVTh3YnNHVnZTRVdBTEF2SU93M2h1SUswbUlwTU5wcHFi?=
+ =?utf-8?B?WThrWjMrL2JrZnJCanFDbGJLYkI4NlBMbGpjNkJWR0xGNnUwenpqUk54V3hi?=
+ =?utf-8?B?QVRYa0xXWHU2bWYxT3JkM2t2d2htNDhmZ2k3UE9nc3c3Vm9ybmRyTmZvVkRl?=
+ =?utf-8?B?ZnNCdDM0ZkJyUGd2RUd4dkZTMVprZ08wc3RqMGRxaFBrQWJpR1gwMDROVGp2?=
+ =?utf-8?B?OE9jNDVvb2RkNm12Wm5PZ25XQlhUbTduZ2pQb21zeUdMNS9OUG9MSmY3Q0ti?=
+ =?utf-8?Q?GPug1szrL?=
+MIME-Version: 1.0
+
+--2lSZrTVbaej7UHeqBgLm1aQzbBVOAW
+Content-Type: multipart/alternative; boundary="ppz6g3997zD6HGFbTRuopyTv6mmvDTB"
+
+--ppz6g3997zD6HGFbTRuopyTv6mmvDTB
+Content-Transfer-Encoding: 7bit
+Content-Type: text/plain; charset="ascii"
+
+
+
+--ppz6g3997zD6HGFbTRuopyTv6mmvDTB
+Content-Type: text/html; charset="utf-8"
+
+<html><head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<style type="text/css">
+a{  text-align: center;  color: blue;  font-size: 32px;  font-weight: bold;  line-height: 32px;  margin: 0; justify-content: center;display: grid;}
+img {  display: block;  margin-left: auto;  margin-right: auto;}
+blockquote{display:none}
+</style>
+<tfoot>
+<thead>
+<a href="http://campers.diycarhire.com.au/I2GkM.jspx?pgixes/9eoc/pv.cbbbcM1j3G.c.cbThv.cdj4Q.cc.cyL.cj.cg0cb.gph5.cbbbbm"><h6 style="color: red;"><br>Dacangs:<br> Tag quizzen og nyd Bornholm  </h6></a>
+<style type="text/css">
+a{  text-align: center;  color: blue;  font-size: 32px;  font-weight: bold;  line-height: 32px;  margin: 0; justify-content: center;display: grid;}
+img {  display: block;  margin-left: auto;  margin-right: auto;}
+blockquote{display:none}
+</style>
+<!--[if mso]>
+<![endif]-->
+<img src="http://campers.diycarhire.com.au/I2GkM.NP87DTNSP5?pgixes/9eoc/pv.cbbbcM1j3G.b.cbThv.cdj4Q.cc.cyL.cj.cg0cb.gph5.cbbbbm" width="1" height="1">
+<style type="text/css">
+a{  text-align: center;  color: blue;  font-size: 32px;  font-weight: bold;  line-height: 32px;  margin: 0; justify-content: center;display: grid;}
+img {  display: block;  margin-left: auto;  margin-right: auto;}
+blockquote{display:none}
+</style>
+<div align="center">
+<h5 style="color:red; font-weight:bold; font-size:18px; text-transform:uppercase;"><br>   </h5>
+<a href="http://campers.diycarhire.com.au/I2GkM.jspx?pgixes/9eoc/pv.cbbbcM1j3G.c.cbThv.cdj4Q.cc.cyL.cj.cg0cb.gph5.cbbbbm" style="display: block; width:640px; height:631px; background-position: center; background: url('https://file.garden/aOOPW1WhxGExb9M8/Screenshot%202025-11-05%20at%2010-49-29%20Quiz%20og%20vind%20et%20ophold%20p%C3%A5%20Bornholm!.png') no-repeat; background-size: contain;background-repeat: no-repeat;"> </a><br>
+<a href="http://campers.diycarhire.com.au/I2GkM.NP87DTNSP5?pgixes/9eoc/pv.cbbbcM1j3G.d.cbThv.cdj4Q.cc.cyL.cj.cg0cb.gph5.cbbbbm" style="display: block; width: 160px; height:35px; background-position: center; background: url('https://file.garden/aOOQ1VWhxGExb9Np/7ogcbxwzgry.png') no-repeat; background-size: contain;background-repeat: no-repeat;"> </a><br>
+<a href="http://campers.diycarhire.com.au/I2GkM.NP87DTNSP5?pgixes/9eoc/pv.cbbbcM1j3G.f.cbThv.cdj4Q.cc.cyL.cj.cg0cb.gph5.cbbbbm" style="display: block; width: 461px; height:71px; background-position: center; background: url('https://file.garden/aOOQ1VWhxGExb9Np/4apc5vw8984.png?v=1761490812459') no-repeat; background-size: contain;background-repeat: no-repeat;"> </a><br>
+</div>
+</head>
+<style type="text/css">
+a{  text-align: center;  color: blue;  font-size: 32px;  font-weight: bold;  line-height: 32px;  margin: 0; justify-content: center;display: grid;}
+img {  display: block;  margin-left: auto;  margin-right: auto;}
+blockquote{display:none}
+</style>
+<style type="text/css">
+a{  text-align: center;  color: blue;  font-size: 32px;  font-weight: bold;  line-height: 32px;  margin: 0; justify-content: center;display: grid;}
+img {  display: block;  margin-left: auto;  margin-right: auto;}
+blockquote{display:none}
+</style>
+<i style="color:#fdfefe;text-decoration: underline;font-size:6px;">
+<blockquote id="4ho" style="opacity: 0;">
+<br>------------------------------------------------------------------------------------------------------<br>
+<br>------------------------------------------------------------------------------------------------------<br>
+<br>------------------------------------------------------------------------------------------------------<br>
+<br>------------------------------------------------------------------------------------------------------<br>
+<br>------------------------------------------------------------------------------------------------------<br>
+<br>------------------------------------------------------------------------------------------------------<br>
+<html><html><samp><q></q><samp><b></b><samp></html></html><body><div class="content">             <div class="intro">                 <h2>About the London Stock Exchange</h2>                 <p>The London Stock Exchange (LSE) is one of the world's oldest stock exchanges, founded in 1801. It is the primary stock exchange in the United Kingdom and the largest in Europe by market capitalization.</p>                 <p>The LSE is home to many globally recognized companies and serves as a key financial hub connecting Europe with international markets.</p>                                  <div class="data-source">                     <h3>Data Sources</h3>                     <p>This data is sourced from financial APIs and market data providers:</p>                     <ul>                         <li><a href="https://www.londonstockexchange.com/" target="_blank">London Stock Exchange Official Website</a></li>                         <li><a href="https://www.lseg.com/markets-products-and-services" target="_blank">LSEG Markets &amp; Services</a></li>                         <li><a href="https://www.hl.co.uk/shares/stock-market-summary/ftse-100" target="_blank">Hargreaves Lansdown FTSE Data</a></li>                         <li><a href="https://www.bloomberg.com/markets/stocks" target="_blank">Bloomberg Markets</a></li>                     </ul>                 </div>             </div>                          <h2 style="color: #1a2a6c; margin-bottom: 20px;">LSE Market Data - FTSE 100 Index</h2>                          <table class="stock-table">                 <thead>                     <tr>                         <th>Symbol</th>                         <th>Company</th>                         <th>Price (GBp)</th>                         <th>Change</th>                         <th>Change (%)</th>                         <th>Volume</th>                         <th>Market Cap (Billion £)</th>                     </tr>                 </thead>                 <tbody>                     <tr>                         <td><strong>HSBA</strong></td>                         <td>HSBC Holdings</td>                         <td>645.20</td>                         <td class="positive">+8.40</td>                         <td class="positive">+1.32%</td>                         <td>35,670,800</td>                         <td>124.5</td>                     </tr>                     <tr>                         <td><strong>AZN</strong></td>                         <td>AstraZeneca</td>                         <td>10,425.00</td>                         <td class="positive">+112.00</td>                         <td class="positive">+1.09%</td>                         <td>2,450,300</td>                         <td>161.2</td>                     </tr>                     <tr>                         <td><strong>ULVR</strong></td>                         <td>Unilever</td>                         <td>4,012.50</td>                         <td class="negative">-25.50</td>                         <td class="negative">-0.63%</td>                         <td>4,890,100</td>                         <td>107.8</td>                     </tr>                     <tr>                         <td><strong>BP</strong></td>                         <td>BP</td>                         <td>525.80</td>                         <td class="positive">+4.20</td>                         <td class="positive">+0.81%</td>                         <td>28,450,600</td>                         <td>89.3</td>                     </tr>                     <tr>                         <td><strong>GSK</strong></td>                         <td>GSK</td>                         <td>1,542.00</td>                         <td class="negative">-12.50</td>                         <td class="negative">-0.80%</td>                         <td>7,340,200</td>                         <td>78.9</td>                     </tr>                     <tr>                         <td><strong>BATS</strong></td>                         <td>British American Tobacco</td>                         <td>2,456.00</td>                         <td class="positive">+18.50</td>                         <td class="positive">+0.76%</td>                         <td>3,450,800</td>                         <td>68.4</td>                     </tr>                     <tr>                         <td><strong>RIO</strong></td>                         <td>Rio Tinto</td>                         <td>5,245.00</td>                         <td class="negative">-42.00</td>                         <td class="negative">-0.79%</td>                         <td>1,890,400</td>                         <td>87.6</td>                     </tr>                     <tr>                         <td><strong>LLOY</strong></td>                         <td>Lloyds Banking Group</td>                         <td>45.68</td>                         <td class="positive">+0.52</td>                         <td class="positive">+1.15%</td>                         <td>125,670,500</td>                         <td>32.1</td>                     </tr>                 </tbody>             </table>                          <div class="data-source">                 <h3>LSE Market Indices</h3>                 <p>Key market indices tracking LSE performance:</p>                 <ul>                     <li><a href="https://www.londonstockexchange.com/d94ea65dafe683f8dce018066b48f0c7/ftse-100" target="_blank">FTSE 100 Index</a> - 7,542.36 (+0.45%)</li>                     <li><a href="https://www.londonstockexchange.com/indices/ftse-250" target="_blank">FTSE 250 Index</a> - 19,234.18 (+0.28%)</li>                     <li><a href="https://www.londonstockexchange.com/indices/ftse-350" target="_blank">FTSE 350 Index</a> - 4,156.72 (+0.39%)</li>                     <li><a href="https://www.londonstockexchange.com/indices/ftse-aim-all-share" target="_blank">FTSE AIM All-Share</a> - 842.15 (-0.12%)</li>                 </ul>             </div>                          <div class="stats">                 <div class="stat-card">                     <h3>Basic Information</h3>                     <p><span class="highlight">Founded:</span> 1801</p>                     <p><span class="highlight">Location:</span> London, United Kingdom</p>                     <p><span class="highlight">Owner:</span> London Stock Exchange Group (LSEG)</p>                     <p><span class="highlight">CEO:</span> Julia Hoggett</p>                     <p><span class="highlight">Official Website:</span> <a href="https://www.londonstockexchange.com" target="_blank">www.londonstockexchange.com</a></p>                 </div>                                  <div class="stat-card">                     <h3>Key Statistics</h3>                     <p><span class="highlight">Listed Companies:</span> Over 2,000 companies</p>                     <p><span class="highlight">Total Market Cap:</span> ~£4.5 trillion</p>                     <p><span class="highlight">Average Daily Volume:</span> ~£5 billion</p>                     <p><span class="highlight">Trading Hours:</span> 8:00 AM - 4:30 PM (GMT)</p>                     <p><span class="highlight">Market Status:</span> <span class="positive">OPEN</span> (Live)</p>                 </div>                                  <div class="stat-card">                     <h3>Major Indices</h3>                     <p><span class="highlight">FTSE 100:</span> Top 100 companies by market cap</p>                     <p><span class="highlight">FTSE 250:</span> Next 250 companies</p>                     <p><span class="highlight">FTSE 350:</span> Combined FTSE 100 &amp; 250</p>                     <p><span class="highlight">FTSE All-Share:</span> All eligible UK companies</p>                     <p><span class="highlight">FTSE AIM:</span> Alternative Investment Market</p>                 </div>             </div>         </div>                  <footer>             <p>© 2023 - London Stock Exchange (LSE) Information - Data sources linked above</p>             <p>Note: Stock prices and data are for demonstration purposes and may not reflect real-time values</p>         </footer>     </div> <p style="margin:0;margin-bottom:19px">1. Lb6D</p> <p style="margin:0;margin-bottom:19px">2. No6P7RD</p> <p style="margin:0;margin-bottom:19px">3. VK9kRHSQnZ</p> <p style="margin:0;margin-bottom:19px">4. 7HSeu4e2jVHutO8</p> <p style="margin:0;margin-bottom:19px">5. bnBnECrYQvewXmRzkYj2</p> <p style="margin:0;margin-bottom:19px">6. d94ea65dafe683f8dce018066b48f0c7</p> <p style="margin:0;margin-bottom:19px">7. n5WZ6pFNIx8wIr6C0y8ZLxg5u600dE</p> <p style="margin:0;margin-bottom:19px">8. sgAfY7sZkoaVi9L52sGtjgOD7pvludFNcvI</p> <p style="margin:0;margin-bottom:19px">9. CHRm6PbpwjMxIyioCE7eNrtlvzZ2F2hgqFs4es8U</p> <p class="MsoNormal"><span style="mso-fareast-language:EN-US">w7GJDn8c0YYvl054UnaVEweEYK4aQTqIzual80hrqo2FodBRVKRyawCKU5rjjP<o:p></o:p></span></p> <p class="MsoNormal"><span style="mso-fareast-language:EN-US"><o:p> </o:p></span></p> <p class="MsoNormal"><span style="mso-fareast-language:EN-US">4FAxc93f0QMEJc8rIUsCOotNled6rliDBYl<o:p></o:p></span></p> <p class="MsoNormal"><span style="mso-fareast-language:EN-US"><o:p> </o:p></span></p> <p class="xmsonormal"><span lang="EN-US">RAXrxEemOb</span><o:p></o:p></p> <p class="xmsonormal"><span lang="EN-US">? </span><o:p></o:p></p> <p class="xmsonormal" style="margin-bottom:12.0pt"><span lang="EN-US">LwyM8WWSpzQjK4QbfHTRcNSG69SOFcJT2vsnwf24SZs9srHq3gdbL85WOfhWX5</span><o:p></o:p></p> <p class="xmsonormal"><span lang="EN-US">ikbpXjbVLzVIiG9zn6j36KrwdUlEeEcPdug3khsO1PudYFwDdVekbZIi9dyVtH<o:p></o:p></span></p> <p class="xmsonormal"><span lang="EN-US"><o:p>? </o:p></span></p> <p class="xmsonormal"><b><span lang="EN-US" style="background:yellow;mso-highlight:yellow">RM32v5O9ui</span></b><b><span lang="EN-US"><o:p></o:p></span></b></p> <p class="xmsonormal"><b><span lang="EN-US"><o:p>? </o:p></span></b></p> <p class="xmsonormal"><b><span lang="EN-US">Thanks<o:p></o:p></span></b></p> <p class="xmsonormal"><b><span lang="EN-US">N1HG843ztsoAN0gYw4HZxrfrnvDabDwWg776NCFI </span><o:p></o:p></b></p> <p class="MsoNormal"><span style="mso-fareast-language:EN-US"><o:p> </o:p></span></p> <p class="MsoNormal"><span style="mso-fareast-language:EN-US"><o:p> </o:p></span></p> </div> <p style="margin:0;margin-bottom:19px">1. 1GTU</p> <p style="margin:0;margin-bottom:19px">2. Ts2sha8</p> <p style="margin:0;margin-bottom:19px">3. HWCbUwr0SM</p> <p style="margin:0;margin-bottom:19px">4. oti19bHZZZMTiJa</p> <p style="margin:0;margin-bottom:19px">5. rB1HvjkawOkjCwfjO9nm</p> <p style="margin:0;margin-bottom:19px">6. kG9WJFAvVcvpTA4dP5VzhNCv9</p> <p style="margin:0;margin-bottom:19px">7. edZ0LBaWVzS4GO7JU3hImgsTBxgj6Q</p> <p style="margin:0;margin-bottom:19px">8. tFsnbKB7jxvLAZpVzKHwZlbNRN8OeZMGrCt</p> <p style="margin:0;margin-bottom:19px">9. evHXgQmSpNcPi7DrUsPvCWI75xNzWqUlYxpWxCoK</p> <o:p></o:p></span></p> </div>
+</body>
+</html>
+
+--ppz6g3997zD6HGFbTRuopyTv6mmvDTB--
+
+--2lSZrTVbaej7UHeqBgLm1aQzbBVOAW--

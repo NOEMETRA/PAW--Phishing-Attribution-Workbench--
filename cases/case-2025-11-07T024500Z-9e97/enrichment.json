@@ -1,0 +1,1125 @@
+{
+  "case_id": "case-2025-11-07T024500Z-9e97",
+  "generated": [
+    {
+      "domain": "campers.diycarhire.com.au",
+      "dns": {
+        "domain": "campers.diycarhire.com.au",
+        "records": {
+          "A": [
+            {
+              "value": "69.175.109.122",
+              "ttl": null
+            }
+          ],
+          "AAAA": []
+        },
+        "cname_chain": [
+          {
+            "domain": "campers.diycarhire.com.au",
+            "cname_target": "global.imallgeo.net.",
+            "depth": 0
+          }
+        ],
+        "nameservers": [],
+        "mx_records": [],
+        "txt_records": [
+          {
+            "value": "\"v=spf1 include:dganz.com -all\"",
+            "ttl": null,
+            "strings": [
+              "b'v=spf1 include:dganz.com -all'"
+            ]
+          }
+        ],
+        "hosting_provider": {
+          "detected_provider": null,
+          "confidence": 0.0,
+          "indicators": []
+        },
+        "registrar_hints": {
+          "detected_registrar": null,
+          "confidence": 0.0,
+          "indicators": []
+        },
+        "reverse_dns": {
+          "69.175.109.122": {
+            "hostname": "taosdesertoak.com",
+            "matches_domain": false
+          }
+        },
+        "ip_ranges": {
+          "ranges": [],
+          "providers": [],
+          "geographic_hints": [
+            "United States (US) / Georgia, Norcross - Internap Holding LLC"
+          ]
+        },
+        "attribution_hints": {
+          "infrastructure_type": "unknown",
+          "hosting_category": "unknown",
+          "risk_indicators": [],
+          "correlation_keys": [],
+          "domain_age_days": null
+        },
+        "errors": []
+      },
+      "threat_intel": {
+        "threatfox": {
+          "domain_iocs": [],
+          "ip_iocs": {
+            "69.175.109.122": {
+              "error": "no_result"
+            }
+          },
+          "malware_families": [],
+          "error": "no_result"
+        },
+        "alienvault": {
+          "pulse_count": 0,
+          "pulses": [],
+          "related_ips": []
+        }
+      }
+    },
+    {
+      "domain": "file.garden",
+      "dns": {
+        "domain": "file.garden",
+        "records": {
+          "A": [
+            {
+              "value": "172.67.72.163",
+              "ttl": null
+            },
+            {
+              "value": "104.26.6.5",
+              "ttl": null
+            },
+            {
+              "value": "104.26.7.5",
+              "ttl": null
+            }
+          ],
+          "AAAA": [
+            {
+              "value": "2606:4700:20::681a:705",
+              "ttl": null
+            },
+            {
+              "value": "2606:4700:20::681a:605",
+              "ttl": null
+            },
+            {
+              "value": "2606:4700:20::ac43:48a3",
+              "ttl": null
+            }
+          ]
+        },
+        "cname_chain": [],
+        "nameservers": [
+          {
+            "value": "nick.ns.cloudflare.com.",
+            "ttl": null
+          },
+          {
+            "value": "eva.ns.cloudflare.com.",
+            "ttl": null
+          }
+        ],
+        "mx_records": [
+          {
+            "value": "0 .",
+            "ttl": null,
+            "preference": 0,
+            "exchange": "."
+          }
+        ],
+        "txt_records": [
+          {
+            "value": "\"v=spf1 -all\"",
+            "ttl": null,
+            "strings": [
+              "b'v=spf1 -all'"
+            ]
+          },
+          {
+            "value": "\"google-site-verification=gIKfKXQ1MM8ZciOeOXV95-7esL983L-Jp__kZzuui-I\"",
+            "ttl": null,
+            "strings": [
+              "b'google-site-verification=gIKfKXQ1MM8ZciOeOXV95-7esL983L-Jp__kZzuui-I'"
+            ]
+          }
+        ],
+        "hosting_provider": {
+          "detected_provider": null,
+          "confidence": 0.0,
+          "indicators": []
+        },
+        "registrar_hints": {
+          "detected_registrar": null,
+          "confidence": 0.0,
+          "indicators": []
+        },
+        "reverse_dns": {
+          "172.67.72.163": {
+            "hostname": null,
+            "error": "no_reverse_record"
+          },
+          "104.26.6.5": {
+            "hostname": null,
+            "error": "no_reverse_record"
+          },
+          "104.26.7.5": {
+            "hostname": null,
+            "error": "no_reverse_record"
+          }
+        },
+        "ip_ranges": {
+          "ranges": [
+            "104.0.0.0/8"
+          ],
+          "providers": [
+            "Google Cloud"
+          ],
+          "geographic_hints": [
+            "United States (US) / New Jersey, Newark - Cloudflare, Inc.",
+            "Canada (CA) / Ontario, Toronto - Cloudflare, Inc."
+          ]
+        },
+        "attribution_hints": {
+          "infrastructure_type": "unknown",
+          "hosting_category": "unknown",
+          "risk_indicators": [],
+          "correlation_keys": [
+            "ip_range:104.0.0.0/8",
+            "ns:nick.ns.cloudflare.com.",
+            "ns:eva.ns.cloudflare.com."
+          ],
+          "domain_age_days": 1360
+        },
+        "errors": []
+      },
+      "threat_intel": {
+        "threatfox": {
+          "domain_iocs": [],
+          "ip_iocs": {
+            "172.67.72.163": {
+              "error": "no_result"
+            },
+            "104.26.6.5": {
+              "error": "no_result"
+            },
+            "104.26.7.5": {
+              "error": "no_result"
+            }
+          },
+          "malware_families": [],
+          "error": "no_result"
+        },
+        "alienvault": {
+          "pulse_count": 4,
+          "pulses": [
+            {
+              "id": "6754e40ba04152b0f637f800",
+              "name": "URLHaus data - 07-12-2024",
+              "description": "",
+              "modified": "2025-01-07T00:02:14.438000",
+              "created": "2024-12-08T00:10:51.765000",
+              "tags": [
+                "32-bit",
+                "elf",
+                "mips",
+                "Mozi",
+                "arm",
+                "mirai",
+                "hajime",
+                "dll",
+                "Stealc",
+                "exe",
+                "WsgiDAV",
+                "x86-32",
+                "MeduzaStealer",
+                "cloudflare",
+                "opendir",
+                "webdav",
+                "apk",
+                "coper",
+                "Octo",
+                "Octo2",
+                "CoinMiner",
+                "bat",
+                "emotet",
+                "heodo",
+                "RedLineStealer",
+                "RemcosRAT",
+                "autoinject",
+                "Loki",
+                "Formbook",
+                "LummaStealer",
+                "infostealer",
+                "darkylock",
+                "Ransomware",
+                "dcrat",
+                "gafgyt",
+                "njRAT",
+                "BABADEDA",
+                "Cryxos",
+                "js",
+                "rustystealer",
+                "SnakeKeylogger",
+                "Socks5Systemz",
+                "orcusrat",
+                "AsyncRAT",
+                "script",
+                "ascii",
+                "meterpreter",
+                "xenorat",
+                "botnetdomain",
+                "censys",
+                "fbi.gov",
+                "moobot",
+                "sh",
+                "ua-wget"
+              ],
+              "references": [
+                "https://urlhaus.abuse.ch/browse/"
+              ],
+              "public": 1,
+              "adversary": "",
+              "targeted_countries": [],
+              "malware_families": [],
+              "attack_ids": [],
+              "industries": [],
+              "TLP": "green",
+              "cloned_from": null,
+              "export_count": 83,
+              "upvotes_count": 0,
+              "downvotes_count": 0,
+              "votes_count": 0,
+              "locked": false,
+              "pulse_source": "api",
+              "validator_count": 0,
+              "comment_count": 0,
+              "follower_count": 0,
+              "vote": 0,
+              "author": {
+                "username": "CyberHunterAutoFeed",
+                "id": "182496",
+                "avatar_url": "/otxapi/users/avatar_image/media/avatars/user_182496/resized/80/avatar_3b9c358f36.png",
+                "is_subscribed": false,
+                "is_following": false
+              },
+              "indicator_type_counts": {
+                "URL": 978,
+                "domain": 28,
+                "hostname": 104
+              },
+              "indicator_count": 1110,
+              "is_author": false,
+              "is_subscribing": null,
+              "subscriber_count": 1442,
+              "modified_text": "304 days ago ",
+              "is_modified": true,
+              "groups": [],
+              "in_group": false,
+              "threat_hunter_scannable": false,
+              "threat_hunter_has_agents": 1,
+              "related_indicator_type": "domain",
+              "related_indicator_is_active": 1
+            },
+            {
+              "id": "658a1a6e37b9e7db8da62973",
+              "name": "URLHaus data - 25-12-2023",
+              "description": "",
+              "modified": "2024-01-25T00:04:13.053000",
+              "created": "2023-12-26T00:12:30.695000",
+              "tags": [
+                "hajime",
+                "elf",
+                "Mozi",
+                "32-bit",
+                "mips",
+                "64",
+                "exe",
+                "64-bit",
+                "mirai",
+                "x86-64",
+                "SocGholish",
+                "BadBazaar",
+                "MarsStealer",
+                "trojan",
+                "jar",
+                "jat",
+                "32",
+                "LummaStealer",
+                "dropped-by-PrivateLoader",
+                "Stealc",
+                "N-W0rm",
+                "discord",
+                "infostealer",
+                "pwd-beta",
+                "4545",
+                "Password-protected",
+                "rar",
+                "arm"
+              ],
+              "references": [
+                "https://urlhaus.abuse.ch/browse/"
+              ],
+              "public": 1,
+              "adversary": "",
+              "targeted_countries": [],
+              "malware_families": [],
+              "attack_ids": [],
+              "industries": [],
+              "TLP": "green",
+              "cloned_from": null,
+              "export_count": 47,
+              "upvotes_count": 0,
+              "downvotes_count": 0,
+              "votes_count": 0,
+              "locked": false,
+              "pulse_source": "api",
+              "validator_count": 0,
+              "comment_count": 0,
+              "follower_count": 0,
+              "vote": 0,
+              "author": {
+                "username": "CyberHunterAutoFeed",
+                "id": "182496",
+                "avatar_url": "/otxapi/users/avatar_image/media/avatars/user_182496/resized/80/avatar_3b9c358f36.png",
+                "is_subscribed": false,
+                "is_following": false
+              },
+              "indicator_type_counts": {
+                "URL": 164,
+                "hostname": 3,
+                "domain": 5
+              },
+              "indicator_count": 172,
+              "is_author": false,
+              "is_subscribing": null,
+              "subscriber_count": 1443,
+              "modified_text": "652 days ago ",
+              "is_modified": true,
+              "groups": [],
+              "in_group": false,
+              "threat_hunter_scannable": false,
+              "threat_hunter_has_agents": 1,
+              "related_indicator_type": "domain",
+              "related_indicator_is_active": 1
+            },
+            {
+              "id": "6584d8d3adddbcfd8a3829d6",
+              "name": "URLHaus data - 21-12-2023",
+              "description": "",
+              "modified": "2024-01-21T00:03:33.056000",
+              "created": "2023-12-22T00:31:14.237000",
+              "tags": [
+                "elf",
+                "Mozi",
+                "32-bit",
+                "mips",
+                "32",
+                "Amadey",
+                "exe",
+                "hajime",
+                "SocGholish",
+                "vjw0rm",
+                "bashlite",
+                "gafgyt",
+                "sparc",
+                "arm",
+                "64",
+                "intel",
+                "PowerPC",
+                "mirai",
+                "motorola",
+                "renesas",
+                "jar",
+                "MarsStealer",
+                "ascii",
+                "7z",
+                "AgentTesla",
+                "FakeBat",
+                "Vidar",
+                "script",
+                "AsyncRAT",
+                "Formbook",
+                "js",
+                "dropped-by-PrivateLoader",
+                "Rhadamanthys",
+                "Socks5Systemz",
+                "risepro",
+                "encrypted",
+                "Pikabot",
+                "TA577",
+                "TR",
+                "zip",
+                "PrivateLoader",
+                "djvu",
+                "ddos",
+                "phorpiex",
+                "dll",
+                "PureCrypter",
+                "RedLineStealer",
+                "CoinMiner"
+              ],
+              "references": [
+                "https://urlhaus.abuse.ch/browse/"
+              ],
+              "public": 1,
+              "adversary": "",
+              "targeted_countries": [],
+              "malware_families": [],
+              "attack_ids": [],
+              "industries": [],
+              "TLP": "green",
+              "cloned_from": null,
+              "export_count": 63,
+              "upvotes_count": 0,
+              "downvotes_count": 0,
+              "votes_count": 0,
+              "locked": false,
+              "pulse_source": "api",
+              "validator_count": 0,
+              "comment_count": 0,
+              "follower_count": 0,
+              "vote": 0,
+              "author": {
+                "username": "CyberHunterAutoFeed",
+                "id": "182496",
+                "avatar_url": "/otxapi/users/avatar_image/media/avatars/user_182496/resized/80/avatar_3b9c358f36.png",
+                "is_subscribed": false,
+                "is_following": false
+              },
+              "indicator_type_counts": {
+                "URL": 429,
+                "hostname": 14,
+                "domain": 181
+              },
+              "indicator_count": 624,
+              "is_author": false,
+              "is_subscribing": null,
+              "subscriber_count": 1443,
+              "modified_text": "656 days ago ",
+              "is_modified": true,
+              "groups": [],
+              "in_group": false,
+              "threat_hunter_scannable": false,
+              "threat_hunter_has_agents": 1,
+              "related_indicator_type": "domain",
+              "related_indicator_is_active": 1
+            },
+            {
+              "id": "6583852ca849df35b1c3dcb2",
+              "name": "URLHaus data - 20-12-2023",
+              "description": "",
+              "modified": "2024-01-20T00:04:50.550000",
+              "created": "2023-12-21T00:22:04.384000",
+              "tags": [
+                "32-bit",
+                "elf",
+                "mips",
+                "Mozi",
+                "hajime",
+                "SocGholish",
+                "64",
+                "exe",
+                "js",
+                "dll",
+                "Pikabot",
+                "TR",
+                "SnakeKeylogger",
+                "script",
+                "AmNsA2",
+                "Lumma",
+                "LummaStealer",
+                "stealer",
+                "viaSmokeLoader",
+                "Loki",
+                "lokibot",
+                "url",
+                "zip",
+                "redir-302",
+                "TA577",
+                "AgentTesla",
+                "OriginBotnet",
+                "MarsStealer",
+                "32",
+                "arm",
+                "mirai",
+                "intel",
+                "Amadey",
+                "dropped-by-PrivateLoader",
+                "glupteba",
+                "smokeloader",
+                "jar",
+                "encrypted",
+                "GuLoader",
+                "doc",
+                "opendir",
+                "discord",
+                "infostealer",
+                "pwd-beta",
+                "Password-protected",
+                "rar",
+                "spoofme",
+                "CL",
+                "downloader",
+                "geo",
+                "Grandoreiro"
+              ],
+              "references": [
+                "https://urlhaus.abuse.ch/browse/"
+              ],
+              "public": 1,
+              "adversary": "",
+              "targeted_countries": [],
+              "malware_families": [],
+              "attack_ids": [],
+              "industries": [],
+              "TLP": "green",
+              "cloned_from": null,
+              "export_count": 63,
+              "upvotes_count": 0,
+              "downvotes_count": 0,
+              "votes_count": 0,
+              "locked": false,
+              "pulse_source": "api",
+              "validator_count": 0,
+              "comment_count": 0,
+              "follower_count": 0,
+              "vote": 0,
+              "author": {
+                "username": "CyberHunterAutoFeed",
+                "id": "182496",
+                "avatar_url": "/otxapi/users/avatar_image/media/avatars/user_182496/resized/80/avatar_3b9c358f36.png",
+                "is_subscribed": false,
+                "is_following": false
+              },
+              "indicator_type_counts": {
+                "URL": 318,
+                "hostname": 15,
+                "domain": 149
+              },
+              "indicator_count": 482,
+              "is_author": false,
+              "is_subscribing": null,
+              "subscriber_count": 1442,
+              "modified_text": "657 days ago ",
+              "is_modified": true,
+              "groups": [],
+              "in_group": false,
+              "threat_hunter_scannable": false,
+              "threat_hunter_has_agents": 1,
+              "related_indicator_type": "domain",
+              "related_indicator_is_active": 1
+            }
+          ],
+          "related_ips": []
+        }
+      }
+    },
+    {
+      "domain": "www.bloomberg.com",
+      "dns": {
+        "domain": "www.bloomberg.com",
+        "records": {
+          "A": [
+            {
+              "value": "199.232.41.73",
+              "ttl": null
+            }
+          ],
+          "AAAA": []
+        },
+        "cname_chain": [
+          {
+            "domain": "www.bloomberg.com",
+            "cname_target": "www.bloomberg.com.shared.bloomberga.com.",
+            "depth": 0
+          },
+          {
+            "domain": "www.bloomberg.com.shared.bloomberga.com",
+            "cname_target": "bloomberg.map.fastly.net.",
+            "depth": 1
+          }
+        ],
+        "nameservers": [],
+        "mx_records": [],
+        "txt_records": [],
+        "hosting_provider": {
+          "detected_provider": "fastly",
+          "confidence": 0.9,
+          "indicators": [
+            "CNAME: bloomberg.map.fastly.net."
+          ]
+        },
+        "registrar_hints": {
+          "detected_registrar": null,
+          "confidence": 0.0,
+          "indicators": []
+        },
+        "reverse_dns": {
+          "199.232.41.73": {
+            "hostname": null,
+            "error": "no_reverse_record"
+          }
+        },
+        "ip_ranges": {
+          "ranges": [],
+          "providers": [],
+          "geographic_hints": [
+            "Denmark (DK) / Capital Region, Copenhagen - Fastly, Inc."
+          ]
+        },
+        "attribution_hints": {
+          "infrastructure_type": "cdn",
+          "hosting_category": "fastly",
+          "risk_indicators": [],
+          "correlation_keys": [
+            "hosting:fastly"
+          ],
+          "domain_age_days": 11727
+        },
+        "errors": []
+      },
+      "threat_intel": {
+        "threatfox": {
+          "domain_iocs": [],
+          "ip_iocs": {
+            "199.232.41.73": {
+              "error": "no_result"
+            }
+          },
+          "malware_families": [],
+          "error": "no_result"
+        },
+        "alienvault": {
+          "pulse_count": 0,
+          "pulses": [],
+          "related_ips": []
+        }
+      }
+    },
+    {
+      "domain": "www.hl.co.uk",
+      "dns": {
+        "domain": "www.hl.co.uk",
+        "records": {
+          "A": [
+            {
+              "value": "3.174.18.110",
+              "ttl": null
+            },
+            {
+              "value": "3.174.18.127",
+              "ttl": null
+            },
+            {
+              "value": "3.174.18.68",
+              "ttl": null
+            },
+            {
+              "value": "3.174.18.12",
+              "ttl": null
+            }
+          ],
+          "AAAA": []
+        },
+        "cname_chain": [
+          {
+            "domain": "www.hl.co.uk",
+            "cname_target": "d3c6vck7qm2wt.cloudfront.net.",
+            "depth": 0
+          }
+        ],
+        "nameservers": [
+          {
+            "value": "ns-107.awsdns-13.com.",
+            "ttl": null
+          },
+          {
+            "value": "ns-1139.awsdns-14.org.",
+            "ttl": null
+          },
+          {
+            "value": "ns-2037.awsdns-62.co.uk.",
+            "ttl": null
+          },
+          {
+            "value": "ns-836.awsdns-40.net.",
+            "ttl": null
+          }
+        ],
+        "mx_records": [],
+        "txt_records": [],
+        "hosting_provider": {
+          "detected_provider": null,
+          "confidence": 0.0,
+          "indicators": []
+        },
+        "registrar_hints": {
+          "detected_registrar": null,
+          "confidence": 0.0,
+          "indicators": []
+        },
+        "reverse_dns": {
+          "3.174.18.110": {
+            "hostname": "server-3-174-18-110.cph50.r.cloudfront.net",
+            "matches_domain": false
+          },
+          "3.174.18.127": {
+            "hostname": "server-3-174-18-127.cph50.r.cloudfront.net",
+            "matches_domain": false
+          },
+          "3.174.18.68": {
+            "hostname": "server-3-174-18-68.cph50.r.cloudfront.net",
+            "matches_domain": false
+          },
+          "3.174.18.12": {
+            "hostname": "server-3-174-18-12.cph50.r.cloudfront.net",
+            "matches_domain": false
+          }
+        },
+        "ip_ranges": {
+          "ranges": [],
+          "providers": [],
+          "geographic_hints": [
+            "Denmark (DK) / Capital Region, Copenhagen - Amazon.com, Inc."
+          ]
+        },
+        "attribution_hints": {
+          "infrastructure_type": "unknown",
+          "hosting_category": "unknown",
+          "risk_indicators": [],
+          "correlation_keys": [
+            "ns:ns-107.awsdns-13.com.",
+            "ns:ns-1139.awsdns-14.org.",
+            "ns:ns-2037.awsdns-62.co.uk.",
+            "ns:ns-836.awsdns-40.net."
+          ],
+          "domain_age_days": 5387
+        },
+        "errors": []
+      },
+      "threat_intel": {
+        "threatfox": {
+          "domain_iocs": [],
+          "ip_iocs": {
+            "3.174.18.110": {
+              "error": "no_result"
+            },
+            "3.174.18.127": {
+              "error": "no_result"
+            },
+            "3.174.18.68": {
+              "error": "no_result"
+            },
+            "3.174.18.12": {
+              "error": "no_result"
+            }
+          },
+          "malware_families": [],
+          "error": "no_result"
+        },
+        "alienvault": {
+          "pulse_count": 0,
+          "pulses": [],
+          "related_ips": []
+        }
+      }
+    },
+    {
+      "domain": "www.londonstockexchange.com",
+      "dns": {
+        "domain": "www.londonstockexchange.com",
+        "records": {
+          "A": [
+            {
+              "value": "3.174.18.26",
+              "ttl": null
+            },
+            {
+              "value": "3.174.18.46",
+              "ttl": null
+            },
+            {
+              "value": "3.174.18.38",
+              "ttl": null
+            },
+            {
+              "value": "3.174.18.92",
+              "ttl": null
+            }
+          ],
+          "AAAA": []
+        },
+        "cname_chain": [
+          {
+            "domain": "www.londonstockexchange.com",
+            "cname_target": "d2ylyp3ilp6r3n.cloudfront.net.",
+            "depth": 0
+          }
+        ],
+        "nameservers": [
+          {
+            "value": "ns-900.awsdns-48.net.",
+            "ttl": null
+          },
+          {
+            "value": "ns-1394.awsdns-46.org.",
+            "ttl": null
+          },
+          {
+            "value": "ns-1686.awsdns-18.co.uk.",
+            "ttl": null
+          },
+          {
+            "value": "ns-487.awsdns-60.com.",
+            "ttl": null
+          }
+        ],
+        "mx_records": [],
+        "txt_records": [],
+        "hosting_provider": {
+          "detected_provider": null,
+          "confidence": 0.0,
+          "indicators": []
+        },
+        "registrar_hints": {
+          "detected_registrar": null,
+          "confidence": 0.0,
+          "indicators": []
+        },
+        "reverse_dns": {
+          "3.174.18.26": {
+            "hostname": "server-3-174-18-26.cph50.r.cloudfront.net",
+            "matches_domain": false
+          },
+          "3.174.18.46": {
+            "hostname": "server-3-174-18-46.cph50.r.cloudfront.net",
+            "matches_domain": false
+          },
+          "3.174.18.38": {
+            "hostname": "server-3-174-18-38.cph50.r.cloudfront.net",
+            "matches_domain": false
+          },
+          "3.174.18.92": {
+            "hostname": "server-3-174-18-92.cph50.r.cloudfront.net",
+            "matches_domain": false
+          }
+        },
+        "ip_ranges": {
+          "ranges": [],
+          "providers": [],
+          "geographic_hints": [
+            "Denmark (DK) / Capital Region, Copenhagen - Amazon.com, Inc."
+          ]
+        },
+        "attribution_hints": {
+          "infrastructure_type": "unknown",
+          "hosting_category": "unknown",
+          "risk_indicators": [],
+          "correlation_keys": [
+            "ns:ns-900.awsdns-48.net.",
+            "ns:ns-1394.awsdns-46.org.",
+            "ns:ns-1686.awsdns-18.co.uk.",
+            "ns:ns-487.awsdns-60.com."
+          ],
+          "domain_age_days": 10614
+        },
+        "errors": []
+      },
+      "threat_intel": {
+        "threatfox": {
+          "domain_iocs": [],
+          "ip_iocs": {
+            "3.174.18.26": {
+              "error": "no_result"
+            },
+            "3.174.18.46": {
+              "error": "no_result"
+            },
+            "3.174.18.38": {
+              "error": "no_result"
+            },
+            "3.174.18.92": {
+              "error": "no_result"
+            }
+          },
+          "malware_families": [],
+          "error": "no_result"
+        },
+        "alienvault": {
+          "pulse_count": 0,
+          "pulses": [],
+          "related_ips": []
+        }
+      }
+    },
+    {
+      "domain": "www.lseg.com",
+      "dns": {
+        "domain": "www.lseg.com",
+        "records": {
+          "A": [
+            {
+              "value": "18.173.5.70",
+              "ttl": null
+            },
+            {
+              "value": "18.173.5.64",
+              "ttl": null
+            },
+            {
+              "value": "18.173.5.50",
+              "ttl": null
+            },
+            {
+              "value": "18.173.5.125",
+              "ttl": null
+            }
+          ],
+          "AAAA": [
+            {
+              "value": "2600:9000:2574:fe00:2:2fdd:fc0:93a1",
+              "ttl": null
+            },
+            {
+              "value": "2600:9000:2574:f800:2:2fdd:fc0:93a1",
+              "ttl": null
+            },
+            {
+              "value": "2600:9000:2574:2600:2:2fdd:fc0:93a1",
+              "ttl": null
+            },
+            {
+              "value": "2600:9000:2574:bc00:2:2fdd:fc0:93a1",
+              "ttl": null
+            },
+            {
+              "value": "2600:9000:2574:d200:2:2fdd:fc0:93a1",
+              "ttl": null
+            },
+            {
+              "value": "2600:9000:2574:3800:2:2fdd:fc0:93a1",
+              "ttl": null
+            },
+            {
+              "value": "2600:9000:2574:400:2:2fdd:fc0:93a1",
+              "ttl": null
+            },
+            {
+              "value": "2600:9000:2574:5400:2:2fdd:fc0:93a1",
+              "ttl": null
+            }
+          ]
+        },
+        "cname_chain": [
+          {
+            "domain": "www.lseg.com",
+            "cname_target": "d3cwx6i5482vjz.cloudfront.net.",
+            "depth": 0
+          }
+        ],
+        "nameservers": [
+          {
+            "value": "ns-1439.awsdns-51.org.",
+            "ttl": null
+          },
+          {
+            "value": "ns-1783.awsdns-30.co.uk.",
+            "ttl": null
+          },
+          {
+            "value": "ns-357.awsdns-44.com.",
+            "ttl": null
+          },
+          {
+            "value": "ns-542.awsdns-03.net.",
+            "ttl": null
+          }
+        ],
+        "mx_records": [],
+        "txt_records": [],
+        "hosting_provider": {
+          "detected_provider": null,
+          "confidence": 0.0,
+          "indicators": []
+        },
+        "registrar_hints": {
+          "detected_registrar": null,
+          "confidence": 0.0,
+          "indicators": []
+        },
+        "reverse_dns": {
+          "18.173.5.70": {
+            "hostname": "server-18-173-5-70.cph50.r.cloudfront.net",
+            "matches_domain": false
+          },
+          "18.173.5.64": {
+            "hostname": "server-18-173-5-64.cph50.r.cloudfront.net",
+            "matches_domain": false
+          },
+          "18.173.5.50": {
+            "hostname": "server-18-173-5-50.cph50.r.cloudfront.net",
+            "matches_domain": false
+          },
+          "18.173.5.125": {
+            "hostname": "server-18-173-5-125.cph50.r.cloudfront.net",
+            "matches_domain": false
+          }
+        },
+        "ip_ranges": {
+          "ranges": [],
+          "providers": [],
+          "geographic_hints": [
+            "United Kingdom (GB) / England, London - Amazon.com, Inc."
+          ]
+        },
+        "attribution_hints": {
+          "infrastructure_type": "unknown",
+          "hosting_category": "unknown",
+          "risk_indicators": [],
+          "correlation_keys": [
+            "ns:ns-1439.awsdns-51.org.",
+            "ns:ns-1783.awsdns-30.co.uk.",
+            "ns:ns-357.awsdns-44.com.",
+            "ns:ns-542.awsdns-03.net."
+          ],
+          "domain_age_days": 8425
+        },
+        "errors": []
+      },
+      "threat_intel": {
+        "threatfox": {
+          "domain_iocs": [],
+          "ip_iocs": {
+            "18.173.5.70": {
+              "error": "no_result"
+            },
+            "18.173.5.64": {
+              "error": "no_result"
+            },
+            "18.173.5.50": {
+              "error": "no_result"
+            },
+            "18.173.5.125": {
+              "error": "no_result"
+            }
+          },
+          "malware_families": [],
+          "error": "no_result"
+        },
+        "alienvault": {
+          "pulse_count": 0,
+          "pulses": [],
+          "related_ips": []
+        }
+      }
+    }
+  ]
+}

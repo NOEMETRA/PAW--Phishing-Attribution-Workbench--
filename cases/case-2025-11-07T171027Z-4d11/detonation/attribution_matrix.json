@@ -1,0 +1,100 @@
+{
+  "timestamp": "2025-11-07T18:13:32.782589",
+  "target_url": "https://www.londonstockexchange.com\\",
+  "correlation_matrix": {
+    "source_correlations": {},
+    "key_frequency": {},
+    "cross_source_links": []
+  },
+  "hypotheses": [],
+  "evidence_summary": {
+    "enrichment_sources": {
+      "trackers": {
+        "evidence_count": 0,
+        "evidence_types": [
+          "analytics_tracking"
+        ],
+        "key_findings": [],
+        "confidence_level": "unknown"
+      },
+      "tls_fingerprints": {
+        "evidence_count": 0,
+        "evidence_types": [
+          "tls_certificate",
+          "spki_fingerprint"
+        ],
+        "key_findings": [],
+        "confidence_level": "unknown"
+      },
+      "dns_enrichment": {
+        "evidence_count": 0,
+        "evidence_types": [
+          "dns_record",
+          "nameserver",
+          "hosting_provider"
+        ],
+        "key_findings": [],
+        "confidence_level": "unknown"
+      },
+      "redirect_chains": {
+        "evidence_count": 1,
+        "evidence_types": [
+          "redirect_chain",
+          "utm_tracking"
+        ],
+        "key_findings": [
+          "Chain length: 1"
+        ],
+        "confidence_level": "low"
+      },
+      "ja3_fingerprints": {
+        "evidence_count": 0,
+        "evidence_types": [
+          "ja3_fingerprint",
+          "client_identification"
+        ],
+        "key_findings": [],
+        "confidence_level": "unknown"
+      },
+      "form_analysis": {
+        "evidence_count": 1,
+        "evidence_types": [
+          "form_field",
+          "payment_processor"
+        ],
+        "key_findings": [],
+        "confidence_level": "low"
+      }
+    },
+    "total_evidence_items": 2,
+    "evidence_by_category": {
+      "analytics_tracking": 1,
+      "tls_certificate": 1,
+      "spki_fingerprint": 1,
+      "dns_record": 1,
+      "nameserver": 1,
+      "hosting_provider": 1,
+      "redirect_chain": 1,
+      "utm_tracking": 1,
+      "ja3_fingerprint": 1,
+      "client_identification": 1,
+      "form_field": 1,
+      "payment_processor": 1
+    },
+    "high_confidence_findings": [],
+    "suspicious_indicators": []
+  },
+  "confidence_assessment": {
+    "overall_confidence": "low",
+    "top_hypothesis_score": 0.0,
+    "hypothesis_count": 0,
+    "evidence_breadth": 0,
+    "confidence_factors": []
+  },
+  "recommendations": [
+    "Low confidence - requires additional investigation",
+    "Limited evidence breadth - consider additional enrichment sources",
+    "Consider TLS certificate analysis for additional attribution evidence",
+    "DNS analysis may provide valuable infrastructure attribution clues"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "status": "error",
+  "message": "Index error during mapping: list index out of range",
+  "network_analysis": {},
+  "service_detection": {},
+  "cdn_detection": false,
+  "infrastructure_timeline": []
+}

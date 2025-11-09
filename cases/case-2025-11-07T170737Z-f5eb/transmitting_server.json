@@ -1,0 +1,23 @@
+{
+  "ip": "91.190.155.131",
+  "asn": 63473,
+  "org": "HOSTHATCH, US",
+  "cc": "SE",
+  "abuse": [
+    {
+      "type": "email",
+      "value": "abuse@prinode.com"
+    }
+  ],
+  "time_utc": "2025-11-05T15:18:50+00:00",
+  "helo": "",
+  "ptr": "phoenix.dancingbearscabin.com",
+  "skew_s": 0,
+  "reputation": {
+    "score": 0,
+    "category": "clean",
+    "sources": [
+      "asn_registered_in:SE"
+    ]
+  }
+}

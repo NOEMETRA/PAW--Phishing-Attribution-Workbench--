@@ -12,7 +12,30 @@ from ..util.timeutil import utc_now_iso
 
 
 class CampaignDatabase:
-    """SQLite database for managing monitored phishing campaigns."""
+    ...
+    def __get_campaign_by_case(self, case_id: str) -> Optional[Dict[str, Any]]:
+        """Return campaign info given the PAW case ID."""
+        with sqlite3.connect(self.db_path) as conn:
+            row = conn.execute("""
+                SELECT * FROM campaigns WHERE case_id = ?
+            """, (case_id,)).fetchone()
+
+            if not row:
+                return None
+
+            return {
+                'id': row[0],
+                'case_id': row[1],
+                'created_at': row[2],
+                'last_check': row[3],
+                'status': row[4],
+                'url': row[5],
+                'domain': row[6],
+                'title': row[7],
+                'description': row[8],
+                'risk_level': row[9],
+                'metadata': self._safe_load_json(row[10], {})
+            }
 
     def __init__(self, db_path: str = "sentinel.db"):
         self.db_path = db_path
@@ -96,6 +119,19 @@ class CampaignDatabase:
             """)
 
             # Migrate existing databases to add new columns
+            # Enrichment results table for imported domain enrichments
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS enrichment_results (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    case_id TEXT NOT NULL,
+                    domain TEXT NOT NULL,
+                    enrichment_json TEXT,
+                    inserted_at TEXT NOT NULL,
+                    UNIQUE(case_id, domain)
+                )
+            """)
+            conn.commit()
+
             self._migrate_database(conn)
             conn.commit()
 
@@ -111,6 +147,21 @@ class CampaignDatabase:
             conn.execute("ALTER TABLE victim_intelligence ADD COLUMN interaction_confidence REAL DEFAULT 0.0")
         if 'interaction_indicators' not in columns:
             conn.execute("ALTER TABLE victim_intelligence ADD COLUMN interaction_indicators TEXT")
+
+        # Ensure enrichment_results table exists on older DBs
+        cursor = conn.execute("""SELECT name FROM sqlite_master WHERE type='table' AND name='enrichment_results'""")
+        if not cursor.fetchone():
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS enrichment_results (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    case_id TEXT NOT NULL,
+                    domain TEXT NOT NULL,
+                    enrichment_json TEXT,
+                    inserted_at TEXT NOT NULL,
+                    UNIQUE(case_id, domain)
+                )
+            """)
+            conn.commit()
 
     def _safe_load_json(self, s: str, default):
         """Safely load JSON from a string field; return default on failure or empty input."""
@@ -616,3 +667,51 @@ class CampaignDatabase:
             return parsed.netloc
         except:
             return url
+
+    # ===== ENRICHMENT RESULTS API =====
+    def add_enrichment_result(self, case_id: str, domain: str, enrichment: Dict[str, Any]) -> None:
+        """Insert or update enrichment JSON for a given case+domain."""
+        with sqlite3.connect(self.db_path) as conn:
+            now = utc_now_iso()
+            # Check existing
+            cur = conn.execute("SELECT id FROM enrichment_results WHERE case_id = ? AND domain = ?", (case_id, domain)).fetchone()
+            if cur:
+                conn.execute(
+                    "UPDATE enrichment_results SET enrichment_json = ?, inserted_at = ? WHERE id = ?",
+                    (json.dumps(enrichment, ensure_ascii=False), now, cur[0])
+                )
+            else:
+                conn.execute(
+                    "INSERT INTO enrichment_results (case_id, domain, enrichment_json, inserted_at) VALUES (?, ?, ?, ?)",
+                    (case_id, domain, json.dumps(enrichment, ensure_ascii=False), now)
+                )
+            conn.commit()
+
+    def get_enrichment_result(self, case_id: str, domain: str) -> Optional[Dict[str, Any]]:
+        """Retrieve enrichment JSON for a given case+domain."""
+        with sqlite3.connect(self.db_path) as conn:
+            row = conn.execute("SELECT enrichment_json, inserted_at FROM enrichment_results WHERE case_id = ? AND domain = ?", (case_id, domain)).fetchone()
+            if not row:
+                return None
+            try:
+                data = json.loads(row[0]) if row[0] else {}
+            except Exception:
+                data = {'raw': row[0]}
+            return {'data': data, 'inserted_at': row[1]}
+
+    def list_enrichments(self, case_id: str = None, limit: int = 100) -> List[Dict[str, Any]]:
+        """List enrichment entries. If case_id is provided filter by it."""
+        with sqlite3.connect(self.db_path) as conn:
+            if case_id:
+                rows = conn.execute("SELECT case_id, domain, enrichment_json, inserted_at FROM enrichment_results WHERE case_id = ? ORDER BY inserted_at DESC LIMIT ?", (case_id, limit)).fetchall()
+            else:
+                rows = conn.execute("SELECT case_id, domain, enrichment_json, inserted_at FROM enrichment_results ORDER BY inserted_at DESC LIMIT ?", (limit,)).fetchall()
+
+            out = []
+            for r in rows:
+                try:
+                    payload = json.loads(r[2]) if r[2] else {}
+                except Exception:
+                    payload = {'raw': r[2]}
+                out.append({'case_id': r[0], 'domain': r[1], 'enrichment': payload, 'inserted_at': r[3]})
+            return out

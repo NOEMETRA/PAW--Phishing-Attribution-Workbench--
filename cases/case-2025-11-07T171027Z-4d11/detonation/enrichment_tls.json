@@ -1,0 +1,12 @@
+{
+  "hostname": "www.londonstockexchange.com\\",
+  "port": 443,
+  "certificates": [],
+  "fingerprints": {},
+  "spki_hashes": {},
+  "issuer_info": {},
+  "validation": {},
+  "errors": [
+    "Certificate analysis failed: [Errno 11001] getaddrinfo failed"
+  ]
+}

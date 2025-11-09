@@ -1,0 +1,33 @@
+{
+  "campaign_origin": {
+    "detected_types": [
+      "business_email_compromise"
+    ],
+    "likely_source": "compromised_server_DUZPR01CA0054.eurprd01.prod.exchangelabs.com"
+  },
+  "sending_patterns": [
+    "non_ms_origin_server"
+  ],
+  "infrastructure_hints": [
+    "Non-Microsoft origin server: DUZPR01CA0054.eurprd01.prod.exchangelabs.com (2603:10a6:10:469::10)"
+  ],
+  "attribution_confidence": "very_high",
+  "infrastructure_chain": {
+    "infrastructure_chain": [
+      {
+        "type": "ssl_error",
+        "message": "[Errno 11001] getaddrinfo failed",
+        "risk": "unknown"
+      }
+    ],
+    "upstream_connections": [
+      {
+        "type": "web_error",
+        "message": "HTTPSConnectionPool(host='duzpr01ca0054.eurprd01.prod.exchangelabs.com', port=443): Max retries exceeded with url: / (Caused by NameResolutionError(\"<urllib3.connection.HTTPSConnection object at 0x00000243488AD090>: Failed to resolve 'duzpr01ca0054.eurprd01.prod.exchangelabs.com' ([Errno 11001] getaddrinfo failed)\"))",
+        "risk": "unknown"
+      }
+    ],
+    "threat_intelligence": [],
+    "risk_assessment": "high"
+  }
+}

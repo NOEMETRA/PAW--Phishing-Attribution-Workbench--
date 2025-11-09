@@ -9,17 +9,27 @@ import socket
 import re
 from collections import defaultdict
 import ipaddress
+from datetime import datetime, timezone
+
+import requests
+import whois
 
 logger = logging.getLogger(__name__)
 
 class DNSEnrichmentAnalyzer:
     """Analyze DNS records for attribution patterns"""
 
-    def __init__(self, timeout: float = 5.0):
+    def __init__(self, timeout: float = 10.0, retries: int = 2):
+        # Increase default DNS timeout and allow a small number of retries to
+        # reduce transient socket/timeouts observed during enrichment runs.
         self.timeout = timeout
+        self.retries = max(1, int(retries))
         self.resolver = dns.resolver.Resolver()
+        # per-attempt timeout
         self.resolver.timeout = timeout
-        self.resolver.lifetime = timeout
+        # overall lifetime across retries (give some headroom)
+        self.resolver.lifetime = timeout * (self.retries + 1)
+        self._geoip_cache: Dict[str, Optional[Dict[str, Any]]] = {}
 
         # Known hosting providers and their patterns
         self.hosting_patterns = {
@@ -112,7 +122,34 @@ class DNSEnrichmentAnalyzer:
         records = []
 
         try:
-            answers = self.resolver.resolve(domain, record_type)
+            # Retry a few times on transient errors/timeouts
+            answers = None
+            last_exc = None
+            for attempt in range(self.retries + 1):
+                try:
+                    answers = self.resolver.resolve(domain, record_type)
+                    break
+                except dns.exception.Timeout as te:
+                    last_exc = te
+                    logger.debug("Timeout resolving %s %s (attempt %d)", domain, record_type, attempt + 1)
+                    continue
+                except dns.resolver.NXDOMAIN:
+                    # domain does not exist, no need to retry
+                    answers = []
+                    break
+                except dns.resolver.NoAnswer:
+                    answers = []
+                    break
+                except Exception as e:
+                    last_exc = e
+                    logger.debug("Error resolving %s %s: %s (attempt %d)", domain, record_type, e, attempt + 1)
+                    continue
+
+            if answers is None:
+                # All attempts failed
+                if last_exc:
+                    logger.debug("All DNS attempts failed for %s %s: %s", domain, record_type, last_exc)
+                return records
 
             for answer in answers:
                 record_info = {
@@ -129,10 +166,8 @@ class DNSEnrichmentAnalyzer:
 
                 records.append(record_info)
 
-        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer, dns.exception.Timeout):
-            # These are expected for some domains
-            pass
         except Exception as e:
+            # Any unexpected errors
             logger.warning(f"Failed to get {record_type} records for {domain}: {e}")
 
         return records
@@ -152,19 +187,35 @@ class DNSEnrichmentAnalyzer:
             visited.add(current_domain)
 
             try:
-                answers = self.resolver.resolve(current_domain, 'CNAME')
-                if answers:
-                    cname_target = str(answers[0].target)
-                    chain.append({
-                        'domain': current_domain,
-                        'cname_target': cname_target,
-                        'depth': depth
-                    })
-                    current_domain = cname_target.rstrip('.')
-                else:
+                # reuse the same retry logic as _get_records for CNAME
+                answers = None
+                last_exc = None
+                for attempt in range(self.retries + 1):
+                    try:
+                        answers = self.resolver.resolve(current_domain, 'CNAME')
+                        break
+                    except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
+                        answers = []
+                        break
+                    except dns.exception.Timeout as te:
+                        last_exc = te
+                        logger.debug("Timeout resolving CNAME %s (attempt %d)", current_domain, attempt + 1)
+                        continue
+                    except Exception as e:
+                        last_exc = e
+                        logger.debug("Error resolving CNAME %s: %s (attempt %d)", current_domain, e, attempt + 1)
+                        continue
+
+                if not answers:
                     break
-            except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
-                break
+
+                cname_target = str(answers[0].target)
+                chain.append({
+                    'domain': current_domain,
+                    'cname_target': cname_target,
+                    'depth': depth
+                })
+                current_domain = cname_target.rstrip('.')
             except Exception as e:
                 logger.warning(f"CNAME analysis failed for {current_domain}: {e}")
                 break
@@ -181,13 +232,37 @@ class DNSEnrichmentAnalyzer:
             ip = record.get('value')
             if ip:
                 try:
-                    hostname = socket.gethostbyaddr(ip)[0]
-                    reverse_info[ip] = {
-                        'hostname': hostname,
-                        'matches_domain': hostname == result['domain']
-                    }
-                except socket.herror:
-                    reverse_info[ip] = {'hostname': None, 'error': 'no_reverse_record'}
+                    # Use DNS PTR resolution so we can control timeouts and retries
+                    ptr_name = dns.reversename.from_address(ip)
+                    answers = None
+                    last_exc = None
+                    for attempt in range(self.retries + 1):
+                        try:
+                            answers = self.resolver.resolve(ptr_name, 'PTR')
+                            break
+                        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
+                            answers = []
+                            break
+                        except dns.exception.Timeout as te:
+                            last_exc = te
+                            logger.debug("Timeout PTR lookup %s (attempt %d)", ip, attempt + 1)
+                            continue
+                        except Exception as e:
+                            last_exc = e
+                            logger.debug("Error PTR lookup %s: %s (attempt %d)", ip, e, attempt + 1)
+                            continue
+
+                    if answers:
+                        hostname = str(answers[0]).rstrip('.')
+                        reverse_info[ip] = {
+                            'hostname': hostname,
+                            'matches_domain': hostname == result['domain']
+                        }
+                    else:
+                        reverse_info[ip] = {'hostname': None, 'error': 'no_reverse_record'}
+                except Exception as exc:
+                    logger.debug("Reverse DNS lookup failed for %s: %s", ip, exc)
+                    reverse_info[ip] = {'hostname': None, 'error': str(exc)}
 
         result['reverse_dns'] = reverse_info
 
@@ -287,94 +362,54 @@ class DNSEnrichmentAnalyzer:
         return ip_analysis
 
     def _get_geo_hint_from_ip(self, ip: str) -> Optional[str]:
-        """Get geographic hint from IP (simplified)"""
+        """Get geographic hint from IP using real GeoIP lookup."""
+        geo = self._lookup_geoip(ip)
+        if not geo:
+            return None
+
+        country = geo.get('country')
+        country_code = geo.get('countryCode')
+        region = geo.get('regionName')
+        city = geo.get('city')
+        isp = geo.get('isp') or geo.get('org')
+
+        parts = []
+        if country:
+            country_part = country if not country_code else f"{country} ({country_code})"
+            parts.append(country_part)
+        location = ", ".join(filter(None, [region, city]))
+        if location:
+            parts.append(location)
+
+        hint = " / ".join(parts) if parts else country
+        if isp:
+            hint = f"{hint} - {isp}" if hint else isp
+
+        return hint or None
+
+    def _lookup_geoip(self, ip: str) -> Optional[Dict[str, Any]]:
+        """Query ip-api.com for GeoIP data with caching."""
+        if ip in self._geoip_cache:
+            return self._geoip_cache[ip]
+
         try:
-            # This is a very basic implementation
-            # In production, you'd use a proper GeoIP database
-            ip_obj = ipaddress.ip_address(ip)
+            # Use a slightly higher timeout for external GeoIP queries and
+            # tolerate transient network hiccups.
+            response = requests.get(
+                f"http://ip-api.com/json/{ip}",
+                params={'fields': 'status,message,country,countryCode,regionName,city,isp,org,as'},
+                timeout=8
+            )
+            data = response.json()
+            if data.get('status') == 'success':
+                self._geoip_cache[ip] = data
+                return data
+            logger.debug("GeoIP lookup failed for %s: %s", ip, data.get('message'))
+        except requests.RequestException as exc:
+            logger.debug("GeoIP lookup error for %s: %s", ip, exc)
 
-            # Some basic ranges for demonstration
-            if ip_obj in ipaddress.ip_network('5.0.0.0/8'):
-                return 'Romania'
-            elif ip_obj in ipaddress.ip_network('31.0.0.0/8'):
-                return 'Netherlands'
-            elif ip_obj in ipaddress.ip_network('41.0.0.0/8'):
-                return 'South Africa'
-            elif ip_obj in ipaddress.ip_network('43.0.0.0/8'):
-                return 'Japan'
-            elif ip_obj in ipaddress.ip_network('49.0.0.0/8'):
-                return 'Japan'
-            elif ip_obj in ipaddress.ip_network('58.0.0.0/8'):
-                return 'Japan'
-            elif ip_obj in ipaddress.ip_network('60.0.0.0/8'):
-                return 'Japan'
-            elif ip_obj in ipaddress.ip_network('61.0.0.0/8'):
-                return 'Australia'
-            elif ip_obj in ipaddress.ip_network('101.0.0.0/8'):
-                return 'China'
-            elif ip_obj in ipaddress.ip_network('103.0.0.0/8'):
-                return 'China'
-            elif ip_obj in ipaddress.ip_network('106.0.0.0/8'):
-                return 'China'
-            elif ip_obj in ipaddress.ip_network('110.0.0.0/8'):
-                return 'China'
-            elif ip_obj in ipaddress.ip_network('111.0.0.0/8'):
-                return 'China'
-            elif ip_obj in ipaddress.ip_network('112.0.0.0/8'):
-                return 'China'
-            elif ip_obj in ipaddress.ip_network('113.0.0.0/8'):
-                return 'China'
-            elif ip_obj in ipaddress.ip_network('114.0.0.0/8'):
-                return 'China'
-            elif ip_obj in ipaddress.ip_network('115.0.0.0/8'):
-                return 'China'
-            elif ip_obj in ipaddress.ip_network('116.0.0.0/8'):
-                return 'China'
-            elif ip_obj in ipaddress.ip_network('117.0.0.0/8'):
-                return 'China'
-            elif ip_obj in ipaddress.ip_network('118.0.0.0/8'):
-                return 'China'
-            elif ip_obj in ipaddress.ip_network('119.0.0.0/8'):
-                return 'China'
-            elif ip_obj in ipaddress.ip_network('120.0.0.0/8'):
-                return 'China'
-            elif ip_obj in ipaddress.ip_network('121.0.0.0/8'):
-                return 'China'
-            elif ip_obj in ipaddress.ip_network('122.0.0.0/8'):
-                return 'China'
-            elif ip_obj in ipaddress.ip_network('123.0.0.0/8'):
-                return 'China'
-            elif ip_obj in ipaddress.ip_network('124.0.0.0/8'):
-                return 'China'
-            elif ip_obj in ipaddress.ip_network('125.0.0.0/8'):
-                return 'China'
-            elif ip_obj in ipaddress.ip_network('126.0.0.0/8'):
-                return 'China'
-            elif ip_obj in ipaddress.ip_network('169.254.0.0/16'):
-                return 'Link-local'
-            elif ip_obj in ipaddress.ip_network('172.16.0.0/12'):
-                return 'Private'
-            elif ip_obj in ipaddress.ip_network('192.168.0.0/16'):
-                return 'Private'
-            elif ip_obj in ipaddress.ip_network('203.0.0.0/8'):
-                return 'Asia Pacific'
-            elif ip_obj in ipaddress.ip_network('210.0.0.0/8'):
-                return 'Asia Pacific'
-            elif ip_obj in ipaddress.ip_network('211.0.0.0/8'):
-                return 'Asia Pacific'
-            elif ip_obj in ipaddress.ip_network('218.0.0.0/8'):
-                return 'Asia Pacific'
-            elif ip_obj in ipaddress.ip_network('219.0.0.0/8'):
-                return 'Asia Pacific'
-            elif ip_obj in ipaddress.ip_network('220.0.0.0/8'):
-                return 'Asia Pacific'
-            elif ip_obj in ipaddress.ip_network('221.0.0.0/8'):
-                return 'Asia Pacific'
-            elif ip_obj in ipaddress.ip_network('222.0.0.0/8'):
-                return 'Asia Pacific'
-
-        except:
-            pass
+        self._geoip_cache[ip] = None
+        return None
 
         return None
 
@@ -419,8 +454,15 @@ class DNSEnrichmentAnalyzer:
         if any(domain.endswith(tld) for tld in suspicious_tlds):
             risk_indicators.append('suspicious_tld')
 
-        # Check for short domain age indicators (would need WHOIS data)
-        # This is a placeholder for domain age analysis
+        domain_age_days = self._get_domain_age_days(domain)
+        if domain_age_days is not None:
+            hints['domain_age_days'] = domain_age_days
+            if domain_age_days < 30:
+                risk_indicators.append('domain_age_less_30d')
+            elif domain_age_days < 90:
+                risk_indicators.append('domain_age_less_90d')
+        else:
+            hints['domain_age_days'] = None
 
         hints['risk_indicators'] = risk_indicators
 
@@ -503,6 +545,31 @@ class DNSEnrichmentAnalyzer:
         correlation_results['infrastructure_clusters'] = clusters
 
         return correlation_results
+
+    def _get_domain_age_days(self, domain: str) -> Optional[int]:
+        """Retrieve domain age in days using WHOIS data."""
+        if not domain:
+            return None
+
+        try:
+            whois_data = whois.whois(domain)
+            creation_date = whois_data.creation_date
+
+            if isinstance(creation_date, list):
+                creation_date = next(
+                    (d for d in creation_date if isinstance(d, datetime)),
+                    creation_date[0] if creation_date else None
+                )
+
+            if isinstance(creation_date, datetime):
+                if creation_date.tzinfo is None:
+                    creation_date = creation_date.replace(tzinfo=timezone.utc)
+                delta = datetime.now(timezone.utc) - creation_date
+                return max(delta.days, 0)
+        except Exception as exc:
+            logger.debug("Domain age lookup failed for %s: %s", domain, exc)
+        return None
+
 
 def analyze_domain_dns(domain: str) -> Dict[str, Any]:
     """Convenience function for DNS analysis"""

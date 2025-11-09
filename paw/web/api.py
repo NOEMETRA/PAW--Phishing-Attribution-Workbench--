@@ -133,6 +133,10 @@ async def analyze_email(request: AnalysisRequest, background_tasks: BackgroundTa
 
 async def run_analysis(analysis_id: str, file_path: Path, profile: str, options: Dict):
     """Run PAW analysis in background"""
+    import logging
+    import concurrent.futures
+    logger = logging.getLogger(__name__)
+
     try:
         analysis_queue[analysis_id]["status"] = "running"
         analysis_queue[analysis_id]["progress"] = 10
@@ -140,29 +144,50 @@ async def run_analysis(analysis_id: str, file_path: Path, profile: str, options:
         # Import PAW trace module
         from paw.core import trace
 
+        # Determine analysis mode based on profile
+        mode_options = {
+            "quick": {"deobfuscate": True, "threat_intel": False, "detonate": False},
+            "full": {"deobfuscate": True, "threat_intel": True, "detonate": True},
+            "forensic": {"deobfuscate": True, "threat_intel": True, "detonate": True, "sign": True, "rekor": True}
+        }
+
+        analysis_options = mode_options.get(profile, mode_options["full"])
+        # Merge with custom options
+        analysis_options.update(options)
+
         # Update progress
         analysis_queue[analysis_id]["progress"] = 30
 
-        # Run analysis (this is synchronous, wrap in executor if needed)
-        # For now, simulate with delay
-        await asyncio.sleep(2)
-        analysis_queue[analysis_id]["progress"] = 60
+        # Run actual PAW analysis (synchronous operation)
+        # Execute in thread pool to avoid blocking event loop
+        loop = asyncio.get_event_loop()
 
-        # TODO: Actually run trace.analyze() here
-        # result = trace.analyze(str(file_path), profile=profile)
+        def run_sync_analysis():
+            return trace.trace_sources(
+                str(file_path),
+                deobfuscate=analysis_options.get("deobfuscate", True),
+                threat_intel=analysis_options.get("threat_intel", True),
+                detonate=analysis_options.get("detonate", False),
+                sign=analysis_options.get("sign", False),
+                rekor=analysis_options.get("rekor", False)
+            )
 
-        # Simulate completion
-        await asyncio.sleep(2)
+        # Run in executor to prevent blocking
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            case_id = await loop.run_in_executor(executor, run_sync_analysis)
+
         analysis_queue[analysis_id]["progress"] = 100
         analysis_queue[analysis_id]["status"] = "completed"
         analysis_queue[analysis_id]["completed_at"] = datetime.now().isoformat()
+        analysis_queue[analysis_id]["case_id"] = case_id
 
-        # TODO: Store case_id from actual analysis
-        analysis_queue[analysis_id]["case_id"] = "case-simulated"
+        logger.info(f"Analysis {analysis_id} completed successfully: {case_id}")
 
     except Exception as e:
+        logger.error(f"Analysis {analysis_id} failed: {e}", exc_info=True)
         analysis_queue[analysis_id]["status"] = "failed"
         analysis_queue[analysis_id]["error"] = str(e)
+        analysis_queue[analysis_id]["completed_at"] = datetime.now().isoformat()
 
 
 @app.get("/api/analysis/{analysis_id}")
@@ -315,7 +340,40 @@ async def get_statistics():
             if age_hours <= 168:  # 7 days
                 stats["cases_last_7d"] += 1
 
-        # TODO: Aggregate threat actors, ASNs, countries from cases
+        # Aggregate threat indicators from cases
+        threat_actors = set()
+        asns = set()
+        countries = set()
+
+        for case_dir in case_dirs:
+            # Read attribution matrix if exists
+            attribution_file = case_dir / "attribution_matrix.json"
+            if attribution_file.exists():
+                try:
+                    with open(attribution_file) as f:
+                        attribution = json.load(f)
+                        # Extract threat actors
+                        if "threat_actors" in attribution:
+                            threat_actors.update(attribution.get("threat_actors", []))
+                except:
+                    pass
+
+            # Read origin info for ASN and country
+            origin_file = case_dir / "origin.json"
+            if origin_file.exists():
+                try:
+                    with open(origin_file) as f:
+                        origin = json.load(f)
+                        if "asn" in origin:
+                            asns.add(str(origin["asn"]))
+                        if "cc" in origin:
+                            countries.add(origin["cc"])
+                except:
+                    pass
+
+        stats["unique_asns"] = len(asns)
+        stats["unique_countries"] = len(countries)
+        stats["threat_actors"] = list(threat_actors)[:10]  # Top 10
 
         return stats
 
@@ -327,12 +385,41 @@ async def get_statistics():
 async def query_cases(query: CaseQuery):
     """Query cases by IP, domain, or ASN"""
     try:
-        # TODO: Implement actual database query
-        # For now, return empty results
+        # Use PAW's index database for queries
+        from paw.core.index import query_recent
+
+        # Query cases using the index
+        matches = query_recent(
+            by=query.query_type,
+            value=query.value,
+            days=query.days
+        )
+
+        # Enhance results with full case data
+        results = []
+        for match in matches:
+            case_id = match.get("id")
+            if case_id:
+                case_dir = CASES_DIR / case_id
+                if case_dir.exists():
+                    manifest_file = case_dir / "manifest.json"
+                    if manifest_file.exists():
+                        with open(manifest_file) as f:
+                            manifest = json.load(f)
+                            results.append({
+                                "case_id": case_id,
+                                "created_at": match.get("created_utc"),
+                                "score": match.get("score"),
+                                "origin_ip": match.get("origin_ip"),
+                                "from_domain": match.get("from_domain"),
+                                "manifest": manifest
+                            })
+
         return {
             "query_type": query.query_type,
             "value": query.value,
-            "matches": []
+            "matches": results,
+            "total": len(results)
         }
 
     except Exception as e:
@@ -341,20 +428,45 @@ async def query_cases(query: CaseQuery):
 
 @app.get("/api/export/{case_id}")
 async def export_case(case_id: str, format: str = "zip"):
-    """Export case as ZIP"""
+    """Export case as ZIP archive"""
+    import zipfile
+    import tempfile
+    import shutil
+
     try:
         case_dir = CASES_DIR / case_id
 
         if not case_dir.exists():
             raise HTTPException(404, "Case not found")
 
-        # TODO: Create ZIP archive
-        # For now, return manifest
-        manifest_file = case_dir / "manifest.json"
-        if manifest_file.exists():
-            return FileResponse(manifest_file, filename=f"{case_id}_manifest.json")
+        # Create ZIP archive
+        if format == "zip":
+            # Create temporary ZIP file
+            temp_dir = Path(tempfile.gettempdir())
+            zip_path = temp_dir / f"{case_id}.zip"
 
-        raise HTTPException(404, "No exportable data found")
+            # Create ZIP archive recursively
+            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                for file_path in case_dir.rglob('*'):
+                    if file_path.is_file():
+                        arcname = file_path.relative_to(case_dir)
+                        zipf.write(file_path, arcname)
+
+            # Return ZIP file
+            return FileResponse(
+                zip_path,
+                media_type="application/zip",
+                filename=f"{case_id}.zip",
+                background=BackgroundTasks()  # Cleanup temp file after response
+            )
+
+        elif format == "json":
+            # Return manifest only
+            manifest_file = case_dir / "manifest.json"
+            if manifest_file.exists():
+                return FileResponse(manifest_file, filename=f"{case_id}_manifest.json")
+
+        raise HTTPException(400, f"Unsupported export format: {format}")
 
     except HTTPException:
         raise
