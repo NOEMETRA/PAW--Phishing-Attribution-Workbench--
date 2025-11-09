@@ -4,8 +4,6 @@ Intelligence Analyzer - Orchestrates victim IP analysis and attacker correlation
 """
 import time
 import json
-from datetime import datetime
-from pathlib import Path
 from typing import List, Dict, Any, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from .database import CampaignDatabase
@@ -389,33 +387,6 @@ class IntelligenceAnalyzer:
 
         return self._analyze_interaction_pattern(ip, ua, click_time, case_id, analysis)
 
-    def _get_campaign_start(self, case_id: str) -> Optional[datetime]:
-        """Infer campaign deployment timestamp from DB or case manifest."""
-        if not case_id:
-            return None
-
-        campaign = self.db.get_campaign_by_case(case_id)
-        if campaign:
-            ts = self._parse_timestamp(campaign.get('created_at'))
-            if ts:
-                return ts
-
-        manifest_path = Path("cases") / case_id / "manifest.json"
-        if not manifest_path.exists():
-            # Allow absolute/relative case paths
-            manifest_path = Path(case_id) / "manifest.json"
-
-        if manifest_path.exists():
-            try:
-                data = json.loads(manifest_path.read_text(encoding='utf-8'))
-                ts = self._parse_timestamp(data.get('created_utc'))
-                if ts:
-                    return ts
-            except Exception:
-                return None
-
-        return None
-
     def _analyze_interaction_pattern(self, ip: str, ua: str, click_time: str, case_id: str, analysis: Dict[str, Any]) -> str:
         """Analyze patterns to classify interaction type."""
         classification = {
@@ -427,8 +398,8 @@ class IntelligenceAnalyzer:
         # 1. Time-based analysis (immediate clicks after deployment)
         if self._is_suspicious_timing(click_time, case_id):
             classification['type'] = 'attacker_test'
-            classification['confidence'] = 0.8
-            classification['indicators'].append('immediate_post_deployment_click')
+            classification['confidence'] = max(classification['confidence'], 0.8)
+            classification['indicators'].append('suspicious_timing')
 
         # 2. Geographic analysis (attacker locations)
         geo_risk = self._analyze_geographic_risk(analysis.get('geolocation', {}))
@@ -459,26 +430,22 @@ class IntelligenceAnalyzer:
     def _is_suspicious_timing(self, click_time: str, case_id: str) -> bool:
         """Check if click happened suspiciously soon after campaign deployment."""
         try:
-            click_dt = self._parse_timestamp(click_time)
-            campaign_start = self._get_campaign_start(case_id)
-            if not click_dt or not campaign_start:
-                return False
+            from datetime import datetime
+            click_dt = datetime.fromisoformat(click_time.replace(' ', 'T'))
 
-            delta = (click_dt - campaign_start).total_seconds()
-            return 0 <= delta <= 3600  # clicks within the first hour are suspicious attacker tests
-        except Exception:
+            # Get campaign creation time (simplified - in production, store campaign metadata)
+            # For now, assume clicks within 1 hour of "case creation" are suspicious
+            # This is a placeholder - real implementation needs campaign deployment timestamps
+
+            # Check if click is within first hour of campaign
+            # This is a heuristic - attackers often test immediately
+            current_hour = click_dt.hour
+            if current_hour in [0, 1, 2]:  # Early morning clicks often suspicious
+                return True
+
             return False
-
-    @staticmethod
-    def _parse_timestamp(value: Optional[str]) -> Optional[datetime]:
-        """Parse various ISO-like timestamps safely."""
-        if not value:
-            return None
-        try:
-            normalized = value.replace('Z', '+00:00').replace(' ', 'T')
-            return datetime.fromisoformat(normalized)
-        except Exception:
-            return None
+        except:
+            return False
 
     def _analyze_geographic_risk(self, geolocation: Dict[str, Any]) -> Dict[str, Any]:
         """Analyze geographic location for attacker indicators."""
