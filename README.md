@@ -1,882 +1,590 @@
 # PAW — Phishing Attribution Workbench
 
-**Attribution-Only Email Forensics Tool**
+**Email-forensics and infrastructure-correlation research workbench.**
 
-PAW (Phishing Attribution Workbench) è uno strumento specializzato per l'analisi forense di email di phishing. Ingestisce file `.eml` e `.msg`, ricostruisce l'origine dell'attacco (IP→ASN→Organizzazione→Paese), valida autenticazioni SPF/DKIM/DMARC, analizza anomalie negli header, rileva pattern di campagna, e produce un dossier completo con grafi, bundle STIX, e package di abuso portabili.
+PAW is a Python research project for turning suspicious email files into structured forensic cases.
 
-## 🚀 Caratteristiche Principali
+Its strongest and most coherent workflow is:
 
-### Core Attribution Engine
-- **Ricostruzione Origine**: Traccia l'IP di origine attraverso il path `Received`
-- **Classificazione Boundary**: Identifica hop MX interni vs internet origin
-- **Risoluzione Infrastruttura**: ASN, organizzazione, geolocalizzazione
-- **Validazione Autenticazione**: SPF, DKIM, DMARC, ARC, Received-SPF
-
-### Advanced Intelligence Integration 🚀
-- **Criminal Hunter**: Analisi automatica infrastrutturale criminale post-detonazione
-- **Infrastructure Mapper**: Mappatura avanzata rete C2 e servizi attivi
-- **Enrich Last Hunt**: SSL certificates, service banners, WHOIS/ASN intelligence
-- **Threat Intelligence**: Correlazione automatica con VirusTotal, AbuseIPDB, AlienVault, ThreatFox
-- **Attribution Matrix**: Matrice unificata di pivot con integrazione intelligence
-
-### Accurate Geolocalization
-- **Physical Location Priority**: Utilizza posizione fisica dell'IP (network.country) invece del paese di registrazione ASN
-- **Historical ASN Tracking**: Mantiene traccia del paese di registrazione ASN per analisi forense completa
-- **Smart Scoring**: Penalizza solo quando sia posizione fisica che ASN sono in paesi high-spam
-- **RDAP Integration**: Query WHOIS/RDAP per dati infrastrutturali accurati e completi
-
-### Advanced Threat Detection
-- **Header Forgery Guard**: Rileva iniezioni e anomalie negli header con analisi sofisticata (IP-FQDN mismatch, relay chains sospetti, manipolazione timestamp)
-- **Brand Identity Heuristics**: Display-name spoofing, TLD rischiosi, NRD analysis
-- **Campaign Correlation**: Pattern detection attraverso correlazione casi
-- **Trust Boundary Engine**: Classificazione MX per O365/Gmail/Yahoo/Proton
-- **Deobfuscation Engine**: Smaschera URL offuscati, caratteri invisibili, encoding multi-layer
-- **Enhanced Attachment Analysis**: Scansione avanzata allegati con rilevamento macro OLE, firme malware, metadati sospetti
-
-### Advanced Intelligence Features 🚀
-
-PAW integra automaticamente moduli di intelligence avanzati per analisi infrastrutturale completa e correlazione threat intelligence:
-
-#### Criminal Hunter Integration
-- **Automatic Infrastructure Analysis**: Post-detonazione analisi criminale degli endpoint C2
-- **Local Intelligence Primitives**: Utilizzo di primitive locali (DNS, SSL, socket) senza API esterne
-- **Criminal Attribution**: Identificazione pattern infrastrutturali criminali
-- **Output**: `criminal_intelligence.json` con analisi dettagliata per dominio
-
-#### Infrastructure Mapper
-- **Advanced Network Mapping**: Mappatura completa dell'infrastruttura di rete
-- **C2 Infrastructure Detection**: Rilevamento server C2 e pattern di comunicazione
-- **Service Fingerprinting**: Identificazione servizi attivi su porte comuni
-- **Output**: `infrastructure_mapping.json` con mappatura dettagliata IP e servizi
-
-#### Enrich Last Hunt
-- **SSL Certificate Enrichment**: Analisi certificati SSL per tutti gli endpoint
-- **Service Banner Grabbing**: Cattura banner servizi (HTTP, FTP, SSH, SMTP, etc.)
-- **Reverse DNS & WHOIS**: Risoluzione DNS inversa e lookup WHOIS
-- **ASN Intelligence**: Informazioni ASN per geolocalizzazione avanzata
-- **Output**: `hunt_enrichments.json` con arricchimenti completi infrastrutturali
-
-#### Threat Intelligence Correlation
-- **Multi-Source Intelligence**: Correlazione automatica con VirusTotal, AbuseIPDB, AlienVault OTX, ThreatFox
-- **Domain & IP Enrichment**: Arricchimento indicatori da tutti i risultati analisi
-- **Intelligence Scoring**: Valutazione affidabilità fonti intelligence
-- **Output**: `threat_intelligence.json` con correlazioni threat intelligence
-
-#### Automatic Attribution Matrix Enhancement
-Tutti i moduli intelligence si integrano automaticamente nell'`attribution_matrix.json`:
-- **Unified Pivots**: Pivot unificati per identificazione operatore
-- **Confidence Scoring**: Punteggio confidenza basato su correlazioni multiple
-- **Cluster Analysis**: Raggruppamento host con caratteristiche comuni
-- **Abuse Targeting**: Identificazione contatti abuse ottimizzati
-
-### Advanced Deobfuscation Module
-- **URL Deobfuscation**: Percent-encoding, base64, hex escapes, homograph attacks
-- **HTML Analysis**: Entity decoding, hidden elements, form obfuscation, iframe detection
-- **JavaScript Deobfuscation**: String.fromCharCode, atob/btoa, eval detection, iterative decoding
-- **Text Normalization**: Character substitution, homoglyph attacks, phishing abbreviations
-- **Multi-layer Analysis**: Deoffuscamento iterativo con scoring di sospetto
-- **Email Filtering**: Distinzione automatica tra URL dannosi e indirizzi email legittimi
-
-### Scoring System Avanzato
-- **Multi-layered Scoring**: Header integrity, domain signals, identity checks
-- **Profile System**: `default`, `strict`, `conservative` per adattare soglie
-- **Campaign Boost**: +0.20 per pattern multi-caso rilevati
-- **Real-time Decision**: "Likely malicious", "Suspicious", "Inconclusive"
-
-### Output Production
-- **Evidence Capsule**: Package portabile con tutti gli artefatti
-- **Mermaid Graphs**: Visualizzazione path di consegna e relazioni
-- **STIX Bundle**: Export per piattaforme SOAR/SIEM
-- **Abuse Package**: Template pronti per report abuse
-
-### PATCH PACK — Advanced Attribution (Detonation + Deobfuscation + Canary)
-- **Observational Detonation**: Browser Playwright per analisi URL sicure (block POST/PUT/PATCH/DELETE)
-- **Interactive Encrypted Clicking**: Profilo avanzato con crittografia end-to-end e simulazione interazioni
-- **Network Capture**: Cattura requests, downloads, endpoints contattati con TLS fingerprinting
-- **Endpoint Resolution**: Risoluzione IP per infrastruttura C2/tracker con DNS enrichment
-- **Passive Canary**: Server per attribuzione visitatori (IP/UA logging)
-- **Advanced Deobfuscation**: Smaschera tecniche di offuscamento avanzate nei phishing
-- **Campaign Integration**: Bonus scoring per pattern multi-vettore
-- **Legal Safe**: Policy guard (observe-only, no interaction senza consenso)
-
-## 📦 Installazione
-
-### Prerequisiti
-- Python 3.8+
-- pip
-
-### Setup Ambiente
-```bash
-# Crea virtual environment
-python -m venv .venv
-
-# Attiva (Linux/Mac)
-source .venv/bin/activate
-
-# Attiva (Windows)
-.venv\Scripts\activate
-
-# Installa dipendenze
-pip install -r requirements.txt
+```text
+email file
+  -> parse headers and message metadata
+  -> normalize Received hops
+  -> identify a likely transmitting boundary
+  -> interpret authentication results
+  -> extract and deobfuscate indicators
+  -> enrich selected infrastructure
+  -> score the case with explicit heuristics
+  -> preserve evidence and generate reports
 ```
 
-### Dipendenze Chiave
-- `requests` - API calls per geolocalizzazione e WHOIS
-- `dnspython` - DNS resolution e DMARC lookup
-- `cryptography` - Validazione certificati e firme
-- `beautifulsoup4` - HTML parsing per deoffuscamento avanzato
-- `pgpy` - PGP signing (opzionale)
-- `extract-msg` - Supporto file .msg
-- `python-magic` - File type detection
+PAW also contains experimental browser detonation, canary, infrastructure-mapping, threat-intelligence, campaign-correlation, and attribution-matrix modules.
 
-## 🎯 Utilizzo Base
+Those experimental layers should not be interpreted as an automated identity-attribution system. PAW can correlate infrastructure and generate hypotheses; it does not prove who operated a phishing campaign.
 
-### Analisi Singola Email
-```bash
-# Analizza email con scoring base
-python -m paw trace --src email.eml
+## Project status
 
-# Analizza directory di email
-python -m paw trace --src inbox/
+PAW is a **research workbench**, not a production incident-response platform or an attribution oracle.
 
-# Con output avanzati e deoffuscamento
-python -m paw trace --src inbox/ --stix --abuse --lang it --no-egress
+| Area | Current status |
+|---|---|
+| `.eml` parsing | Implemented |
+| `.msg` parsing | Implemented through `extract-msg`, with format-specific limitations |
+| Case creation and input hashing | Implemented |
+| Received-path normalization | Implemented heuristically |
+| MX/trust-boundary classification | Implemented heuristically |
+| SPF/DKIM/DMARC result interpretation | Implemented from message headers |
+| ARC and Received-SPF parsing | Implemented |
+| DMARC policy DNS lookup | Implemented |
+| Independent end-to-end DKIM verification in the main trace path | Not established |
+| URL extraction | Implemented |
+| Content deobfuscation | Implemented experimentally |
+| Attachment inspection | Implemented for selected formats |
+| RDAP / infrastructure enrichment | Implemented where network access is available |
+| Case scoring | Implemented as hand-authored heuristics |
+| Local case index and indicator query | Implemented |
+| Evidence manifest / Merkle utilities | Implemented |
+| Optional PGP manifest signing | Implemented when a key is configured |
+| STIX export | Implemented |
+| Abuse-package generation | Implemented as report/package generation |
+| Playwright detonation | Implemented experimentally |
+| Network request logging | Implemented during detonation |
+| Resource collection / static kit analysis | Implemented experimentally |
+| Canary logging | Implemented experimentally |
+| Infrastructure correlation | Implemented |
+| Operator identity attribution | Not established |
+| Automated legal attribution | Not claimed |
+| Production readiness | Not claimed |
+
+## Repository philosophy
+
+The useful distinction in PAW is between three kinds of output.
+
+### Observation
+
+Data directly present in an email or collected during a controlled measurement.
+
+Examples:
+
+- a `Received` header contains a particular IP;
+- an `Authentication-Results` header reports `spf=fail`;
+- a detonation browser requested a particular hostname;
+- a certificate contains a particular public-key fingerprint.
+
+### Inference
+
+A conclusion derived from one or more observations.
+
+Examples:
+
+- a public hop is the likely external ingress point;
+- two domains may share infrastructure;
+- a domain resembles a protected brand;
+- two campaigns may be related because they share a tracker or TLS key.
+
+### Attribution hypothesis
+
+A claim about a person, group, operator, geography, or criminal organization.
+
+This is the weakest category unless supported by evidence independent of PAW's own heuristics.
+
+PAW should preserve the observations and correlations even when the attribution hypothesis remains unknown.
+
+## Core workflow
+
+### 1. Email ingestion
+
+The main CLI accepts a single email or a directory of email files.
+
+The current parser extracts fields including:
+
+- `From`;
+- `Reply-To`;
+- `Return-Path`;
+- `Message-ID`;
+- `Date`;
+- `Subject`;
+- `Received` headers;
+- `Authentication-Results`;
+- ARC headers;
+- `Received-SPF`.
+
+`.eml` files use Python's standard email parser. `.msg` support uses `extract-msg` and depends on which transport headers are available in the original Outlook message.
+
+### 2. Case preservation
+
+Each analysis creates a case directory under:
+
+```text
+cases/
 ```
 
-### Deoffuscamento Avanzato
-```bash
-# Analizza email con deoffuscamento completo (default)
-python -m paw trace --src phishing.eml
+The original input is copied into the case and its BLAKE3 hash is stored in `manifest.json`.
 
-# Analizza senza detonazione esterna (--no-egress)
-python -m paw trace --src phishing.eml --no-egress
+When `PAW_PGP_PRIV` is configured, the manifest can also be signed.
 
-# Deoffusca contenuto specifico
-python -c "
-from paw.deobfuscate.core import DeobfuscationEngine
-engine = DeobfuscationEngine()
-result = engine.analyze_artifacts({
-    'text': 'Contenuto con URL offuscati',
-    'urls': ['hxxps://evil[.]com', 'https%3A//bad.com']
-})
-print(result)
-"
-```
+This provides useful evidence-integrity metadata, but PAW does not by itself establish a legal chain of custody. Collection procedure, analyst identity, system time, acquisition method, storage controls, and external documentation still matter.
 
-**Output Deoffuscamento**: `[deobfuscate] discovered hidden URL: https://real-malicious-site.com`
+### 3. Received-path reconstruction
 
-### Verifica Caso Esistente
-```bash
-python -m paw verify --case cases/case-2025-10-28T131823Z-c77d
-```
+`paw/core/received.py` parses `Received` lines into a normalized hop representation.
 
-### Query Database Casi
-```bash
-# Cerca per IP
-python -m paw query --by ip --value 192.168.1.1
+It attempts to extract:
 
-# Cerca per dominio
-python -m paw query --by domain --value evil.com
+- `from` host;
+- `by` host;
+- IP address;
+- protocol;
+- HELO value;
+- timestamp;
+- PTR result;
+- basic timestamp skew;
+- a trust-boundary role.
 
-# Cerca per ASN
-python -m paw query --by asn --value 12345
-```
+The trace pipeline then chooses a likely origin candidate using a sequence of fallbacks, preferring public hops classified as external ingress.
 
-### Export Caso
-```bash
-python -m paw export --case cases/case-id --format zip
-```
+This is a **transmitting-path hypothesis**, not proof of the original human sender.
 
-## 🔬 PATCH PACK — Detonation + Canary
+Email paths can contain:
 
-### Detonazione Osservativa
-## 🚀 Utilizzo
+- compromised mail servers;
+- forwarding systems;
+- SaaS relays;
+- mailing infrastructure;
+- NAT;
+- spoofed or malformed headers before the first trusted boundary;
+- legitimate cloud providers used by an attacker.
 
-PAW fornisce **3 entrypoint principali** per workflow forense scalabili:
+A hosting IP should therefore be reported as infrastructure evidence, not automatically as attacker identity.
 
-### 1. 📧 Trace (Ingest + Attribuzione - No Egress)
-**Scopo**: Analisi primaria forense senza connessioni di rete esterne.
+## Email authentication
 
-```bash
-# Analisi base email (no egress by default)
-python -m paw trace --src phishing.eml
+PAW parses authentication information already present in the message and derives alignment information.
 
-# Con profilo scoring specifico
-python -m paw trace --src phishing.eml --profile strict --lang it
+The main path currently uses:
 
-# Directory di email
-python -m paw trace --src /path/to/emails/ --stix --abuse
+- `Authentication-Results` for SPF, DKIM, and DMARC result strings;
+- `Received-SPF`;
+- ARC headers;
+- `From` and `Return-Path` domains;
+- DNS lookup of the sender domain's DMARC policy.
 
-# Forensics avanzati
-python -m paw trace --src email.eml --deob-weight 0.4 --anchor
-```
+This is not equivalent to independently reproducing the receiver's complete authentication process.
 
-**Output**: `cases/<case>/report/` - dossier completo forense
+In particular:
 
-### 2. 🔍 Detonate (Egress Osservativo)
-**Scopo**: Mappare infrastruttura phishing con capture di rete controllata.
+- a parsed `dkim=pass` value means a receiving system reported that result;
+- the core trace path does not establish that PAW independently revalidated the DKIM signature against the exact raw message bytes;
+- SPF depends on the connecting IP and receiver context, which may not be reconstructable from a forwarded message;
+- DMARC alignment in PAW is simplified compared with a complete standards implementation;
+- ARC interpretation is heuristic and should not be treated as independent cryptographic validation of the entire chain.
 
-```bash
-# Detonazione osservativa (block POST/PUT/DELETE)
-python -m paw detonate --url https://suspicious-site.com --observe --pcap
+Authentication results are strong evidence when their provenance is trusted, but they are not absolute attribution evidence.
 
-# Da case esistente (URLs estratte da trace)
-python -m paw detonate --case case-20251029-XXXX --observe --timeout 45
+## Deobfuscation
 
-# Encrypted clicking per analisi interattiva
-python -m paw detonate --case case-20251029-XXXX --encrypted --phishing-type banking
-```
+The trace pipeline inspects body text, HTML, JavaScript, and URL-like strings for transformations such as:
 
-**Output**: `cases/<case>/detonation/` + enrichment files + `attribution_matrix.json`
+- ordinary HTTP/HTTPS URLs;
+- `hxxp` / `hxxps` forms;
+- percent encoding;
+- domain-like strings;
+- selected character and encoding transformations.
 
-### 3. 🕸️ Canary (Server Passivo)
-**Scopo**: Tracciare visitatori dei link canarino per attribuzione campagne.
+Newly recovered URLs are added to the case as candidate indicators.
 
-```bash
-# Avvia server canary per case
-python -m paw canary --case case-20251029-XXXX --port 8787
+Deobfuscation can create false positives. A recovered string should be treated as a candidate IOC until its syntax, context, and provenance are verified.
 
-# Link canarino da condividere (ambiente sicuro!)
-# http://<your-public-ip>:8787/t/<token>
-```
+## Heuristic scoring
 
-**Output**: `cases/<case>/canary/hits.jsonl` - IP/UA visitatori
+`paw/core/scoring.py` calculates a case score from explicit rules.
 
-### 🔄 Workflow Tipico
-```bash
-# 1. Analisi iniziale (sicura, no egress)
-python -m paw trace --src phishing.eml
+Signals currently include combinations of:
 
-# 2. Detonazione se necessaria (ambiente controllato)
-python -m paw detonate --case <generated-case-id> --observe
+- SPF/DKIM/DMARC and ARC results;
+- header inconsistencies;
+- newly registered domains;
+- display-name and reply-to mismatches;
+- selected TLDs;
+- mixed-script domains;
+- brand-string similarity;
+- deobfuscation score;
+- detonation artifacts;
+- canary observations;
+- enrichment artifacts;
+- recurrence across indexed cases.
 
-# 3. Canary per tracking campagne (opzionale)
-python -m paw canary --case <case-id> --port 8787
-```
+The result is a **heuristic score**, not a calibrated probability that an email is malicious.
 
-**Output**: `cases/<case>/detonation/{requests.jsonl,summary.json,downloads/,capture.pcap}`
+For example, a value such as `0.85` should not be interpreted as "85% probability of phishing."
 
-**Detonation Enrichment**:
-- `trackers.json` - Analytics IDs (GTM/GA4/FB Pixel/TikTok/Matomo) per correlazione campagne
-- `tls.json` - Certificate SPKI hash per pivot tra host diversi con stessa chiave
-- `redirect_chain.json` - Shortener full-chain (hop, status, timing, UTM params)
-- `dns_enrichment.json` - CNAME/NS/Reseller mapping per pattern hosting
-- `tls_fingerprint.json` - JA3S/ALPN fingerprinting server costante
-- `forms.json` - Form/payment hints parsing (PSP patterns, merchant correlation)
+Weights and thresholds were chosen by the project and have not been demonstrated here against a large independently labeled corpus with measured precision, recall, false-positive rate, or calibration error.
 
-**Encrypted Output**: `cases/<case>/detonation/encrypted/{analysis.enc,interactions.json.enc,screenshots.enc}`
+The three profiles (`default`, `strict`, and `conservative`) change thresholds; they do not represent statistically validated operating points.
 
-**Attribution Matrix**: `cases/<case>/attribution_matrix.json` - Pivot unificati per arrivare alla fonte (linkato in executive.md)
+## Local case index
 
-### Struttura Attribution Matrix
-L'Attribution Matrix unifica tutti i pivot forensi per identificare l'operatore dietro la campagna:
+PAW can index completed cases and search recent records by indicators such as:
 
-```json
-{
-  "case_id": "case-20251029-XXXX",
-  "operator_hypothesis": {
-    "confidence": 0.85,
-    "hypothesis": "Eastern European hosting provider, cryptocurrency payment processor",
-    "evidence_count": 12
-  },
-  "pivots": [
-    {
-      "type": "tls_fingerprint",
-      "source": "JA3S fingerprint",
-      "value": "abc123...",
-      "matches": ["campaign_001", "campaign_002"],
-      "weight": 0.9
-    },
-    {
-      "type": "tracker_id",
-      "source": "Google Analytics",
-      "value": "UA-12345678-9",
-      "matches": ["phish_domain_1", "phish_domain_2"],
-      "weight": 0.8
-    },
-    {
-      "type": "reseller_pattern",
-      "source": "DNS enrichment",
-      "value": "namecheap_shared_hosting",
-      "matches": ["ip_1.2.3.4", "ip_5.6.7.8"],
-      "weight": 0.7
-    }
-  ],
-  "clusters": [
-    {
-      "cluster_id": "cluster_001",
-      "pivot_types": ["tls_fingerprint", "tracker_id"],
-      "hosts": ["evil.com", "bad.net", "phish.org"],
-      "operator_hint": "Likely same actor based on TLS + GA overlap"
-    }
-  ],
-  "abuse_targets": [
-    {
-      "type": "hosting_abuse",
-      "contact": "abuse@hoster.com",
-      "priority": "high",
-      "evidence": "3 domains with same TLS fingerprint"
-    }
-  ]
-}
-```
+- IP;
+- domain;
+- ASN;
+- organization.
 
-### Canary Passivo
-```bash
-# Avvia server canary per case
-python -m paw canary --case case-20251027-XXXX --port 8787
-```
+Repeated infrastructure can be useful campaign evidence. Reuse does not prove common human ownership: hosting platforms, reverse proxies, registrars, analytics identifiers, and shared services can create legitimate overlap.
 
-**Link canarino**: `http://<TUO_IP_PUBBLICO>:8787/t/<token>` (usa solo in ambienti sicuri!)
+## Experimental detonation
 
-**Output**: `cases/<case>/canary/hits.jsonl` → `canary_ips.json`
+PAW includes a Playwright-based detonation runner.
 
-## 📊 Report Generation & Attribution
+The current implementation can:
 
-### Executive Summary Enhancement
-Il report `executive.md` include ora una sezione **"Operator Hypothesis"** basata sui pivot correlati:
+- launch Chromium;
+- visit extracted URLs;
+- record requests and responses;
+- block `POST`, `PUT`, `PATCH`, and `DELETE` when observe-only mode is enabled;
+- record downloads;
+- optionally start `tcpdump`;
+- save page HTML;
+- download selected external JavaScript, CSS, and image resources;
+- calculate hashes;
+- perform static string analysis;
+- generate enrichment files for trackers, TLS, DNS, redirects, forms, and other pivots.
 
-```
-## Operator Hypothesis (LLM-Free Attribution)
+### Important detonation boundary
 
-### Ricorrenze Identificate
-- **TLS Fingerprint JA3S**: `abc123...` (4 host, 3 campagne)
-- **Google Analytics**: `UA-12345678-9` (2 domini phishing)
-- **Reseller Pattern**: Namecheap shared hosting (6 IP)
+"Observe only" does **not** mean side-effect free.
 
-### Ipotesi Operatore
-**Confidence: 85%** - Operatore Eastern European con infrastruttura condivisa, pagamento crypto, focus su campagne italiane di emergenza auto.
+A browser `GET` can still:
 
-### Destinatari Abuse
-1. **hosting_abuse@namecheap.com** (Priority: High) - 6 IP con stesso reseller
-2. **cert-abuse@digicert.com** (Priority: Medium) - Certificato wildcard sospetto
-3. **abuse@google.com** (Priority: Low) - GA tracking su siti phishing
-```
+- notify a remote server that the URL was visited;
+- activate tracking pixels;
+- consume single-use tokens;
+- cause redirects;
+- trigger server-side state changes in badly designed applications;
+- execute JavaScript in the browser;
+- initiate additional requests;
+- download content.
 
-### Attribution Matrix Integration
-L'`attribution_matrix.json` alimenta automaticamente l'Operator Hypothesis con:
-- **Cluster Analysis**: Gruppi di host con pivot comuni
-- **Confidence Scoring**: Peso evidenza basato su correlazioni multiple
-- **Abuse Targeting**: Contatti ottimizzati per massima efficacia
+The runner also performs additional HTTP requests when collecting resources.
 
-### File Output Structure
-```
-cases/<case>/
+Use detonation only from an isolated research environment with an appropriate outbound-network policy.
+
+## Critical current issue: `--no-egress`
+
+The CLI exposes `--no-egress`, and the selected value is stored in the case manifest.
+
+**In the current code, that flag must not be treated as a reliable network kill switch.**
+
+The trace pipeline contains network-dependent operations and automatic detonation paths that are not consistently gated by `no_egress`. For example, after URL discovery the current `trace_one()` path can invoke the detonation runner automatically, and later stages can perform RDAP, DNS, reverse-DNS, certificate, banner, and threat-intelligence enrichment.
+
+Until this is corrected in code:
+
+- do not rely on `--no-egress` for isolation;
+- use an OS firewall, VM network policy, container/network namespace, or physically isolated environment when offline analysis is required;
+- inspect the trace path before processing untrusted evidence;
+- treat the manifest value as analyst intent, not enforcement evidence.
+
+This is one of the highest-priority code fixes for PAW.
+
+## Phishing-kit collection
+
+During detonation, PAW can save page HTML and selected external resources and calculate a combined kit hash.
+
+Static analysis currently searches for simple indicators such as:
+
+- Telegram-style identifiers;
+- email addresses;
+- source-code comments;
+- login/password/form strings;
+- selected JavaScript network patterns.
+
+These findings are useful pivots, not proof of authorship.
+
+A username found in a copied script, for example, may belong to:
+
+- the kit author;
+- a reseller;
+- a victim;
+- a copied dependency;
+- an analyst;
+- an unrelated commenter.
+
+## Infrastructure enrichment
+
+PAW includes modules for several infrastructure observations, including combinations of:
+
+- RDAP;
+- DNS records;
+- reverse DNS;
+- server banners;
+- TLS certificates;
+- tracker identifiers;
+- redirects;
+- form structure;
+- hosting and registrar metadata;
+- optional external threat-intelligence sources.
+
+Availability and accuracy vary by source.
+
+Network metadata is especially time dependent. A domain, IP, certificate, ASN, or hosting account can change ownership or configuration after collection.
+
+Every externally collected datum should therefore retain a timestamp and original source when used as evidence.
+
+## Attribution Matrix
+
+`paw/core/attribution_matrix.py` combines enrichment-derived correlation keys and produces hypotheses.
+
+This module is experimental.
+
+The current implementation includes a small hard-coded set of example operator profiles and performs substring matching against infrastructure and indicator strings.
+
+Those profiles are not a validated threat-actor knowledge base.
+
+The resulting names and regional labels **must not be treated as real criminal attribution**. They are demonstrations of how a correlation matrix might be structured.
+
+A high score from this module means that several strings matched one of the built-in profiles under the current weighting rules. It does not establish nationality, organization, geography, criminal group, or individual identity.
+
+For serious use, this layer should be replaced by evidence-based cluster identifiers and analyst-authored hypotheses without demographic or national shortcuts.
+
+## Canary module
+
+The canary server records requests made to generated tracking paths and can preserve values such as:
+
+- timestamp;
+- source IP as seen by the server;
+- user agent;
+- requested path.
+
+A canary hit proves that something requested the URL from an observed network path.
+
+It does not prove that the requester was:
+
+- the phishing operator;
+- a particular person;
+- located at the apparent IP address;
+- manually using a browser.
+
+Security scanners, mail gateways, link-expansion services, crawlers, sandboxes, VPNs, proxies, NAT, and automated preview systems can all trigger links.
+
+Canary data should therefore be correlated with other evidence rather than promoted directly to identity attribution.
+
+## Reports and exports
+
+PAW can generate multiple artifacts under each case, depending on the enabled workflow.
+
+Typical outputs can include:
+
+```text
+cases/case-.../
+├── input.eml
+├── manifest.json
+├── headers.json
+├── received_path.json
+├── auth.json
+├── transmitting_server.json
+├── domains.json
+├── deobfuscation_results.json
+├── campaign_origin.json
+├── attribution_matrix.json
 ├── report/
-│   ├── executive.md          # Summary + Operator Hypothesis
-│   ├── technical.md          # Detailed analysis
-│   ├── score.json           # Scoring breakdown
-│   └── evidence.zip         # Portable package
+├── graphs/
 ├── detonation/
-│   ├── endpoints.json         # Endpoint contattati
-│   ├── requests.jsonl         # Network capture
-│   ├── summary.json          # Analysis summary
-│   ├── trackers.json         # Analytics IDs
-│   ├── tls.json              # Certificate fingerprints
-│   ├── redirect_chain.json   # URL expansion
-│   ├── dns_enrichment.json   # Hosting patterns
-│   ├── tls_fingerprint.json  # JA3S/ALPN
-│   ├── forms.json           # Payment hints
-│   ├── criminal_intelligence.json    # Criminal infrastructure analysis
-│   ├── infrastructure_mapping.json   # Advanced network mapping
-│   ├── hunt_enrichments.json         # SSL/banner enrichments
-│   └── threat_intelligence.json      # Threat intelligence correlations
-├── intelligence/             # Advanced intelligence modules
-│   ├── criminal_hunter/     # Criminal analysis results
-│   ├── infrastructure/      # Network mapping data
-│   ├── enrichments/         # SSL/banner data
-│   └── threat_intel/        # Intelligence correlations
-├── attribution_matrix.json  # Unified pivots + intelligence
-├── c2_infrastructure.json   # C2 infrastructure analysis
-├── phishing_kit_analysis.json # Extracted kit analysis
+├── evidence/
 └── canary/
-    └── hits.jsonl          # Visitor tracking
 ```
 
-### Integrazione Scoring
-- **+0.15**: Se downloads rilevati durante detonazione
-- **+0.10**: Se endpoints esterni al dominio origine
-- **+0.20**: Se canary cattura IP pubblici
-- **+0.10-0.30**: Bonus deoffuscamento basato su complessità tecniche rilevate
-- **+0.15-0.22**: Bonus encrypted clicking per pattern interattivi rilevati
-- **+0.25**: Se tracker/analytics IDs correlano con campagne conosciute
-- **+0.30**: Se TLS SPKI match con host precedentemente identificati
-- **+0.20**: Se redirect chain rivela affiliazioni/UTM tracking
-- **+0.15**: Se reseller pattern identifica provider ricorrente
-- **+0.25**: Se JA3S fingerprint match con server C2 conosciuti
-- **+0.35**: Se Criminal Hunter identifica pattern infrastrutturali criminali
-- **+0.25**: Se Infrastructure Mapper rileva C2 infrastructure complessa
-- **+0.20**: Se Enrich Last Hunt trova certificati SSL sospetti
-- **+0.30**: Se Threat Intelligence correlation conferma attività malevola
-- **+0.40**: Se Attribution Matrix mostra cluster operatore ad alta confidenza
+Additional modules may produce files such as:
 
-## ⚙️ Configurazione Avanzata
+- STIX bundles;
+- abuse packages;
+- enrichment reports;
+- infrastructure maps;
+- threat-intelligence snapshots;
+- kit-analysis files;
+- PCAPs;
+- exported ZIP archives.
 
-### Profili Scoring
-```bash
-# Strict: più sensibile, meno falsi negativi
-python -m paw trace --src email.eml --profile strict
+Not every artifact is generated in every run.
 
-# Conservative: meno sensibile, meno falsi positivi
-python -m paw trace --src email.eml --profile conservative
+## Installation
 
-# Default: bilanciato
-python -m paw trace --src email.eml --profile default
-```
+The dependency set is pinned in `requirements.txt`.
 
-### PGP Signing (Opzionale)
-Richiede chiave GPG privata per firma crittografica dei package.
+Create an isolated environment:
 
 ```bash
-# Genera chiave GPG
-gpg --gen-key
-
-# Esporta chiave privata
-gpg --export-secret-keys --armor your@email.com > private.key
-
-# Configura ambiente
-export PAW_PGP_PRIV="/path/to/private.key"
-export PAW_PGP_PASS="your_passphrase"  # opzionale
-
-# Traccia con firma
-python -m paw trace --src email.eml --abuse
+python -m venv .venv
 ```
 
-### Rekor Anchoring (Opzionale)
-Timestamping immutabile su Sigstore Rekor per evidence preservation.
+Activate it, then install dependencies:
 
 ```bash
-# Genera chiave RSA
-openssl genrsa -out private.pem 2048
-openssl rsa -in private.pem -pubout -out public.pem
-
-# Configura ambiente
-export PAW_REKOR_URL=https://rekor.sigstore.dev
-export PAW_REKOR_PRIVKEY_PEM="/path/to/private.pem"
-export PAW_REKOR_PUBKEY_PEM="/path/to/public.pem"
-
-# Traccia con anchoring
-python -m paw trace --src email.eml --anchor
+python -m pip install -r requirements.txt
 ```
 
-## 📊 Sistema di Scoring
+Browser detonation additionally requires the Playwright browser runtime:
 
-### Componenti Score
-- **Header Integrity** (0-0.4): SPF fail, DKIM missing, DMARC invalid
-- **Domain Signals** (0-0.3): ASN suspicious, NRD <30 giorni, TLD rischioso
-- **Identity Checks** (0-0.2): Display-name spoofing, Reply-To mismatch
-- **Authentication Advanced** (0-0.8): Received-SPF fail, ARC issues, DMARC policy
-- **Deobfuscation Bonus** (0-0.3): URL nascosti rivelati, tecniche avanzate rilevate
-
-### Tuning del contributo del Deoffuscamento
-
-PAW ora integra il risultato dell'engine di deoffuscamento direttamente nello scoring finale.
-Di default il contributo massimo che la deoffuscazione può dare al punteggio del dominio è 0.30
-(30%). Il valore è applicato come: domain_score += deob_score * deobfuscation_weight,
-dove `deob_score` è un aggregato (0.0–1.0) basato su: testo (peso 0.6), URL (peso 0.25) e HTML (peso 0.15).
-
-Come cambiare il comportamento:
-
-- Cambiare il valore predefinito (rapido): modificare la signature di `score_case` in
-  `paw/core/scoring.py` (parametro `deobfuscation_weight`). Esempio, aumentare a 0.5 per maggiore impatto.
-- Esposizione CLI (consigliato come prossimo step): aggiungere un argomento `--deob-weight` in
-  `paw/__main__.py` e passarne il valore a `score_case` da `paw/core/trace.py`.
-
-Ispezione rapida dei risultati di deoffuscamento in un case:
-
-```python
-import json
-rs = json.load(open('cases/<case>/deobfuscation_results.json'))
-da = rs.get('deobfuscated_artifacts', {})
-print('Text suspicion:', (da.get('text') or {}).get('suspicion_score'))
-print('HTML suspicion:', (da.get('html') or {}).get('suspicion_score'))
-urls = da.get('urls', [])
-if urls:
-    print('Top URL suspicion:', max(u.get('suspicion_score',0) for u in urls))
-    print('URLs:', [(u.get('original_url'), u.get('final_url'), u.get('suspicion_score')) for u in urls])
-```
-
-Nota: se preferisci che la deoffuscazione non influenzi lo scoring, imposta `deobfuscation_weight` a `0.0`.
-- **Campaign Boost** (0-0.2): Pattern multi-caso rilevati
-
-### Soglie Decisione
-- **≥ 0.72**: Likely malicious infrastructure
-- **≥ 0.55**: Suspicious or compromised account
-- **< 0.55**: Inconclusive (richiede analisi manuale)
-
-### Modificatori Profilo
-- **Strict**: +0.05 base, soglie più basse (0.68/0.52)
-- **Conservative**: -0.05 base, soglie più alte (0.76/0.58)
-
-## 🏗️ Architettura Sistema
-
-### Pipeline di Analisi
-1. **Ingest**: Parsing .eml/.msg con estrazione header strutturata
-2. **Deobfuscation**: Analisi contenuto per rivelare URL nascosti e tecniche di offuscamento
-3. **Path Reconstruction**: Normalizzazione Received headers, classificazione hop
-4. **Origin Selection**: Scelta IP origine (preferenza non-MX-internal)
-5. **Infrastructure Resolution**: IP→ASN→Org→CC via API
-6. **Authentication Validation**: SPF/DKIM/DMARC/ARC parsing e verifica
-7. **Anomaly Detection**: Header forgery avanzato, boundary violations, relay chain analysis
-8. **Attachment Analysis**: Scansione allegati con rilevamento malware e macro OLE
-9. **Detonation Analysis**: Osservazione sicura degli URL rivelati (PATCH PACK)
-10. **Criminal Hunter**: Analisi infrastrutturale criminale automatica
-11. **Infrastructure Mapping**: Mappatura avanzata rete e servizi C2
-12. **Enrichment Hunt**: SSL certificates, service banners, WHOIS/ASN intelligence
-13. **Threat Intelligence**: Correlazione automatica con feed esterni
-14. **Campaign Analysis**: Correlazione con casi precedenti + intelligence matrix
-15. **Scoring**: Calcolo punteggio multi-layered con bonus intelligence
-16. **Evidence Generation**: Grafi, STIX, abuse package con attribution completa
-
-### Struttura Caso
-```
-cases/case-{timestamp}-{hash}/
-├── input.eml                    # Email originale
-├── manifest.json               # Metadati caso
-├── headers.json                # Header estratti
-├── auth.json                   # Risultati autenticazione
-├── origin.json                 # IP origine risolto
-├── received_path.json          # Path di consegna
-├── received_anomalies.json     # Anomalie rilevate (header forgery avanzato)
-├── attachments.json            # Analisi allegati (malware, macro OLE)
-├── deobfuscation_artifacts.json # Artefatti deoffuscamento
-├── deobfuscation_results.json   # Risultati analisi deoffuscamento
-├── detonation/                 # PATCH PACK - Detonazione osservativa
-│   ├── endpoints.json         # Endpoint contattati
-│   ├── requests.jsonl         # Requests catturati
-│   ├── summary.json           # Analysis summary
-│   ├── criminal_intelligence.json    # Criminal infrastructure analysis
-│   ├── infrastructure_mapping.json   # Advanced network mapping
-│   ├── hunt_enrichments.json         # SSL/banner enrichments
-│   ├── threat_intelligence.json      # Threat intelligence correlations
-│   └── phishing_kit_analysis.json    # Extracted kit analysis
-├── intelligence/               # Advanced intelligence modules
-│   ├── criminal_hunter/       # Criminal analysis results
-│   ├── infrastructure/        # Network mapping data
-│   ├── enrichments/           # SSL/banner data
-│   └── threat_intel/          # Intelligence correlations
-├── attribution_matrix.json    # Unified pivots + intelligence integration
-├── c2_infrastructure.json     # C2 infrastructure analysis
-├── canary/                    # PATCH PACK - Server passivo
-│   └── hits.jsonl            # IP visitatori catturati
-├── report/
-│   ├── score.json            # Punteggio e decisione
-│   ├── executive.md          # Report narrativo + Operator Hypothesis
-│   └── graphs/               # Visualizzazioni Mermaid
-├── evidence/
-│   ├── rekor_anchor.json     # Rekor timestamp (opzionale)
-│   ├── rekor_proof.json      # Rekor inclusion proof
-│   └── abuse_package/        # Package per report abuse
-└── case_index.json           # Metadati per database
-```
-```
-cases/case-{timestamp}-{hash}/
-├── input.eml                    # Email originale
-├── manifest.json               # Metadati caso
-├── headers.json                # Header estratti
-├── auth.json                   # Risultati autenticazione
-├── origin.json                 # IP origine risolto
-├── received_path.json          # Path di consegna
-├── received_anomalies.json     # Anomalie rilevate
-├── deobfuscation_artifacts.json # Artefatti deoffuscamento
-├── deobfuscation_results.json   # Risultati analisi deoffuscamento
-├── detonation/                 # PATCH PACK - Detonazione osservativa
-│   ├── endpoints.json         # Endpoint contattati
-│   ├── requests.jsonl         # Requests catturati
-│   └── downloads/             # File scaricati
-├── canary/                     # PATCH PACK - Server passivo
-│   └── hits.jsonl             # IP visitatori catturati
-├── report/
-│   ├── score.json             # Punteggio e decisione
-│   ├── executive.md           # Report narrativo
-│   └── graphs/                # Visualizzazioni Mermaid
-├── evidence/
-│   ├── rekor_anchor.json      # Rekor timestamp (opzionale)
-│   ├── rekor_proof.json       # Rekor inclusion proof
-│   └── abuse_package/         # Package per report abuse
-└── case_index.json            # Metadati per database
-```
-
-### Database Indicatori
-SQLite database `cases/index.db` per correlazione campagne:
-- **Cases**: ID, timestamp, origine, punteggio, simhash
-- **Indicators**: IP, dominio, ASN, organizzazione per query rapida
-
-## 🔍 Esempi di Analisi
-
-### Caso con Deoffuscamento Avanzato
-```json
-{
-  "deobfuscation_results": {
-    "deobfuscated_artifacts": {
-      "urls": [
-        {
-          "original_url": "hxxps://evil[.]com",
-          "final_url": "https://evil.com",
-          "transformations": [
-            {
-              "technique": "decodeurl",
-              "from": "hxxps://evil[.]com",
-              "to": "https://evil.com",
-              "description": "Decoded hxxp obfuscation and dot bracket"
-            }
-          ],
-          "suspicion_score": 0.8,
-          "suspicion_indicators": ["hxxp_obfuscation", "bracket_notation"]
-        }
-      ]
-    },
-    "suspicion_score": 0.75,
-    "complexity_rating": "high"
-  },
-  "score": 0.89,
-  "decision": "Likely malicious - Advanced obfuscation techniques detected"
-}
-```
-
-### Caso Phishing O365 Spoofed
-```json
-{
-  "score": 0.87,
-  "decision": "Campaign pattern detected - Likely malicious infrastructure",
-  "anomalies": {
-    "private_ip_before_boundary": true,
-    "invalid_fqdn_count": 2,
-    "received_spf_result": "fail"
-  },
-  "origin": {
-    "ip": "185.123.45.67",
-    "asn": 12345,
-    "org": "Malicious Hosting Ltd",
-    "cc": "RU"
-  }
-}
-```
-
-### Caso Legittimo con Forwarding
-```json
-{
-  "score": 0.12,
-  "decision": "Inconclusive",
-  "anomalies": {
-    "non_monotonic_dates": false,
-    "private_ip_before_boundary": false
-  },
-  "origin": {
-    "ip": "203.0.113.1",
-    "asn": 64496,
-    "org": "Gmail",
-    "cc": "US"
-  }
-}
-```
-
-### Intelligence Integration Examples
-
-#### Criminal Hunter Analysis
-```json
-{
-  "criminal_intelligence": [
-    {
-      "target_domain": "evil-phish.com",
-      "criminal_analysis": {
-        "infrastructure_type": "bulletproof_hosting",
-        "risk_level": "high",
-        "indicators": ["anonymous_registration", "high_risk_asn", "malware_distribution"],
-        "confidence": 0.85
-      }
-    }
-  ]
-}
-```
-
-#### Infrastructure Mapping
-```json
-{
-  "infrastructure_mapping": {
-    "target_domain": "c2-server.com",
-    "ip_mappings": [
-      {
-        "ip": "192.168.1.100",
-        "services": ["HTTP", "HTTPS", "FTP"],
-        "banners": {
-          "80": "Apache/2.4.29 (Ubuntu)",
-          "443": "nginx/1.18.0"
-        },
-        "risk_assessment": "C2_server"
-      }
-    ],
-    "network_topology": "single_hop",
-    "c2_indicators": ["unusual_port_usage", "encrypted_c2_protocol"]
-  }
-}
-```
-
-#### Threat Intelligence Correlation
-```json
-{
-  "threat_intelligence": {
-    "domain_evil.com": {
-      "virustotal": {
-        "domain_score": "malicious",
-        "detection_ratio": "45/90"
-      },
-      "abuseipdb": {
-        "abuse_confidence": 85,
-        "reports": 127
-      },
-      "alienvault": {
-        "pulse_count": 3,
-        "related_malware": ["Emotet", "TrickBot"]
-      }
-    }
-  }
-}
-```
-
-#### Enhanced Attribution Matrix
-```json
-{
-  "case_id": "case-20251029-XXXX",
-  "operator_hypothesis": {
-    "confidence": 0.92,
-    "hypothesis": "Eastern European cybercrime syndicate using bulletproof hosting",
-    "evidence_count": 18
-  },
-  "intelligence_integrations": {
-    "criminal_hunter": "bulletproof_hosting_detected",
-    "infrastructure_mapper": "c2_infrastructure_mapped",
-    "threat_intelligence": "multiple_feed_correlations",
-    "enrich_last_hunt": "suspicious_ssl_certificates"
-  },
-  "pivots": [
-    {
-      "type": "criminal_infrastructure",
-      "source": "criminal_hunter",
-      "value": "bulletproof_hosting_pattern",
-      "matches": ["current_campaign", "historical_campaigns"],
-      "weight": 0.9
-    },
-    {
-      "type": "threat_intel_correlation",
-      "source": "virustotal_abuseipdb",
-      "value": "high_abuse_scores",
-      "matches": ["domain_1", "domain_2", "ip_ranges"],
-      "weight": 0.85
-    }
-  ]
-}
-```
-
-## 🚨 Sicurezza e Privacy
-
-- **No Egress Default**: Nessuna connessione esterna senza `--anchor`
-- **Evidence Preservation**: Timestamping crittografico opzionale
-- **PII Handling**: Nessuna memorizzazione contenuti email
-- **Key Management**: Chiavi private esterne, non nel codice
-
-## 🤝 Contributing
-
-PAW è open-source. Per contribuire:
-
-1. Fork del repository
-2. Crea feature branch
-3. Aggiungi test per nuove funzionalità
-4. Submit pull request
-
-## 📄 Licenza
-
-MIT License - vedere LICENSE file per dettagli.
-
-## 🛡️ Policy Sicurezza e Network
-
-### Isolamento di Rete
-PAW implementa **defense-in-depth** per garantire analisi forense sicura senza compromettere la sicurezza del sistema.
-
-#### Comandi Base (No Egress)
-- **`trace`**: **Default no-egress**. Analizza solo contenuti locali, non contatta mai infrastruttura esterna
-- **Input**: File `.eml`/`.msg` locali
-- **Output**: Report forense completo senza connessioni di rete
-- **Uso**: Analisi primaria, ambienti air-gapped
-
-#### Comandi Avanzati (Egress Controllato)
-- **`detonate`**: Egress osservativo con policy **observe-only**
-  - ✅ GET/HEAD/OPTIONS permessi
-  - ❌ POST/PUT/PATCH/DELETE bloccati
-  - 📊 Logging completo di tutte le richieste
-  - 🎯 Scopo: Mappare infrastruttura senza interagire
-
-- **`detonate --encrypted`**: Egress interattivo crittografato
-  - 🔐 Traffico crittografato end-to-end
-  - 🎭 Simulazione interazioni phishing (form fill, navigation)
-  - 📸 Screenshot crittografati
-  - ⚠️ Richiede consenso esplicito per interazioni
-  - 🌐 **Network Policy**: Allowlist egress verso host del caso + CDN trusted (fonts.googleapis.com, etc.)
-
-- **`canary`**: Egress controllato per server passivo
-  - 🌐 Solo porte specificate (default 8787)
-  - 📝 Logging IP/UA visitatori
-  - 🛡️ Firewall rules applicate automaticamente
-
-### Controlli di Sicurezza
-- **Network Isolation**: Container encrypted clicking con allowlist egress (non `network_mode: none`)
-- **Resource Limits**: CPU ≤50%, RAM ≤512MB per processo
-- **No Privileges**: Esecuzione senza root
-- **Ephemeral Keys**: Chiavi crittografiche generate per sessione
-- **Audit Logging**: Tracciamento completo operazioni
-
-### Network Policy per Encrypted Clicking
-L'encrypted clicking richiede **connettività controllata** per raggiungere i target phishing:
-
-#### Allowlist Egress
 ```bash
-# Host del caso (da URL estratti)
-- *.bit.ly
-- *.shorturl.at
-- Target domain del phishing
-
-# CDN/Fonti trusted (per rendering corretto)
-- fonts.googleapis.com
-- fonts.gstatic.com
-- www.google-analytics.com
-- www.googletagmanager.com
-
-# Browser/CDN essenziali
-- chromium.org
-- *.cloudflare.com
+python -m playwright install chromium
 ```
 
-#### Implementazione
-```yaml
-# docker-compose.encrypted-clicker.yml
-services:
-  encrypted-clicker:
-    network_mode: bridge
-    # NON network_mode: none
-    environment:
-      - ALLOWLIST_HOSTS=${CASE_HOSTS},fonts.googleapis.com,fonts.gstatic.com
-    cap_drop:
-      - ALL
-    read_only: true
-    tmpfs:
-      - /tmp
-```
+Some optional functions also depend on platform tools such as `tcpdump`, system MIME libraries, or network access.
 
-#### Alternative Sicure
-1. **Proxy Recorder**: Traffico instradato attraverso proxy che logga tutto
-2. **VPN Controllata**: Connessione attraverso VPN aziendale con logging
-3. **Air-Gapped Analysis**: Upload risultati manualmente (non raccomandato)
+## CLI
 
-### Raccomandazioni Operative
+The current CLI is available through:
+
 ```bash
-# Ambiente sicuro: sempre inizia con trace no-egress
-python -m paw trace --src email.eml --no-egress
-
-# Poi detona se necessario (ambiente controllato)
-python -m paw detonate --case <case> --observe --pcap
-
-# Encrypted clicking solo con consenso e in container isolato
-python -m paw detonate --case <case> --encrypted --crypto-vault /secure/path
+python -m paw --help
 ```
 
-**⚠️ ATTENZIONE**: I comandi `detonate` e `canary` richiedono connessioni di rete controllate. Usa solo in ambienti sicuri con firewall configurato.
+### Email analysis
+
+```bash
+python -m paw analyze sample.eml
+```
+
+A directory can be analyzed through the legacy `trace` interface:
+
+```bash
+python -m paw trace --src samples/
+```
+
+### Verify a case
+
+```bash
+python -m paw verify --case cases/<case-directory>
+```
+
+### Query recent cases
+
+```bash
+python -m paw query --by domain --value example.test
+```
+
+### Export a case
+
+```bash
+python -m paw export --case cases/<case-directory> --format zip
+```
+
+### Detonation
+
+PAW exposes a dedicated detonation command. Use it only in an isolated environment and only for URLs you are authorized to investigate.
+
+```bash
+python -m paw detonate --url http://127.0.0.1:8000/example --observe
+```
+
+The loopback example is intentional. Do not use the command as a general-purpose URL scanner.
+
+## Presets
+
+The CLI currently contains `quick`, `full`, and `forensic` shortcuts.
+
+These names describe requested workflow depth, not validation levels.
+
+Because network gating is currently incomplete, inspect the code before assuming that a preset is offline or passive.
+
+## Known limitations
+
+- `--no-egress` is not consistently enforced.
+- The main trace path automatically detonates discovered URLs in the current implementation.
+- Several network enrichments run from the same process as forensic parsing.
+- Authentication handling primarily interprets reported results rather than independently reproducing every authentication protocol.
+- Received-path origin selection is heuristic.
+- Reverse DNS can be missing, stale, or misleading.
+- The case score is not statistically calibrated.
+- Hard-coded cloud and reputation ranges are incomplete and can become stale.
+- Selected geography/risk heuristics can introduce bias and should be removed from evidentiary scoring.
+- The attribution matrix contains demo operator profiles and must not be used for real identity attribution.
+- Infrastructure overlap does not prove common ownership.
+- A canary IP does not identify a person.
+- Browser observation can cause real network side effects.
+- Resource collection disables TLS verification in selected code paths.
+- Some static phishing-kit analysis is keyword-based and can over-classify ordinary code.
+- Threat-intelligence integrations depend on external services, API availability, credentials, quotas, and their own data quality.
+- Errors are often caught and converted to partial output, so the existence of a report file does not imply that every upstream stage succeeded.
+- Multiple generations of features coexist in the repository, including legacy and experimental interfaces.
+
+## Evidence discipline
+
+For every important conclusion, retain the smallest evidence chain that supports it.
+
+A useful reporting format is:
+
+```text
+OBSERVATION
+Received hop contains public IP X.
+
+SOURCE
+Original email, Received header #N.
+
+MEASUREMENT TIME
+<UTC timestamp>
+
+INFERENCE
+X is the first public hop outside the classified recipient boundary.
+
+ALTERNATIVE EXPLANATIONS
+Forwarder, compromised mail server, cloud relay, forged pre-boundary header.
+
+CONFIDENCE
+Medium.
+```
+
+For infrastructure correlation:
+
+```text
+OBSERVATION
+Two cases share the same certificate SPKI hash.
+
+INFERENCE
+The hosts may share key material or deployment infrastructure.
+
+NOT PROVEN
+Same operator, same organization, same person, or same geography.
+```
+
+This distinction is more valuable than increasing a numeric confidence score.
+
+## Intended use
+
+PAW is intended for:
+
+- analysis of phishing email samples you are authorized to inspect;
+- email-header forensics;
+- defensive threat-intelligence research;
+- controlled infrastructure correlation;
+- offline and isolated-lab experimentation;
+- generation of structured evidence packages for analyst review.
+
+It is not intended for unauthorized scanning, interaction with third-party infrastructure outside an approved investigation, automated accusation of individuals or groups, or unsupervised takedown decisions.
+
+## Recommended next development steps
+
+The highest-value improvements are architectural rather than additional enrichment modules.
+
+1. **Enforce network policy centrally.** Every network-capable module should receive one explicit policy object. `no_egress=True` must make outbound access technically impossible from PAW code paths.
+2. **Separate parse from enrich.** A forensic parse should be deterministic and offline. Network enrichment should be a second explicit command.
+3. **Remove automatic detonation from `trace`.** Detonation should require a deliberate operator action.
+4. **Add provenance to every enrichment field.** Store source, timestamp, request type, and failure state.
+5. **Replace the current attribution profiles.** Use neutral cluster IDs and evidence-driven analyst hypotheses.
+6. **Calibrate scoring.** Build a labeled corpus and measure precision, recall, false positives, and score calibration.
+7. **Independently validate authentication where possible.** Separate "receiver reported pass" from "PAW reproduced pass."
+8. **Test case determinism.** The same offline input should produce the same forensic artifacts when network enrichment is disabled.
+9. **Create explicit module status metadata.** Mark each subsystem as stable, experimental, external-data-dependent, or deprecated.
+10. **Treat negative results as first-class output.** Failed RDAP, DNS, TLS, or TI lookups should remain visible rather than disappearing behind broad exception handling.
+
+## Development context
+
+PAW contains several generations of experimentation. Some modules are considerably more mature than others.
+
+The core value of the repository is not the number of enrichment modules. It is the attempt to preserve a traceable chain from an email artifact to infrastructure observations and then to clearly qualified hypotheses.
+
+The project should be judged by whether each conclusion can be traced back to evidence, not by how aggressive the attribution language sounds.
+
+## License
+
+See the repository's current license and notices for the applicable terms.
