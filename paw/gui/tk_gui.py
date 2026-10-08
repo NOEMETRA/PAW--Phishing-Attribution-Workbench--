@@ -1152,9 +1152,9 @@ class PawTkGui:
         """Run a command in a separate thread with real-time output"""
         self.status_var.set(f"Running {operation_name}...")
         text_widget.insert(END, "Running: {' '.join(cmd)}\n\n")
-    text_widget.insert(END, "⚠️ Note: PAW's detailed progress output is not shown in GUI.\n")
-    text_widget.insert(END, "   Use terminal for full output (example): paw analyze --lang da file.eml\n")
-    text_widget.insert(END, "   Note: `paw quick` is a fast preset and does NOT accept --lang. Use `paw analyze` to pass language.\n\n")
+        text_widget.insert(END, "⚠️ Note: PAW's detailed progress output is not shown in GUI.\n")
+        text_widget.insert(END, "   Use terminal for full output (example): paw analyze --lang da file.eml\n")
+        text_widget.insert(END, "   Note: `paw quick` is a fast preset and does NOT accept --lang. Use `paw analyze` to pass language.\n\n")
         text_widget.insert(END, "⏳ Starting analysis process...\n")
         text_widget.see(END)
         
