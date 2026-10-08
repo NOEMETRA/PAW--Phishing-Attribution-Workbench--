@@ -5,20 +5,20 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "paw"
 version = "2.0.0"
-description = "Phishing Attribution Workbench - Advanced Email Forensics Tool"
+description = "Research workbench for email forensics and infrastructure correlation"
 readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
 authors = [
-    {name = "PAW Development Team", email = "security@example.com"}
+    {name = "Northguard Security"}
 ]
 maintainers = [
-    {name = "PAW Development Team", email = "security@example.com"}
+    {name = "Northguard Security"}
 ]
 keywords = ["phishing", "email", "forensics", "attribution", "security", "cybersecurity"]
 
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 3 - Alpha",
     "Intended Audience :: Information Technology",
     "Intended Audience :: System Administrators",
     "License :: OSI Approved :: MIT License",
@@ -85,10 +85,10 @@ docs = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/paw"
-Documentation = "https://paw.readthedocs.io/"
-Repository = "https://github.com/yourusername/paw"
-"Bug Tracker" = "https://github.com/yourusername/paw/issues"
+Homepage = "https://github.com/Northguard-Security/PAW--Phishing-Attribution-Workbench--"
+Documentation = "https://github.com/Northguard-Security/PAW--Phishing-Attribution-Workbench--#readme"
+Repository = "https://github.com/Northguard-Security/PAW--Phishing-Attribution-Workbench--"
+"Bug Tracker" = "https://github.com/Northguard-Security/PAW--Phishing-Attribution-Workbench--/issues"
 
 [project.scripts]
 paw = "paw.__main__:main"
