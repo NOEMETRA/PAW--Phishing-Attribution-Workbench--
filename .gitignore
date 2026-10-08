@@ -1,0 +1,27 @@
+# Local environments, builds and caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Research runs: case evidence and local configuration
+.env
+.env.*
+!.env.example
+cases/
+logs/
+*.log
+
+# Editor and operating-system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

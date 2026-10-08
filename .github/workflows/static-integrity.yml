@@ -1,0 +1,23 @@
+name: PAW static integrity
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  static-preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Compile project sources
+        run: python -m compileall -q paw
+      - name: Check public metadata and safety wording
+        run: python -m unittest discover -s tests -p 'test_static_contracts.py' -v

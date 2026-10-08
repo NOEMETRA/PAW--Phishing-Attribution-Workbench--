@@ -46,7 +46,8 @@ def handle_error(error_type, message, details=None, suggestions=None):
             "suggestions": [
                 "Check your internet connection",
                 "Try again later",
-                "Use --no-egress flag to skip network operations"
+                "The --no-egress flag does not currently enforce network isolation",
+                "Use a firewall or isolated VM/network policy to block outbound traffic"
             ]
         },
         "permission_error": {
