@@ -111,3 +111,9 @@ jobs:
 
       - name: Verify actual offline display brand comparisons
         run: python tests/integration_display_brand_real.py
+
+      - name: Verify bounded domain brand comparison contracts
+        run: python -m unittest discover -s tests -p 'test_domain_brand_contracts.py' -v
+
+      - name: Verify actual offline domain-label comparisons
+        run: python tests/integration_domain_brand_real.py

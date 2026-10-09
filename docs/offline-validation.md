@@ -126,6 +126,13 @@ registrable label. Hosted tenant exceptions, unambiguous From gating and numeric
 provenance are explicit. Domain ownership is unverified; other domain-label/TLD
 heuristics and attribution accuracy remain separate validation work.
 
+The [domain-label comparison fix](domain-brand-labels.md) retains a brand-spelling
+signal when a recognized registrable label is preceded by a service subdomain.
+It bounds comparisons to normalized leftmost/PSL registrable labels, preserves
+uncertain From identity and limits this rule to one 0.20 contribution. Spelling,
+suffix structure and owner identity remain unverified; accuracy and TLD audits
+are still open.
+
 ## GitHub review follow-up: process launch and crash recovery
 
 The first GitHub review found two P1 issues: audited `spawn`/`fork`/`exec` paths

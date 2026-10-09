@@ -222,6 +222,49 @@ def _display_brand_comparison(headers, from_domain, brand_seeds):
     return record
 
 
+def _domain_brand_comparison(headers, from_domain, brand_seeds):
+    headers = headers or {}
+    normalized = normalize_domain(from_domain)
+    record = {'brand_schema_version':1,'status':'not_evaluated','verified':False,
+              'source':'message_headers' if headers.get('from') else 'supplied_domain',
+              'ownership_status':'not_evaluated','normalized_domain':None,
+              'scope':'normalized_leftmost_and_PSL_registrable_labels',
+              'registrable_domain':None,'private_suffix':None,
+              'suffix_source':'bundled_tldextract_PSL_snapshot_no_network',
+              'suffix_package_version':None,'comparisons':[], 'max_similarity':None,
+              'exact_leftmost_under_other_public_domain':None,'contribution':0.0,
+              'reason':'Unambiguous normalized From domain unavailable'}
+    if not _from_domain_available(headers,normalized):
+        return record
+    import tldextract
+    extractor = tldextract.TLDExtract(cache_dir=None,suffix_list_urls=(),include_psl_private_domains=True)
+    registered = extractor(normalized)
+    labels = [('leftmost_label',brand_label(normalized))]
+    if registered.suffix and registered.domain:
+        labels.append(('registrable_label',registered.domain))
+    comparisons = []
+    for role,label in labels:
+        similarity,brand = max(((bk_similarity(label,brand),brand) for brand in brand_seeds),key=lambda item:item[0])
+        comparisons.append({'role':role,'label':label,'brand':brand,'similarity':similarity,
+                            'lookalike':.7 <= similarity < 1.0})
+    first = comparisons[0]
+    exact_subdomain = False
+    if first['similarity'] == 1.0:
+        public = extractor(normalized,include_psl_private_domains=False)
+        exact_subdomain = public.domain != first['label'] if public.suffix and public.domain else None
+    record.update(status='observed_unverified' if len(labels)==2 else 'partial',
+                  normalized_domain=normalized,
+                  registrable_domain=registered.domain+'.'+registered.suffix if len(labels)==2 else None,
+                  private_suffix=registered.is_private if registered.suffix else None,
+                  suffix_package_version=tldextract.__version__,comparisons=comparisons,
+                  max_similarity=max(row['similarity'] for row in comparisons),
+                  exact_leftmost_under_other_public_domain=exact_subdomain,
+                  contribution=.2 if any(row['lookalike'] for row in comparisons) or exact_subdomain is True else 0.0,
+                  reason='Unverified spelling heuristic; ownership not evaluated' if len(labels)==2 else
+                         'Registrable label unavailable in bundled PSL; leftmost comparison only')
+    return record
+
+
 def score_case(hop_diag: dict, auth: dict, dominfo: dict, brand_seeds=None, suspicious_asn=False, ns_mx_recurrent=False, profile="default", headers=None, detonation_endpoints=None, canary_ips=None, det_summary=None, origin_domain="", deobfuscation_weight: float = 0.30):
     deobfuscation_weight = validate_deobfuscation_weight(deobfuscation_weight)
     brand_seeds = brand_seeds or ["apple","google","microsoft","paypal"]
@@ -256,14 +299,9 @@ def score_case(hop_diag: dict, auth: dict, dominfo: dict, brand_seeds=None, susp
     
     # Brand & Identity heuristics
     from_domain = dominfo.get("domain", "")
-    label = brand_label(from_domain)
-    bk = max(bk_similarity(label, b) for b in brand_seeds) if label else 0.0
-    exact_brand_subdomain = False
-    if bk == 1.0:
-        import tldextract
-        registered = tldextract.TLDExtract(cache_dir=None, suffix_list_urls=())(from_domain)
-        exact_brand_subdomain = bool(registered.suffix and registered.domain != label)
-    if 0.7 <= bk < 1.0 or exact_brand_subdomain: domain_score += 0.2
+    brand_observation = _domain_brand_comparison(headers,from_domain,brand_seeds)
+    bk = brand_observation['max_similarity']
+    domain_score += brand_observation['contribution']
     # This is a structural heuristic, never proof of official brand ownership.
     
     # Display-Name lookalike
@@ -360,12 +398,14 @@ def score_case(hop_diag: dict, auth: dict, dominfo: dict, brand_seeds=None, susp
     if reply_observation['status'] != 'completed': missing.append('reply_to_comparison')
     if unicode_observation['status'] != 'observed_unverified': missing.append('unicode_domain')
     if display_observation['status'] != 'completed': missing.append('display_brand_comparison')
+    if brand_observation['status'] != 'observed_unverified': missing.append('domain_brand_comparison')
     missing.extend(('domain_script_analysis', 'domain_homograph_analysis'))
     return {**_score_metadata(total, components, profile),
             'sender_domain_observations': {'reply_to_comparison':reply_observation,
                                            'unicode_domain':unicode_observation,
-                                           'display_brand_comparison':display_observation},
-            "bk_score": round(bk,2), "mixed_flag": None,
+                                           'display_brand_comparison':display_observation,
+                                           'domain_brand_comparison':brand_observation},
+            "bk_score": round(bk,2) if bk is not None else None, "mixed_flag": None,
             "assessment_status": "partial" if missing else "completed",
             "coverage": {"authentication": verification, "not_evaluated": missing},
             "limitation": "Heuristic evidence score; missing checks do not establish safety"}
