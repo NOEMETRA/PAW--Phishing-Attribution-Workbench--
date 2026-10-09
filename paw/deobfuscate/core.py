@@ -72,7 +72,7 @@ class DeobfuscationEngine:
                 results['deobfuscated_artifacts']['javascript'] = deobfuscated
                 results['transformations'].extend(deobfuscated.get('transformations', []))
 
-            elif artifact_type == 'text' and artifact_data:
+            elif artifact_type == 'text' and isinstance(artifact_data, str):
                 deobfuscated = self.deobfuscate_text(artifact_data)
                 results['deobfuscated_artifacts']['text'] = deobfuscated
                 results['transformations'].extend(deobfuscated.get('transformations', []))
@@ -81,6 +81,27 @@ class DeobfuscationEngine:
         results['suspicion_score'] = self.calculate_suspicion_score(results['transformations'])
         results['techniques_detected'] = list(set([t.get('technique', '') for t in results['transformations']]))
         results['complexity_rating'] = self.rate_complexity(results)
+
+        analyzed = results['deobfuscated_artifacts']
+        has_text = 'text' in analyzed
+        has_nontext = bool(analyzed.get('urls') or analyzed.get('html') or analyzed.get('javascript'))
+        results['assessment_status'] = ('partial' if has_text and has_nontext else
+                                        'heuristic_only' if has_nontext else
+                                        'descriptive_only' if has_text else 'not_evaluated')
+        results['coverage'] = {
+            'text': {'status': 'descriptive_only' if has_text else 'not_evaluated',
+                     'risk_detection': 'not_evaluated'},
+            **{kind: {'status': 'heuristic_only' if analyzed.get(kind) else 'not_evaluated'}
+               for kind in ('urls', 'html', 'javascript')},
+            'attachments': {'status': 'not_evaluated'},
+        }
+        results['score_scope'] = 'nontext_transformations_only'
+        results['calibrated'] = False
+        results['limitation'] = ('Text risk detection is not evaluated; visual observations are descriptive. '
+                                 'Nontext transformation heuristics do not establish safety or phishing.')
+        if not has_nontext:
+            results['suspicion_score'] = None
+            results['complexity_rating'] = 'not_evaluated'
 
         return results
 
@@ -162,9 +183,7 @@ class DeobfuscationEngine:
 
     def deobfuscate_text(self, text: str) -> Dict[str, Any]:
         """Preserve text once; visual comparison is not an iterative decoder."""
-        result = self.layers[3].deobfuscate_text(text)
-        result['suspicion_indicators'] = []
-        return result
+        return self.layers[3].deobfuscate_text(text)
 
     def calculate_suspicion_score(self, transformations: List[Dict]) -> float:
         """Calcola punteggio di sospetto basato sulle trasformazioni"""

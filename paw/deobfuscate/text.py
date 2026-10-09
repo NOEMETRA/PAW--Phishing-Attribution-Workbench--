@@ -17,6 +17,7 @@ class TextDeobfuscator:
             'original_text': text,
             'final_text': text,
             'transformations': [],
+            'suspicion_indicators': [],
             'analysis': {
                 'word_count': len(text.split()),
                 'character_count': len(text),

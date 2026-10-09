@@ -38,6 +38,21 @@ verdict or a completed phishing assessment. `readability_improvement` remains
 zero for compatibility; editorial readability is no longer claimed as analysis.
 Content observations continue separately in the auxiliary content assessor.
 
+Both the exported direct text API and the main engine return the same indicator
+field. Aggregate results expose `coverage`, `assessment_status`, `calibrated`
+and `score_scope: nontext_transformations_only`. Text-only (including empty text)
+results are `descriptive_only`, with aggregate `suspicion_score: null` and
+`complexity_rating: not_evaluated`. With no supported analyzed input, the status
+is `not_evaluated`. Nontext-only inputs are `heuristic_only`; mixed text/nontext
+inputs are `partial`, with text risk detection explicitly `not_evaluated`.
+The numeric aggregate in those cases describes only nontext transformations;
+it does not assess text or establish a negative detection result.
+
+The human `deobfuscate` CLI shows these coverage limits, suppresses numeric
+suspicion/complexity for text-only input, and labels any nontext number as an
+uncalibrated transformation heuristic. JSON consumers must handle a nullable
+aggregate score; nested text scores remain zero compatibility contributions.
+
 URL refanging/decoding, original URL identities and candidate provenance remain
 in the URL-specific module. HTML and JavaScript analysis and their heuristics
 are outside this correction; ordinary HTML decoding may still add points.
@@ -57,15 +72,16 @@ legacy entry points and representative independently adjudicated holdout data.
 Reducing a heuristic contribution alone does not demonstrate improved detection.
 UI and the separate Linux detonation lab remain deferred.
 
-The final serial Windows suite ran 180 tests: 175 passed and five POSIX-only
-tests were skipped. Five text regressions cover preservation, comparisons,
-scoring, repeated analysis and encoded URLs. The preservation/score regressions
+The final serial Windows suite ran 183 tests: 178 passed and five POSIX-only
+tests were skipped. Eight text regressions cover preservation, comparisons,
+scoring, repeated analysis, encoded URLs, direct/engine schema parity, aggregate
+coverage and actual human/JSON CLI entry points. The preservation/score regressions
 failed against the old path and pass after the correction. Eight supervised
 full-CLI content cases and eleven real
 offline URL cases passed, including original-byte and evidence-seal checks.
 
-The private full `--no-egress` run completed all 20 original EMLs in 21.437 seconds,
-with 137.60 MiB peak sampled process-tree RSS (50 ms sampling). Original bytes,
+The private full `--no-egress` run completed all 20 original EMLs in 25.090 seconds,
+with 115.88 MiB peak sampled process-tree RSS (50 ms sampling). Original bytes,
 execution records and seals verified. Text matches original MIME extraction;
 nontext deobfuscation artifacts, URLs, remaining headers, authentication and MIME
 metadata are unchanged. Every raw score reconciles after removing exactly `0.18`.
@@ -78,3 +94,11 @@ ranges do not validate detection, and Inconclusive does not mean benign.
 Thirteen cases still have nonzero URL/HTML deobfuscation contributions. Those
 signals need a separate audit. No accuracy metrics or speed-improvement claim
 are made; the historical four-hour online run remains unreproduced.
+
+The subsequent review correction only adds aggregate coverage and fixes direct
+API/CLI presentation. Compared with the first text-preservation run, all 20
+final score artifacts, original text, visual comparisons, URL/nontext artifacts
+and remaining evidence are unchanged. All 20 expose partial aggregate coverage
+and text risk detection not evaluated. New coverage/schema/CLI regressions
+reproduce the reviewed defects before this correction; nullable aggregate values
+do not change nested compatibility contributions or final attribution weights.

@@ -70,8 +70,15 @@ def main():
             assert deob_text['original_text'] == deob_text['final_text'] == original_text
             assert deob_text['text_schema_version'] == 2
             assert deob_text['transformations'] == []
+            assert deob_text['suspicion_indicators'] == []
             assert deob_text['suspicion_score'] == 0
             assert deob_text['visual_comparison']['comparison_only'] is True
+            deob_result = headers['deobfuscation_analysis']
+            assert deob_result['assessment_status'] == 'descriptive_only'
+            assert deob_result['suspicion_score'] is None
+            assert deob_result['complexity_rating'] == 'not_evaluated'
+            assert deob_result['coverage']['text']['risk_detection'] == 'not_evaluated'
+            assert deob_result['calibrated'] is False
             score = read(case / 'report/score.json')
             assert abs(math.fsum(score['score_components'].values()) - score['raw_score']) < 1e-12
             assert score['score'] == round(score['decision_score'], 2)
