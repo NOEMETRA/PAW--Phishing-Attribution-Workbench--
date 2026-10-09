@@ -222,6 +222,33 @@ def _display_brand_comparison(headers, from_domain, brand_seeds):
     return record
 
 
+def _tld_comparison(headers, from_domain):
+    headers = headers or {}
+    normalized = normalize_domain(from_domain)
+    from_metadata = any(key in headers for key in ('from','from_header_count','from_identity')) or any(
+        isinstance(issue,dict) and str(issue.get('field','')).lower() == 'from'
+        for issue in headers.get('header_field_defects') or [])
+    record = {'tld_schema_version':1,'status':'not_evaluated','verified':False,
+              'source':'message_headers' if from_metadata else 'supplied_domain',
+              'scope':'normalized_final_domain_label_static_list',
+              'normalized_domain':None,'tld':None,'listed':None,'result':None,
+              'list_source':'PAW_legacy_static_TLD_list','list_version':1,
+              'listed_tlds':sorted(risky_tlds()),'reputation_status':'not_evaluated',
+              'contribution':0.0,'reason':'Unambiguous normalized From domain unavailable'}
+    if not _from_domain_available(headers,normalized):
+        return record
+    if '.' not in normalized:
+        record['reason'] = 'Final dotted-domain label unavailable'
+        return record
+    tld = '.' + normalized.rsplit('.',1)[1]
+    listed = tld in risky_tlds()
+    record.update(status='observed_unverified',normalized_domain=normalized,tld=tld,
+                  listed=listed,result='listed' if listed else 'not_listed',
+                  contribution=.1 if listed else 0.0,
+                  reason='Legacy static final-label heuristic; reputation and ownership not evaluated')
+    return record
+
+
 def _domain_brand_comparison(headers, from_domain, brand_seeds):
     headers = headers or {}
     normalized = normalize_domain(from_domain)
@@ -310,11 +337,8 @@ def score_case(hop_diag: dict, auth: dict, dominfo: dict, brand_seeds=None, susp
     display_observation = _display_brand_comparison(headers,from_domain,brand_seeds)
     domain_score += display_observation['contribution']
 
-    # TLD risk
-    if from_domain:
-        tld = "." + from_domain.split(".")[-1] if "." in from_domain else ""
-        if tld in risky_tlds():
-            domain_score += 0.10
+    tld_observation = _tld_comparison(headers,from_domain)
+    domain_score += tld_observation['contribution']
     
     normalized_from = normalize_domain(from_domain)
     unicode_observation = observe_domain_unicode(
@@ -399,12 +423,14 @@ def score_case(hop_diag: dict, auth: dict, dominfo: dict, brand_seeds=None, susp
     if unicode_observation['status'] != 'observed_unverified': missing.append('unicode_domain')
     if display_observation['status'] != 'completed': missing.append('display_brand_comparison')
     if brand_observation['status'] != 'observed_unverified': missing.append('domain_brand_comparison')
+    if tld_observation['status'] != 'observed_unverified': missing.append('tld_comparison')
     missing.extend(('domain_script_analysis', 'domain_homograph_analysis'))
     return {**_score_metadata(total, components, profile),
             'sender_domain_observations': {'reply_to_comparison':reply_observation,
                                            'unicode_domain':unicode_observation,
                                            'display_brand_comparison':display_observation,
-                                           'domain_brand_comparison':brand_observation},
+                                           'domain_brand_comparison':brand_observation,
+                                           'tld_comparison':tld_observation},
             "bk_score": round(bk,2) if bk is not None else None, "mixed_flag": None,
             "assessment_status": "partial" if missing else "completed",
             "coverage": {"authentication": verification, "not_evaluated": missing},

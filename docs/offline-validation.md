@@ -133,6 +133,12 @@ uncertain From identity and limits this rule to one 0.20 contribution. Spelling,
 suffix structure and owner identity remain unverified; accuracy and TLD audits
 are still open.
 
+The [TLD observation fix](tld-observations.md) normalizes final-label comparisons,
+requires usable From identity or an explicit legacy domain hint, and exposes
+unevaluated cases without TLD points. Static-list membership is not a reputation
+verdict. List/weight calibration and domain-age/RDAP correctness remain separate;
+future registration dates currently becoming age zero are not corrected here.
+
 ## GitHub review follow-up: process launch and crash recovery
 
 The first GitHub review found two P1 issues: audited `spawn`/`fork`/`exec` paths

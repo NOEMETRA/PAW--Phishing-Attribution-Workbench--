@@ -117,3 +117,9 @@ jobs:
 
       - name: Verify actual offline domain-label comparisons
         run: python tests/integration_domain_brand_real.py
+
+      - name: Verify normalized TLD observations and From availability
+        run: python -m unittest discover -s tests -p 'test_tld_contracts.py' -v
+
+      - name: Verify actual offline TLD observations and scoring
+        run: python tests/integration_tld_real.py
