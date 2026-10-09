@@ -1,4 +1,4 @@
-# Received evidence schema v2
+# Received evidence schema v3
 
 The old parser scanned an entire Received field for IPv4 before IPv6 and selected
 the first result. A receiver address or queue ID could replace the sender's IPv6
@@ -10,7 +10,7 @@ contracts, not phishing accuracy.
 ## Field scope, bounds and source preservation
 
 `received_path.json` preserves complete parsed header strings, original
-zero-based header indices and positional chain order, plus schema version 2.
+zero-based header indices and positional chain order, plus schema version 3.
 No sorting by untrusted timestamps is performed. This is a bounded lexical
 parser for supported SMTP From/By clauses, not full RFC validation. Clause
 keywords and the timestamp delimiter are located outside comments, quoted
@@ -83,13 +83,13 @@ The automatic pipeline therefore gives zero to
 add an origin-hop FQDN penalty through header diagnostics. The component names
 remain in the ledger with descriptive source explanations. Other sender-domain,
 authentication and profile contributions retain their existing rules. The
-existing claimed non-monotonic timestamp contribution is unchanged and remains
-an unverified, uncalibrated heuristic needing separate validation. Missing
-timestamps/timezones are explicit parsing limitations; legacy zero skew values
-do not prove simultaneous delivery. Standalone legacy caller diagnostics and
-HELO/PTR comparison also need separate validation.
+claimed non-monotonic timestamp contribution is now descriptive and zero in
+the automatic pipeline. [Received timing](received-timing.md) documents schema
+3's nullable `skew_s`, adjacent comparisons and reference-time observations.
+Missing timestamps/timezones are explicit parsing limitations. Standalone legacy
+caller diagnostics and HELO/PTR comparison still need separate validation.
 
-## Verification scope
+## IP provenance verification (preceding schema 2 stage)
 
 Twenty-one contracts cover field provenance, IPv4/IPv6 precedence, complete mapped
 literals, comments, multiple IPs, missing/duplicate/unsupported clauses, limits,
@@ -143,7 +143,9 @@ available. Against the preceding boundary fix, all 240 corpus artifacts above
 remain identical, with valid original bytes/seals and matching source hashes.
 
 Independent sender authenticity, binary classifier accuracy, speedup and the
-historical four-hour online analysis remain unestablished. Remaining timestamp,
-relay and legacy diagnostics, domain/brand/non-ASCII heuristics, clean installation
+historical four-hour online analysis remain unestablished. The subsequent
+[timing audit](received-timing.md) addresses adjacent availability and unsupported
+relay interpretations. Complete calendar/trace validation, legacy diagnostics,
+domain/brand/non-ASCII heuristics, clean installation
 and an independent holdout remain outstanding. UI and the Linux detonation lab
 are deferred. The no-egress policy is an application guard, not OS isolation.

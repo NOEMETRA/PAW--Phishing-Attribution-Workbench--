@@ -69,7 +69,7 @@ def main():
             assert read(case/'execution.json')['no_egress'] is True
             path,origin,anomalies,score,coverage = [read(case/file) for file in (
                 'received_path.json','origin.json','received_anomalies.json','report/score.json','analysis_coverage.json')]
-            assert path['received_schema_version'] == 2
+            assert path['received_schema_version'] == 3
             value, = path['ordered_hops']
             assert value['raw'] == lines[name][0]+DATE
             assert value['ip_observation']['verified'] is False

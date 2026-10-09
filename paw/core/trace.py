@@ -585,7 +585,8 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
     ip = origin.get("ip") or ""
     ip_res = ip_rdap(ip) if ip else {}
     origin_out = {"ip": ip, "asn": ip_res.get("asn"), "org": ip_res.get("asn_org"), "cc": ip_res.get("cc"), "abuse": ip_res.get("abuse", []),
-                  "time_utc": origin.get("date"), "helo": origin.get("helo"), "ptr": origin.get("ptr"), "skew_s": origin.get("skew_s",0),
+                  "time_utc": origin.get("date"), "helo": origin.get("helo"), "ptr": origin.get("ptr"), "skew_s": origin.get("skew_s"),
+                  'timing_observation':origin.get('timing_observation'),
                   "reputation": check_ip_reputation(ip),
                   "status": "candidate" if ip else "unavailable", "source": "Received header",
                   "verified": False, "limitation": "Header chain and receiver boundary are not independently authenticated",
@@ -996,9 +997,9 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
     # Score
     suspicious_asn = False  # could be enhanced with local list
     ns_mx_recurrent = False # could be enhanced with local list
-    # By-host syntax is descriptive; single labels and address literals cannot
-    # establish malicious routing or a verified receiver boundary.
-    hop_diag = {"skew_s": origin.get("skew_s",0), "helo_ptr_match": origin.get("helo_ptr_match"), "fqdn_ok": None}
+    # Timestamp differences and By-host syntax are unverified descriptions,
+    # not evidence of malicious routing or a verified receiver boundary.
+    hop_diag = {"skew_s": None, "helo_ptr_match": origin.get("helo_ptr_match"), "fqdn_ok": None}
     # Load detonation/canary data for scoring bonuses
     detonation_endpoints = []
     canary_ips = []
@@ -1032,6 +1033,12 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
         'parsing_issues':[{'header_index':h['header_index'],'issues':h['parsing']['issues']} for h in hops if h['parsing']['issues']],
         'receiver_boundary':anomalies['receiver_boundary'],
         'descriptive_components':['received_private_ip_before_boundary','received_invalid_fqdn']}
+    timing = anomalies['timing_observations']
+    stage_status['received_timing'] = {'status':timing['status'],'verified':False,
+        'schema_version':timing['timing_schema_version'],'comparison_status':timing['comparison_status'],
+        'adjacent_pair_count':len(timing['adjacent_pairs']),
+        'available_pair_count':sum(pair['status']=='completed' for pair in timing['adjacent_pairs']),
+        'interpretation_status':timing['interpretation_status']}
     correlations = correlate_campaigns(os.path.dirname(case_dir))
     stage_status['campaign_correlation'] = {'status':correlations['status'], 'reason':correlations['reason']}
     stage_status['stix_export'] = {'status':'unavailable' if stix else 'skipped',
@@ -1314,8 +1321,8 @@ def print_beautiful_summary(case_dir: str, case_id: str, score: dict, ip: str, i
     
     # Check anomalies
     anomalies = read_json(os.path.join(case_dir, "received_anomalies.json")) or {}
-    if anomalies.get("suspicious_relay_chain"):
-        findings.append("🟡 Suspicious relay chain detected")
+    if (anomalies.get('timing_observations') or {}).get('repeated_ip_claims'):
+        findings.append('Repeated Received IP claims; relay behavior unverified')
     
     # Check auth failures
     if auth.get("dmarc", {}).get("inferred_result") == "none":

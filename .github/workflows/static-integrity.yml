@@ -37,6 +37,9 @@ jobs:
       - name: Verify scoped Received IP evidence and unverified receiver boundary
         run: python -m unittest discover -s tests -p 'test_received_contracts.py' -v
 
+      - name: Verify adjacent timestamp claims and neutral relay observations
+        run: python -m unittest discover -s tests -p 'test_received_timing_contracts.py' -v
+
       - name: Verify content observations cannot infer safety or authorize actions
         run: python -m unittest discover -s tests -p 'test_content_contracts.py' -v
 
@@ -93,3 +96,6 @@ jobs:
 
       - name: Verify real offline Received IP provenance and descriptive categories
         run: python tests/integration_received_real.py
+
+      - name: Verify real offline Received timing observations and score parity
+        run: python tests/integration_received_timing_real.py

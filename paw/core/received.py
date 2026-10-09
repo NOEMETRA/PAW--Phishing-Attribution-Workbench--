@@ -1,11 +1,12 @@
 
-import re, socket, datetime, ipaddress
+import re, socket, ipaddress
 from email.utils import parsedate_to_datetime
 from typing import List, Dict, Any
 from .trust_boundary import classify_hop
 from .network_policy import network_allowed
 from .authentication import normalize_domain
 from .ip_observations import classify_ip
+from .received_timing import adjacent_timestamp_observations
 
 MAX_RECEIVED_CHARACTERS = 65536
 IP_TOKEN_CHARACTER = r'[\w.@:%/\[\]-]'
@@ -250,21 +251,20 @@ def normalize_received(received_lines: List[str]) -> Dict[str, Any]:
             'source':'provider_hostname_heuristic','limitation':'Provider names do not establish the recipient trust boundary'}
     # Received headers are prepended. Keep chain order; never sort by untrusted dates.
     hops_sorted = list(reversed(hops))
-    # compute skew
-    prev_dt = None
-    for h in hops_sorted:
-        cur = datetime.datetime.fromisoformat(h["date"]) if h["date"] else None
-        if prev_dt and cur:
-            h["skew_s"] = int((cur - prev_dt).total_seconds())
-        else:
-            h["skew_s"] = 0
-        prev_dt = cur if cur else prev_dt
+    pairs = adjacent_timestamp_observations(hops_sorted)
+    for index,h in enumerate(hops_sorted):
+        observation = pairs[index-1] if index else {
+            'status':'not_evaluated','delta_seconds':None,'result':None,
+            'source':'Adjacent Received timestamp claims','verified':False,
+            'reason':'No preceding Received hop'}
+        h['timing_observation'] = observation
+        h['skew_s'] = observation['delta_seconds']
         h["helo_ptr_match"] = (
             None if not network_allowed() or not h.get('ptr') or not h.get('helo') else
             bool(h.get("ptr")) and bool(h.get("helo")) and
             h["ptr"].split(".")[0].lower() == h["helo"].split(".")[0].lower()
         )
     # origin candidate: first hop not belonging to local MX (caller will filter)
-    return {"ordered_hops": hops_sorted, "received_schema_version":2,
+    return {"ordered_hops": hops_sorted, "received_schema_version":3,
             "status": 'partial' if any(h['parsing']['status']=='partial' for h in hops) else "parsed" if hops else "unavailable",
             "order_source": "Received header position", "verified": False}

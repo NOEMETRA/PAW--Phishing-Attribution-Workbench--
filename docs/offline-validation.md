@@ -105,6 +105,10 @@ The [Received audit](received-evidence.md) scopes selected IPs to supported From
 clauses, preserves other candidates and removes unsupported private-address and
 FQDN-only contributions. Recipient boundaries remain explicitly unevaluated;
 timestamp/relay heuristics and other domain signals still need validation.
+The subsequent [timing audit](received-timing.md) leaves missing adjacent
+comparisons null, retains timestamp/address observations and removes unsupported
+timestamp risk and relay/manipulation interpretations. Clocks and delivery remain
+unverified; independent accuracy and remaining domain/legacy work are still open.
 
 Codex review is requested in GitHub PR comments. Treat the review as an additional
 check and resolve actionable findings with reproductions and focused tests; do
