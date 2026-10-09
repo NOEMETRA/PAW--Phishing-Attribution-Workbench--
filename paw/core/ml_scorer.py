@@ -29,11 +29,11 @@ class HeuristicContentScorer:
                                 'sender_pattern_score': 0.5}
 
     @staticmethod
-    def _matching_words(text, words):
+    def _matching_words(content_fields, words):
         matches = []
         for word in words:
             pattern = r'(?<!\w)' + r'\s+'.join(re.escape(part) for part in word.split()) + r'(?!\w)'
-            if re.search(pattern, text, re.IGNORECASE):
+            if any(re.search(pattern, text, re.IGNORECASE) for text in content_fields):
                 matches.append(word)
         return matches
 
@@ -74,13 +74,16 @@ class HeuristicContentScorer:
             raise TypeError('Content assessment requires textual subject, body and from fields')
         # Lexical content rules use subject/body. Sender spelling has its own
         # diagnostic, so a display name cannot inject urgency into body evidence.
-        content = fields['subject'] + ' ' + fields['body']
-        urgency = self._matching_words(content, self.urgency_words)
-        threats = self._matching_words(content, self.threat_words)
+        content_fields = (fields['subject'], fields['body'])
+        # Joined text is only for descriptive statistics. Phrase/pattern evidence
+        # must exist within an original field, never across this synthetic space.
+        content = ' '.join(content_fields)
+        urgency = self._matching_words(content_fields, self.urgency_words)
+        threats = self._matching_words(content_fields, self.threat_words)
         patterns = [pattern for pattern in self.suspicious_patterns
-                    if re.search(pattern, content, re.IGNORECASE)]
-        danish = self._matching_words(content, ['konto', 'vil', 'blive', 'bekræft'])
-        english = self._matching_words(content, ['account', 'verify', 'confirm', 'login'])
+                    if any(re.search(pattern, text, re.IGNORECASE) for text in content_fields)]
+        danish = self._matching_words(content_fields, ['konto', 'vil', 'blive', 'bekræft'])
+        english = self._matching_words(content_fields, ['account', 'verify', 'confirm', 'login'])
         mixed = bool(danish and english)
         sender_score, sender_patterns, sender_syntax = self._sender_patterns(fields['from'])
         features = {'urgency_score': len(urgency), 'threat_score': len(threats),

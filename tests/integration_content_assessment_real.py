@@ -26,13 +26,18 @@ def main():
                   'long.eml': 'a' * 10000,
                   'style.eml': 'A' * 600 + '!!!???',
                   'indicators.eml': 'URGENT: verify your account. ID: 123456. Konto login.',
-                  'incidental.eml': 'refundability importantissimo village login'}
+                  'incidental.eml': 'refundability importantissimo village login',
+                  'split-urgency.eml': 'required',
+                  'split-threat.eml': 'your account',
+                  'split-pattern.eml': 'team'}
+        subjects = {'split-urgency.eml': 'action', 'split-threat.eml': 'verify',
+                    'split-pattern.eml': 'security'}
         originals = {}
         for name, body in bodies.items():
             message = EmailMessage(policy=policy.SMTP)
             message['From'] = 'regression@example.invalid'
             message['To'] = 'recipient@example.invalid'
-            message['Subject'] = 'Content contract fixture'
+            message['Subject'] = subjects.get(name, 'Content contract fixture')
             message['X-PAW-Fixture'] = 'constructed regression; not classifier accuracy ground truth'
             message.set_content(body)
             originals[name] = message.as_bytes()
@@ -65,7 +70,8 @@ def main():
             assert 'content_length' not in auxiliary['contributions']
             observed[name] = auxiliary
         assert set(observed) == set(bodies)
-        for name in ('short.eml', 'long.eml', 'style.eml', 'incidental.eml'):
+        for name in ('short.eml', 'long.eml', 'style.eml', 'incidental.eml',
+                     'split-urgency.eml', 'split-threat.eml', 'split-pattern.eml'):
             assert observed[name]['phishing_score'] == 0, (name, observed[name])
             assert observed[name]['recommendations']['flag_for_review'] is False
         assert observed['long.eml']['features']['content_length'] > observed['short.eml']['features']['content_length']
@@ -74,7 +80,7 @@ def main():
         assert indicator['recommendations']['flag_for_review'] is True
         assert 'verify your account' in indicator['evidence']['threat_score']
         assert indicator['features']['mixed_languages'] == 1
-        print('PASS: 5 real full --no-egress cases; originals, seals, content evidence and action contracts verified')
+        print('PASS: 8 real full --no-egress cases; originals, seals, field boundaries, content evidence and action contracts verified')
 
 
 if __name__ == '__main__':

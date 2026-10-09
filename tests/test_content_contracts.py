@@ -80,6 +80,34 @@ class ContentContracts(unittest.TestCase):
         self.assertIn('action required', result['evidence']['urgency_score'])
         self.assertIn('verify your account', result['evidence']['threat_score'])
 
+    def test_phrases_cannot_be_created_across_subject_body_boundary(self):
+        for phrase in self.scorer.urgency_words + self.scorer.threat_words:
+            words = phrase.split()
+            for cut in range(1, len(words)):
+                with self.subTest(phrase=phrase, cut=cut):
+                    result = self.scorer.score_email({'subject': ' '.join(words[:cut]),
+                                                     'body': ' '.join(words[cut:])})
+                    self.assertEqual(result['phishing_score'], 0)
+                    self.assertFalse(result['recommendations']['flag_for_review'])
+
+    def test_regex_patterns_cannot_cross_fields_either(self):
+        for subject, body in (('security', 'team'), ('customer', 'support'),
+                              ('technical', 'support'), ('ID:', 'abc')):
+            with self.subTest(subject=subject, body=body):
+                split = self.scorer.score_email({'subject': subject, 'body': body})
+                self.assertEqual(split['features']['suspicious_patterns'], 0)
+                self.assertEqual(split['phishing_score'], 0)
+                complete = self.scorer.score_email({'body': subject + '\n' + body})
+                self.assertGreater(complete['features']['suspicious_patterns'], 0)
+
+    def test_complete_rules_in_both_fields_are_not_double_counted(self):
+        single = self.scorer.score_email({'body': 'Action required: security team'})
+        both = self.scorer.score_email({'subject': 'ACTION\tREQUIRED: security team',
+                                       'body': 'Action required: security team'})
+        self.assertEqual(single['evidence'], both['evidence'])
+        self.assertEqual(single['contributions'], both['contributions'])
+        self.assertEqual(single['phishing_score'], both['phishing_score'])
+
     def test_sender_display_name_does_not_supply_address_patterns(self):
         ordinary = self.scorer.score_email({'from': 'ordinary@example.org'})
         display = self.scorer.score_email({'from': '"Project 123456 -- a.b.c.xyz" <ordinary@example.org>'})

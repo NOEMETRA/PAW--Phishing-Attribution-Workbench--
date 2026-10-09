@@ -28,7 +28,11 @@ probability or phishing verdict. Old and new scores are not directly comparable.
 - Length, original-case capitalization ratio and punctuation are descriptive
   features only. Appending neutral text or punctuation cannot add to the sum.
 - Matching uses word boundaries and accepts whitespace between phrase words.
-  Subject and body supply lexical content; `From` display names do not supply
+  Phrase and regex matches are searched independently within subject and body;
+  joining fields cannot create evidence. Each rule contributes once even when
+  both fields match it. Language co-occurrence can use words actually present
+  in different fields. Subject and body supply lexical content; `From` display
+  names do not supply
   content phrases. This is not semantic understanding, intent or quotation analysis.
 - Sender address spelling is `sender_pattern_score`, replacing the misleading
   feature name `sender_reputation`. It describes digits, hyphens, dots and listed
@@ -61,13 +65,13 @@ triage remain open work; this fix does not establish classifier accuracy.
 `tests/test_content_contracts.py` covers neutral length/style, missing sender,
 word boundaries, whitespace/case, evidence/contribution consistency, legacy
 imports, offline operation and separation from the final attribution score.
-`tests/integration_content_assessment_real.py` runs five constructed EMLs through
+`tests/integration_content_assessment_real.py` runs eight constructed EMLs through
 the actual supervised `full --no-egress` CLI and verifies exact originals, seals
 and persisted artifact contracts. Fixtures are regression inputs, not an accuracy
 corpus. Both are included in GitHub CI.
 
-Windows validation on 9 October 2026: 155 contract tests, 150 passed and five
-POSIX-only skips; five real supervised full-CLI regression cases passed. The 20
+Initial Windows validation on 9 October 2026: 155 contract tests, 150 passed and
+five POSIX-only skips; five real supervised full-CLI regression cases passed. The 20
 private original EMLs were rerun through `full --no-egress`: all originals and
 seals verified, URL/evidence inventories and complete final score artifacts
 unchanged from the preceding engine run. All 20 auxiliary artifacts now state
@@ -78,3 +82,14 @@ The original-EML run took 31.914 s with 126.75 MiB peak sampled process-tree RSS
 (50 ms sampling). This is an observed offline workload, not a speedup claim,
 accuracy measurement or reproduction of the historical four-hour online run.
 Raw messages, per-message diagnostics and private run artifacts stay outside Git.
+
+The GitHub review found a remaining field-boundary defect: subject `action` plus
+body `required` manufactured evidence for `action required`. This also existed
+in the pre-PR scorer. Matching now runs independently per field, including regex
+patterns, and merges matching rules without double counting. Regression tests
+reproduce all splits of multiword rules, split regex patterns and genuine
+same-field matches. Final Windows validation: 158 contracts (153 passed, five
+POSIX skips) and eight real full-CLI cases. A fresh 20-original-EML offline run
+verified originals and seals, unchanged auxiliary artifacts, URL/evidence
+inventories and final scores. It took 23.803 s with 120.93 MiB sampled tree RSS;
+these observations do not establish a speedup or accuracy.
