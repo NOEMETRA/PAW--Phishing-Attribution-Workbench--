@@ -9,11 +9,16 @@ enabling proactive detection of changes, automated alerts, and campaign lifecycl
 __version__ = "1.0.0"
 __author__ = "PAW Team"
 
-from .config import SentinelConfig
-from .monitor import SentinelMonitor
-from .database import CampaignDatabase
-from .file_monitor import FileMonitor
-from .ip_analyzer import IPAnalyzer
-from .intelligence_analyzer import IntelligenceAnalyzer
-
 __all__ = ['SentinelConfig', 'SentinelMonitor', 'CampaignDatabase', 'FileMonitor', 'IPAnalyzer', 'IntelligenceAnalyzer']
+
+
+def __getattr__(name):
+    # Local integrity monitoring must not import optional geographic plotting.
+    from importlib import import_module
+    modules = {'SentinelConfig':'config', 'SentinelMonitor':'monitor',
+               'CampaignDatabase':'database', 'FileMonitor':'file_monitor',
+               'IPAnalyzer':'ip_analyzer', 'IntelligenceAnalyzer':'intelligence_analyzer'}
+    if name not in modules: raise AttributeError(name)
+    value = getattr(import_module('.'+modules[name], __name__), name)
+    globals()[name] = value
+    return value

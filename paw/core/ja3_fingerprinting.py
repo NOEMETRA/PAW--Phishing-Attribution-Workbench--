@@ -11,52 +11,9 @@ class JA3FingerprintAnalyzer:
     """Analyze JA3 and JA3S fingerprints for TLS client/server identification"""
 
     def __init__(self):
-        # Known JA3 fingerprints for common clients
-        self.known_ja3_fingerprints = {
-            # Chrome
-            'b32309a26951912be7dba376398abc3b': 'Chrome_91',
-            'b3025039c0d083ca5a35c0f5c0d083ca': 'Chrome_90',
-            'b2c6c2d1c3f3e4f5a6b7c8d9e0f1a2b': 'Chrome_89',
-
-            # Firefox
-            'c3d6e7f8a9b0c1d2e3f4a5b6c7d8e9': 'Firefox_89',
-            'd4e7f8a9b0c1d2e3f4a5b6c7d8e9f0': 'Firefox_88',
-
-            # Safari
-            'e5f8a9b0c1d2e3f4a5b6c7d8e9f0a1': 'Safari_14',
-            'f6a9b0c1d2e3f4a5b6c7d8e9f0a1b2': 'Safari_13',
-
-            # Edge
-            'a7b0c1d2e3f4a5b6c7d8e9f0a1b2c3': 'Edge_91',
-            'b8c1d2e3f4a5b6c7d8e9f0a1b2c3d4': 'Edge_90',
-
-            # Common malware/bot JA3 patterns
-            'malware_pattern_1': 'Malware_Bot_1',
-            'malware_pattern_2': 'Malware_Bot_2',
-        }
-
-        # Known JA3S fingerprints for servers
-        self.known_ja3s_fingerprints = {
-            # Cloudflare
-            'c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6': 'Cloudflare',
-            'd3e4f5a6b7c8d9e0f1a2b3c4d5e6f7': 'Cloudflare',
-
-            # AWS ALB
-            'e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8': 'AWS_ALB',
-            'f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9': 'AWS_ALB',
-
-            # Nginx
-            'a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0': 'Nginx',
-            'b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1': 'Nginx',
-
-            # Apache
-            'c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2': 'Apache',
-            'd9e0f1a2b3c4d5e6f7a8b9c0d1e2f3': 'Apache',
-
-            # IIS
-            'e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4': 'IIS',
-            'f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5': 'IIS',
-        }
+        # Unverified built-in fingerprint labels removed.
+        self.known_ja3_fingerprints = {}
+        self.known_ja3s_fingerprints = {}
 
     def analyze_ja3_from_network_logs(self, network_logs: List[Dict]) -> Dict[str, Any]:
         """Extract and analyze JA3 fingerprints from network capture logs"""
@@ -81,7 +38,7 @@ class JA3FingerprintAnalyzer:
 
                     if tls_data:
                         # Client fingerprint
-                        ja3_hash = self._extract_ja3_from_client_hello(tls_data)
+                        ja3_hash = self._extract_ja3_from_client_hello(tls_data.get('client_hello', tls_data))
                         if ja3_hash and ja3_hash not in ja3_hashes:
                             ja3_hashes.add(ja3_hash)
                             result['ja3_fingerprints'].append({
@@ -93,7 +50,7 @@ class JA3FingerprintAnalyzer:
                             })
 
                         # Server fingerprint
-                        ja3s_hash = self._extract_ja3s_from_server_hello(tls_data)
+                        ja3s_hash = self._extract_ja3s_from_server_hello(tls_data.get('server_hello', tls_data))
                         if ja3s_hash and ja3s_hash not in ja3s_hashes:
                             ja3s_hashes.add(ja3s_hash)
                             result['ja3s_fingerprints'].append({
@@ -117,23 +74,28 @@ class JA3FingerprintAnalyzer:
         # Generate attribution hints
         result['attribution_hints'] = self._generate_ja3_attribution_hints(result)
 
+        result['status'] = 'completed' if ja3_hashes or ja3s_hashes else 'unavailable'
+        if result['status'] == 'unavailable':
+            result['reason'] = 'No captured TLS handshake fields; HTTP logs cannot establish JA3'
         return result
 
     def _extract_ja3_from_client_hello(self, client_hello: Dict) -> Optional[str]:
         """Extract JA3 fingerprint from ClientHello data"""
         try:
             # JA3 = SSLVersion,Cipher,SSLExtension,EllipticCurve,EllipticCurvePointFormat
-            version = client_hello.get('version', '')
+            if 'version' not in client_hello or 'cipher_suites' not in client_hello:
+                return None
+            version = client_hello['version']
             ciphers = client_hello.get('cipher_suites', [])
             extensions = client_hello.get('extensions', [])
             curves = client_hello.get('elliptic_curves', [])
             formats = client_hello.get('ec_point_formats', [])
 
             # Convert to strings and sort
-            cipher_str = '-'.join(str(c) for c in sorted(ciphers))
-            extension_str = '-'.join(str(e) for e in sorted(extensions))
-            curve_str = '-'.join(str(c) for c in sorted(curves))
-            format_str = '-'.join(str(f) for f in sorted(formats))
+            cipher_str = '-'.join(str(c) for c in [v for v in ciphers if v not in {0x0a0a + 0x1010 * i for i in range(16)}])
+            extension_str = '-'.join(str(e) for e in [v for v in extensions if v not in {0x0a0a + 0x1010 * i for i in range(16)}])
+            curve_str = '-'.join(str(c) for c in [v for v in curves if v not in {0x0a0a + 0x1010 * i for i in range(16)}])
+            format_str = '-'.join(str(f) for f in formats)
 
             # Create JA3 string
             ja3_string = f"{version},{cipher_str},{extension_str},{curve_str},{format_str}"
@@ -151,12 +113,14 @@ class JA3FingerprintAnalyzer:
         """Extract JA3S fingerprint from ServerHello data"""
         try:
             # JA3S = SSLVersion,Cipher,SSLExtension
-            version = server_hello.get('version', '')
+            if 'version' not in server_hello or 'cipher_suite' not in server_hello:
+                return None
+            version = server_hello['version']
             cipher = server_hello.get('cipher_suite', '')
             extensions = server_hello.get('extensions', [])
 
             # Convert extensions to string and sort
-            extension_str = '-'.join(str(e) for e in sorted(extensions))
+            extension_str = '-'.join(str(e) for e in [v for v in extensions if v not in {0x0a0a + 0x1010 * i for i in range(16)}])
 
             # Create JA3S string
             ja3s_string = f"{version},{cipher},{extension_str}"

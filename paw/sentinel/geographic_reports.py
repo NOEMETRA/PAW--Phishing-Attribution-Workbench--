@@ -103,8 +103,7 @@ class GeographicReporter:
     def _get_victim_data(self, case_id: str = None, min_confidence: float = 0.0) -> List[Dict]:
         """Get victim data from database."""
         if not self.db:
-            # Return mock data for testing
-            return self._get_mock_victim_data()
+            raise RuntimeError("Geographic reports require a real database connection")
 
         try:
             victims = self.db.get_victim_intelligence()
@@ -130,67 +129,6 @@ class GeographicReporter:
         except Exception as e:
             print(f"❌ Errore recupero dati vittime: {e}")
             return []
-
-    def _get_mock_victim_data(self) -> List[Dict]:
-        """Return mock victim data for testing."""
-        return [
-            {
-                'id': 1,
-                'victim_ip': '192.168.1.100',
-                'interaction_type': 'victim',
-                'interaction_confidence': 0.8,
-                'geolocation_data': {
-                    'country': 'Italy',
-                    'countryCode': 'IT',
-                    'region': 'Lazio',
-                    'city': 'Rome',
-                    'lat': 41.9028,
-                    'lon': 12.4964
-                }
-            },
-            {
-                'id': 2,
-                'victim_ip': '185.220.101.1',
-                'interaction_type': 'attacker',
-                'interaction_confidence': 0.9,
-                'geolocation_data': {
-                    'country': 'Russia',
-                    'countryCode': 'RU',
-                    'region': 'Moscow',
-                    'city': 'Moscow',
-                    'lat': 55.7558,
-                    'lon': 37.6176
-                }
-            },
-            {
-                'id': 3,
-                'victim_ip': '91.193.75.123',
-                'interaction_type': 'attacker',
-                'interaction_confidence': 0.7,
-                'geolocation_data': {
-                    'country': 'Netherlands',
-                    'countryCode': 'NL',
-                    'region': 'North Holland',
-                    'city': 'Amsterdam',
-                    'lat': 52.3676,
-                    'lon': 4.9041
-                }
-            },
-            {
-                'id': 4,
-                'victim_ip': '8.8.8.8',
-                'interaction_type': 'suspicious',
-                'interaction_confidence': 0.6,
-                'geolocation_data': {
-                    'country': 'United States',
-                    'countryCode': 'US',
-                    'region': 'California',
-                    'city': 'Mountain View',
-                    'lat': 37.3861,
-                    'lon': -122.084
-                }
-            }
-        ]
 
     def _analyze_geographic_distribution(self, victims: List[Dict]) -> Dict[str, Any]:
         """Analyze geographic distribution of victims."""

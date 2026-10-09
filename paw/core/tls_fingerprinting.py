@@ -245,23 +245,9 @@ class TLSFingerprintAnalyzer:
         return False
 
     def _extract_ja3_from_client_hello(self, client_hello: Dict) -> Optional[str]:
-        """Extract JA3 fingerprint from ClientHello data"""
-        try:
-            # JA3 = SSLVersion,Cipher,SSLExtension,EllipticCurve,EllipticCurvePointFormat
-            version = client_hello.get('version', '')
-            ciphers = ','.join(str(c) for c in client_hello.get('cipher_suites', []))
-            extensions = ','.join(str(e) for e in client_hello.get('extensions', []))
-            curves = ','.join(str(c) for c in client_hello.get('elliptic_curves', []))
-            formats = ','.join(str(f) for f in client_hello.get('ec_point_formats', []))
+        from .ja3_fingerprinting import JA3FingerprintAnalyzer
+        return JA3FingerprintAnalyzer()._extract_ja3_from_client_hello(client_hello)
 
-            ja3_string = f"{version},{ciphers},{extensions},{curves},{formats}"
-            ja3_hash = hashlib.md5(ja3_string.encode()).hexdigest()
-
-            return ja3_hash
-
-        except Exception as e:
-            logger.warning(f"JA3 extraction failed: {e}")
-            return None
 
 def analyze_tls_fingerprints(hostname: str, network_logs: List[Dict] = None) -> Dict[str, Any]:
     """Convenience function for complete TLS analysis"""

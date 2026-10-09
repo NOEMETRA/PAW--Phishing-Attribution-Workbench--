@@ -19,6 +19,7 @@ def analyze_received_anomalies(hops: list) -> dict:
     }
 
     if not hops:
+        anomalies.update(status='not_evaluated', reason='No Received headers')
         return anomalies
 
     # Check for non-monotonic dates
@@ -49,7 +50,7 @@ def analyze_received_anomalies(hops: list) -> dict:
 
     # Count invalid FQDNs
     for hop in hops:
-        if not hop.get("fqdn_ok", False):
+        if hop.get("fqdn_ok") is False:
             anomalies["invalid_fqdn_count"] += 1
 
     # Check for impossible negative skew (time going backwards)
@@ -62,6 +63,7 @@ def analyze_received_anomalies(hops: list) -> dict:
     # Advanced spoofing detection
     anomalies.update(_detect_advanced_spoofing(hops))
 
+    anomalies.update(status='heuristic_observations', verified=False)
     return anomalies
 
 def _detect_advanced_spoofing(hops: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -79,7 +81,7 @@ def _detect_advanced_spoofing(hops: List[Dict[str, Any]]) -> Dict[str, Any]:
         ip = hop.get("ip")
         fqdn = hop.get("fqdn")
         if ip and fqdn:
-            if not _validate_ip_fqdn_consistency(ip, fqdn):
+            if _validate_ip_fqdn_consistency(ip, fqdn) is False:
                 results["ip_fqdn_mismatch"] = True
                 results["spoofing_patterns"].append("ip_fqdn_mismatch")
 
@@ -105,6 +107,8 @@ def _validate_ip_fqdn_consistency(ip: str, fqdn: str) -> bool:
     """Validate if IP and FQDN are consistent."""
     try:
         # Basic validation - check if FQDN resolves to IP or vice versa
+        from .network_policy import network_allowed
+        if not network_allowed(): return None
         import socket
         resolved_ips = socket.gethostbyname_ex(fqdn)[2]
         return ip in resolved_ips
@@ -112,7 +116,7 @@ def _validate_ip_fqdn_consistency(ip: str, fqdn: str) -> bool:
         # If resolution fails, check for obvious mismatches
         if fqdn and not re.match(r'^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', fqdn):
             return False
-        return True
+        return None
 
 def _detect_suspicious_relay_chain(hops: List[Dict[str, Any]]) -> bool:
     """Detect suspicious patterns in relay chaining."""
@@ -169,7 +173,7 @@ def _detect_timestamp_manipulation(hops: List[Dict[str, Any]]) -> bool:
     # Check for future timestamps
     now = datetime.datetime.now(datetime.timezone.utc)
     for ts in timestamps:
-        if ts > now + datetime.timedelta(hours=1):  # More than 1 hour in future
+        if ts.tzinfo is not None and ts > now + datetime.timedelta(hours=1):  # More than 1 hour in future
             return True
 
     return False

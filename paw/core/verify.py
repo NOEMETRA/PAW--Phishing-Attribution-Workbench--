@@ -9,15 +9,34 @@ def verify_case(case_dir):
         print("[verify] evidence index or root missing")
         return False
     with open(idx_path,"r",encoding="utf-8") as f: idx = json.load(f)
+    # Modern cases enumerate all files. Added/unindexed artifacts must fail verification.
+    scope_path = os.path.join(case_dir, 'evidence', 'inventory_scope.json')
+    if os.path.exists(scope_path):
+        from .evidence import file_inventory
+        try:
+            actual = file_inventory(case_dir)
+            if set(actual) != set(idx):
+                print('[verify] unindexed or missing case files')
+                return False
+        except ValueError as exc:
+            print(f'[verify] invalid inventory: {exc}')
+            return False
     # recompute file hashes
     recomputed = {}
     for rel, h in idx.items():
-        full = os.path.join(case_dir, rel)
+        from pathlib import Path
+        root = Path(case_dir).resolve()
+        full = (root / rel).resolve()
+        if not full.is_relative_to(root):
+            print('[verify] indexed path outside case')
+            return False
         if not os.path.exists(full):
             print(f"[verify] missing file in case: {rel}")
             return False
         with open(full, "rb") as fh:
-            recomputed[rel] = blake3.blake3(fh.read()).hexdigest()
+            digest = blake3.blake3()
+            while chunk := fh.read(1024*1024): digest.update(chunk)
+            recomputed[rel] = digest.hexdigest()
     if recomputed != idx:
         print("[verify] mismatch in evidence index")
         return False
@@ -47,5 +66,6 @@ def verify_case(case_dir):
             ok = False
     elif os.path.exists(anchor_path):
         print("[verify] Rekor anchored but no inclusion proof available")
+        ok = False
     
     return ok

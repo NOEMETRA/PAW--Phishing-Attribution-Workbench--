@@ -3,6 +3,7 @@
 Database management for Sentinel monitoring campaigns.
 """
 import sqlite3
+from contextlib import contextmanager, closing
 import json
 import os
 from datetime import datetime, timedelta
@@ -21,9 +22,15 @@ class CampaignDatabase:
             ensure_dir(db_dir)
         self._init_db()
 
+    @contextmanager
+    def connection(self):
+        with closing(sqlite3.connect(self.db_path)) as conn:
+            with conn:
+                yield conn
+
     def _init_db(self) -> None:
         """Initialize database tables."""
-        with sqlite3.connect(self.db_path) as conn:
+        with self.connection() as conn:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS campaigns (
                     id TEXT PRIMARY KEY,
@@ -125,7 +132,7 @@ class CampaignDatabase:
         """Add a new campaign to monitor."""
         campaign_id = f"sentinel_{case_id}_{int(datetime.now().timestamp())}"
 
-        with sqlite3.connect(self.db_path) as conn:
+        with self.connection() as conn:
             conn.execute("""
                 INSERT INTO campaigns (id, case_id, created_at, url, domain, metadata)
                 VALUES (?, ?, ?, ?, ?, ?)
@@ -143,7 +150,7 @@ class CampaignDatabase:
 
     def get_campaign(self, campaign_id: str) -> Optional[Dict[str, Any]]:
         """Get campaign details by ID."""
-        with sqlite3.connect(self.db_path) as conn:
+        with self.connection() as conn:
             row = conn.execute("""
                 SELECT * FROM campaigns WHERE id = ?
             """, (campaign_id,)).fetchone()
@@ -167,7 +174,7 @@ class CampaignDatabase:
     def get_active_campaigns(self) -> List[Dict[str, Any]]:
         """Get all active campaigns."""
         campaigns = []
-        with sqlite3.connect(self.db_path) as conn:
+        with self.connection() as conn:
             rows = conn.execute("""
                 SELECT * FROM campaigns WHERE status = 'active'
             """).fetchall()
@@ -190,7 +197,7 @@ class CampaignDatabase:
 
     def update_campaign_status(self, campaign_id: str, status: str) -> None:
         """Update campaign status."""
-        with sqlite3.connect(self.db_path) as conn:
+        with self.connection() as conn:
             conn.execute("""
                 UPDATE campaigns SET status = ? WHERE id = ?
             """, (status, campaign_id))
@@ -201,7 +208,7 @@ class CampaignDatabase:
                     screenshot_path: str = None, error_message: str = None,
                     metadata: Dict[str, Any] = None) -> None:
         """Record a monitoring check result."""
-        with sqlite3.connect(self.db_path) as conn:
+        with self.connection() as conn:
             conn.execute("""
                 INSERT INTO checks (campaign_id, check_time, status, response_time,
                                   http_status, content_hash, screenshot_path,
@@ -229,7 +236,7 @@ class CampaignDatabase:
     def record_alert(self, campaign_id: str, alert_type: str, message: str,
                     severity: str = "info", metadata: Dict[str, Any] = None) -> None:
         """Record an alert."""
-        with sqlite3.connect(self.db_path) as conn:
+        with self.connection() as conn:
             conn.execute("""
                 INSERT INTO alerts (campaign_id, alert_time, alert_type, severity,
                                   message, metadata)
@@ -247,7 +254,7 @@ class CampaignDatabase:
     def get_recent_checks(self, campaign_id: str, limit: int = 10) -> List[Dict[str, Any]]:
         """Get recent checks for a campaign."""
         checks = []
-        with sqlite3.connect(self.db_path) as conn:
+        with self.connection() as conn:
             rows = conn.execute("""
                 SELECT * FROM checks WHERE campaign_id = ?
                 ORDER BY check_time DESC LIMIT ?
@@ -271,7 +278,7 @@ class CampaignDatabase:
     def get_unacknowledged_alerts(self) -> List[Dict[str, Any]]:
         """Get unacknowledged alerts."""
         alerts = []
-        with sqlite3.connect(self.db_path) as conn:
+        with self.connection() as conn:
             rows = conn.execute("""
                 SELECT * FROM alerts WHERE acknowledged = 0
                 ORDER BY alert_time DESC
@@ -292,7 +299,7 @@ class CampaignDatabase:
 
     def acknowledge_alert(self, alert_id: int) -> None:
         """Mark an alert as acknowledged."""
-        with sqlite3.connect(self.db_path) as conn:
+        with self.connection() as conn:
             conn.execute("""
                 UPDATE alerts SET acknowledged = 1 WHERE id = ?
             """, (alert_id,))
@@ -302,7 +309,7 @@ class CampaignDatabase:
         """Clean up old check data and screenshots."""
         cutoff_date = (datetime.now() - timedelta(days=retention_days)).isoformat()
 
-        with sqlite3.connect(self.db_path) as conn:
+        with self.connection() as conn:
             # Delete old checks
             conn.execute("""
                 DELETE FROM checks WHERE check_time < ?
@@ -320,7 +327,7 @@ class CampaignDatabase:
     def add_victim_intelligence(self, victim_ip: str, victim_ua: str, phishing_url: str,
                                case_id: str = None, metadata: Dict[str, Any] = None) -> int:
         """Add victim intelligence data when a phishing click is detected."""
-        with sqlite3.connect(self.db_path) as conn:
+        with self.connection() as conn:
             cursor = conn.execute("""
                 INSERT INTO victim_intelligence
                 (victim_ip, victim_ua, click_time, phishing_url, case_id, metadata)
@@ -339,7 +346,7 @@ class CampaignDatabase:
 
     def get_victim_intelligence(self, victim_id: int = None, victim_ip: str = None) -> List[Dict[str, Any]]:
         """Get victim intelligence data."""
-        with sqlite3.connect(self.db_path) as conn:
+        with self.connection() as conn:
             if victim_id:
                 rows = conn.execute("""
                     SELECT * FROM victim_intelligence WHERE id = ?
@@ -382,7 +389,7 @@ class CampaignDatabase:
 
     def get_unanalyzed_victims(self, limit: int = 50) -> List[Dict[str, Any]]:
         """Get victims that haven't been fully analyzed yet."""
-        with sqlite3.connect(self.db_path) as conn:
+        with self.connection() as conn:
             rows = conn.execute("""
                 SELECT * FROM victim_intelligence
                 WHERE analyzed_status IN ('captured', 'analyzing')
@@ -413,7 +420,7 @@ class CampaignDatabase:
 
     def get_victim_statistics(self) -> Dict[str, Any]:
         """Get statistics about victim intelligence data."""
-        with sqlite3.connect(self.db_path) as conn:
+        with self.connection() as conn:
             # Total victims
             total_victims = conn.execute("""
                 SELECT COUNT(*) FROM victim_intelligence
@@ -506,7 +513,7 @@ class CampaignDatabase:
         """
         params.append(victim_id)
 
-        with sqlite3.connect(self.db_path) as conn:
+        with self.connection() as conn:
             conn.execute(query, params)
             conn.commit()
 
@@ -537,7 +544,7 @@ class CampaignDatabase:
 
     def get_victims_by_risk_score(self, min_score: int = 5) -> List[Dict[str, Any]]:
         """Get victims with risk score above threshold."""
-        with sqlite3.connect(self.db_path) as conn:
+        with self.connection() as conn:
             rows = conn.execute("""
                 SELECT * FROM victim_intelligence
                 WHERE risk_score >= ?
@@ -548,7 +555,7 @@ class CampaignDatabase:
 
     def get_victims_by_country(self, country: str) -> List[Dict[str, Any]]:
         """Get victims from specific country."""
-        with sqlite3.connect(self.db_path) as conn:
+        with self.connection() as conn:
             rows = conn.execute("""
                 SELECT * FROM victim_intelligence
                 WHERE json_extract(geolocation_data, '$.country') = ?
@@ -559,7 +566,7 @@ class CampaignDatabase:
 
     def get_attacker_correlations(self) -> List[Dict[str, Any]]:
         """Get potential attacker infrastructure correlations."""
-        with sqlite3.connect(self.db_path) as conn:
+        with self.connection() as conn:
             # Find networks with multiple victims
             rows = conn.execute("""
                 SELECT

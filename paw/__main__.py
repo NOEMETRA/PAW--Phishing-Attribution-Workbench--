@@ -1,8 +1,39 @@
 
 import argparse, os, sys, json, shutil
-from .core.trace import trace_sources
+import asyncio, uuid
+from pathlib import Path
+from .core.runtime import RunLimits, atomic_json, supervise, preserve_interrupted
 from .core.verify import verify_case
 from .core.exporter import export_case
+from .core.scoring import validate_deobfuscation_weight
+
+_analysis_limits = RunLimits()
+
+def trace_sources(src, lang, stix, abuse, anchor, no_egress, profile='default', deob_weight=.30):
+    """CLI and API share the same supervised worker and honest terminal states."""
+    control = Path.cwd()/'.paw-jobs'/uuid.uuid4().hex
+    control.mkdir(parents=True)
+    request, result = control/'request.json', control/'result.json'
+    atomic_json(request, {'file_path':str(Path(src).resolve()),'lang':lang,'stix':stix,
+        'abuse':abuse,'anchor':anchor,'no_egress':no_egress,'profile':profile,'deob_weight':deob_weight})
+    env = {'PYTHONPATH':str(Path(__file__).resolve().parents[1])}
+    try:
+        outcome = asyncio.run(supervise([sys.executable,'-X','utf8','-m','paw.web.worker',str(request),str(result)],
+            cwd=Path.cwd(), control=control, limits=_analysis_limits, env=env))
+    except KeyboardInterrupt:
+        preserve_interrupted(Path.cwd(), control, 'cancelled', 'CLI interrupted by operator')
+        print(f'Cancelled; evidence and logs preserved in {control}')
+        raise
+    with (control/'worker.log').open('rb') as log:
+        print(log.read(_analysis_limits.log_bytes).decode('utf-8', errors='replace'))
+    if outcome['status'] != 'exited':
+        preserve_interrupted(Path.cwd(), control, outcome['status'], outcome['error'])
+        raise RuntimeError(f"{outcome['status']}: {outcome['error']}; logs: {control}")
+    value = json.loads(result.read_text(encoding='utf-8')) if result.exists() else {}
+    if outcome['returncode'] or value.get('status') != 'completed':
+        preserve_interrupted(Path.cwd(), control, 'failed', value.get('error','Worker failed'))
+        raise RuntimeError(value.get('error',f'Worker failed; logs: {control}'))
+    return [str(Path.cwd()/'cases'/case_id) for case_id in value['case_ids']]
 
 # Suppress SSL verification warnings for security testing
 try:
@@ -46,7 +77,7 @@ def handle_error(error_type, message, details=None, suggestions=None):
             "suggestions": [
                 "Check your internet connection",
                 "Try again later",
-                "The --no-egress flag does not currently enforce network isolation",
+                "The --no-egress flag enforces application policy, not an OS sandbox",
                 "Use a firewall or isolated VM/network policy to block outbound traffic"
             ]
         },
@@ -91,6 +122,10 @@ def handle_error(error_type, message, details=None, suggestions=None):
     sys.exit(1)
 
 def main():
+    global _analysis_limits
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8', errors='replace')
     try:
         parser = argparse.ArgumentParser(
             prog="paw",
@@ -99,11 +134,11 @@ def main():
             epilog="""
 Examples:
   paw analyze email.eml                    # Quick analysis
-  paw analyze email.eml --forensic         # Full forensics
+  paw analyze email.eml --forensic         # Request optional anchoring
   paw analyze email.eml --stix --abuse     # With exports
   paw quick email.eml                      # Fast preset
   paw full email.eml                       # Complete analysis
-  paw forensic email.eml                   # Maximum detail
+  paw forensic email.eml                   # Strict profile, exports, optional anchoring
 
 For help: paw help <command>
         """
@@ -115,11 +150,11 @@ For help: paw help <command>
         p_analyze.add_argument("email", help="Path to .eml file or directory")
         p_analyze.add_argument("--profile", choices=["default", "strict", "conservative"], default="default",
                               help="Scoring profile")
-        p_analyze.add_argument("--stix", action="store_true", help="Export STIX bundle")
+        p_analyze.add_argument("--stix", action="store_true", help="Request STIX export; conformance currently unavailable")
         p_analyze.add_argument("--abuse", action="store_true", help="Generate abuse package")
-        p_analyze.add_argument("--forensic", action="store_true", help="Maximum detail analysis")
+        p_analyze.add_argument("--forensic", action="store_true", help="Request optional Rekor anchoring; does not change profile or enable exports")
         p_analyze.add_argument("--no-egress", action="store_true", help="Do not contact suspicious infra")
-        p_analyze.add_argument("--lang", default="en", help="Report language (en,it,da,fr,de,es,...)")
+        p_analyze.add_argument("--lang", default="en", help="Abuse-package language: it or en fallback; main reports remain English")
 
         # PRESET commands (shortcuts)
         p_quick = sub.add_parser("quick", help="Fast analysis, no egress")
@@ -127,28 +162,28 @@ For help: paw help <command>
 
         p_full = sub.add_parser("full", help="Complete analysis with detonation")
         p_full.add_argument("email", help="Path to .eml file")
-        p_full.add_argument("--lang", default="en", help="Report language (en,it,da,fr,de,es,...)")
-        p_full.add_argument("--stix", action="store_true", help="Export STIX bundle")
-        p_full.add_argument("--abuse", action="store_true", help="Generate abuse package")
+        p_full.add_argument("--lang", default="en", help="Abuse-package language: it or en fallback; main reports remain English")
+        p_full.add_argument("--stix", action="store_true", help="Compatibility flag: STIX is always requested by full; conformance unavailable")
+        p_full.add_argument("--abuse", action="store_true", help="Compatibility flag: abuse package is always enabled by full")
         p_full.add_argument("--no-egress", action="store_true", help="Do not contact suspicious infra")
 
-        p_forensic = sub.add_parser("forensic", help="Maximum detail + anchoring")
+        p_forensic = sub.add_parser("forensic", help="Strict profile + exports + optional anchoring")
         p_forensic.add_argument("email", help="Path to .eml file")
-        p_forensic.add_argument("--lang", default="en", help="Report language (en,it,da,fr,de,es,...)")
-        p_forensic.add_argument("--stix", action="store_true", help="Export STIX bundle")
-        p_forensic.add_argument("--abuse", action="store_true", help="Generate abuse package")
+        p_forensic.add_argument("--lang", default="en", help="Abuse-package language: it or en fallback; main reports remain English")
+        p_forensic.add_argument("--stix", action="store_true", help="Compatibility flag: STIX is always requested by forensic; conformance unavailable")
+        p_forensic.add_argument("--abuse", action="store_true", help="Compatibility flag: abuse package is always enabled by forensic")
         p_forensic.add_argument("--no-egress", action="store_true", help="Do not contact suspicious infra")
 
         # Legacy TRACE command (keep for compatibility)
         p_trace = sub.add_parser("trace", help="Legacy: use 'analyze' instead")
         p_trace.add_argument("--src", required=True, help="Path to .eml file or directory")
-        p_trace.add_argument("--lang", default="en", help="Report language (en,it,...)")
-        p_trace.add_argument("--stix", action="store_true", help="Export STIX bundle")
+        p_trace.add_argument("--lang", default="en", help="Abuse-package language: it or en fallback; main reports remain English")
+        p_trace.add_argument("--stix", action="store_true", help="Request STIX export; conformance currently unavailable")
         p_trace.add_argument("--abuse", action="store_true", help="Generate abuse package")
         p_trace.add_argument("--anchor", action="store_true", help="(Optional) Anchor Merkle root to Rekor")
         p_trace.add_argument("--no-egress", action="store_true", help="Do not contact suspicious infra")
         p_trace.add_argument("--profile", choices=["default", "strict", "conservative"], default="default", help="Scoring profile")
-        p_trace.add_argument("--deob-weight", type=float, default=0.30, help="Weight applied to deobfuscation suspicion")
+        p_trace.add_argument("--deob-weight", type=validate_deobfuscation_weight, default=0.30, help="Finite deobfuscation weight between 0 and 1")
 
         # Other commands remain the same
         p_verify = sub.add_parser("verify", help="Verify evidence integrity for a case")
@@ -189,8 +224,11 @@ For help: paw help <command>
         p_help.add_argument("topic", nargs="?", help="Command to get help for")
 
         # GUI command
-        p_gui = sub.add_parser("gui", help="Launch local Tkinter GUI for canary/tunnel control")
+        p_gui = sub.add_parser("gui", help="Launch the local email workbench")
         p_gui.add_argument("--debug", action="store_true", help="Enable debug logging")
+        p_gui.add_argument('--port',type=int,default=8765,help='Loopback port')
+        p_gui.add_argument('--data-dir',help='Analysis data directory (default: current directory)')
+        p_gui.add_argument('--no-browser',action='store_true',help='Start without automatically opening a browser')
 
         p_update = sub.add_parser("update", help="Update report with detonation/canary data")
         p_update.add_argument("--case", required=True, help="Path to case directory")
@@ -210,7 +248,14 @@ For help: paw help <command>
         p_geo.add_argument("--min-confidence", type=float, default=0.0, help="Minimum confidence threshold (0.0-1.0)")
         p_geo.add_argument("--output", choices=["html", "json", "both"], default="both", help="Output format")
 
+        for analysis_parser in (p_analyze, p_quick, p_full, p_forensic, p_trace):
+            analysis_parser.add_argument('--deadline', type=float, default=900, help='Overall analysis deadline in seconds')
+            analysis_parser.add_argument('--stage-timeout', type=float, default=120, help='Maximum elapsed time per analysis stage')
+            analysis_parser.add_argument('--memory-mib', type=int, default=2048, help='Worker memory budget in MiB')
         args = parser.parse_args()
+        if args.cmd in {'analyze','quick','full','forensic','trace'}:
+            _analysis_limits = RunLimits(wall_seconds=args.deadline, stage_seconds=args.stage_timeout,
+                memory_bytes=args.memory_mib * 1024**2)
 
         # Handle new commands
         if args.cmd == "analyze":
@@ -231,13 +276,13 @@ For help: paw help <command>
             # Full preset: complete with exports
             if not os.path.exists(args.email):
                 handle_error("file_not_found", args.email)
-            trace_sources(args.email, "en", True, True, False, False, "strict", 0.30)
+            trace_sources(args.email, args.lang, True, True, False, args.no_egress, "strict", 0.30)
 
         elif args.cmd == "forensic":
             # Forensic preset: maximum detail + anchoring
             if not os.path.exists(args.email):
                 handle_error("file_not_found", args.email)
-            trace_sources(args.email, "en", True, True, True, False, "strict", 0.30)
+            trace_sources(args.email, args.lang, True, True, True, args.no_egress, "strict", 0.30)
 
         elif args.cmd == "help":
             if args.topic:
@@ -246,8 +291,8 @@ For help: paw help <command>
                 show_main_help()
 
         elif args.cmd == "gui":
-            from .gui.tk_gui import main
-            main()
+            from .gui.launcher import main
+            main(port=args.port,data_dir=args.data_dir,open_browser=not args.no_browser,debug=args.debug)
 
         # Legacy commands
         elif args.cmd == "trace":
@@ -386,7 +431,7 @@ For help: paw help <command>
                     print("🔍 File Changes Detected:")
                     for change in changes:
                         print(f"\n📁 Case: {change['case_id']}")
-                        print(f"   Integrity: {'✅ OK' if change['integrity_status'] == 'ok' else '❌ COMPROMISED'}")
+                        print(f"   Integrity: {change['integrity_status']}")
                         if change['integrity_message']:
                             print(f"   Message: {change['integrity_message']}")
                         if change['new_files']:
@@ -408,7 +453,7 @@ For help: paw help <command>
                 print(f"   ❓ Unknown: {report['integrity_summary']['unknown']}")
                 print("\n📋 Case Details:")
                 for case in report['cases']:
-                    status_emoji = "✅" if case['integrity_status'] == 'ok' else "❌"
+                    status_emoji = {'ok':'✅', 'unknown':'❓', 'compromised':'❌'}[case['integrity_status']]
                     print(f"   {status_emoji} {case['case_id']}: {case['file_count']} files - {case['integrity_message']}")
 
         elif args.cmd in ["geographic", "geo"]:
@@ -482,7 +527,7 @@ Commands:
   analyze     Analyze email(s) and generate attribution report
   quick       Fast analysis, no egress
   full        Complete analysis with detonation
-  forensic    Maximum detail + anchoring
+  forensic    Strict profile + exports + optional anchoring
   detonate    Safely detonate URLs from analyzed case
   canary      Start passive tracking server
   geographic  Generate geographic intelligence reports
@@ -493,11 +538,11 @@ Commands:
 
 Examples:
   paw analyze email.eml                    # Quick analysis
-  paw analyze email.eml --forensic         # Full forensics
+  paw analyze email.eml --forensic         # Request optional anchoring
   paw analyze email.eml --stix --abuse     # With exports
   paw quick email.eml                      # Fast preset
   paw full email.eml                       # Complete analysis
-  paw forensic email.eml                   # Maximum detail
+  paw forensic email.eml                   # Strict profile, exports, optional anchoring
 
 For detailed help: paw help <command>
 """
@@ -517,11 +562,11 @@ USAGE:
 
 OPTIONS:
   --profile PROFILE    Scoring profile (default, strict, conservative)
-  --stix               Export STIX bundle
+  --stix               Request STIX; conformance currently unavailable
   --abuse              Generate abuse package
-  --forensic           Maximum detail analysis
+  --forensic           Request optional anchoring; profile/exports unchanged
   --no-egress          Do not contact suspicious infrastructure
-  --lang LANG          Report language (en, it)
+  --lang LANG          Abuse-package language (it or en fallback); main reports English
 
 EXAMPLES:
   paw analyze suspicious.eml
@@ -552,12 +597,15 @@ USAGE:
 This is equivalent to:
   paw analyze <email> --stix --abuse --profile strict
 
-Includes all available analysis modules and generates export packages.
+Uses the common pipeline with strict scoring and both export packages.
+With --no-egress, detonation and network enrichment are skipped.
+Unavailable checks remain explicit; this preset does not guarantee full coverage.
 """,
         "forensic": """
-🐾 PAW FORENSIC - Maximum Detail
+🐾 PAW FORENSIC - Strict Profile and Optional Anchoring
 
-Perform forensic-level analysis with evidence anchoring.
+Use strict scoring and both exports, with optional anchoring if keys and network
+are available. --no-egress excludes anchoring and other external stages.
 
 USAGE:
   paw forensic <email>
@@ -565,7 +613,8 @@ USAGE:
 This is equivalent to:
   paw analyze <email> --stix --abuse --forensic --profile strict
 
-Maximum detail analysis with cryptographic evidence anchoring.
+This preset shares the common analysis pipeline. Rekor inclusion verification
+is not implemented; anchoring does not establish actor identity.
 """,
         "detonate": """
 🐾 PAW DETONATE - URL Detonation

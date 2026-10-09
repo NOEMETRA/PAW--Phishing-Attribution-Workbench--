@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="it">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>PAW · Email Workbench</title><link rel="stylesheet" href="/assets/app.css"><script defer src="/assets/app.js"></script></head>
+<body>
+<a class="skip" href="#main">Vai al contenuto</a>
+<aside class="sidebar">
+  <a class="brand" href="/" aria-label="PAW, pagina iniziale"><span class="brand-mark">P<span>·</span></span><span>PAW<small>PHISHING ATTRIBUTION WORKBENCH</small></span></a>
+  <div class="workspace-label">WORKSPACE LOCALE</div>
+  <button class="nav active" id="new-analysis"><span>＋</span> Nuova analisi</button>
+  <button id="mobile-cases" class="mobile-cases" aria-expanded="false">Casi</button>
+  <div class="sidebar-heading">CASI <button id="refresh-cases" class="icon-button" aria-label="Aggiorna casi">↻</button></div>
+  <div id="case-list" class="case-list"><p class="muted">Caricamento casi…</p></div>
+  <div class="pagination"><button id="previous-cases" class="icon-button" aria-label="Casi precedenti">←</button><span id="case-page"></span><button id="next-cases" class="icon-button" aria-label="Casi successivi">→</button></div>
+  <div class="sidebar-foot"><span id="connection-dot" class="dot"></span><span id="connection">Connessione al servizio…</span><small>PAW 2 · versione di ricerca</small></div>
+</aside>
+<main id="main">
+  <header class="topbar"><span>Email forensics <span class="slash">/</span> Workspace</span><span class="offline"><span class="dot green"></span> Modalità offline</span></header>
+  <div id="notice" class="notice" role="alert" hidden></div>
+  <section id="intake-view">
+    <div class="page-heading"><div><p class="eyebrow">ANALISI EMAIL</p><h1>Dall’email alle evidenze.</h1><p class="subtitle">Importa un EML originale. Ogni risultato conserva la sua provenienza.</p></div><span class="outline-tag">ELABORAZIONE LOCALE</span></div>
+    <div class="intake-grid">
+      <form id="analysis-form" class="panel import-panel">
+        <div class="panel-title"><span class="step">01</span><h2>Importa l’email</h2></div>
+        <label class="dropzone" id="dropzone"><span class="file-glyph">↥</span><strong id="file-title">Scegli un file o trascinalo qui</strong><span id="file-description">EML originale · massimo 25 MiB</span><input id="email-file" type="file" accept=".eml" aria-label="Scegli email EML"></label>
+        <div class="form-grid"><label>Profilo di analisi<select id="profile"><option value="strict">Rigoroso</option><option value="default">Standard</option><option value="conservative">Conservativo</option></select></label><label>Tempo massimo (secondi)<input id="deadline" type="number" min="1" max="3600" value="900" required></label></div>
+        <details class="settings"><summary>Limiti di esecuzione</summary><div class="form-grid"><label>Tempo per fase (secondi)<input id="stage-timeout" type="number" min="1" max="900" value="120" required></label><label>Memoria (MiB)<input id="memory" type="number" min="64" max="4096" value="2048" required></label></div></details>
+        <div class="import-footer"><p>Il file originale viene conservato.<br>Detonazione e arricchimenti di rete esclusi.</p><button class="primary" id="start-analysis" type="submit" disabled>Avvia analisi <span>→</span></button></div>
+      </form>
+      <aside class="panel method-panel"><p class="eyebrow">UN PERCORSO VERIFICABILE</p><h2>Prima i fatti.<br>Poi le ipotesi.</h2><ol class="method"><li><span>01</span><div><strong>Conservazione</strong><p>Originale, hash e struttura MIME.</p></div></li><li><span>02</span><div><strong>Analisi locale</strong><p>Header, contenuto, link e metadati degli allegati.</p></div></li><li><span>03</span><div><strong>Evidenze e copertura</strong><p>Risultati, controlli mancanti e limiti espliciti.</p></div></li></ol><div class="method-note">Un’analisi completata può avere copertura parziale. Non equivale a una certificazione di sicurezza.</div></aside>
+    </div>
+  </section>
+  <section id="job-view" class="panel job-panel" hidden aria-live="polite">
+    <div class="section-header"><div><p class="eyebrow">ESECUZIONE</p><h2 id="job-filename"></h2></div><span id="job-status" class="badge"></span></div>
+    <div class="job-stats"><div><span>Fase osservata</span><strong id="job-stage">In attesa</strong></div><div><span>Tempo trascorso</span><strong id="job-elapsed">—</strong></div><div><span>Termine complessivo</span><strong id="job-limit">—</strong></div><button class="secondary danger" id="cancel-job">Annulla job</button></div>
+    <p class="muted" id="job-description">Gli avanzamenti mostrano le fasi osservate dal worker.</p><ol id="job-timeline" class="timeline"></ol>
+    <div class="job-actions"><button class="text-button" id="show-log">Apri log del worker</button><button class="secondary" id="open-partial" hidden>Apri evidenze conservate</button></div><pre id="job-log" class="raw-log" hidden></pre>
+  </section>
+  <section id="case-view" hidden>
+    <div class="page-heading"><div><p class="eyebrow">DOSSIER EMAIL</p><h1 id="case-title">Evidenze del caso</h1><p id="case-id" class="subtitle mono"></p></div><div class="case-actions"><button class="secondary" id="verify-case">Verifica evidenze</button><a id="export-case" class="primary" href="#">Esporta ZIP <span>↗</span></a></div></div>
+    <div id="case-caution" class="caution"></div>
+    <div class="summary-grid"><article class="panel summary-card"><span>Esito dell’esecuzione</span><strong id="case-status"></strong><small id="case-scope"></small></article><article class="panel summary-card"><span>Valutazione</span><strong id="case-decision"></strong><small id="case-score"></small></article><article class="panel summary-card"><span>Copertura</span><strong id="case-coverage"></strong><small>Le verifiche mancanti restano visibili.</small></article><article class="panel summary-card"><span>Integrità locale</span><strong id="case-integrity">Da verificare</strong><small id="integrity-description">Coerenza dei file, distinta dall’origine.</small></article></div>
+    <div class="tabs" role="tablist" aria-label="Sezioni del caso"><button role="tab" aria-selected="true" aria-controls="overview-tab" id="overview-button" data-tab="overview" tabindex="0">Panoramica</button><button role="tab" aria-selected="false" aria-controls="attachments-tab" id="attachments-button" data-tab="attachments" tabindex="-1">Allegati</button><button role="tab" aria-selected="false" aria-controls="report-tab" id="report-button" data-tab="report" tabindex="-1">Report</button><button role="tab" aria-selected="false" aria-controls="data-tab" id="data-button" data-tab="data" tabindex="-1">Dati strutturati</button></div>
+    <div id="overview-tab" class="tab-content" role="tabpanel" aria-labelledby="overview-button"><div class="detail-grid"><section class="panel"><div class="panel-title"><h2>Controlli e copertura</h2><span class="outline-tag">OSSERVAZIONI</span></div><div id="coverage-list"></div></section><section class="panel"><div class="panel-title"><h2>Origine e autenticazione</h2></div><dl id="origin-details" class="facts"></dl><p class="method-note">La catena Received fornisce candidati. Non identifica da sola il mittente originale o l’autore dell’attacco.</p><div id="authentication-list"></div></section></div></div>
+    <div id="attachments-tab" class="tab-content panel" role="tabpanel" aria-labelledby="attachments-button" hidden><div class="panel-title"><h2>Allegati conservati</h2></div><p class="muted">Hash e metadati. Analisi malware e macro non effettuata.</p><div id="attachment-list"></div></div>
+    <div id="report-tab" class="tab-content panel" role="tabpanel" aria-labelledby="report-button" hidden><div class="panel-title"><h2>Report dell’analisi</h2><select id="report-kind" aria-label="Tipo di report"><option value="executive_report">Sintesi</option><option value="technical_report">Tecnico</option></select></div><pre id="report-content" class="report-text"></pre></div>
+    <div id="data-tab" class="tab-content panel" role="tabpanel" aria-labelledby="data-button" hidden><div class="panel-title"><h2>Dati strutturati del caso</h2></div><p class="muted">Contenuti visualizzati come testo. I link rilevati non vengono aperti.</p><pre id="case-data" class="raw-log"></pre></div>
+  </section>
+  <section class="panel history-panel"><div class="section-header"><div><p class="eyebrow">CRONOLOGIA</p><h2>Job recenti</h2></div><button class="text-button" id="refresh-jobs">Aggiorna</button></div><div id="job-list"><p class="muted">Caricamento…</p></div></section>
+  <footer class="page-footer"><span>PAW · evidenze, limiti, provenienza</span><span>Offline applicativo · isolamento OS non attestato</span></footer>
+</main>
+</body></html>

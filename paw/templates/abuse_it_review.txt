@@ -1,0 +1,19 @@
+BOZZA LOCALE PER REVISIONE - NON INVIATA
+
+Caso: {case_id}
+Generata: {generated_utc}
+Mittente dichiarato nell'email: {from_addr}
+IP candidato dai Received, non accertato indipendentemente: {origin_candidate}
+Valutazione euristica: {decision}
+Score euristico, non probabilita: {score}
+
+Analisi autenticazione (dichiarazioni negli header e verifiche hanno stati distinti):
+{authentication_json}
+
+Questa bozza non accerta account compromessi, infrastruttura malevola o identita
+dell'autore. Le verifiche mancanti non dimostrano sicurezza. Esaminare originale
+e report prima di decidere se segnalare un incidente.
+
+Integrita: usare paw verify sulla directory del caso. La bozza entra nel sigillo
+successivo; la root resta separata in evidence/merkle_root.bin.
+Nessun invio effettuato. Nessun destinatario o mittente della segnalazione inventato.

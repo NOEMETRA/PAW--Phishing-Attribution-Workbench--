@@ -21,3 +21,23 @@ jobs:
         run: python -m compileall -q paw
       - name: Check public metadata and safety wording
         run: python -m unittest discover -s tests -p 'test_static_contracts.py' -v
+      - name: Install evidence hashing dependency
+        run: python -m pip install 'blake3>=1.0.0,<2.0.0' 'dnspython>=2.4.2,<3.0.0' 'tldextract>=5,<6' 'dkimpy>=1.1.4,<2' 'cryptography>=42,<47'
+      - name: Verify execution and evidence contracts
+        run: python -m unittest discover -s tests -p 'test_execution_contracts.py' -v
+      - name: Verify authentication and missing evidence contracts
+        run: python -m unittest discover -s tests -p 'test_authentication_contracts.py' -v
+
+      - name: Verify MIME and attachment evidence contracts
+        run: python -m unittest discover -s tests -p 'test_mime_contracts.py' -v
+
+      - name: Verify real process supervision and interrupted evidence
+        run: python -m unittest discover -s tests -p 'test_runtime_contracts.py' -v
+
+      - name: Install local API contract dependencies
+        run: python -m pip install 'fastapi>=0.104,<1' 'python-multipart>=0.0.9,<1'
+      - name: Verify queue cancellation races
+        run: python -m unittest discover -s tests -p 'test_gui_contracts.py' -v
+
+      - name: Verify batch, numeric inputs, export and local integrity regressions
+        run: python -m unittest discover -s tests -p 'test_engine_contracts.py' -v

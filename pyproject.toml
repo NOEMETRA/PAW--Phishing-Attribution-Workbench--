@@ -7,7 +7,7 @@ name = "paw"
 version = "2.0.0"
 description = "Research workbench for email forensics and infrastructure correlation"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.11"
 license = {text = "MIT"}
 authors = [
     {name = "Northguard Security"}
@@ -24,9 +24,6 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.8",
-    "Programming Language :: Python :: 3.9",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Topic :: Security",
     "Topic :: System :: Monitoring",
@@ -36,27 +33,28 @@ dependencies = [
     "requests>=2.31.0,<3.0.0",
     "dnspython>=2.4.2,<3.0.0",
     "ipwhois>=1.2.0,<2.0.0",
-    "blake3>=0.3.3,<1.0.0",
+    "blake3>=1.0.0,<2.0.0",
     "python-dateutil>=2.8.2,<3.0.0",
     "dkimpy>=1.1.4,<2.0.0",
     "pyspf>=2.0.14,<3.0.0",
     "tldextract>=5.0.0,<6.0.0",
-    "cryptography>=42.0.0,<43.0.0",
+    "cryptography>=42.0.0,<47.0.0",
     "pgpy>=0.6.0,<1.0.0",
     "extract-msg>=0.46.0,<1.0.0",
     "python-magic>=0.4.27,<1.0.0",
     "oletools>=0.60.1,<1.0.0",
     "playwright>=1.40.0,<2.0.0",
     "fastapi>=0.104.0,<1.0.0",
+    "python-multipart>=0.0.9,<1.0.0",
     "uvicorn>=0.24.0,<1.0.0",
-    "pyOpenSSL>=23.3.0,<24.0.0",
+    "pyOpenSSL>=24.0.0,<26.0.0",
     "selenium>=4.15.0,<5.0.0",
     "webdriver-manager>=4.0.0,<5.0.0",
     "docker>=6.1.0,<7.0.0",
     "python-whois>=0.8.0,<1.0.0",
     "rich>=13.7.0,<14.0.0",
     "beautifulsoup4>=4.12.0,<5.0.0",
-    "lxml>=4.9.0,<5.0.0",
+    "lxml>=5.0.0,<7.0.0",
 ]
 
 [project.optional-dependencies]
@@ -92,19 +90,16 @@ Repository = "https://github.com/Northguard-Security/PAW--Phishing-Attribution-W
 
 [project.scripts]
 paw = "paw.__main__:main"
-paw-analyze = "paw.core.trace:main"
-paw-detonate = "paw.detonate.runner:main"
-paw-canary = "paw.canary.server:main"
 
-[tool.setuptools]
-packages = ["paw"]
+[tool.setuptools.packages.find]
+include = ["paw*"]
 
 [tool.setuptools.package-data]
-paw = ["i18n/*.json", "templates/*.txt"]
+paw = ["i18n/*.json", "templates/*.txt", "web/static/*"]
 
 [tool.black]
 line-length = 100
-target-version = ['py38', 'py39', 'py310', 'py311']
+target-version = ['py311']
 include = '\.pyi?$'
 exclude = '''
 /(
@@ -123,7 +118,7 @@ line_length = 100
 skip = [".venv", "SAVE", "build", "dist"]
 
 [tool.mypy]
-python_version = "3.8"
+python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false

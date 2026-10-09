@@ -1,8 +1,11 @@
 
 import requests, socket, json, tldextract, dns.resolver
 from ipwhois import IPWhois
+from .network_policy import network_allowed
 
 def ip_rdap(ip: str):
+    if not network_allowed():
+        return {'status': 'skipped', 'reason': 'no-egress'}
     try:
         iw = IPWhois(ip)
         res = iw.lookup_rdap(asn_methods=["whois", "http"])
@@ -29,6 +32,8 @@ def ip_rdap(ip: str):
 
 def domain_rdap(domain: str):
     out = {"domain": domain, "registrar": None, "created": None, "ns": [], "mx": []}
+    if not network_allowed():
+        return dict(out, status='skipped', reason='no-egress')
     try:
         # RDAP aggregator
         r = requests.get(f"https://rdap.org/domain/{domain}", timeout=10)

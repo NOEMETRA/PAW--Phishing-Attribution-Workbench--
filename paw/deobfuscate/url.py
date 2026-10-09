@@ -277,7 +277,7 @@ class URLDeobfuscator:
         return result_url
 
     def _analyze_url_shorteners(self, url: str) -> str:
-        """Analizza URL shortener (placeholder per future implementazioni)"""
+        """Identify shortener domains locally; network expansion is not performed"""
         # Per ora solo identifica shortener comuni
         shortener_domains = [
             'bit.ly', 'tinyurl.com', 'goo.gl', 't.co', 'ow.ly',

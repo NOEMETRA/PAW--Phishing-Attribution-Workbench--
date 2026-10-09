@@ -1,5 +1,15 @@
 
 import re
+import math
+
+
+def validate_deobfuscation_weight(value):
+    if isinstance(value, bool):
+        raise ValueError('Deobfuscation weight must be finite and between 0 and 1')
+    value = float(value)
+    if not math.isfinite(value) or not 0 <= value <= 1:
+        raise ValueError('Deobfuscation weight must be finite and between 0 and 1')
+    return value
 
 def brand_label(domain: str):
     # Leftmost label
@@ -58,6 +68,7 @@ def _extract_domain(addr: str):
     return (m2.group(1) if m2 else "").strip().lower()
 
 def score_case(hop_diag: dict, auth: dict, dominfo: dict, brand_seeds=None, suspicious_asn=False, ns_mx_recurrent=False, profile="default", headers=None, detonation_endpoints=None, canary_ips=None, det_summary=None, origin_domain="", deobfuscation_weight: float = 0.30):
+    deobfuscation_weight = validate_deobfuscation_weight(deobfuscation_weight)
     brand_seeds = brand_seeds or ["apple","google","microsoft","paypal"]
     
     # Apply profile adjustments
@@ -70,37 +81,14 @@ def score_case(hop_diag: dict, auth: dict, dominfo: dict, brand_seeds=None, susp
     # Header integrity
     header_score = 0.0
     if hop_diag.get("skew_s", 0) > 600: header_score += 0.2
-    if not hop_diag.get("helo_ptr_match", True): header_score += 0.1
-    if not hop_diag.get("fqdn_ok", True): header_score += 0.1
-    # Auth
-    spf_res = (auth.get("spf") or {}).get("result")
-    if spf_res == "fail": header_score += 0.4
-    dkim = auth.get("dkim") or {}
-    if not dkim.get("present"): header_score += 0.2
-    else:
-        # if present but not aligned strictly, small bump
-        if not dkim.get("aligned"): header_score += 0.1
-    
-    # Received-SPF scoring
-    received_spf_result = auth.get("received_spf_result")
-    if received_spf_result in ["fail", "softfail"]:
-        header_score += 0.30
-    
-    # ARC cv scoring
-    arc_cv = (auth.get("arc") or {}).get("cv")
-    if arc_cv == "fail":
-        header_score += 0.25
-    elif arc_cv == "none" and spf_res == "pass" and not dkim.get("present"):
-        header_score += 0.15
-    
-    dmarc = (auth.get("dmarc") or {}).get("inferred_result")
-    if dmarc and dmarc != "pass": header_score += 0.2
-    
-    # DMARC policy scoring
-    dmarc_policy = (auth.get("dmarc") or {}).get("policy", {}).get("policy")
-    dmarc_aligned = (auth.get("dmarc") or {}).get("aligned", False)
-    if dmarc_policy in ["reject", "quarantine"] and not dmarc_aligned:
-        header_score += 0.25
+    if hop_diag.get("helo_ptr_match") is False: header_score += 0.1
+    if hop_diag.get("fqdn_ok") is False: header_score += 0.1
+    # Only independently verified failures affect authentication risk.
+    # Missing evidence and untrusted receiver claims are coverage limitations.
+    for method, weight in [('spf', 0.4), ('dkim', 0.2), ('dmarc', 0.2), ('arc', 0.25)]:
+        verification = (auth.get(method) or {}).get('verification') or {}
+        if verification.get('status') == 'completed' and verification.get('result') == 'fail':
+            header_score += weight
     # Domain signals
     domain_score = 0.0
     nrd = dominfo.get("nrd_days")
@@ -113,7 +101,13 @@ def score_case(hop_diag: dict, auth: dict, dominfo: dict, brand_seeds=None, susp
     from_domain = dominfo.get("domain", "")
     label = brand_label(from_domain)
     bk = max(bk_similarity(label, b) for b in brand_seeds) if label else 0.0
-    if bk >= 0.7: domain_score += 0.2
+    exact_brand_subdomain = False
+    if bk == 1.0:
+        import tldextract
+        registered = tldextract.TLDExtract(cache_dir=None, suffix_list_urls=())(from_domain)
+        exact_brand_subdomain = bool(registered.suffix and registered.domain != label)
+    if 0.7 <= bk < 1.0 or exact_brand_subdomain: domain_score += 0.2
+    # This is a structural heuristic, never proof of official brand ownership.
     
     # Display-Name lookalike
     if headers:
@@ -200,72 +194,8 @@ def score_case(hop_diag: dict, auth: dict, dominfo: dict, brand_seeds=None, susp
                 campaign_score += 0.20
                 break  # one time bonus
 
-    # Enrichment bonuses for advanced attribution
+    # Coverage is metadata, never evidence of maliciousness.
     enrichment_score = 0.0
-    if det_summary and det_summary.get("enrichment"):
-        enrichment_data = det_summary["enrichment"]
-
-        # Tracker analysis bonus
-        if enrichment_data.get("enrichment_files", {}).get("trackers"):
-            enrichment_score += 0.08  # Bonus for tracker extraction
-
-        # TLS fingerprinting bonus
-        if enrichment_data.get("enrichment_files", {}).get("tls_fingerprints"):
-            enrichment_score += 0.10  # Bonus for certificate analysis
-
-        # DNS enrichment bonus
-        if enrichment_data.get("enrichment_files", {}).get("dns_enrichment"):
-            enrichment_score += 0.08  # Bonus for DNS analysis
-
-        # Redirect chain analysis bonus
-        if enrichment_data.get("enrichment_files", {}).get("redirect_chains"):
-            enrichment_score += 0.06  # Bonus for redirect analysis
-
-        # JA3 fingerprinting bonus
-        if enrichment_data.get("enrichment_files", {}).get("ja3_fingerprints"):
-            enrichment_score += 0.12  # Bonus for JA3 analysis (higher weight)
-
-        # Form analysis bonus
-        if enrichment_data.get("enrichment_files", {}).get("form_analysis"):
-            enrichment_score += 0.08  # Bonus for form analysis
-
-        # Attribution matrix bonus (highest weight)
-        if enrichment_data.get("enrichment_files", {}).get("attribution_matrix"):
-            enrichment_score += 0.15  # Bonus for complete attribution analysis
-
-        # Additional bonuses based on enrichment quality
-        try:
-            # Load attribution matrix for quality assessment
-            import os
-            case_dir = os.path.dirname(os.path.dirname(det_summary.get("pcap", ""))) if det_summary.get("pcap") else ""
-            if case_dir:
-                matrix_file = os.path.join(case_dir, "detonation", "attribution_matrix.json")
-                if os.path.exists(matrix_file):
-                    import json
-                    with open(matrix_file, 'r') as f:
-                        matrix_data = json.load(f)
-
-                    # Bonus for high confidence hypotheses
-                    hypotheses = matrix_data.get("hypotheses", [])
-                    if hypotheses:
-                        top_confidence = hypotheses[0].get("confidence_score", 0)
-                        if top_confidence > 0.8:
-                            enrichment_score += 0.10  # High confidence attribution
-                        elif top_confidence > 0.6:
-                            enrichment_score += 0.05  # Medium confidence attribution
-
-                    # Bonus for multiple evidence types
-                    evidence_summary = matrix_data.get("evidence_summary", {})
-                    evidence_types = evidence_summary.get("evidence_by_category", {})
-                    if len(evidence_types) >= 4:
-                        enrichment_score += 0.08  # Broad evidence coverage
-                    elif len(evidence_types) >= 2:
-                        enrichment_score += 0.04  # Moderate evidence coverage
-
-        except Exception:
-            # Silently ignore enrichment quality assessment errors
-            pass
-    
     total = header_score + domain_score + profile_modifier + campaign_score + enrichment_score
     decision = "Inconclusive"
     
@@ -282,4 +212,24 @@ def score_case(hop_diag: dict, auth: dict, dominfo: dict, brand_seeds=None, susp
     
     if total >= malicious_threshold: decision = "Likely malicious infrastructure"
     elif total >= suspicious_threshold: decision = "Suspicious or compromised account"
-    return {"score": round(total,2), "decision": decision, "bk_score": round(bk,2), "mixed_flag": is_mixed_script(dominfo.get("domain",""))}
+    verification = {method: ((auth.get(method) or {}).get('verification') or {}).get('status', 'not_evaluated')
+                    for method in ('spf', 'dkim', 'dmarc', 'arc')}
+    missing = [method for method, status in verification.items() if status != 'completed']
+    if not dominfo.get('domain'): missing.append('from_domain')
+    return {"score": round(max(0.0, min(1.0, total)),2), "decision": decision,
+            "bk_score": round(bk,2), "mixed_flag": is_mixed_script(dominfo.get("domain","")),
+            "assessment_status": "partial" if missing else "completed",
+            "coverage": {"authentication": verification, "not_evaluated": missing},
+            "limitation": "Heuristic evidence score; missing checks do not establish safety"}
+
+
+def finalize_score(score, profile='default', additional=0.0):
+    """Keep numeric score, thresholds and verdict consistent after added signals."""
+    if not math.isfinite(score['score']) or not math.isfinite(additional):
+        raise ValueError('Score and additional signals must be finite')
+    total = max(0.0, min(1.0, score['score'] + additional))
+    malicious, suspicious = {'strict': (0.68, 0.52), 'conservative': (0.76, 0.58)}.get(profile, (0.72, 0.55))
+    score['score'] = round(total, 2)
+    score['decision'] = ('Likely malicious infrastructure' if total >= malicious else
+                         'Suspicious or compromised account' if total >= suspicious else 'Inconclusive')
+    return score

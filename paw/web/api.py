@@ -1,377 +1,392 @@
+"""Local API: real analysis workers, persisted status, no simulated completion.
+Run one API process. Each job executes in a separate Python process.
 """
-PAW Web API
-FastAPI backend for modern GUI
-"""
-
-from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse
-from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
-from typing import List, Optional, Dict
-import os
-import json
 import asyncio
-from datetime import datetime
+from collections import Counter
+from datetime import datetime, timezone
+import json
+import os
 from pathlib import Path
-
-# Import PAW core
+import shutil
+import sqlite3
 import sys
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
+import uuid
+import time
+from contextlib import asynccontextmanager
+from typing import Literal
+from fastapi import BackgroundTasks, FastAPI, File, HTTPException, UploadFile, Request
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from urllib.parse import urlsplit
+from pydantic import BaseModel, Field
+from ..core.runtime import RunLimits, supervise, preserve_interrupted, read_progress
 
-app = FastAPI(
-    title="PAW - Phishing Attribution Workbench",
-    description="Modern web interface for phishing analysis",
-    version="2.0.0"
-)
+app = FastAPI(title='PAW', version='2.0.0')
+STATIC_DIR = Path(__file__).parent/'static'
+app.mount('/assets', StaticFiles(directory=STATIC_DIR), name='assets')
 
-# CORS configuration
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # In production, specify exact origins
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Paths
-CASES_DIR = Path("cases")
-UPLOAD_DIR = Path("uploads")
-UPLOAD_DIR.mkdir(exist_ok=True)
-
-# Analysis queue
+@app.middleware('http')
+async def local_boundary(request: Request, call_next):
+    host = request.headers.get('host', '')
+    if urlsplit('//'+host).hostname not in {'127.0.0.1','localhost','::1'}:
+        return JSONResponse({'detail':'Local host required'}, status_code=403)
+    origin = request.headers.get('origin')
+    if origin and origin != str(request.base_url).rstrip('/'):
+        return JSONResponse({'detail':'Same-origin requests required'}, status_code=403)
+    response = await call_next(request)
+    response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['Referrer-Policy'] = 'no-referrer'
+    return response
+DATA_DIR = Path(os.environ.get('PAW_DATA_DIR', '.')).resolve()
+CASES_DIR = DATA_DIR / 'cases'
+UPLOAD_DIR = DATA_DIR / 'uploads'
+JOBS_DIR = DATA_DIR / 'jobs'
+EXPORT_DIR = DATA_DIR / 'exports'
+for directory in (UPLOAD_DIR, JOBS_DIR, EXPORT_DIR):
+    directory.mkdir(parents=True, exist_ok=True)
 analysis_queue = {}
+_workers = asyncio.Semaphore(1)
+MAX_ANALYSIS_SECONDS = 900
+_cancel_events = {}
 
+class RuntimeOptions(BaseModel):
+    wall_seconds: float = Field(default=900, gt=0, le=3600, strict=True)
+    stage_seconds: float = Field(default=120, gt=0, le=900, strict=True)
+    memory_bytes: int = Field(default=2*1024**3, ge=64*1024**2, le=4*1024**3, strict=True)
+    artifact_bytes: int = Field(default=512*1024**2, ge=1024, le=512*1024**2, strict=True)
+    artifact_files: int = Field(default=10000, ge=1, le=10000, strict=True)
+    log_bytes: int = Field(default=8*1024**2, ge=1024, le=8*1024**2, strict=True)
+    model_config = {'extra':'forbid'}
+
+@asynccontextmanager
+async def job_slot(analysis_id, limits):
+    job = analysis_queue[analysis_id]
+    acquired = False
+    allowed = False
+    acquire_task = cancel_task = None
+    try:
+        remaining = limits.wall_seconds - (time.monotonic()-job['queued_monotonic'])
+        if remaining > 0:
+            acquire_task = asyncio.create_task(_workers.acquire())
+            cancel_task = asyncio.create_task(_cancel_events[analysis_id].wait())
+            done, _ = await asyncio.wait([acquire_task,cancel_task],timeout=remaining,return_when=asyncio.FIRST_COMPLETED)
+            if cancel_task in done:
+                job.update(status='cancelled',completed_at=now())
+            elif acquire_task in done:
+                acquired = allowed = True
+            elif job['status'] == 'queued':
+                job.update(status='timed_out',error='Queue deadline exceeded',completed_at=now())
+        elif job['status'] == 'queued':
+            job.update(status='timed_out',error='Queue deadline exceeded',completed_at=now())
+        yield allowed
+    except asyncio.CancelledError:
+        if job['status'] == 'queued': job.update(status='interrupted',error='API stopped',completed_at=now())
+        raise
+    finally:
+        tasks = [task for task in (acquire_task,cancel_task) if task is not None]
+        for task in tasks:
+            if not task.done(): task.cancel()
+        if tasks: await asyncio.gather(*tasks,return_exceptions=True)
+        if acquire_task is not None and not acquire_task.cancelled() and acquire_task.exception() is None:
+            acquired = bool(acquire_task.result())
+        if acquired: _workers.release()
+        if not allowed:
+            save(JOBS_DIR/(analysis_id+'.json'),job)
+            _cancel_events.pop(analysis_id,None)
+            analysis_queue.pop(analysis_id,None)
+
+def now():
+    return datetime.now(timezone.utc).isoformat()
+
+def load(path):
+    return json.loads(path.read_text(encoding='utf-8'))
+
+def artifact(path, errors):
+    try: return load(path)
+    except (OSError, ValueError) as exc:
+        errors[path.name] = type(exc).__name__ + ': ' + str(exc)
+        return None
+
+def save(path, data):
+    temporary = path.with_suffix('.tmp')
+    temporary.write_text(json.dumps(data, indent=2), encoding='utf-8')
+    temporary.replace(path)
+
+def contained(root, value):
+    path = Path(value).resolve()
+    if not path.is_relative_to(root.resolve()):
+        raise HTTPException(400, 'Path outside allowed directory')
+    return path
+
+def case_path(case_id):
+    if Path(case_id).name != case_id:
+        raise HTTPException(400, 'Invalid case ID')
+    path = contained(CASES_DIR, CASES_DIR / case_id)
+    if not path.is_dir():
+        raise HTTPException(404, 'Case not found')
+    return path
+
+def case_status(directory):
+    """Completed requires worker acknowledgment, not a preliminary execution file."""
+    execution = read_progress(directory/'execution.json')
+    job_id = read_progress(directory/'manifest.json').get('analysis_job')
+    if job_id:
+        if not job_id.startswith('analysis_') or not job_id[9:].isalnum(): return 'incomplete'
+        job = read_progress(JOBS_DIR/(job_id+'.json'))
+        status = job.get('status', 'interrupted')
+        if status in {'running','queued'} and job_id not in analysis_queue: return 'interrupted'
+        if status == 'completed':
+            return 'completed' if directory.name in job.get('case_ids', []) else 'incomplete'
+        if any(item.get('case_id') == directory.name and item.get('status') == 'completed'
+                and item.get('integrity') == 'verified' for item in job.get('partial_cases', [])):
+            return 'completed'
+        return status
+    if execution.get('status') == 'completed':
+        from ..core.verify import verify_case
+        try: return 'completed' if verify_case(directory) else 'incomplete'
+        except (OSError, ValueError, KeyError, TypeError): return 'incomplete'
+    return execution.get('status', 'incomplete')
 
 class AnalysisRequest(BaseModel):
     file_path: str
-    profile: str = "default"
-    options: Dict = {}
-
+    profile: Literal['default', 'strict', 'conservative'] = 'default'
+    options: dict = Field(default_factory=dict)
+    limits: RuntimeOptions = Field(default_factory=RuntimeOptions)
 
 class CaseQuery(BaseModel):
-    query_type: str  # "ip", "domain", "asn"
+    query_type: Literal['ip', 'domain', 'asn']
     value: str
 
+@app.get('/', include_in_schema=False)
+async def workspace():
+    return FileResponse(STATIC_DIR/'index.html')
 
-@app.get("/")
+@app.get('/health')
 async def root():
-    """API root endpoint"""
-    return {
-        "name": "PAW API",
-        "version": "2.0.0",
-        "status": "operational",
-        "endpoints": {
-            "upload": "/api/upload",
-            "analyze": "/api/analyze",
-            "cases": "/api/cases",
-            "case_detail": "/api/cases/{case_id}",
-            "statistics": "/api/statistics"
-        }
-    }
+    return {'name':'PAW', 'version':'2.0.0', 'status':'operational', 'timestamp':now()}
 
-
-@app.post("/api/upload")
+@app.post('/api/upload')
 async def upload_email(file: UploadFile = File(...)):
-    """Upload email file for analysis"""
+    extension = Path(file.filename or '').suffix.lower()
+    if extension not in {'.eml', '.msg'}:
+        raise HTTPException(400, 'Only .eml and .msg files supported')
+    path = UPLOAD_DIR / (uuid.uuid4().hex + extension)
+    size = 0
     try:
-        # Validate file type
-        if not file.filename.endswith(('.eml', '.msg')):
-            raise HTTPException(400, "Only .eml and .msg files supported")
+        with path.open('xb') as stream:
+            while chunk := await file.read(1024 * 1024):
+                size += len(chunk)
+                if size > 25 * 1024 * 1024:
+                    raise HTTPException(413, 'Email exceeds 25 MiB')
+                stream.write(chunk)
+        if not size: raise HTTPException(400, 'Empty email')
+    except Exception:
+        path.unlink(missing_ok=True)
+        raise
+    original_name = Path((file.filename or '').replace('\\','/')).name
+    save(path.with_suffix(path.suffix+'.json'),{'filename':original_name})
+    return {'status':'success', 'filename':path.name, 'original_name':original_name, 'path':str(path), 'size':size}
 
-        # Save file
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        safe_filename = f"{timestamp}_{file.filename}"
-        file_path = UPLOAD_DIR / safe_filename
-
-        with open(file_path, "wb") as f:
-            content = await file.read()
-            f.write(content)
-
-        return {
-            "status": "success",
-            "filename": safe_filename,
-            "path": str(file_path),
-            "size": len(content)
-        }
-
-    except Exception as e:
-        raise HTTPException(500, f"Upload failed: {str(e)}")
-
-
-@app.post("/api/analyze")
+@app.post('/api/analyze')
 async def analyze_email(request: AnalysisRequest, background_tasks: BackgroundTasks):
-    """Start email analysis"""
-    try:
-        file_path = Path(request.file_path)
-        if not file_path.exists():
-            raise HTTPException(404, "File not found")
+    if len(_cancel_events) >= 32: raise HTTPException(429, 'Analysis queue is full')
+    path = Path(request.file_path)
+    path = contained(UPLOAD_DIR, path if path.is_absolute() else DATA_DIR / path)
+    if not path.is_file(): raise HTTPException(404, 'Uploaded email not found')
+    if path.suffix.lower() not in {'.eml','.msg'}: raise HTTPException(400,'Unsupported email format')
+    if set(request.options) - {'no_egress','stix','abuse','anchor','lang'}:
+        raise HTTPException(400, 'Unsupported options')
+    for name in {'no_egress','stix','abuse','anchor'} & request.options.keys():
+        if type(request.options[name]) is not bool:
+            raise HTTPException(400, f'{name} must be boolean')
+    analysis_id = 'analysis_' + uuid.uuid4().hex
+    job = {'status':'queued', 'file':str(path), 'filename':read_progress(path.with_suffix(path.suffix+'.json')).get('filename',path.name), 'no_egress':request.options.get('no_egress',True), 'queued_at':now(), 'queued_monotonic':time.monotonic(), 'progress':None}
+    analysis_queue[analysis_id] = job
+    _cancel_events[analysis_id] = asyncio.Event()
+    job['limits'] = request.limits.model_dump()
+    save(JOBS_DIR / (analysis_id + '.json'), job)
+    background_tasks.add_task(run_analysis, analysis_id, path, request.profile, request.options, request.limits)
+    return {'status':'queued', 'analysis_id':analysis_id}
 
-        # Generate analysis ID
-        analysis_id = f"analysis_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+async def run_analysis(analysis_id, path, profile, options, limits):
+    async with job_slot(analysis_id, limits) as acquired:
+        if not acquired: return
+        job = analysis_queue[analysis_id]
+        state = JOBS_DIR / (analysis_id + '.json')
+        if job['status'] != 'queued':
+            _cancel_events.pop(analysis_id, None)
+            analysis_queue.pop(analysis_id, None)
+            return
+        request = JOBS_DIR / (analysis_id + '.request.json')
+        result_path = JOBS_DIR / (analysis_id + '.result.json')
+        save(request, dict(options, file_path=str(path), profile=profile,
+            no_egress=options.get('no_egress', True)))
+        control = JOBS_DIR / analysis_id
+        try:
+            job.update(status='running', started_at=now())
+            save(state, job)
+            env = dict(os.environ, PYTHONIOENCODING='utf-8')
+            env['PYTHONPATH'] = str(Path(__file__).resolve().parents[2])
+            env['PAW_ANALYSIS_ID'] = analysis_id
+            outcome = await supervise([sys.executable, '-X', 'utf8', '-m', 'paw.web.worker', str(request), str(result_path)],
+                cwd=DATA_DIR, control=control, env=env,
+                limits=RunLimits(**dict(limits.model_dump(),wall_seconds=max(.001,limits.wall_seconds-(time.monotonic()-job['queued_monotonic'])))),
+                cancel=_cancel_events[analysis_id])
+            job['supervisor'] = outcome
+            if outcome['status'] != 'exited':
+                job.update(status=outcome['status'], error=outcome['error'], completed_at=now())
+                job['partial_cases'] = preserve_interrupted(DATA_DIR, control, job['status'], job['error'])
+                return
+            if not result_path.exists():
+                raise RuntimeError(f"Worker exited {outcome['returncode']} without result; see job log")
+            result = load(result_path)
+            if outcome['returncode'] != 0 or result.get('status') != 'completed':
+                raise RuntimeError(result.get('error', 'Worker failed'))
+            job.update(result, progress=100, completed_at=now(), case_id=result['case_ids'][0])
+        except asyncio.CancelledError:
+            job.update(status='interrupted', error='API stopped')
+            job['partial_cases'] = preserve_interrupted(DATA_DIR, control, job['status'], job['error'])
+            raise
+        except Exception as exc:
+            job.update(status='failed', error=f'{type(exc).__name__}: {exc}', completed_at=now())
+            job['partial_cases'] = preserve_interrupted(DATA_DIR, control, job['status'], job['error'])
+        finally:
+            save(state, job)
+            _cancel_events.pop(analysis_id, None)
+            analysis_queue.pop(analysis_id, None)
 
-        # Add to queue
-        analysis_queue[analysis_id] = {
-            "status": "queued",
-            "file": str(file_path),
-            "started_at": datetime.now().isoformat(),
-            "progress": 0
-        }
+@app.post('/api/analysis/{analysis_id}/cancel')
+async def cancel_analysis(analysis_id: str):
+    await get_analysis_status(analysis_id)
+    job = analysis_queue.get(analysis_id)
+    if job is None or job['status'] not in {'queued','running'}:
+        return load(JOBS_DIR/(analysis_id+'.json'))
+    _cancel_events[analysis_id].set()
+    job['cancel_requested_at'] = now()
+    if job['status'] == 'queued': job.update(status='cancelled', completed_at=now())
+    save(JOBS_DIR/(analysis_id+'.json'), job)
+    return job
 
-        # Start background analysis
-        background_tasks.add_task(run_analysis, analysis_id, file_path, request.profile, request.options)
+@app.get('/api/analyses')
+async def list_analyses(limit: int = 30):
+    if not 1 <= limit <= 100: raise HTTPException(400,'Invalid limit')
+    paths = [path for path in JOBS_DIR.glob('analysis_*.json') if path.stem[9:].isalnum()]
+    paths.sort(key=lambda path:path.stat().st_mtime, reverse=True)
+    return {'jobs':[dict(await get_analysis_status(path.stem),analysis_id=path.stem) for path in paths[:limit]], 'total':len(paths)}
 
-        return {
-            "status": "queued",
-            "analysis_id": analysis_id,
-            "message": "Analysis started"
-        }
+@app.get('/api/analysis/{analysis_id}/log')
+async def job_log(analysis_id: str):
+    await get_analysis_status(analysis_id)
+    path = JOBS_DIR/analysis_id/'worker.log'
+    if not path.exists(): return {'text':'Il worker non ha ancora prodotto un log.','truncated':False}
+    size = path.stat().st_size
+    with path.open('rb') as stream:
+        stream.seek(max(0,size-65536))
+        text = stream.read(65536).decode('utf-8',errors='replace')
+    return {'text':text,'truncated':size>65536}
 
-    except Exception as e:
-        raise HTTPException(500, f"Analysis failed: {str(e)}")
+@app.post('/api/cases/{case_id}/verify')
+async def verify_evidence(case_id: str):
+    from ..core.verify import verify_case
+    directory = case_path(case_id)
+    if case_status(directory) in {'queued','running'}: raise HTTPException(409,'Analysis still writing evidence')
+    try: valid = await asyncio.to_thread(verify_case,directory)
+    except (OSError,ValueError,TypeError,KeyError): valid = False
+    return {'case_id':case_id,'integrity':'verified' if valid else 'failed','checked_at':now(),
+        'scope':'Local file consistency; no independent origin or signature is established'}
 
-
-async def run_analysis(analysis_id: str, file_path: Path, profile: str, options: Dict):
-    """Run PAW analysis in background"""
-    try:
-        analysis_queue[analysis_id]["status"] = "running"
-        analysis_queue[analysis_id]["progress"] = 10
-
-        # Import PAW trace module
-        from paw.core import trace
-
-        # Update progress
-        analysis_queue[analysis_id]["progress"] = 30
-
-        # Run analysis (this is synchronous, wrap in executor if needed)
-        # For now, simulate with delay
-        await asyncio.sleep(2)
-        analysis_queue[analysis_id]["progress"] = 60
-
-        # TODO: Actually run trace.analyze() here
-        # result = trace.analyze(str(file_path), profile=profile)
-
-        # Simulate completion
-        await asyncio.sleep(2)
-        analysis_queue[analysis_id]["progress"] = 100
-        analysis_queue[analysis_id]["status"] = "completed"
-        analysis_queue[analysis_id]["completed_at"] = datetime.now().isoformat()
-
-        # TODO: Store case_id from actual analysis
-        analysis_queue[analysis_id]["case_id"] = "case-simulated"
-
-    except Exception as e:
-        analysis_queue[analysis_id]["status"] = "failed"
-        analysis_queue[analysis_id]["error"] = str(e)
-
-
-@app.get("/api/analysis/{analysis_id}")
+@app.get('/api/analysis/{analysis_id}')
 async def get_analysis_status(analysis_id: str):
-    """Get analysis status"""
-    if analysis_id not in analysis_queue:
-        raise HTTPException(404, "Analysis not found")
+    if not analysis_id.startswith('analysis_') or not analysis_id[9:].isalnum():
+        raise HTTPException(400, 'Invalid analysis ID')
+    path = JOBS_DIR / (analysis_id + '.json')
+    if not path.exists(): raise HTTPException(404, 'Analysis not found')
+    job = load(path)
+    progress = read_progress(JOBS_DIR/analysis_id/'progress.json')
+    if progress: job['observed_progress'] = progress
+    if analysis_id not in analysis_queue and job['status'] in {'running','queued'}:
+        job.update(status='interrupted', error='Worker state lost after API restart')
+        save(path, job)
+    return job
 
-    return analysis_queue[analysis_id]
-
-
-@app.get("/api/cases")
+@app.get('/api/cases')
 async def list_cases(limit: int = 20, offset: int = 0):
-    """List all analysis cases"""
-    try:
-        cases = []
+    if not 1 <= limit <= 100 or offset < 0: raise HTTPException(400, 'Invalid pagination')
+    paths = sorted(CASES_DIR.glob('*/manifest.json'), key=lambda p:p.stat().st_mtime, reverse=True)
+    cases = []
+    for path in paths[offset:offset+limit]:
+        execution, score = path.parent/'execution.json', path.parent/'report/score.json'
+        status = case_status(path.parent)
+        errors = {}
+        manifest = artifact(path, errors) or {}
+        cases.append({'case_id':path.parent.name, 'created_at':manifest.get('created_utc'),
+            'subject':str(read_progress(path.parent/'headers.json').get('subject',''))[:200],
+            'status':status,
+            'summary':(artifact(score, errors) or {}) if score.exists() and status == 'completed' else {},
+            'artifact_errors':errors})
+    return {'cases':cases, 'total':len(paths), 'limit':limit, 'offset':offset}
 
-        if not CASES_DIR.exists():
-            return {"cases": [], "total": 0}
-
-        # List case directories
-        case_dirs = sorted([d for d in CASES_DIR.iterdir() if d.is_dir()],
-                          key=lambda x: x.stat().st_mtime,
-                          reverse=True)
-
-        for case_dir in case_dirs[offset:offset+limit]:
-            manifest_file = case_dir / "manifest.json"
-            if manifest_file.exists():
-                with open(manifest_file) as f:
-                    manifest = json.load(f)
-                    cases.append({
-                        "case_id": case_dir.name,
-                        "created_at": manifest.get("created_at"),
-                        "status": "completed",
-                        "summary": manifest.get("summary", {})
-                    })
-
-        return {
-            "cases": cases,
-            "total": len(case_dirs),
-            "limit": limit,
-            "offset": offset
-        }
-
-    except Exception as e:
-        raise HTTPException(500, f"Failed to list cases: {str(e)}")
-
-
-@app.get("/api/cases/{case_id}")
+@app.get('/api/cases/{case_id}')
 async def get_case_detail(case_id: str):
-    """Get detailed case information"""
-    try:
-        case_dir = CASES_DIR / case_id
+    directory = case_path(case_id)
+    result = {'case_id':case_id, 'status':case_status(directory)}
+    headers = read_progress(directory/'headers.json')
+    result['email'] = {key:headers.get(key) for key in ('subject','from','to','date')}
+    files = {'manifest':'manifest.json','score':'report/score.json','origin':'origin.json',
+        'mime':'mime_analysis.json','attachments':'attachments.json','coverage':'analysis_coverage.json','authentication':'auth.json','deobfuscation':'deobfuscation_results.json',
+        'attribution_matrix':'attribution_matrix.json','execution':'execution.json',
+        'criminal_intelligence':'criminal_intelligence.json'}
+    for key, name in files.items():
+        if (directory/name).exists():
+            result[key] = artifact(directory/name, result.setdefault('artifact_errors', {}))
+    if result.get('execution') and result['status'] != 'completed':
+        result['execution'] = dict(result['execution'], recorded_status=result['execution'].get('status'), status=result['status'])
+    for key, name in {'executive_report':'report/executive.md','technical_report':'report/technical.md'}.items():
+        if (directory/name).exists(): result[key] = (directory/name).read_text(encoding='utf-8', errors='replace')
+    return result
 
-        if not case_dir.exists():
-            raise HTTPException(404, "Case not found")
-
-        # Load all case files
-        result = {"case_id": case_id}
-
-        # Manifest
-        manifest_file = case_dir / "manifest.json"
-        if manifest_file.exists():
-            with open(manifest_file) as f:
-                result["manifest"] = json.load(f)
-
-        # Score
-        score_file = case_dir / "report" / "score.json"
-        if score_file.exists():
-            with open(score_file) as f:
-                result["score"] = json.load(f)
-
-        # Executive report
-        exec_file = case_dir / "report" / "executive.md"
-        if exec_file.exists():
-            with open(exec_file) as f:
-                result["executive_report"] = f.read()
-
-        # Technical report
-        tech_file = case_dir / "report" / "technical.md"
-        if tech_file.exists():
-            with open(tech_file) as f:
-                result["technical_report"] = f.read()
-
-        # Origin info
-        origin_file = case_dir / "origin.json"
-        if origin_file.exists():
-            with open(origin_file) as f:
-                result["origin"] = json.load(f)
-
-        # Auth results
-        auth_file = case_dir / "auth.json"
-        if auth_file.exists():
-            with open(auth_file) as f:
-                result["authentication"] = json.load(f)
-
-        # Deobfuscation results
-        deob_file = case_dir / "deobfuscation_results.json"
-        if deob_file.exists():
-            with open(deob_file) as f:
-                result["deobfuscation"] = json.load(f)
-
-        # Criminal intelligence (if exists)
-        criminal_file = case_dir / "detonation" / "criminal_intelligence.json"
-        if criminal_file.exists():
-            with open(criminal_file) as f:
-                result["criminal_intelligence"] = json.load(f)
-
-        # Attribution matrix
-        attr_file = case_dir / "attribution_matrix.json"
-        if attr_file.exists():
-            with open(attr_file) as f:
-                result["attribution_matrix"] = json.load(f)
-
-        return result
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(500, f"Failed to load case: {str(e)}")
-
-
-@app.get("/api/statistics")
-async def get_statistics():
-    """Get overall statistics"""
-    try:
-        stats = {
-            "total_cases": 0,
-            "cases_last_24h": 0,
-            "cases_last_7d": 0,
-            "top_threat_actors": [],
-            "top_asns": [],
-            "top_countries": []
-        }
-
-        if not CASES_DIR.exists():
-            return stats
-
-        case_dirs = [d for d in CASES_DIR.iterdir() if d.is_dir()]
-        stats["total_cases"] = len(case_dirs)
-
-        # Time-based stats
-        now = datetime.now()
-        for case_dir in case_dirs:
-            mtime = datetime.fromtimestamp(case_dir.stat().st_mtime)
-            age_hours = (now - mtime).total_seconds() / 3600
-
-            if age_hours <= 24:
-                stats["cases_last_24h"] += 1
-            if age_hours <= 168:  # 7 days
-                stats["cases_last_7d"] += 1
-
-        # TODO: Aggregate threat actors, ASNs, countries from cases
-
-        return stats
-
-    except Exception as e:
-        raise HTTPException(500, f"Failed to generate statistics: {str(e)}")
-
-
-@app.post("/api/query")
+@app.post('/api/query')
 async def query_cases(query: CaseQuery):
-    """Query cases by IP, domain, or ASN"""
-    try:
-        # TODO: Implement actual database query
-        # For now, return empty results
-        return {
-            "query_type": query.query_type,
-            "value": query.value,
-            "matches": []
-        }
+    database, matches = CASES_DIR/'index.db', []
+    if database.exists():
+        with sqlite3.connect(f'{database.as_uri()}?mode=ro', uri=True) as connection:
+            connection.row_factory = sqlite3.Row
+            matches = [dict(row) for row in connection.execute(
+                'SELECT c.* FROM cases c JOIN indicators i ON c.id=i.case_id WHERE i.type=? AND i.value=?',
+                (query.query_type,query.value))]
+    for match in matches:
+        identifier = 'case-' + match['id']
+        if Path(identifier).name == identifier:
+            match['execution_status'] = case_status(CASES_DIR/identifier)
+    return {'query_type':query.query_type,'value':query.value,'matches':matches}
 
-    except Exception as e:
-        raise HTTPException(500, f"Query failed: {str(e)}")
+@app.get('/api/statistics')
+async def get_statistics():
+    paths = list(CASES_DIR.glob('*/manifest.json'))
+    countries, asns = Counter(), Counter()
+    for path in paths:
+        if case_status(path.parent) != 'completed': continue
+        origin = path.parent/'origin.json'
+        if origin.exists():
+            data = read_progress(origin)
+            if data.get('cc'): countries[data['cc']] += 1
+            if data.get('asn'): asns[str(data['asn'])] += 1
+    return {'total_cases':len(paths),'top_countries':countries.most_common(10),
+        'top_asns':asns.most_common(10),'operator_attribution':'not established'}
 
+@app.get('/api/export/{case_id}')
+async def export_case(case_id: str, format: str = 'zip'):
+    if format != 'zip': raise HTTPException(400, 'Only ZIP export supported')
+    directory = case_path(case_id)
+    if case_status(directory) in {'queued','running'}: raise HTTPException(409,'Analysis still writing evidence')
+    from ..core.evidence import file_inventory
+    try: await asyncio.to_thread(file_inventory,directory)
+    except ValueError as exc: raise HTTPException(409,str(exc)) from exc
+    archive = await asyncio.to_thread(shutil.make_archive,
+        str(EXPORT_DIR/(case_id+'-'+uuid.uuid4().hex)), 'zip', str(directory))
+    return FileResponse(archive, filename=case_id+'.zip', media_type='application/zip')
 
-@app.get("/api/export/{case_id}")
-async def export_case(case_id: str, format: str = "zip"):
-    """Export case as ZIP"""
-    try:
-        case_dir = CASES_DIR / case_id
-
-        if not case_dir.exists():
-            raise HTTPException(404, "Case not found")
-
-        # TODO: Create ZIP archive
-        # For now, return manifest
-        manifest_file = case_dir / "manifest.json"
-        if manifest_file.exists():
-            return FileResponse(manifest_file, filename=f"{case_id}_manifest.json")
-
-        raise HTTPException(404, "No exportable data found")
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(500, f"Export failed: {str(e)}")
-
-
-@app.get("/health")
-async def health_check():
-    """Health check endpoint"""
-    return {
-        "status": "healthy",
-        "timestamp": datetime.now().isoformat(),
-        "version": "2.0.0"
-    }
-
-
-if __name__ == "__main__":
+if __name__ == '__main__':
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host='127.0.0.1', port=8000)

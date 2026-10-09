@@ -1,5 +1,6 @@
 # paw/detonate/runner.py
 import os, json, time, shutil, subprocess, socket, hashlib, requests
+import uuid
 from contextlib import contextmanager
 from datetime import datetime
 from urllib.parse import urlparse
@@ -300,33 +301,34 @@ def _extract_urls_from_case(case_id: str):
     subj = headers.get("subject") or ""
     # fallback: cerca URL minimi in raw headers
     import re
-    raw = json.dumps(headers)
-    found = re.findall(r"https?://[^\s\"\'<>]+", raw)
+    found = []
     urls = []
     seen=set()
     for u in (body_urls + found):
-        if u not in seen:
+        if u not in seen and urlparse(u).scheme in {'http', 'https'}:
             seen.add(u); urls.append(u)
     return case_dir, urls
 
-def run_detonation(url: str|None, case_id: str|None, timeout: int=35, capture_pcap: bool=False, headless: bool=True, observe_only: bool=True):
+def run_detonation(url: str|None, case_id: str|None, timeout: int=35, capture_pcap: bool=False, headless: bool=True, observe_only: bool=True, network_enrichment: bool=True):
     assert url or case_id, "--url oppure --case richiesto"
     if case_id:
         case_dir, urls = _extract_urls_from_case(case_id)
-        if url: urls.insert(0, url)
+        if url:
+            urls = [url]
     else:
         stamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
         case_dir = ensure_dir(f"cases/det-{stamp}")
         urls = [url]
 
-    det_dir = os.path.join(case_dir, "detonation")
+    det_root = os.path.join(case_dir, "detonation")
+    det_dir = os.path.join(det_root, 'runs', uuid.uuid4().hex)
     os.makedirs(det_dir, exist_ok=True)
     out_req = os.path.join(det_dir, "requests.jsonl")
     out_log = os.path.join(det_dir, "netlog.json")
     out_pcap = os.path.join(det_dir, "capture.pcap")
-    out_sum = os.path.join(det_dir, "summary.json")
+    out_sum = os.path.join(det_root, "summary.json")
 
-    results = {"visited": [], "downloads": [], "errors": []}
+    results = {"visited": [], "downloads": [], "errors": [], 'url_results': []}
 
     with maybe_pcap(out_pcap if capture_pcap else "/dev/null"):
         with sync_playwright() as p:
@@ -375,15 +377,18 @@ def run_detonation(url: str|None, case_id: str|None, timeout: int=35, capture_pc
 
             # downloads
             def _on_download(d):
-                try:
-                    path = d.path()  # may raise if not finished
-                except Exception:
-                    path = None
                 fn = d.suggested_filename
-                save_to = os.path.join(det_dir, "downloads", fn)
+                save_to = os.path.join(det_dir, "downloads", uuid.uuid4().hex + '.bin')
                 os.makedirs(os.path.dirname(save_to), exist_ok=True)
-                d.save_as(save_to)
-                results["downloads"].append({"filename": fn, "path": os.path.relpath(save_to, case_dir)})
+                try:
+                    d.save_as(save_to)
+                    digest = hashlib.sha256()
+                    with open(save_to, 'rb') as stream:
+                        while chunk := stream.read(1024 * 1024): digest.update(chunk)
+                    results["downloads"].append({"filename": fn, "path": os.path.relpath(save_to, case_dir),
+                        "sha256": digest.hexdigest(), "size": os.path.getsize(save_to), "url":d.url})
+                except Exception as exc:
+                    results['errors'].append({'download_url':d.url, 'err':str(exc)})
             page.on("download", _on_download)
 
             # visit
@@ -393,14 +398,17 @@ def run_detonation(url: str|None, case_id: str|None, timeout: int=35, capture_pc
                     results["visited"].append(u)
                     
                     # NEW: Extract full phishing kit
-                    kit_data = extract_phishing_kit(page, det_dir, u)
+                    url_dir = os.path.join(det_dir, hashlib.sha256(u.encode()).hexdigest()[:16])
+                    os.makedirs(url_dir, exist_ok=True)
+                    kit_data = extract_phishing_kit(page, url_dir, u)
                     if kit_data:
                         results["phishing_kit"] = kit_data
 
                     # NEW: Generate enrichment files for attribution
-                    enrichment_data = generate_enrichment_files(page, det_dir, u, network_logs)
+                    enrichment_data = generate_enrichment_files(page, url_dir, u, network_logs) if network_enrichment else {'status': 'skipped', 'reason': 'network enrichment disabled'}
                     if enrichment_data:
                         results["enrichment"] = enrichment_data
+                    results['url_results'].append({'url': u, 'artifacts': os.path.relpath(url_dir, case_dir)})
                     
                     # let timers/JS fire briefly
                     page.wait_for_timeout(min(5000, timeout*1000))
@@ -424,7 +432,7 @@ def run_detonation(url: str|None, case_id: str|None, timeout: int=35, capture_pc
                         endpoints.setdefault(host, {"count":0,"methods":set(),"cts":set()})
                         endpoints[host]["count"] += 1
                         if "method" in j: endpoints[host]["methods"].add(j["method"])
-                        if "ct" in j: endpoints[host]["cts"].add(j["ct"])
+                        if j.get("content_type"): endpoints[host]["cts"].add(j["content_type"])
                 except Exception:
                     pass
     except FileNotFoundError:
@@ -435,18 +443,19 @@ def run_detonation(url: str|None, case_id: str|None, timeout: int=35, capture_pc
     ep_list = []
     for h,v in endpoints.items():
         ips=[]
-        try:
-            for fam,_,_,_,sa in socket.getaddrinfo(h, 443, proto=socket.IPPROTO_TCP):
-                ip = sa[0]
-                if ip not in ips: ips.append(ip)
-        except Exception:
-            pass
+        if network_enrichment:
+            try:
+                for fam,_,_,_,sa in socket.getaddrinfo(h, 443, proto=socket.IPPROTO_TCP):
+                    ip = sa[0]
+                    if ip not in ips: ips.append(ip)
+            except Exception:
+                pass
         ep_list.append({
-            "host": h, "ips": ips, "count": v["count"],
+            "host": h, "ips": ips, "ip_resolution_status": "attempted" if network_enrichment else "skipped", "count": v["count"],
             "methods": sorted(list(v["methods"])), "content_types": sorted(list(v["cts"]))
         })
 
-    write_json(out_sum, {
+    summary = {
         "visited": results["visited"],
         "downloads": results["downloads"],
         "endpoints": ep_list,
@@ -454,7 +463,16 @@ def run_detonation(url: str|None, case_id: str|None, timeout: int=35, capture_pc
         "enrichment": results.get("enrichment"),
         "pcap": os.path.basename(out_pcap) if capture_pcap and os.path.exists(out_pcap) else None,
         "observe_only": observe_only,
-        "policy": {"observe_only": observe_only, "blocked_methods": sorted(list(BLOCK_METHODS))}
-    })
+        "policy": {"observe_only": observe_only, "blocked_methods": sorted(list(BLOCK_METHODS))},
+        'errors': results['errors'], 'url_results': results['url_results'],
+        'run_directory': os.path.relpath(det_dir, case_dir),
+        'status': 'partial' if results['errors'] else 'completed',
+    }
+    write_json(os.path.join(det_dir, 'summary.json'), summary)
+    previous = read_json(out_sum) or {}
+    history = previous.get('runs', [])
+    history.append(summary['run_directory'])
+    summary['runs'] = history
+    write_json(out_sum, summary)
 
-    print(f"[detonate] OK → {det_dir}")
+    print(f"[detonate] OK: {det_dir}")

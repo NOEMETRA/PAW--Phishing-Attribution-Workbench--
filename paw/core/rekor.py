@@ -117,24 +117,5 @@ def fetch_inclusion_proof(rekor_url: str, entry_uuid: str) -> dict:
     return proof
 
 def verify_inclusion_proof(proof: dict, statement_sha256: str) -> bool:
-    """Verify inclusion proof locally."""
-    try:
-        from cryptography.hazmat.primitives import hashes
-        from cryptography.hazmat.primitives.asymmetric import ec
-        from cryptography.hazmat.backends import default_backend
-        
-        # Simplified verification: check if the hash is in the Merkle tree
-        # In a full implementation, you'd verify the entire Merkle proof
-        log_index = proof.get("logIndex")
-        tree_size = proof.get("treeSize")
-        root_hash = proof.get("rootHash")
-        hashes = proof.get("hashes", [])
-        
-        if not all([log_index is not None, tree_size is not None, root_hash, hashes]):
-            return False
-        
-        # For now, just check that we have the required fields
-        # A complete implementation would reconstruct the Merkle root
-        return True
-    except Exception:
-        return False
+    """No validated Rekor verifier is implemented; field presence is not a proof."""
+    return False
