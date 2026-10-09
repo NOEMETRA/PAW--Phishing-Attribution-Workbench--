@@ -135,6 +135,30 @@ class ReceivedContracts(unittest.TestCase):
                 self.assertIsNone(value['ip'])
                 self.assertEqual(value['ip_candidates'],[])
 
+    def test_malformed_bracket_fragments_cannot_supply_sender_ip(self):
+        for token in ('[8.8.8.8', '8.8.8.8]', '[IPv6:::ffff:8.8.8.8',
+                      'IPv6:::ffff:8.8.8.8]', '[[8.8.8.8]', '[8.8.8.8]]',
+                      '[ 8.8.8.8', '[[8.8.8.8]]'):
+            with self.subTest(token=token):
+                line = 'from sender.example ('+token+') by mx.example'
+                value = hop(line)
+                self.assertEqual(value['raw'],line+DATE)
+                self.assertIsNone(value['ip'])
+                self.assertEqual(value['ip_observation']['status'],'unsupported')
+                self.assertEqual(value['parsing']['status'],'partial')
+                self.assertTrue(any('bracket' in issue.lower() for issue in value['parsing']['issues']))
+                self.assertEqual([candidate['text'] for candidate in value['ip_candidates']],
+                                 ['[8.8.8.8]'] if token == '[8.8.8.8]]' else [])
+
+    def test_valid_literal_candidates_remain_whole_next_to_malformed_fragment(self):
+        value = hop('from sender.example (8.8.8.8]) by mx.example ([9.9.9.9])')
+        self.assertIsNone(value['ip'])
+        self.assertEqual(value['parsing']['status'],'partial')
+        candidate, = value['ip_candidates']
+        self.assertEqual(candidate['scope'],'by')
+        self.assertEqual(candidate['text'],'[9.9.9.9]')
+        self.assertEqual(value['raw'][slice(*candidate['source_span'])],candidate['text'])
+
 
 if __name__ == '__main__':
     unittest.main()

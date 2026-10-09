@@ -27,7 +27,12 @@ def main():
              'single-label':('from sender.example by MAILBOX01',None),
              'literal-by':('from sender.example by [IPv6:2001:db8::1]',None),
              'missing-from':('by mx.example (8.8.8.8)',None),
-             'comment-keywords':('(by fake.example) from sender.example (comment; by fake.example [8.8.8.8]) by mx.example','8.8.8.8')}
+             'comment-keywords':('(by fake.example) from sender.example (comment; by fake.example [8.8.8.8]) by mx.example','8.8.8.8'),
+             'unclosed-ipv4':('from sender.example ([8.8.8.8) by mx.example',None),
+             'unclosed-mapped':('from sender.example ([IPv6:::ffff:8.8.8.8) by mx.example',None),
+             'unopened-ipv4':('from sender.example (8.8.8.8]) by mx.example',None),
+             'unopened-mapped':('from sender.example (IPv6:::ffff:8.8.8.8]) by mx.example',None),
+             'nested-brackets':('from sender.example ([[8.8.8.8]]) by mx.example',None)}
     base = b'From: a@example.invalid\r\nSubject: Constructed Received contract\r\n'
     samples = {name+'.eml':base+b'Received: '+(line+DATE).encode()+b'\r\n\r\nhello'
                for name,(line,_) in lines.items()}
@@ -64,6 +69,12 @@ def main():
             assert anomalies['receiver_boundary']['status'] == 'not_evaluated'
             assert origin['verified'] is False
             assert coverage['stages']['received_path']['receiver_boundary'] == anomalies['receiver_boundary']
+            if name in {'unclosed-ipv4','unclosed-mapped','unopened-ipv4','unopened-mapped','nested-brackets'}:
+                assert value['ip_candidates'] == []
+                assert value['ip_observation']['status'] == 'unsupported'
+                assert value['parsing']['status'] == 'partial'
+                assert coverage['stages']['received_path']['status'] == 'partial'
+                assert any('bracket' in issue.lower() for issue in value['parsing']['issues'])
             assert score['score_components']['received_private_ip_before_boundary'] == 0
             assert score['score_components']['received_invalid_fqdn'] == 0
             assert score['score_components']['verified_authentication_failures'] == 0
@@ -82,7 +93,7 @@ def main():
                 assert candidate['verified'] is False
             seen.add(name)
         assert seen == set(lines)
-        print('PASS: 12 real full --no-egress Received cases; scoped IPs, raw strings, partial coverage, unverified boundary, zero category penalties and valid seals')
+        print('PASS: 17 real full --no-egress Received cases; malformed bracket rejection, scoped IPs, raw strings, partial coverage, unverified boundary, zero category penalties and valid seals')
 
 
 if __name__ == '__main__':

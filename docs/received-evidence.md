@@ -26,6 +26,10 @@ Whole bracketed and mapped IPv6 literals are retained; malformed brackets,
 hostname suffixes, CIDR tokens and interface-scoped addresses are not silently
 reduced to a different address. Those formats are outside the selected-IP scope;
 their original text remains preserved.
+Bracket scanning also protects incomplete or nested fragments inside comments
+from bare-address fallback. Unmatched or nested brackets before the timestamp
+delimiter make selection unsupported and coverage partial. This is a conservative
+parser scope limit, not a claim that every bracket in a comment violates RFC syntax.
 
 The selected `ip` requires one unique recognized address in the supported From
 clause, with one ordered From/By pair and supported host tokens. Identical
@@ -76,17 +80,18 @@ HELO/PTR comparison also need separate validation.
 
 ## Verification scope
 
-Fifteen contracts cover field provenance, IPv4/IPv6 precedence, complete mapped
+Seventeen contracts cover field provenance, IPv4/IPv6 precedence, complete mapped
 literals, comments, multiple IPs, missing/duplicate/unsupported clauses, limits,
-address categories, non-truncation and offline operation. Twelve real supervised
+address categories, malformed bracket fragments, non-truncation and offline
+operation. Seventeen real supervised
 `full --no-egress` CLI fixtures verify bytes/seals, selected origin provenance,
 candidate spans, explicit boundary uncertainty and zero category/syntax penalties.
 The selected strict profile's 0.05 modifier is kept separate from observed risk.
 
-On Windows/Python 3.13, the combined contract suite passes 241 tests with five
-POSIX-specific skips (246 total); all twelve supervised CLI fixtures pass.
+On Windows/Python 3.13, the combined contract suite passes 243 tests with five
+POSIX-specific skips (248 total); all seventeen supervised CLI fixtures pass.
 Replaying the protected twenty-original corpus against the preceding merged
-version completes twenty cases in 20.235 seconds, with 131.781 MiB peak sampled
+version completes twenty cases in 27.688 seconds, with 138.691 MiB peak sampled
 process-tree RSS (50 ms sampling). Original bytes and all seals verify; the
 no-egress guard reports no attempted blocked operations. Source-file hashes
 match the tested implementation. These are offline workload measurements, not
@@ -101,6 +106,14 @@ three unavailable and five unsupported selections across 101 Received fields.
 Headers, authentication, domain, URL, MIME and deobfuscation evidence artifacts
 are unchanged; this comparison does not assert parity of every derived artifact.
 The private originals, filenames and case-level comparison stay outside Git.
+
+The malformed-bracket correction was reproduced before the fix (nine failing
+assertions across two regression methods). It adds five CLI cases for unmatched
+IPv4/mapped-IPv6 and nested brackets. Compared with the preceding schema-v2
+replay, the corrected twenty-original run has identical Received paths,
+anomalies, origin/transmitting-server, scores, coverage, header, authentication,
+domain, URL, MIME and deobfuscation JSON (240 artifacts). Original bytes and
+both runs' seals verify. No score, origin IP or decision changes on this corpus.
 
 Independent sender authenticity, binary classifier accuracy, speedup and the
 historical four-hour online analysis remain unestablished. Remaining timestamp,

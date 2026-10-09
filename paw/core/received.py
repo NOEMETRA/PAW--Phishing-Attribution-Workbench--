@@ -10,6 +10,32 @@ from .ip_observations import classify_ip
 MAX_RECEIVED_CHARACTERS = 65536
 
 
+def _bracket_regions(line):
+    """Protect complete literals and incomplete/nested bracket fragments alike."""
+    regions = []
+    depth, start, nested, malformed = 0, None, False, False
+    for index,char in enumerate(line):
+        if char == '[':
+            if not depth:
+                start, nested = index, False
+            else:
+                nested = True
+            depth += 1
+        elif char == ']':
+            if not depth:
+                malformed = True
+                regions.append((index,index+1,False))
+            else:
+                depth -= 1
+                if not depth:
+                    regions.append((start,index+1,not nested))
+                    malformed = malformed or nested
+    if depth:
+        regions.append((start,len(line),False))
+        malformed = True
+    return regions,malformed
+
+
 def _structure(line):
     """Locate supported clauses outside comments/quotes/literals, preserving offsets."""
     visible = list(line)
@@ -56,6 +82,10 @@ def _structure(line):
     if depth or quoted or escaped or bracket or angle:
         issues.append('Unterminated Received comment, quote or literal')
     end = len(line) if date_start is None else date_start
+    # Candidate scanning also recognizes literals inside comments. Validate
+    # those brackets here, so malformed fragments cannot establish a sender IP.
+    if _bracket_regions(line[:end])[1]:
+        issues.append('Malformed Received address brackets; selection unsupported')
     masked = ''.join(visible[:end])
     tokens = list(re.finditer(r'(?<!\S)(from|by|with|id|for|via)(?=\s|$)',masked,re.I))
     if tokens and masked[:tokens[0].start()].strip():
@@ -91,12 +121,12 @@ def _first_token(value):
 
 def _ip_candidates(line, clauses, date_start):
     output,protected = [],[]
-    for match in re.finditer(r'\[[^\[\]\r\n]*\]',line):
-        protected.append(match.span())
-        ip = _valid_ip(match.group()[1:-1])
-        if ip: output.append({'ip':ip,'source_span':list(match.span())})
+    for start,stop,complete in _bracket_regions(line)[0]:
+        protected.append((start,stop))
+        ip = _valid_ip(line[start+1:stop-1]) if complete else None
+        if ip: output.append({'ip':ip,'source_span':[start,stop]})
     bracket_index = 0
-    for match in re.finditer(r'(?<![\w.:%/-])(?:IPv6:)?[0-9a-f:.]+(?![\w.:%/-])',line,re.I):
+    for match in re.finditer(r'(?<![\w.:%/\[\]-])(?:IPv6:)?[0-9a-f:.]+(?![\w.:%/\[\]-])',line,re.I):
         while bracket_index < len(protected) and protected[bracket_index][1] <= match.start():
             bracket_index += 1
         if bracket_index < len(protected) and protected[bracket_index][0] <= match.start():
