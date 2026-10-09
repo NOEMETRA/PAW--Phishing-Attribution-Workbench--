@@ -1019,9 +1019,10 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
         'received_non_monotonic_dates': .1 if anomalies.get('non_monotonic_dates') else 0.0,
         'received_private_ip_before_boundary': .1 if anomalies.get('private_ip_before_boundary') else 0.0,
         'received_invalid_fqdn': .05 if anomalies.get('invalid_fqdn_count', 0) >= 1 else 0.0})
-    stage_status['header_parsing'] = {'status': 'partial' if headers.get('header_defects') or headers.get('from_header_count') != 1 else 'completed',
+    stage_status['header_parsing'] = {'status': 'partial' if headers.get('header_defects') or headers.get('from_header_count') != 1 or (headers.get('from_identity') or {}).get('status') != 'parsed' else 'completed',
                                      'defects': headers.get('header_defects') or [],
                                      'field_defects': headers.get('header_field_defects') or [],
+                                     'from_identity': headers.get('from_identity') or {},
                                      'from_header_count': headers.get('from_header_count')}
     stage_status['mime_parsing'] = {'status': mime_result['metadata']['status'], 'issues': mime_result['metadata']['issues']}
     stage_status['received_path'] = {'status': 'parsed_unverified' if hops else 'unavailable', 'verified': False}

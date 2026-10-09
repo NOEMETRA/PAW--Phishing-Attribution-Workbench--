@@ -108,6 +108,8 @@ def extract_display_name(from_header: str):
         parsed = from_header if hasattr(from_header,'addresses') else policy.default.header_factory('From',str(from_header))
         if parsed.defects or len(parsed.addresses) != 1:
             return ""
+        if len(parsed.groups) != 1 or parsed.groups[0].display_name is not None:
+            return ""
         address = parsed.addresses[0]
         if not address.username or not address.domain:
             return ""
@@ -173,7 +175,14 @@ def score_case(hop_diag: dict, auth: dict, dominfo: dict, brand_seeds=None, susp
     
     # Display-Name lookalike
     if headers:
-        display_name = extract_display_name(headers.get("from", ""))
+        # Persisted JSON no longer carries HeaderRegistry objects. Respect its
+        # original occurrence/defect metadata instead of trusting rendered text.
+        from_name_available = headers.get('from_header_count',1) == 1 and not any(
+            isinstance(issue,dict) and str(issue.get('field','')).lower() == 'from'
+            for issue in headers.get('header_field_defects') or [])
+        if headers.get('from_identity'):
+            from_name_available = from_name_available and headers['from_identity'].get('status') == 'parsed'
+        display_name = extract_display_name(headers.get("from", "")) if from_name_available else ""
         if display_name and label:
             display_brand = brand_label(display_name.lower().replace(" ", ""))
             if display_brand and display_brand != label:

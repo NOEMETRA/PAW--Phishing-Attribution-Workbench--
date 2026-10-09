@@ -1,5 +1,6 @@
 """Mailbox syntax/evidence contracts; constructed headers are not accuracy labels."""
 from email import policy
+import json
 import unittest
 
 from paw.core.parser_mail import parse_eml_bytes
@@ -65,6 +66,32 @@ class HeaderIdentityContracts(unittest.TestCase):
         self.assertEqual(headers['header_defects'],[])
         self.assertEqual(extract_display_name(headers['from']),'PayPal A')
         self.assertEqual(getattr(headers['from'],'addresses')[0].domain,'example.invalid')
+
+    def test_serialized_header_defects_keep_the_same_identity_contribution(self):
+        headers = parse_eml_bytes(b'From: PayPal\xff <a@example.invalid>\r\n\r\nhello')
+        persisted = json.loads(json.dumps(headers))
+        domain = {'domain':'example.invalid'}
+        before = score_case({}, {}, domain,headers=headers)
+        after = score_case({}, {}, domain,headers=persisted)
+        self.assertEqual(before,after)
+        self.assertEqual(after['score_components']['sender_domain_heuristics'],0)
+
+    def test_multiple_from_fields_do_not_select_first_display_name(self):
+        headers = parse_eml_bytes(b'From: PayPal A <a@example.invalid>\r\nFrom: Other <b@example.invalid>\r\n\r\nhello')
+        score = score_case({}, {}, {'domain':'example.invalid'},headers=headers)
+        self.assertEqual(score['score_components']['sender_domain_heuristics'],0)
+
+    def test_named_or_extra_groups_are_not_selected_as_a_sender_mailbox(self):
+        for value in ('Group: PayPal <a@example.invalid>;',
+                      'PayPal <a@example.invalid>, undisclosed:;', 'Automated System:;'):
+            with self.subTest(value=value):
+                headers = parse_eml_bytes(('From: '+value+'\r\n\r\nhello').encode())
+                self.assertEqual(extract_display_name(value),'')
+                self.assertEqual(headers['from_identity']['status'],'unsupported')
+                self.assertEqual(headers['header_field_defects'],[])
+                self.assertEqual(headers['header_defects'],[])
+                score = score_case({}, {}, {'domain':'example.invalid'},headers=headers)
+                self.assertEqual(score['score_components']['sender_domain_heuristics'],0)
 
 
 if __name__ == '__main__':

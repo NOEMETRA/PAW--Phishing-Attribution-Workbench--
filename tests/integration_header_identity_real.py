@@ -22,6 +22,8 @@ def main():
     samples = {name:b'From: '+value+b'\r\nTo: b@example.invalid\r\nSubject: Constructed mailbox contract\r\n\r\nhello\r\n'
                for name,value in names.items()}
     samples['bad-date.eml'] = samples['unquoted.eml'].replace(b'To:',b'Date: not a date\r\nTo:')
+    samples['group.eml'] = samples['unquoted.eml'].replace(b'PayPal A <a@example.invalid>',b'Group: PayPal <a@example.invalid>;')
+    samples['extra-group.eml'] = samples['unquoted.eml'].replace(b'PayPal A <a@example.invalid>',b'PayPal <a@example.invalid>, undisclosed:;')
     with tempfile.TemporaryDirectory(prefix='paw-identity-',dir=REPO.parent) as temporary:
         root = Path(temporary).resolve()
         inputs = root/'inputs'
@@ -35,6 +37,7 @@ def main():
         assert result.returncode == 0,(result.stdout+result.stderr).decode(errors='replace')[-6000:]
         sys.path.insert(0,str(REPO))
         from paw.core.verify import verify_case
+        from paw.core.scoring import score_case
         cases = list((root/'cases').glob('case-*'))
         assert len(cases) == len(samples)
         observed = {}
@@ -46,8 +49,12 @@ def main():
             headers,score = read(case/'headers.json'),read(case/'report/score.json')
             coverage = read(case/'analysis_coverage.json')['stages']['header_parsing']
             assert coverage['field_defects'] == headers['header_field_defects']
+            assert coverage['from_identity'] == headers['from_identity']
             assert score['score_components']['verified_authentication_failures'] == 0
             assert score['calibrated'] is False
+            auth = read(case/'auth.json')
+            persisted = score_case({}, {}, {'domain':auth.get('from_domain') or ''},headers=headers)
+            assert persisted['score_components']['sender_domain_heuristics'] == score['score_components']['sender_domain_heuristics']
             observed[name] = {'score':score,'headers':headers,'coverage':coverage}
         for name in ('unquoted.eml','quoted.eml','encoded.eml'):
             assert observed[name]['score']['score_components']['sender_domain_heuristics'] == .2
@@ -58,10 +65,15 @@ def main():
         issue, = observed['bad-bytes.eml']['headers']['header_field_defects']
         assert issue['field'] == 'From' and issue['type'] == 'UndecodableBytesDefect'
         assert observed['bad-date.eml']['coverage']['status'] == 'partial'
+        for name in ('group.eml','extra-group.eml'):
+            assert observed[name]['coverage']['status'] == 'partial'
+            assert observed[name]['headers']['from_identity']['status'] == 'unsupported'
+            assert observed[name]['headers']['header_field_defects'] == []
+            assert observed[name]['score']['score_components']['sender_domain_heuristics'] == 0
         # Coverage is deliberately different; a parser defect adds no score.
         for key in ('score_components','raw_score','decision_score','score','decision','thresholds'):
             assert observed['bad-date.eml']['score'][key] == observed['unquoted.eml']['score'][key]
-        print('PASS: 6 real full --no-egress mailbox cases; equivalent names, absent display names, explicit field defects, original bytes, scores and seals verified')
+        print('PASS: 8 real full --no-egress mailbox cases; supported identity scope, persisted scoring parity, field defects, original bytes, scores and seals verified')
 
 
 if __name__ == '__main__':

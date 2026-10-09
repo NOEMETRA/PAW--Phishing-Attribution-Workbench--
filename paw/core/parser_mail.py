@@ -113,7 +113,25 @@ def _legacy_auth(records):
 
 def _annotate(headers, msg):
     if hasattr(msg, 'get_all'):
-        headers['from_header_count'] = len(msg.get_all('From') or [])
+        from_fields = msg.get_all('From') or []
+        headers['from_header_count'] = len(from_fields)
+        identity = {'status':'unavailable','scope':'single_ungrouped_mailbox',
+                    'reason':'No From field','source':'message_headers','verification':'not_evaluated'}
+        if len(from_fields) > 1:
+            identity.update(status='unsupported',reason='Multiple From fields; no identity selected')
+        elif from_fields:
+            field = from_fields[0]
+            if not hasattr(field,'addresses'):
+                identity.update(status='not_evaluated',reason='Structured From parsing unavailable')
+            elif field.defects:
+                identity.update(status='partial',reason='From field has reported parsing defects')
+            elif len(field.groups) != 1 or field.groups[0].display_name is not None or len(field.addresses) != 1:
+                identity.update(status='unsupported',reason='Grouped or multiple mailboxes outside supported identity scope')
+            elif not field.addresses[0].username or not field.addresses[0].domain:
+                identity.update(status='unsupported',reason='Complete mailbox username/domain unavailable')
+            else:
+                identity.update(status='parsed',reason='One ungrouped mailbox parsed; identity not verified')
+        headers['from_identity'] = identity
         headers['return_path_header_count'] = len(msg.get_all('Return-Path') or [])
         headers['dkim_signature_present'] = bool(msg.get_all('DKIM-Signature'))
         headers['header_defects'] = [str(defect) for defect in msg.defects]
@@ -131,6 +149,9 @@ def _annotate(headers, msg):
                     headers['header_defects'].append(f'{field}[{index}]: {kind}: {defect}')
     else:
         headers['from_header_count'] = None
+        headers['from_identity'] = {'status':'not_evaluated','scope':'single_ungrouped_mailbox',
+                                    'reason':'Structured From parsing unavailable',
+                                    'source':'message_headers','verification':'not_evaluated'}
         headers['return_path_header_count'] = None
         headers['dkim_signature_present'] = None
         headers['header_defects'] = ['MSG transport header completeness not validated']

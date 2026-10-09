@@ -31,6 +31,10 @@ and domain. Bare addresses yield an empty display name; malformed or ambiguous
 lists yield no selected name. Existing parsed objects keep their original defects;
 rendering and reparsing cannot silently turn them into defect-free observations.
 Direct string callers use the same HeaderRegistry parsing, including encoded words.
+Scoring also respects persisted `header_field_defects` and `from_header_count`:
+JSON-rendered strings cannot silently erase original From defects or select the
+first display name from multiple From fields. Legacy callers without original
+metadata receive only best-effort string parsing, not reconstructed authenticity.
 See [Python HeaderRegistry](https://docs.python.org/3/library/email.headerregistry.html)
 and [RFC 5322 addresses](https://www.rfc-editor.org/rfc/rfc5322.html#section-3.4).
 
@@ -39,6 +43,15 @@ it does not calibrate the heuristic or verify sender identity. Correctly parsed
 names remain claims made in the message. Equivalent supported representations
 now receive equivalent heuristic treatment; absence of a name adds no invented
 display-name observation.
+
+The supported identity scope additionally requires one anonymous HeaderRegistry
+group holding one mailbox. Named/extra/empty groups are not flattened into a
+selected sender name. `from_identity` records parsed, partial, unsupported or
+unavailable identity coverage and propagates into the header-parsing stage.
+Grouped syntax is allowed by [RFC 6854](https://www.rfc-editor.org/rfc/rfc6854.html);
+unsupported here does not mean invalid RFC syntax or malicious email, and no
+synthetic parser defect or numeric penalty is invented. Existing authentication
+header claims/domain normalization remain unchanged and unverified.
 
 `headers.json` adds `header_field_defects` for defects reported by the stdlib on
 the selected top-level From, Reply-To, Return-Path, Date and Subject fields.
@@ -58,21 +71,26 @@ heuristics require further audit. Historical sealed cases remain unchanged.
 
 ## Verification scope
 
-Eight contracts cover unquoted/quoted/encoded names, bare mailboxes, ambiguous
+Eleven contracts cover unquoted/quoted/encoded names, bare mailboxes, ambiguous
 and malformed fields, comments/escaped quotes, original undecodable bytes,
-occurrence provenance and reported Date/Reply-To defects. Six supervised real
+occurrence provenance and reported Date/Reply-To defects. JSON round trips,
+multiple From fields and group syntax preserve conservative name selection.
+Eight supervised real
 `full --no-egress` MIME fixtures verify persisted coverage, original bytes/seals,
 equivalent name scores, no fabricated bare-mailbox name, and no risk points from
 a bad Date. Coverage changes are checked separately from numeric score values.
 
-The serial Windows suite passes 211 tests with five POSIX skips (216 total).
-All six mailbox CLI fixtures and eight existing content CLI fixtures pass.
+The serial Windows suite passes 214 tests with five POSIX skips (219 total).
+All eight mailbox CLI fixtures and eight existing content CLI fixtures pass.
 A new private `full --no-egress` replay verifies 20/20 originals and case seals,
 with matching source hashes. Numeric scores/verdicts remain identical and all
 20 are Inconclusive. Header-parsing coverage changes to partial in exactly six
 cases, preserving reported From-field defects; other evidence, MIME, URLs and
 authentication artifacts are unchanged. Every numeric contribution reconciles.
-The run took 20.644 seconds with 129.25 MiB peak sampled process-tree RSS at 50 ms.
+The final run took 19.529 seconds with 131.25 MiB peak sampled process-tree RSS at 50 ms.
+The GitHub group-syntax finding and two additional serialization/multiple-field
+regressions fail before correction; saved JSON and original objects now preserve
+the same conservative display-name scoring boundaries.
 
 The fixtures are not accuracy ground truth. Original-pilot labels remain
 provisional; no independent sender authenticity, binary phishing accuracy,
