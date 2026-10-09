@@ -105,3 +105,9 @@ jobs:
 
       - name: Verify real offline Unicode and ACE spelling observations
         run: python tests/integration_domain_unicode_real.py
+
+      - name: Verify display brand and public registrable label contracts
+        run: python -m unittest discover -s tests -p 'test_display_brand_contracts.py' -v
+
+      - name: Verify actual offline display brand comparisons
+        run: python tests/integration_display_brand_real.py

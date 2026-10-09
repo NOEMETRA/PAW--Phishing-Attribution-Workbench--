@@ -178,6 +178,50 @@ def _reply_to_comparison(headers, from_domain):
             reason='Unverified structural domain comparison; ownership not established')
     return observation
 
+def _display_brand_comparison(headers, from_domain, brand_seeds):
+    headers = headers or {}
+    normalized = normalize_domain(from_domain)
+    record = {'status':'not_evaluated','result':None,'verified':False,
+              'source':'message_headers','ownership_status':'not_evaluated',
+              'scope':'legacy_leftmost_comparison_with_public_registrable_label_exception',
+              'normalized_domain':None,'matched_brand':None,
+              'public_registrable_domain':None,'private_suffix':None,
+              'suffix_source':'bundled_tldextract_PSL_snapshot_no_network',
+              'suffix_package_version':None,
+              'contribution':0.0,'reason':'Unambiguous normalized From domain unavailable'}
+    if not headers.get('from') or not _from_domain_available(headers,normalized):
+        return record
+    record['normalized_domain'] = normalized
+    display_name = extract_display_name(headers.get('from',''))
+    display_brand = brand_label(display_name.lower().replace(' ',''))
+    matched = next((brand for brand in brand_seeds if brand in display_name.lower()
+                    and bk_similarity(display_brand,brand) >= .8),None)
+    record.update(status='completed',result='no_brand_match',
+                  reason='No recognized display-name brand; ownership not evaluated')
+    if not matched:
+        return record
+    import tldextract
+    extractor = tldextract.TLDExtract(cache_dir=None,suffix_list_urls=(),include_psl_private_domains=True)
+    private = extractor(normalized)
+    public = extractor(normalized,include_psl_private_domains=False)
+    record.update(matched_brand=matched,
+                  public_registrable_domain=public.domain+'.'+public.suffix if public.domain and public.suffix else None,
+                  suffix_package_version=tldextract.__version__,
+                  private_suffix=private.is_private if private.suffix else None)
+    # A hosted tenant is not exempt merely because its tenant label spells a brand.
+    # The exception describes registrable spelling, never verified ownership.
+    if public.suffix and public.domain == matched and not private.is_private:
+        record.update(result='registrable_label_match',
+                      reason='Display brand matches public registrable label; ownership not evaluated')
+    elif display_brand == brand_label(normalized):
+        record.update(result='leftmost_label_match',
+                      reason='Existing leftmost spelling matches; ownership not evaluated')
+    else:
+        record.update(result='different',contribution=.2,
+                      reason='Unverified display-name spelling heuristic; ownership not evaluated')
+    return record
+
+
 def score_case(hop_diag: dict, auth: dict, dominfo: dict, brand_seeds=None, suspicious_asn=False, ns_mx_recurrent=False, profile="default", headers=None, detonation_endpoints=None, canary_ips=None, det_summary=None, origin_domain="", deobfuscation_weight: float = 0.30):
     deobfuscation_weight = validate_deobfuscation_weight(deobfuscation_weight)
     brand_seeds = brand_seeds or ["apple","google","microsoft","paypal"]
@@ -225,25 +269,9 @@ def score_case(hop_diag: dict, auth: dict, dominfo: dict, brand_seeds=None, susp
     # Display-Name lookalike
     reply_observation = _reply_to_comparison(headers,from_domain)
     domain_score += reply_observation['contribution']
-    if headers:
-        # Persisted JSON no longer carries HeaderRegistry objects. Respect its
-        # original occurrence/defect metadata instead of trusting rendered text.
-        from_name_available = headers.get('from_header_count',1) == 1 and not any(
-            isinstance(issue,dict) and str(issue.get('field','')).lower() == 'from'
-            for issue in headers.get('header_field_defects') or [])
-        if headers.get('from_identity'):
-            from_name_available = from_name_available and headers['from_identity'].get('status') == 'parsed'
-        display_name = extract_display_name(headers.get("from", "")) if from_name_available else ""
-        if display_name and label:
-            display_brand = brand_label(display_name.lower().replace(" ", ""))
-            if display_brand and display_brand != label:
-                # Check if display name contains known brand
-                for brand in brand_seeds:
-                    if brand in display_name.lower() and bk_similarity(display_brand, brand) >= 0.8:
-                        domain_score += 0.20
-                        break
-        
-    
+    display_observation = _display_brand_comparison(headers,from_domain,brand_seeds)
+    domain_score += display_observation['contribution']
+
     # TLD risk
     if from_domain:
         tld = "." + from_domain.split(".")[-1] if "." in from_domain else ""
@@ -331,10 +359,12 @@ def score_case(hop_diag: dict, auth: dict, dominfo: dict, brand_seeds=None, susp
     if not dominfo.get('domain'): missing.append('from_domain')
     if reply_observation['status'] != 'completed': missing.append('reply_to_comparison')
     if unicode_observation['status'] != 'observed_unverified': missing.append('unicode_domain')
+    if display_observation['status'] != 'completed': missing.append('display_brand_comparison')
     missing.extend(('domain_script_analysis', 'domain_homograph_analysis'))
     return {**_score_metadata(total, components, profile),
             'sender_domain_observations': {'reply_to_comparison':reply_observation,
-                                           'unicode_domain':unicode_observation},
+                                           'unicode_domain':unicode_observation,
+                                           'display_brand_comparison':display_observation},
             "bk_score": round(bk,2), "mixed_flag": None,
             "assessment_status": "partial" if missing else "completed",
             "coverage": {"authentication": verification, "not_evaluated": missing},

@@ -60,6 +60,10 @@ keeps unavailable intervals null and reports relay observations descriptively.
 spellings without automatic risk points. Script and homograph detection remain
 explicitly unevaluated; the legacy mixed-script flag is nullable.
 
+[Display brand comparisons](docs/display-brand-comparison.md) account for public
+registrable labels when evaluating service subdomains. Hosted tenant spelling
+and all domain ownership remain unverified.
+
 PAW is a **research workbench**, not a production incident-response platform or an attribution oracle.
 
 [JavaScript schema v2](docs/javascript-evidence.md) preserves original source,
