@@ -409,7 +409,7 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
     write_json(os.path.join(case_dir, 'mime_analysis.json'), mime_result['metadata'])
     body_text = mime_result['body_text']
     from .mime_analysis import extract_urls
-    from .url_evidence import extract_text_url_candidates, build_url_evidence
+    from .url_evidence import extract_mime_url_candidates, build_url_evidence
     observed_urls = list(dict.fromkeys(mime_result['urls'] +
         extract_urls(headers.get('subject', '')) + extract_urls(headers.get('from', ''))))
     headers['mime_status'] = mime_result['metadata']['status']
@@ -423,7 +423,7 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
     if headers.get("subject"):
         full_text += " " + headers["subject"]
     
-    potential_urls = extract_text_url_candidates(full_text)
+    potential_urls = extract_mime_url_candidates(mime_result, headers.get('subject', ''))
     
     deobfuscation_artifacts = {
         "text": full_text,

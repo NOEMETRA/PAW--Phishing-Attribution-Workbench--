@@ -27,6 +27,19 @@ as incomplete Unicode confusables coverage. It does not verify brand ownership
 and is never substituted into a network target. The public homoglyph URL API and
 the main deobfuscation engine preserve this same contract.
 
+Candidate extraction inspects the original MIME-decoded body representations:
+plain/visible text and subject, parsed HTML attributes, all HTML text (including
+inline scripts), HTML comments, and non-attached `text/javascript` parts. XML
+namespace declarations identify vocabularies and are excluded as network links.
+Visible text is scanned after MIME joins it across tags, so individual parser
+chunks cannot add truncated URL prefixes. Script/style text is scanned separately. HTML
+character references are interpreted once by the parser, matching the ordinary
+MIME URL inventory; raw markup containing `&amp;` is not added as another target.
+Script text remains literal and is never executed. No candidates are extracted
+from the rewritten HTML/JavaScript produced by generic deobfuscation or from
+attachments/embedded emails. Extracted strings still pass the same bounded URL
+interpreter and target validator; hidden invalid inputs produce partial coverage.
+
 `url_evidence.json` and `headers.json.url_evidence` inventory observed URLs and
 recovered textual URLs with provenance. Network targets are deduplicated separately
 from evidence records: distinct source strings and transformation paths remain
@@ -60,27 +73,34 @@ The local comparison map is not presented as a complete UTS #39 implementation.
 
 ## Validation
 
-- 31 URL contract tests exercise resource identity, whole URL recovery, Base64,
+- 38 URL contract tests exercise resource identity, whole URL recovery, Base64,
   nested JSON tracking, invalid UTF-8, IDN/visual comparisons, user information,
   malformed inputs, colliding provenance, all 256 complete resource percent
-  octets, deterministic inventories, failed/unresolved/limited source retention
+  octets, deterministic inventories, failed/unresolved/limited source retention,
+  HTML/script candidates, character-reference semantics, split visible text,
+  namespace identifiers, attachment boundaries
   and bounded decoding. They replace
   the old non-failing harness that expected rewritten destinations.
-- Real supervised `full --no-egress` CLI regressions use three constructed messages
-  (plain, HTML and one containing only failed/unresolved/limited candidates).
+- Real supervised `full --no-egress` CLI regressions use seven constructed messages:
+  plain, ordinary HTML, failed-only candidates, the review's invalid-only HTML
+  attribute, hidden HTML attributes, inline script, and a JavaScript MIME body.
   They preserve original bytes, verify case inventories, and assert that
   malformed URLs, comparison strings and embedded candidates are not network
   targets. These fixtures are not classifier accuracy ground truth.
-- The full Windows contract suite passes: 133 tests, five POSIX-only skips.
+- The full Windows contract suite passes: 140 tests, five POSIX-only skips.
   Real CLI/API shared-directory and crash-recovery integration also passes.
 - A private pilot of 20 distinct original EMLs contains 300 MIME-extracted URLs.
   Before the change, 50 were altered and appended as additional reported URLs
   across three messages. After the change, all 300 retain their bytes and no
-  additional rewritten targets appear; 50 embedded candidates remain available
-  separately (28 in decoded JSON tracking containers).
+  additional rewritten targets appear. Expanded hidden HTML coverage retains
+  four more byte-identical URL literals found in the originals, for 304 network
+  inventory entries. The previous 50 embedded candidates remain available
+  separately (28 in decoded JSON tracking containers), with one more found by
+  expanded coverage, for 51. Additional literals are not proof of active redirects
+  or authenticity; their syntax and source are inspected offline.
 - All 20 real cases complete with verified seals, preserved original bytes and
-  explicit no-egress. The run after the review fixes takes 26.03 seconds with a
-  peak sampled process-tree RSS of 117.04 MiB, observed every 50 ms;
+  explicit no-egress. The run after the review fixes takes 21.75 seconds with a
+  peak sampled process-tree RSS of 130.64 MiB, observed every 50 ms. Tests ran concurrently;
   this single run does not establish a performance improvement or reproduce the
   historical four-hour online workload.
 

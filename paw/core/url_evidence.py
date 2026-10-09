@@ -1,6 +1,7 @@
 """Offline URL inventory: observed/refanged targets and derived candidates."""
 import json
 import re
+from html.parser import HTMLParser
 from ..deobfuscate.url import http_url_status
 
 
@@ -12,6 +13,55 @@ def extract_text_url_candidates(text):
     for token in re.findall(r'[^\s<>"\']+', text):
         if re.match(r'(?:h(?:tt|xx)ps?%|%(?:25){0,3}(?:68|48)|\\x(?:68|48)|aHR0c)', token, re.IGNORECASE):
             candidates.append(token)
+    return list(dict.fromkeys(candidates))
+
+
+class _HtmlURLCandidateParser(HTMLParser):
+    """Inspect parsed attributes and hidden text without execution."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.candidates = []
+        self.raw_text = False
+
+    def handle_starttag(self, tag, attrs):
+        if tag in {'script', 'style'}:
+            self.raw_text = True
+        for name, value in attrs:
+            # Namespace URIs identify XML vocabularies; they are not links.
+            if name == 'xmlns' or name.startswith('xmlns:'):
+                continue
+            if value:
+                self.candidates.extend(extract_text_url_candidates(value))
+
+    def handle_data(self, value):
+        # Visible text has already been joined across markup by MIME analysis.
+        # Scanning individual data chunks would invent truncated URL targets.
+        if self.raw_text:
+            self.candidates.extend(extract_text_url_candidates(value))
+
+    def handle_endtag(self, tag):
+        if tag in {'script', 'style'}:
+            self.raw_text = False
+
+    def handle_comment(self, value):
+        self.candidates.extend(extract_text_url_candidates(value))
+
+
+def extract_mime_url_candidates(mime_result, subject=''):
+    """Inspect original decoded body representations, never attachments or rewritten HTML.
+
+    Parse HTML so character references are interpreted once, matching MIME URL
+    extraction; scanning raw markup would invent a second target containing &amp;.
+    Script text remains literal, and no JavaScript is executed.
+    """
+    candidates = extract_text_url_candidates(mime_result['body_text'])
+    candidates.extend(extract_text_url_candidates(subject))
+    parser = _HtmlURLCandidateParser()
+    parser.feed(mime_result['html'])
+    parser.close()
+    candidates.extend(parser.candidates)
+    candidates.extend(extract_text_url_candidates(mime_result['javascript']))
     return list(dict.fromkeys(candidates))
 
 

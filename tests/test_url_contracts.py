@@ -7,7 +7,7 @@ from urllib.parse import quote
 
 from paw.core.mime_analysis import analyze_mime
 from paw.core.network_policy import offline_policy, violations
-from paw.core.url_evidence import build_url_evidence, extract_text_url_candidates
+from paw.core.url_evidence import build_url_evidence, extract_text_url_candidates, extract_mime_url_candidates
 from paw.deobfuscate.core import DeobfuscationEngine
 from paw.deobfuscate.homoglyph import HomoglyphDetector
 from paw.deobfuscate.url import URLDeobfuscator, http_url_status
@@ -362,6 +362,93 @@ class URLContracts(unittest.TestCase):
         message.set_content('<a href="HTTPS://example.invalid/a%2Fb?x=a%26b&amp;next=1">go</a>', subtype='html')
         result = analyze_mime(message)
         self.assertEqual(result['urls'], ['HTTPS://example.invalid/a%2Fb?x=a%26b&next=1'])
+
+    def test_html_only_attributes_reach_url_recovery_and_failed_evidence(self):
+        invalid = 'hxxps://example[.]invalid/%ZZ'
+        target = 'https://encoded.invalid/a%2Fb'
+        source = quote(target, safe='')
+        message = EmailMessage()
+        message.set_content('<a href="' + invalid + '">go</a><div data-next="' + source + '"></div>', subtype='html')
+        mime = analyze_mime(message)
+        self.assertEqual(mime['urls'], [])
+        self.assertEqual(extract_mime_url_candidates(mime), [invalid, source])
+        results = [self.engine.deobfuscate_url(value) for value in extract_mime_url_candidates(mime)]
+        targets, evidence = build_url_evidence(mime['urls'], results)
+        self.assertEqual(targets, [target])
+        self.assertEqual(evidence[0]['source_url'], invalid)
+        self.assertEqual(evidence[0]['status'], 'invalid')
+        self.assertFalse(evidence[0]['network_target'])
+
+    def test_inline_and_standalone_script_literals_are_inspected_offline(self):
+        invalid = quote('https://example.invalid/%ZZ', safe='')
+        source = encoded('https://script.invalid/a%2Fb')
+        script = 'const bad="' + invalid + '"; const good="' + source + '";'
+        before = len(violations())
+        with offline_policy(True):
+            for subtype, content in [('html', '<script>' + script + '</script>'), ('javascript', script)]:
+                with self.subTest(subtype=subtype):
+                    message = EmailMessage()
+                    message.set_content(content, subtype=subtype)
+                    mime = analyze_mime(message)
+                    self.assertEqual(mime['body_text'].strip(), '')
+                    self.assertEqual(mime['urls'], [])
+                    self.assertEqual(extract_mime_url_candidates(mime), [invalid, source])
+                    results = [self.engine.deobfuscate_url(value) for value in extract_mime_url_candidates(mime)]
+                    targets, evidence = build_url_evidence([], results)
+                    self.assertEqual(targets, ['https://script.invalid/a%2Fb'])
+                    self.assertEqual(evidence[0]['status'], 'invalid')
+        self.assertEqual(len(violations()), before)
+
+    def test_html_candidate_extraction_interprets_character_references_once(self):
+        message = EmailMessage()
+        message.set_content('<a href="HTTPS://example.invalid/a%2Fb?x=a%26b&amp;y=2">go</a>'
+            '<a href="https://example.invalid/?x=1&amp;amp;y=2">two</a>'
+            '<script>const u="https://script.invalid/?x=1&amp;y=2";</script>', subtype='html')
+        mime = analyze_mime(message)
+        expected = ['HTTPS://example.invalid/a%2Fb?x=a%26b&y=2',
+            'https://example.invalid/?x=1&amp;y=2', 'https://script.invalid/?x=1&amp;y=2']
+        self.assertEqual(extract_mime_url_candidates(mime), expected)
+        results = [self.engine.deobfuscate_url(value) for value in expected]
+        self.assertEqual(build_url_evidence(mime['urls'], results)[0], expected)
+
+    def test_candidates_from_all_body_representations_are_deduplicated(self):
+        source = 'hxxps://example[.]invalid/a'
+        message = EmailMessage()
+        message['Subject'] = source
+        message.set_content(source)
+        message.add_alternative('<a href="' + source + '">go</a><!-- ' + source + ' -->', subtype='html')
+        self.assertEqual(extract_mime_url_candidates(analyze_mime(message), str(message['Subject'])), [source])
+        comment = EmailMessage()
+        comment.set_content('<!-- ' + source + ' -->', subtype='html')
+        self.assertEqual(extract_mime_url_candidates(analyze_mime(comment)), [source])
+
+    def test_attached_html_and_javascript_are_not_outer_body_url_candidates(self):
+        message = EmailMessage()
+        message.set_content('Ordinary message')
+        message.add_attachment('<a href="hxxps://attachment[.]invalid/a">go</a>', subtype='html', filename='attached.html')
+        message.add_attachment('const u="https%3A%2F%2Fattachment.invalid%2Fa";', subtype='javascript', filename='attached.js')
+        mime = analyze_mime(message)
+        self.assertEqual(len(mime['attachments']), 2)
+        self.assertEqual(extract_mime_url_candidates(mime), [])
+
+    def test_xml_namespace_identifiers_are_not_html_url_targets(self):
+        message = EmailMessage()
+        message.set_content('<html xmlns="https://namespace.invalid/schema"'
+            ' xmlns:custom="hxxps://other[.]invalid/schema"><a href="hxxps://link[.]invalid/a">go</a></html>', subtype='html')
+        mime = analyze_mime(message)
+        self.assertEqual(extract_mime_url_candidates(mime), ['hxxps://link[.]invalid/a'])
+
+    def test_visible_urls_split_across_html_tags_do_not_create_prefix_targets(self):
+        message = EmailMessage()
+        message.set_content('https://example.invalid/<span>a%2Fb</span>?x=a%26b'
+            ' hxxps://other[.]invalid/<b>login</b>', subtype='html')
+        mime = analyze_mime(message)
+        candidates = extract_mime_url_candidates(mime)
+        self.assertEqual(candidates, ['https://example.invalid/a%2Fb?x=a%26b',
+                                     'hxxps://other[.]invalid/login'])
+        results = [self.engine.deobfuscate_url(value) for value in candidates]
+        self.assertEqual(build_url_evidence(mime['urls'], results)[0],
+                         ['https://example.invalid/a%2Fb?x=a%26b', 'https://other.invalid/login'])
 
     def test_url_interpretation_uses_no_network_or_child_process(self):
         before = len(violations())
