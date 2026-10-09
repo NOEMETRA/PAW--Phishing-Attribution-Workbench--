@@ -5,6 +5,7 @@ from email.parser import BytesParser
 from email.message import EmailMessage
 from .authentication import parse_authentication_results
 from .mime_analysis import MimeLimits, MimeLimitExceeded
+from .mailbox_domains import reply_domain_observation
 
 def parse_eml_bytes(b: bytes):
     return _parse_msg_obj(parse_message_bytes(b))
@@ -113,13 +114,53 @@ def _legacy_auth(records):
 
 def _annotate(headers, msg):
     if hasattr(msg, 'get_all'):
-        headers['from_header_count'] = len(msg.get_all('From') or [])
+        from_fields = msg.get_all('From') or []
+        headers['from_header_count'] = len(from_fields)
+        identity = {'status':'unavailable','scope':'single_ungrouped_mailbox',
+                    'reason':'No From field','source':'message_headers','verification':'not_evaluated'}
+        if len(from_fields) > 1:
+            identity.update(status='unsupported',reason='Multiple From fields; no identity selected')
+        elif from_fields:
+            field = from_fields[0]
+            if not hasattr(field,'addresses'):
+                identity.update(status='not_evaluated',reason='Structured From parsing unavailable')
+            elif field.defects:
+                identity.update(status='partial',reason='From field has reported parsing defects')
+            elif len(field.groups) != 1 or field.groups[0].display_name is not None or len(field.addresses) != 1:
+                identity.update(status='unsupported',reason='Grouped or multiple mailboxes outside supported identity scope')
+            elif not field.addresses[0].username or not field.addresses[0].domain:
+                identity.update(status='unsupported',reason='Complete mailbox username/domain unavailable')
+            else:
+                identity.update(status='parsed',reason='One ungrouped mailbox parsed; identity not verified')
+        headers['from_identity'] = identity
         headers['return_path_header_count'] = len(msg.get_all('Return-Path') or [])
         headers['dkim_signature_present'] = bool(msg.get_all('DKIM-Signature'))
         headers['header_defects'] = [str(defect) for defect in msg.defects]
+        # Message-level defects do not include each structured field's defects.
+        # Preserve occurrences for identity/date/subject fields, without turning
+        # malformed/unavailable observations into authentication or risk points.
+        headers['header_field_defects'] = []
+        for field in ('From','Reply-To','Return-Path','Date','Subject'):
+            for index, value in enumerate(msg.get_all(field) or []):
+                for defect in getattr(value,'defects',()):
+                    kind = type(defect).__name__
+                    headers['header_field_defects'].append({
+                        'field':field,'header_index':index,'type':kind,
+                        'description':str(defect),'source':'message_headers'})
+                    headers['header_defects'].append(f'{field}[{index}]: {kind}: {defect}')
+        reply_fields = msg.get_all('Reply-To') or []
+        headers['reply_to_header_count'] = len(reply_fields)
+        headers['reply_to_domain'] = reply_domain_observation(
+            reply_fields[0] if reply_fields else '',count=len(reply_fields))
     else:
         headers['from_header_count'] = None
+        headers['from_identity'] = {'status':'not_evaluated','scope':'single_ungrouped_mailbox',
+                                    'reason':'Structured From parsing unavailable',
+                                    'source':'message_headers','verification':'not_evaluated'}
         headers['return_path_header_count'] = None
         headers['dkim_signature_present'] = None
         headers['header_defects'] = ['MSG transport header completeness not validated']
+        headers['header_field_defects'] = []
+        headers['reply_to_header_count'] = None
+        headers['reply_to_domain'] = reply_domain_observation('',count=None)
     return headers
