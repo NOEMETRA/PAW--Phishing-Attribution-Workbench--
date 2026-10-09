@@ -189,7 +189,7 @@ def _display_brand_comparison(headers, from_domain, brand_seeds):
               'suffix_source':'bundled_tldextract_PSL_snapshot_no_network',
               'suffix_package_version':None,
               'contribution':0.0,'reason':'Unambiguous normalized From domain unavailable'}
-    if not _from_domain_available(headers,normalized):
+    if not headers.get('from') or not _from_domain_available(headers,normalized):
         return record
     record['normalized_domain'] = normalized
     display_name = extract_display_name(headers.get('from',''))

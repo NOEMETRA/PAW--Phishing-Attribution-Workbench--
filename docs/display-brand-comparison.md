@@ -14,6 +14,9 @@ An unambiguous normalized From domain and a defect-free structured mailbox are
 required. Existing occurrence/identity/field-defect metadata remains authoritative
 when scoring persisted JSON. Missing, ambiguous, grouped, defective or disagreeing
 From domains leave `status=not_evaluated`, `result=null`, `contribution=0`.
+An absent/null From value remains unevaluated even for legacy callers supplying
+only a domain. A valid bare mailbox has an observed empty display name and can
+report `completed/no_brand_match`; missing From input cannot.
 
 The existing display recognition rule (brand substring and normalized display-name
 edit similarity >= 0.8) is retained. If no brand matches, `result=no_brand_match`
@@ -54,7 +57,7 @@ python -m unittest discover -s tests -p 'test_display_brand_contracts.py' -v
 python tests/integration_display_brand_real.py
 ```
 
-Eight unit contracts reproduce the service-subdomain mismatch and cover retained
+Nine unit contracts reproduce the service-subdomain mismatch and cover retained
 other-domain/hosted-namespace risk, From availability, JSON defects, encoded names
 and explicit unverified ownership. Fourteen constructed EMLs run through the
 actual supervised full CLI with `--no-egress`, checking numeric expectations,

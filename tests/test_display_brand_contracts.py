@@ -46,8 +46,22 @@ class DisplayBrandContracts(unittest.TestCase):
 
     def test_no_display_name_is_no_brand_match(self):
         record=self.score('example.com',headers={'from':'google@example.com'})['sender_domain_observations']['display_brand_comparison']
+        self.assertEqual(record['status'],'completed')
         self.assertEqual(record['result'],'no_brand_match')
         self.assertEqual(record['contribution'],0)
+
+    def test_absent_from_input_is_not_a_completed_display_comparison(self):
+        for headers in (None, {}, {'from':None}, {'from':''}, {'subject':'fixture'},
+                        {'from_identity':{'status':'parsed'}},
+                        {'from':None,'from_identity':{'status':'parsed'}}):
+            with self.subTest(headers=headers):
+                result=score_case({}, {}, {'domain':'example.com'},headers=headers)
+                record=result['sender_domain_observations']['display_brand_comparison']
+                self.assertEqual(record['status'],'not_evaluated')
+                self.assertIsNone(record['result'])
+                self.assertIsNone(record['normalized_domain'])
+                self.assertEqual(record['contribution'],0)
+                self.assertIn('display_brand_comparison',result['coverage']['not_evaluated'])
 
     def test_quoted_and_encoded_names_keep_same_result(self):
         records=[]
