@@ -34,6 +34,9 @@ jobs:
       - name: Verify score contributions, unrounded decisions and numeric contracts
         run: python -m unittest discover -s tests -p 'test_scoring_contracts.py' -v
 
+      - name: Verify text preservation and comparison-only deobfuscation observations
+        run: python -m unittest discover -s tests -p 'test_deobfuscation_contracts.py' -v
+
       - name: Verify MIME and attachment evidence contracts
         run: python -m unittest discover -s tests -p 'test_mime_contracts.py' -v
 

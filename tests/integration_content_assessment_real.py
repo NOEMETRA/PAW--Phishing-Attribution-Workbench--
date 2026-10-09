@@ -50,6 +50,8 @@ def main():
         assert result.returncode == 0, result.stdout.decode('utf-8', errors='replace')[-8000:] + result.stderr.decode('utf-8', errors='replace')[-2000:]
         sys.path.insert(0, str(REPO))
         from paw.core.verify import verify_case
+        from paw.core.parser_mail import load_mail
+        from paw.core.mime_analysis import analyze_mime
         cases = list((root / 'cases').glob('case-*'))
         assert len(cases) == len(originals)
         observed = {}
@@ -60,6 +62,23 @@ def main():
             execution = read(case / 'execution.json')
             assert execution['no_egress'] is True
             headers = read(case / 'headers.json')
+            original_headers, original_message, _ = load_mail(str(case / 'input.eml'))
+            original_text = analyze_mime(original_message)['body_text']
+            if original_headers.get('subject'):
+                original_text += ' ' + original_headers['subject']
+            deob_text = headers['deobfuscation_analysis']['deobfuscated_artifacts']['text']
+            assert deob_text['original_text'] == deob_text['final_text'] == original_text
+            assert deob_text['text_schema_version'] == 2
+            assert deob_text['transformations'] == []
+            assert deob_text['suspicion_indicators'] == []
+            assert deob_text['suspicion_score'] == 0
+            assert deob_text['visual_comparison']['comparison_only'] is True
+            deob_result = headers['deobfuscation_analysis']
+            assert deob_result['assessment_status'] == 'descriptive_only'
+            assert deob_result['suspicion_score'] is None
+            assert deob_result['complexity_rating'] == 'not_evaluated'
+            assert deob_result['coverage']['text']['risk_detection'] == 'not_evaluated'
+            assert deob_result['calibrated'] is False
             score = read(case / 'report/score.json')
             assert abs(math.fsum(score['score_components'].values()) - score['raw_score']) < 1e-12
             assert score['score'] == round(score['decision_score'], 2)

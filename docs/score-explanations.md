@@ -46,6 +46,12 @@ does not add points. The CLI leaves ASN/recurrence flags disabled; campaign
 correlation remains unavailable. Malformed/nonfinite numeric score metadata is
 rejected rather than converted into a successful verdict.
 
+The subsequent [text-preservation correction](text-deobfuscation.md) removes
+editorial rewrites from the text path. Newly produced version-2 text artifacts
+contribute zero; limited visual comparisons remain descriptive. The blend and
+URL/HTML contributions remain unchanged. Historical scores below describe the
+pre-correction pilot and are not rewritten.
+
 `finalize_score` still accepts legacy dictionaries containing only `score` and
 the `additional` argument; such a base is explicitly labeled `legacy_base`.
 New callers add through `additional` or `additional_components`. Directly
