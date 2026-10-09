@@ -70,7 +70,7 @@ def decode_text(part, payload):
 
 
 def extract_urls(text):
-    return list(dict.fromkeys(re.findall(r'https?://[^\s<>"\']+', text)))
+    return list(dict.fromkeys(re.findall(r'https?://[^\s<>"\']+', text, flags=re.IGNORECASE)))
 
 
 class HtmlEvidenceParser(HTMLParser):

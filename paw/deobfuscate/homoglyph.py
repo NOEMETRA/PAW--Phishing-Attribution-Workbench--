@@ -95,35 +95,31 @@ class HomoglyphDetector:
         }
 
     def deobfuscate_url(self, url: str) -> Dict[str, Any]:
-        # For URLs, apply same normalization on hostname portion
-        try:
-            from urllib.parse import urlparse, urlunparse
-            p = urlparse(url)
-            host = p.netloc
-            new_host = []
-            changed = False
-            for ch in host:
-                if ch in self.map:
-                    new_host.append(self.map[ch])
-                    changed = True
-                else:
-                    new_host.append(ch)
-            new_host_s = ''.join(new_host)
-            if changed:
-                new_url = urlunparse((p.scheme, new_host_s, p.path, p.params, p.query, p.fragment))
-                return {
-                    'original_url': url,
-                    'final_url': new_url,
-                    'transformations': [{
-                        'technique': 'homoglyph_in_hostname',
-                        'from': host,
-                        'to': new_host_s,
-                        'description': 'Normalized homoglyphs in hostname'
-                    }],
-                    'suspicion_score': 0.15,
-                    'is_changed': True
-                }
-        except Exception as e:
-            logger.debug(f"homoglyph deobfuscate_url error: {e}")
+        """Compare the real hostname without changing the URL's destination.
 
-        return {'original_url': url, 'final_url': url, 'transformations': [], 'suspicion_score': 0.0, 'is_changed': False}
+        This small character map is a heuristic, not a complete Unicode UTS #39
+        skeleton implementation. Its output must never be used as a network URL.
+        """
+        result = {'original_url':url, 'final_url':url, 'transformations':[],
+            'suspicion_indicators':[], 'suspicion_score':0.0, 'is_changed':False}
+        try:
+            from urllib.parse import urlsplit, unquote
+            host = urlsplit(url).hostname or ''
+            unicode_host = unquote(host, errors='strict')
+            labels = []
+            for label in unicode_host.split('.'):
+                labels.append(label.encode('ascii').decode('idna') if label.startswith('xn--') else label)
+            unicode_host = '.'.join(labels)
+            skeleton = ''.join(self.map.get(ch, ch) for ch in unicode_host)
+            result['hostname_analysis'] = {'status':'completed', 'observed_hostname':host,
+                'unicode_hostname':unicode_host, 'visual_skeleton':skeleton,
+                'comparison_only':True, 'complete_unicode_confusables_coverage':False,
+                'limitation':'Limited visual character heuristic; no brand ownership or maliciousness verification'}
+            if skeleton != unicode_host:
+                result['suspicion_indicators'] = [{'type':'hostname_visual_confusable',
+                    'severity':'low', 'description':'Hostname contains mapped visual confusables',
+                    'comparison_only':True}]
+                result['suspicion_score'] = 0.15
+        except (ValueError, UnicodeError) as exc:
+            result['hostname_analysis'] = {'status':'partial', 'reason':str(exc), 'comparison_only':True}
+        return result

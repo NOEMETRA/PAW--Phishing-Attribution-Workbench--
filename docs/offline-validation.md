@@ -67,6 +67,11 @@ Windows-specific resource/locking checks require the Windows host.
   compatibility outputs are local review drafts without asserted standards
   compliance. Offline CLI DKIM key ingestion and genuine SimHash are still open.
 
+URL identity and derived-candidate handling have a subsequent focused audit and
+regression set documented in [URL evidence](url-evidence.md). A private original
+EML pilot exposes real URL rewriting defects; it does not yet establish classifier
+accuracy or reproduce the historical online runtime.
+
 Codex review is requested in GitHub PR comments. Treat the review as an additional
 check and resolve actionable findings with reproductions and focused tests; do
 not interpret an empty review as full software validation.

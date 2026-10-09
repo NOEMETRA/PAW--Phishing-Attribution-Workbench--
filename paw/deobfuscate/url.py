@@ -1,424 +1,236 @@
-#!/usr/bin/env python3
-"""
-PAW - URL Deobfuscation Module
-Deoffusca URL e link offuscati nei phishing
-"""
+"""Offline URL interpretation without replacing observed network destinations.
 
-import re
+Percent escapes inside a URL, embedded redirect values and visual lookalikes
+are evidence to inspect, not permission to rewrite the enclosing URL.
+"""
 import base64
-from urllib.parse import unquote, urlparse
-from typing import Dict, List, Any, Optional
+import ipaddress
+import json
+import re
+from urllib.parse import unquote, urlsplit
 
-# Optional homoglyph normalization layer (if available in package)
-try:
-    from .homoglyph import HomoglyphDetector
-except Exception:
-    HomoglyphDetector = None
-import logging
+from .homoglyph import HomoglyphDetector
 
-logger = logging.getLogger(__name__)
+_SCHEME = re.compile(r'^(https?|hxxps?)://', re.IGNORECASE)
+_HEX = re.compile(r'\\x([0-9a-fA-F]{2})')
+_DOT = re.compile(r'\[\s*\.\s*\]|\(\.\)|\[dot\]', re.IGNORECASE)
+
+
+def http_url_status(value):
+    """Conservative syntax check; does not verify reachability or ownership."""
+    if len(value) > 65536:
+        return 'partial', 'URL character limit exceeded'
+    if not re.match(r'^https?://', value, re.IGNORECASE):
+        return 'not_url', 'Not an absolute HTTP(S) URL'
+    if any(c.isspace() or ord(c) < 32 or ord(c) == 127 for c in value):
+        return 'invalid', 'Whitespace/control characters in URL'
+    if '\\' in value:
+        return 'invalid', 'Backslashes have ambiguous HTTP URL parsing'
+    try:
+        parsed = urlsplit(value)
+        if not parsed.hostname:
+            return 'invalid', 'Missing hostname'
+        # Accessing port detects both nonnumeric and out-of-range values.
+        parsed.port
+        if any(c in parsed.hostname for c in '\\<>"{}|^`'):
+            return 'invalid', 'Invalid hostname characters'
+        if '%' in parsed.hostname:
+            host = unquote(parsed.hostname, errors='strict')
+            if any(c.isspace() or c in '/?#@:[]%\\' or ord(c) < 32 or ord(c) == 127 for c in host):
+                return 'invalid', 'Ambiguous encoded hostname'
+    except (ValueError, UnicodeError) as exc:
+        return 'invalid', str(exc)
+    return 'completed', None
+
 
 class URLDeobfuscator:
-    """Deoffuscatore specializzato per URL"""
+    """Preserve URL bytes; expose bounded derived candidates separately."""
+
+    max_iter = 4
+    max_url_chars = 65536
+    max_token_chars = 16384
+    max_candidates = 32
+    max_tokens = 128
+    max_json_nodes = 128
+    max_json_depth = 8
 
     def __init__(self):
-        # Ordered techniques — URL deobfuscation is iterative so we'll re-run until stable
-        self.techniques = [
-            self._preprocess_obfuscation,
-            self._decode_url_encoding,
-            self._decode_hex_escapes,
-            self._decode_base64_url_parts,
-            self._decode_base64_in_query,
-            self._analyze_url_shorteners,
-            self._detect_idn_homograph_attack,
-        ]
+        self.homoglyph = HomoglyphDetector()
 
-        # If homoglyph detector exists, use it as a final normalization step
-        self.homoglyph = HomoglyphDetector() if HomoglyphDetector else None
-
-    def deobfuscate_url(self, url: str) -> Dict[str, Any]:
-        """
-        Deoffusca un URL applicando multiple tecniche
-
-        Args:
-            url: URL potenzialmente offuscato
-
-        Returns:
-            Dizionario con URL finale e trasformazioni applicate
-        """
-        # Skip email addresses - they're not URLs to deobfuscate
-        if '@' in url and re.match(r'^[^@]+@[^@]+\.[^@]+$', url):
-            return {
-                'original_url': url,
-                'final_url': url,
-                'transformations': [],
-                'suspicion_score': 0,
-                'suspicion_indicators': ['email_address'],
-                'is_email': True
-            }
-        
-        # Iterative multi-pass application: run techniques repeatedly until stable
-        current_url = url
-        transformations: List[Dict[str, Any]] = []
-        suspicion_indicators = []
-
-        # allow instance-level configuration
-        max_iter = getattr(self, 'max_iter', 4)
-        for i in range(max_iter):
-            changed = False
-            for technique in self.techniques:
+    def _recover_text_url(self, value):
+        """Decode an encoded whole URL only until its scheme becomes visible."""
+        current, transformations = value, []
+        limit = min(8, max(1, self.max_iter))
+        for iteration in range(limit + 1):
+            match = _SCHEME.match(current)
+            if match:
+                # Refanging applies only to scheme/authority, never resource
+                # components or visual confusables.
+                end = min([len(current)] + [p for d in '/?#'
+                    if (p := current.find(d, match.end())) >= 0])
+                scheme = match.group(1)
+                scheme = {'hxxp':'http', 'hxxps':'https'}.get(scheme.lower(), scheme)
+                authority = current[match.end():end]
+                userinfo, at, host_port = authority.rpartition('@')
+                authority = userinfo + at + _DOT.sub('.', host_port) if at else _DOT.sub('.', authority)
+                recovered = scheme + '://' + authority + current[end:]
+                if recovered != current:
+                    transformations.append({'technique':'text_url_refang', 'from':current,
+                        'to':recovered, 'iteration':iteration + 1,
+                        'description':'Refanged scheme/authority; resource components preserved'})
+                return recovered, transformations, False
+            if iteration == limit:
+                return current, transformations, bool(transformations)
+            # A decoded tracking container is structured data. Decoding all
+            # of it again would change percent escapes inside its URL values.
+            if current.lstrip().startswith(('{', '[')):
+                return current, transformations, False
+            decoded, technique = current, None
+            if re.search(r'%[0-9a-fA-F]{2}', current):
                 try:
-                    result = technique(current_url)
-                    # Some techniques return a tuple or dict (e.g., homoglyph later) — handle str results
-                    if isinstance(result, dict):
-                        # if a module returns structured result, extract final_url
-                        result_url = result.get('final_url') or result.get('url') or current_url
-                    else:
-                        result_url = result
-
-                    if result_url != current_url:
-                        transformations.append({
-                            'technique': technique.__name__.lstrip('_'),
-                            'from': current_url,
-                            'to': result_url,
-                            'description': self._get_technique_description(technique.__name__),
-                            'iteration': i + 1
-                        })
-                        current_url = result_url
-                        changed = True
-                except Exception as e:
-                    logger.warning(f"Errore in {technique.__name__}: {e}")
-                    continue
-
-            # Homoglyph normalization as a separate final pass per-iteration
-            if self.homoglyph:
-                try:
-                    hg = self.homoglyph.deobfuscate_url(current_url)
-                    if hg and hg.get('is_changed') and hg.get('final_url') != current_url:
-                        transformations.append({
-                            'technique': 'homoglyph_in_hostname',
-                            'from': current_url,
-                            'to': hg.get('final_url'),
-                            'description': 'Normalized homoglyphs in hostname',
-                            'iteration': i + 1
-                        })
-                        current_url = hg.get('final_url')
-                        changed = True
-                except Exception:
-                    pass
-
-            if not changed:
+                    decoded = unquote(current, errors='strict')
+                    technique = 'whole_url_percent_decode'
+                except UnicodeError:
+                    break
+            elif _HEX.search(current):
+                decoded = _HEX.sub(lambda m: chr(int(m.group(1), 16)), current)
+                technique = 'whole_url_hex_decode'
+            else:
+                decoded = self._try_base64_decode_string(current) or current
+                technique = 'whole_url_base64_decode'
+            if decoded == current:
                 break
+            transformations.append({'technique':technique, 'from':current, 'to':decoded,
+                'iteration':iteration + 1, 'description':'Decoded an entire textual URL candidate'})
+            current = decoded
+        return current, transformations, False
 
-        # Analizza URL finale per indicatori di sospetto
-        suspicion_indicators = self._analyze_suspicion_indicators(current_url)
-
-        return {
-            'original_url': url,
-            'final_url': current_url,
-            'transformations': transformations,
-            'suspicion_indicators': suspicion_indicators,
-            'suspicion_score': self._calculate_url_suspicion(transformations, suspicion_indicators),
-            'is_changed': len(transformations) > 0
-        }
-
-    def _decode_url_encoding(self, url: str) -> str:
-        """Decodifica URL encoding (percent-encoding)"""
+    def _try_base64_decode_string(self, value):
+        if not 8 <= len(value) <= self.max_token_chars:
+            return None
+        if not re.fullmatch(r'[A-Za-z0-9+/_-]+={0,2}', value):
+            return None
         try:
-            decoded = unquote(url)
-            # Decodifica multipla per encoding annidati
-            while decoded != unquote(decoded):
-                decoded = unquote(decoded)
-            return decoded
-        except Exception:
-            return url
-
-    def _decode_base64_url_parts(self, url: str) -> str:
-        """Decodifica parti dell'URL che potrebbero essere in base64"""
-        result_url = url
-
-        # Find candidate tokens (path segments and parameter values)
-        try:
-            # split path segments
-            parsed = urlparse(url)
-            path_segs = [seg for seg in parsed.path.split('/') if seg]
-            for seg in path_segs:
-                dec = self._try_base64_decode_string(seg)
-                if dec and self._looks_like_url(dec):
-                    result_url = result_url.replace(seg, dec)
-                    return result_url
-
-            # inspect query params
-            from urllib.parse import parse_qs
-            qs = parse_qs(parsed.query, keep_blank_values=True)
-            for k, vals in qs.items():
-                for v in vals:
-                    dec = self._try_base64_decode_string(v)
-                    if dec and self._looks_like_url(dec):
-                        result_url = result_url.replace(v, dec)
-                        return result_url
-
-            # fallback: generic long token matcher (allow URL-safe base64)
-            for m in re.finditer(r'([A-Za-z0-9_\-]{12,}={0,2})', url):
-                tok = m.group(1)
-                dec = self._try_base64_decode_string(tok)
-                if dec and self._looks_like_url(dec):
-                    result_url = result_url.replace(tok, dec)
-                    return result_url
-        except Exception:
-            pass
-
-        return result_url
-
-    def _try_base64_decode_string(self, s: str) -> Optional[str]:
-        """Try various base64 decoding modes (standard, urlsafe, padded/unpadded)."""
-        if not s or len(s) < 8:
+            padded = value + '=' * (-len(value) % 4)
+            return base64.b64decode(padded, altchars=b'-_', validate=True).decode('utf-8', errors='strict')
+        except (ValueError, UnicodeError):
             return None
 
-        # normalize common URL-safe characters
-        cand = s.strip()
-        # remove surrounding quotes or brackets
-        cand = cand.strip('"\'"')
+    def _embedded_candidates(self, url):
+        parsed = urlsplit(url)
+        tokens = []
+        for index, segment in enumerate(parsed.path.split('/')):
+            if segment:
+                tokens.append(('path_segment', index, None, segment))
+        for index, field in enumerate(parsed.query.split('&')):
+            name, separator, value = field.partition('=')
+            if separator and value:
+                tokens.append(('query_value', index, name, value))
+        if parsed.fragment:
+            tokens.append(('fragment', 0, None, parsed.fragment))
+        candidates, limited = [], len(tokens) > self.max_tokens
+        for component, index, name, token in tokens[:self.max_tokens]:
+            if len(token) > self.max_token_chars:
+                limited = True
+                continue
+            decoded, steps, token_limited = self._recover_text_url(token)
+            limited |= token_limited
+            values, container_limited = self._candidate_values(decoded)
+            limited |= container_limited
+            for candidate, pointer, value_steps in values:
+                if len(candidates) == self.max_candidates:
+                    limited = True
+                    break
+                candidates.append({'url':candidate, 'source_url':url, 'source_component':component,
+                    'source_index':index, 'source_name':name, 'encoded_value':token,
+                    'source_json_pointer':pointer, 'decoding':steps + value_steps,
+                    'status':'candidate_not_verified', 'network_target':False})
+            if len(candidates) == self.max_candidates and limited:
+                break
+        return candidates, limited
 
-        # Replace URL-safe chars and try padded/unpadded
-        variants = [cand, cand.replace('-', '+').replace('_', '/')]
-        for v in variants:
-            # try with padding up to 2 '='
-            for pad in ['', '=', '==']:
-                tryv = v + pad
-                try:
-                    decoded = base64.b64decode(tryv, validate=False)
-                    decs = decoded.decode('utf-8', errors='ignore')
-                    if decs and len(decs) > 3:
-                        return decs
-                except Exception:
-                    continue
-
-        return None
-
-    def _decode_base64_in_query(self, url: str) -> str:
-        """Specifically decode obvious base64 tokens in query parameters"""
-        from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+    def _candidate_values(self, decoded):
+        """Extract URL string values from bounded JSON, without guessing links
+        from arbitrary text or treating the JSON as an enclosing destination.
+        """
+        if http_url_status(decoded)[0] == 'completed':
+            return [(decoded, None, [])], False
+        if not decoded.lstrip().startswith(('{', '[')):
+            return [], False
         try:
-            p = urlparse(url)
-            qs = parse_qs(p.query, keep_blank_values=True)
-            changed = False
-            for k, vals in qs.items():
-                new_vals = []
-                for v in vals:
-                    # try decoding only if likely base64 (contains '=' padding or long length)
-                    if re.match(r'^[A-Za-z0-9+/]{8,}={0,2}$', v):
-                        try:
-                            dec = base64.b64decode(v).decode('utf-8', errors='ignore')
-                            if self._looks_like_url(dec):
-                                new_vals.append(dec)
-                                changed = True
-                                continue
-                        except Exception:
-                            pass
-                    new_vals.append(v)
-                qs[k] = new_vals
+            data = json.loads(decoded)
+        except (ValueError, RecursionError):
+            return [], True
+        stack, values, nodes, limited = [(data, '', 0)], [], 0, False
+        while stack and nodes < self.max_json_nodes:
+            value, pointer, depth = stack.pop()
+            nodes += 1
+            if depth > self.max_json_depth:
+                limited = True
+                continue
+            if isinstance(value, str):
+                candidate, steps, decode_limited = self._recover_text_url(value)
+                limited |= decode_limited
+                if http_url_status(candidate)[0] == 'completed':
+                    values.append((candidate, pointer, [{'technique':'json_url_value',
+                        'json_pointer':pointer, 'description':'URL string value in decoded JSON'}] + steps))
+            elif isinstance(value, dict):
+                stack.extend((item, pointer + '/' + key.replace('~', '~0').replace('/', '~1'), depth + 1)
+                    for key, item in reversed(list(value.items())))
+            elif isinstance(value, list):
+                stack.extend((item, pointer + '/' + str(index), depth + 1)
+                    for index, item in reversed(list(enumerate(value))))
+        return values, limited or bool(stack)
 
-            if changed:
-                new_query = urlencode(qs, doseq=True)
-                return urlunparse((p.scheme, p.netloc, p.path, p.params, new_query, p.fragment))
-        except Exception:
-            return url
-
-        return url
-
-    def _detect_idn_homograph_attack(self, url: str) -> str:
-        """Rileva e decodifica attacchi homograph usando caratteri Unicode"""
-        suspicious_chars = []
-
-        # Mappa caratteri Unicode simili ad ASCII
-        unicode_map = {
-            'а': 'a', 'А': 'A',  # Cyrillic
-            'е': 'e', 'Е': 'E',
-            'о': 'o', 'О': 'O',
-            'р': 'p', 'Р': 'P',
-            'с': 'c', 'С': 'C',
-            'х': 'x', 'Х': 'X',
-            'і': 'i', 'І': 'I',
-            'ј': 'j', 'Ј': 'J',
-            'ӏ': 'l', 'Ӏ': 'l',
-        }
-
-        result_url = url
-        for char in url:
-            if ord(char) > 127:  # Carattere non-ASCII
-                ascii_equivalent = unicode_map.get(char)
-                if ascii_equivalent:
-                    suspicious_chars.append({
-                        'unicode': char,
-                        'ascii': ascii_equivalent,
-                        'codepoint': ord(char)
-                    })
-                    # Sostituisci con equivalente ASCII
-                    result_url = result_url.replace(char, ascii_equivalent)
-
-        # Also attempt to normalize punycode IDN to unicode and viceversa for detection
+    def deobfuscate_url(self, url):
+        result = {'original_url':url, 'final_url':url, 'transformations':[],
+            'suspicion_indicators':[], 'suspicion_score':0.0, 'is_changed':False,
+            'embedded_url_candidates':[], 'network_url':None, 'network_target':False,
+            'url_provenance':'observed', 'analysis_status':'completed'}
+        if len(url) > self.max_url_chars:
+            result.update(status='partial', analysis_status='partial', reason='URL character limit exceeded')
+            return result
+        if not _SCHEME.match(url) and re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+', url):
+            result.update(status='not_url', is_email=True, reason='Email address, not URL')
+            return result
+        current, transformations, limited = self._recover_text_url(url)
+        status, reason = http_url_status(current)
+        result.update(status=status, reason=reason)
+        if status != 'completed':
+            result['decoding_attempts'] = transformations
+            if limited:
+                result.update(status='partial', analysis_status='partial', reason='Whole URL decoding limit exceeded')
+            return result
+        result.update(final_url=current, transformations=transformations, is_changed=current != url,
+            url_provenance='derived_text_url' if transformations else 'observed',
+            network_url=current, network_target=True)
+        candidates, limited = self._embedded_candidates(current)
+        result['embedded_url_candidates'] = candidates
+        if limited:
+            result.update(analysis_status='partial', analysis_limitation='Embedded URL decoding limits reached')
+        hg = self.homoglyph.deobfuscate_url(current)
+        result['hostname_analysis'] = hg.get('hostname_analysis', {})
+        if result['hostname_analysis'].get('status') == 'partial':
+            result.update(analysis_status='partial', hostname_limitation='IDN comparison not completed')
+        indicators = list(hg.get('suspicion_indicators', []))
+        parsed = urlsplit(current)
         try:
-            # If hostname contains xn-- punycode, decode to unicode for inspection
-            p = urlparse(result_url)
-            host = p.netloc
-            if host and host.startswith('xn--'):
-                try:
-                    import idna
-                    decoded = idna.decode(host)
-                    # if decoded contains non-ascii, replace host with decoded
-                    if any(ord(c) > 127 for c in decoded):
-                        result_url = result_url.replace(host, decoded)
-                except Exception:
-                    pass
-        except Exception:
-            pass
-
-        return result_url
-
-    def _analyze_url_shorteners(self, url: str) -> str:
-        """Identify shortener domains locally; network expansion is not performed"""
-        # Per ora solo identifica shortener comuni
-        shortener_domains = [
-            'bit.ly', 'tinyurl.com', 'goo.gl', 't.co', 'ow.ly',
-            'buff.ly', 'adf.ly', 'is.gd', 'v.gd', 's.coop'
-        ]
-        try:
-            parsed = urlparse(url)
-            netloc = parsed.netloc or ''
-            # sanitize common IPv6 oddities
-            if netloc.startswith('[') and ']' in netloc:
-                host = netloc.split(']')[0] + ']'
-            else:
-                host = netloc
-
-            if any(s in host for s in shortener_domains):
-                # don't expand automatically here
-                return url
-        except Exception:
-            # parsing error — return original URL
-            return url
-
-        return url
-
-    def _decode_hex_escapes(self, url: str) -> str:
-        """Decodifica escape hex nel formato \\xHH"""
-        try:
-            # Pattern per \\xHH (hex escape)
-            hex_pattern = r'\\x([0-9a-fA-F]{2})'
-            def hex_replace(match):
-                hex_value = match.group(1)
-                return chr(int(hex_value, 16))
-
-            return re.sub(hex_pattern, hex_replace, url)
-        except Exception:
-            return url
-
-    def _preprocess_obfuscation(self, url: str) -> str:
-        """Apply quick fixes for common textual obfuscation: hxxp/hxxps, [.] and [dot]"""
-        if not url:
-            return url
-
-        s = url
-        # fix scheme obfuscation
-        s = re.sub(r'^hxxps?://', lambda m: 'https://' if m.group(0).lower().startswith('hxxps') else 'http://', s, flags=re.IGNORECASE)
-
-        # replace [.] or (.) or [dot] with .
-        s = re.sub(r'\[\.\]|\(\.\)|\[dot\]', '.', s, flags=re.IGNORECASE)
-        s = re.sub(r'\[\s*\.\s*\]', '.', s)
-
-        # common bracketed dots like google[.]com
-        s = re.sub(r'\[\s*\.\s*\]', '.', s)
-        s = re.sub(r'\[\.\]', '.', s)
-
-        # replace literal '[.]' written without escaping
-        s = s.replace('[.]', '.')
-
-        # remove spaces around dots
-        s = re.sub(r'\s*\.\s*', '.', s)
-
-        return s
-
-    def _looks_like_url(self, text: str) -> bool:
-        """Verifica se una stringa sembra un URL"""
-        if not text or len(text) < 4:
-            return False
-
-        # Deve contenere http o https, o iniziare con www.
-        return ('http' in text.lower() or
-                text.lower().startswith('www.') or
-                '://' in text)
-
-    def _analyze_suspicion_indicators(self, url: str) -> List[Dict]:
-        """Analizza URL per indicatori di sospetto"""
-        indicators = []
-
-        parsed = urlparse(url)
-
-        # IP invece di dominio
-        if self._is_ip_address(parsed.netloc):
-            indicators.append({
-                'type': 'ip_in_url',
-                'description': 'URL contiene indirizzo IP invece di dominio',
-                'severity': 'medium'
-            })
-
-        # Porta non standard
-        if parsed.port and parsed.port not in [80, 443, 8080]:
-            indicators.append({
-                'type': 'non_standard_port',
-                'description': f'Porta non standard: {parsed.port}',
-                'severity': 'low'
-            })
-
-        # Path lungo o complesso
-        if len(parsed.path) > 100:
-            indicators.append({
-                'type': 'long_path',
-                'description': 'Path URL insolitamente lungo',
-                'severity': 'low'
-            })
-
-        # Molti parametri
-        if parsed.query and len(parsed.query.split('&')) > 5:
-            indicators.append({
-                'type': 'many_parameters',
-                'description': 'Molti parametri nell\'URL',
-                'severity': 'low'
-            })
-
-        return indicators
-
-    def _is_ip_address(self, hostname: str) -> bool:
-        """Verifica se una stringa è un indirizzo IP"""
-        import ipaddress
-        try:
-            ipaddress.ip_address(hostname)
-            return True
+            ipaddress.ip_address(parsed.hostname)
+            indicators.append({'type':'ip_in_url','severity':'medium','description':'IP literal in URL hostname'})
         except ValueError:
-            return False
-
-    def _calculate_url_suspicion(self, transformations: List, indicators: List) -> float:
-        """Calcola punteggio di sospetto per l'URL"""
-        score = 0.0
-
-        # Peso per trasformazioni
-        score += len(transformations) * 0.2
-
-        # Peso per indicatori
-        severity_weights = {'low': 0.1, 'medium': 0.3, 'high': 0.5}
-        for indicator in indicators:
-            score += severity_weights.get(indicator.get('severity', 'low'), 0.1)
-
-        return min(1.0, score)
-
-    def _get_technique_description(self, technique_name: str) -> str:
-        """Restituisce descrizione della tecnica"""
-        descriptions = {
-            '_decode_url_encoding': 'Decodifica URL encoding (percent-encoding)',
-            '_decode_base64_url_parts': 'Decodifica parti URL in base64',
-            '_detect_idn_homograph_attack': 'Decodifica attacco homograph IDN',
-            '_analyze_url_shorteners': 'Analizza URL shortener',
-            '_decode_hex_escapes': 'Decodifica escape hex (\\xHH)'
-        }
-        return descriptions.get(technique_name, technique_name)
+            pass
+        if parsed.port and parsed.port not in (80, 443, 8080):
+            indicators.append({'type':'non_standard_port','severity':'low','description':'Non-standard URL port'})
+        if len(parsed.path) > 100:
+            indicators.append({'type':'long_path','severity':'low','description':'Long URL path'})
+        if parsed.query and len(parsed.query.split('&')) > 5:
+            indicators.append({'type':'many_parameters','severity':'low','description':'Many query fields'})
+        if parsed.username is not None:
+            indicators.append({'type':'userinfo_in_url','severity':'low','description':'URL contains user information'})
+        result['suspicion_indicators'] = indicators
+        # Preserve the engine's existing transform-count heuristic; candidate
+        # decoding and routine percent escapes do not change the enclosing URL.
+        count = len(transformations)
+        result['suspicion_score'] = min(1.0, .1 * count + min(.3, .05 * count) +
+            hg.get('suspicion_score', 0.0))
+        return result
