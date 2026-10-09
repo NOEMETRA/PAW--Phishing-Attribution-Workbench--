@@ -27,6 +27,7 @@ def main():
     samples['defective.eml']=samples['root.eml'].replace(b'a@paypa1.com',b'Name\xff <a@paypa1.com>')
     samples['fragment.eml']=samples['root.eml'].replace(b'a@paypa1.com',b'a@paypa1.co m')
     samples['missing.eml']=b'Subject: Domain label contract\r\n\r\nhello'
+    samples['empty.eml']=b'From:\r\n'+samples['missing.eml']
     samples['root-dot.eml']=samples['root.eml'].replace(b'a@paypa1.com',b'a@paypa1.com.')
     with tempfile.TemporaryDirectory(prefix='paw-domain-brand-',dir=REPO.parent) as temporary:
         root=Path(temporary); inputs=root/'inputs'; inputs.mkdir()
@@ -48,12 +49,13 @@ def main():
             headers,auth,score,coverage=[read(case/file) for file in ('headers.json','auth.json','report/score.json','analysis_coverage.json')]
             record=score['sender_domain_observations']['domain_brand_comparison']
             assert record==coverage['stages']['domain_brand_comparison']
+            assert record['source']=='message_headers',(name,record)
             assert record['verified'] is False and record['ownership_status']=='not_evaluated'
             expected=.2 if name in {'root','service','nested','country','private','two-labels','brand-subdomain','leftmost-typo','unknown','uppercase'} else 0
             assert record['contribution']==expected,(name,record)
             assert score['score_components']['sender_domain_heuristics']==expected,(name,score)
             assert score['score_components']['verified_authentication_failures']==0
-            if name in {'duplicate','group','defective','fragment','missing','root-dot'}:
+            if name in {'duplicate','group','defective','fragment','missing','empty','root-dot'}:
                 assert record['status']=='not_evaluated' and record['max_similarity'] is None
                 assert score['bk_score'] is None
                 assert 'domain_brand_comparison' in score['coverage']['not_evaluated']
@@ -70,7 +72,7 @@ def main():
             observed[name]=record
         assert set(observed)=={Path(name).stem for name in samples}
         assert observed['service']==observed['uppercase']
-        print('PASS: 21 actual full --no-egress domain-label cases; registrable/private labels, single contribution, retained first-label rules, unknown suffixes, identity gates, original bytes, JSON/coverage parity and seals')
+        print('PASS: 22 actual full --no-egress domain-label cases; registrable/private labels, single contribution, retained first-label rules, unknown suffixes, identity gates and unavailable-From provenance, original bytes, JSON/coverage parity and seals')
 
 
 if __name__=='__main__': main()

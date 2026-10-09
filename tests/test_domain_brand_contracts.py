@@ -56,6 +56,19 @@ class DomainBrandContracts(unittest.TestCase):
         self.assertIs(record['verified'],False)
         self.assertEqual(record['ownership_status'],'not_evaluated')
 
+    def test_unavailable_from_retains_message_provenance(self):
+        for headers in ({'from':''}, {'from':None}, {'from_header_count':0},
+                        {'from_identity':{'status':'unavailable'}},
+                        parse_eml_bytes(b'Subject: Missing From\r\n\r\nhello'),
+                        parse_eml_bytes(b'From:\r\n\r\nhello')):
+            for version in (headers,json.loads(json.dumps(headers))):
+                with self.subTest(headers=version):
+                    record=self.observation('',headers=version)
+                    self.assertEqual(record['source'],'message_headers')
+                    self.assertEqual(record['status'],'not_evaluated')
+                    self.assertEqual(record['contribution'],0)
+                    self.assertIsNone(record['max_similarity'])
+
     def test_missing_or_defective_identity_does_not_create_similarity_evidence(self):
         for headers in ({'from_header_count':0},{'from_header_count':2},
                         {'from_identity':{'status':'partial'}},

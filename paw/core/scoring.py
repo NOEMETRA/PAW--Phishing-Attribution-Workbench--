@@ -226,7 +226,7 @@ def _domain_brand_comparison(headers, from_domain, brand_seeds):
     headers = headers or {}
     normalized = normalize_domain(from_domain)
     record = {'brand_schema_version':1,'status':'not_evaluated','verified':False,
-              'source':'message_headers' if headers.get('from') else 'supplied_domain',
+              'source':'message_headers' if any(key in headers for key in ('from','from_header_count','from_identity')) else 'supplied_domain',
               'ownership_status':'not_evaluated','normalized_domain':None,
               'scope':'normalized_leftmost_and_PSL_registrable_labels',
               'registrable_domain':None,'private_suffix':None,

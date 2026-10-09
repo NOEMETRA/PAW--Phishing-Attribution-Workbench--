@@ -37,6 +37,9 @@ with the supplied domain or invalid normalized domains leave the comparison
 Original occurrence/defect metadata is respected when scoring persisted JSON.
 Legacy direct callers may supply only a domain hint; the spelling observation then
 records `source=supplied_domain` rather than claiming original From evidence.
+Presence of From fields or parser occurrence/identity metadata retains
+`source=message_headers`, including missing/empty From observations. Unavailable
+identity remains unevaluated; provenance does not assert a usable mailbox.
 
 The legacy `bk_score` is now the rounded maximum of these label similarities and
 is null when the domain comparison cannot be evaluated. It is a spelling metric,
@@ -70,10 +73,10 @@ python -m unittest discover -s tests -p 'test_domain_brand_contracts.py' -v
 python tests/integration_domain_brand_real.py
 ```
 
-Fourteen unit contracts reproduce the hidden registrable-label signal and check
+Fifteen unit contracts reproduce the hidden registrable-label signal and check
 root/service equivalence, retained first-label rules, one contribution, private
 tenants, unknown suffixes, authoritative From gates, JSON defects, normalization,
-unrounded thresholds and no egress attempts. Twenty-one constructed EMLs run
+unrounded thresholds and no egress attempts. Twenty-two constructed EMLs run
 through the actual supervised full CLI with `--no-egress`, checking original
 bytes/seals, contributions and persisted-JSON/coverage parity. These are regression
 contracts, not phishing ground truth or calibrated detection accuracy.
