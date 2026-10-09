@@ -1,0 +1,125 @@
+# URL identity and derived evidence
+
+The previous URL decoder changed network destinations while interpreting their
+content. For example, `https://example.invalid/a%2Fb?x=a%26admin%3D1` became a
+different path and query. Base64 tracking containers were substituted into their
+enclosing links, and visually similar Unicode hostnames became the imitated
+ASCII hostname. The trace pipeline then appended these strings to the URL list
+used for reports, enrichment and automatic detonation.
+
+The URL interpreter now preserves existing HTTP(S) URL bytes, including percent
+escapes, duplicate query fields, plus signs and fragments. Explicit textual
+defanging (`hxxps`, bracketed dots in the hostname) and encoded whole URL strings
+can be recovered, with the original string and transformation provenance retained.
+Whole URL decoding stops when the scheme is recovered: resource components are
+not decoded again. Refanging does not alter user information, paths or queries.
+
+`deobfuscation_results.json` records `embedded_url_candidates` independently from
+`final_url` and `network_url`. Candidates carry the source URL, component, index,
+encoded value, decoding steps and, for JSON tracking containers, a JSON pointer
+to the URL string value. They are `candidate_not_verified`, with
+`network_target: false`. They do not establish that a redirect occurs.
+Arbitrary prose containing `http` is not treated as an absolute URL.
+
+Hostname metadata includes an observed hostname, IDN display form and a visual
+comparison string. The comparison uses a limited character map, explicitly marked
+as incomplete Unicode confusables coverage. It does not verify brand ownership
+and is never substituted into a network target. The public homoglyph URL API and
+the main deobfuscation engine preserve this same contract.
+
+Candidate extraction inspects the original MIME-decoded body representations:
+plain/visible text and subject, parsed HTML attributes, all HTML text (including
+inline scripts), HTML comments, and non-attached `text/javascript` parts. XML
+namespace declarations identify vocabularies and are excluded as network links.
+Visible text is scanned after MIME joins it across tags, so individual parser
+chunks cannot add truncated URL prefixes. Script/style text is scanned separately. HTML
+character references are interpreted once by the parser, matching the ordinary
+MIME URL inventory; raw markup containing `&amp;` is not added as another target.
+MIME extraction retains `html_parts` as separate decoded body documents. Each
+gets a fresh candidate parser, so an unclosed script/style/comment in one part
+cannot change attribute parsing or namespace exclusions in a later part. The
+joined `html` representation remains available for the other analysis layers.
+Base64 candidate recognition probes at most 12 encoded characters (nine bytes),
+accepting all case variants of `http`, `https`, `hxxp` and `hxxps`, standard and
+URL-safe alphabets, and unpadded inputs. Legacy scheme-like malformed candidates
+remain inspectable; full decoding and target validation still apply separately.
+Script text remains literal and is never executed. No candidates are extracted
+from the rewritten HTML/JavaScript produced by generic deobfuscation or from
+attachments/embedded emails. Extracted strings still pass the same bounded URL
+interpreter and target validator; hidden invalid inputs produce partial coverage.
+
+`url_evidence.json` and `headers.json.url_evidence` inventory observed URLs and
+recovered textual URLs with provenance. Network targets are deduplicated separately
+from evidence records: distinct source strings and transformation paths remain
+visible even when they recover the same target, while identical records appear
+once. Invalid, unresolved and decoding-limited textual candidates also remain in
+the inventory, even when no observed HTTP(S) URL exists. Their `url` and
+`source_url` retain the original input; `decoding_attempts` records the failed
+recovery path, with the outcome in `status` and `reason`. They have
+`network_target: false` and never enter `headers.json.urls`. Non-target inputs
+already observed by MIME extraction retain observed provenance; other textual
+inputs have `provenance: text_url_candidate`. Ports, missing hosts, controls, ambiguous
+backslashes, encoded hostname delimiters and malformed percent escapes in any
+component are checked locally. Each `%` must be followed by two hexadecimal
+digits; complete octets such as `%FF` are retained without UTF-8 decoding of
+resource components. These are bounded conservative syntax checks, not a full
+browser URL parser or proof of
+authenticity. URL interpretation coverage reports invalid/unresolved inputs,
+decoding limits and candidate counts.
+
+Decoder limits are explicit: 65,536 characters per URL, 16,384 per embedded token,
+four decoding rounds (configuration capped at eight), 128 tokens, 32 candidates,
+128 JSON nodes and eight JSON levels. Reaching a limit produces partial coverage.
+The generic engine no longer repeats URL decoding through text/homoglyph layers,
+which previously multiplied decode budgets and discarded structured indicators.
+
+The change follows the distinction between reserved URL delimiters and encoded
+data in [RFC 3986, sections 2.2–2.4](https://www.rfc-editor.org/rfc/rfc3986.html#section-2.2),
+and the distinction between visual comparison and identity in
+[Unicode UTS #39](https://www.unicode.org/reports/tr39/#Confusable_Detection).
+The local comparison map is not presented as a complete UTS #39 implementation.
+
+## Validation
+
+- 42 URL contract tests exercise resource identity, whole URL recovery, Base64,
+  nested JSON tracking, invalid UTF-8, IDN/visual comparisons, user information,
+  malformed inputs, colliding provenance, all 256 complete resource percent
+  octets, deterministic inventories, failed/unresolved/limited source retention,
+  HTML/script candidates, character-reference semantics, split visible text,
+  namespace identifiers, independent MIME parser state, all 96 supported scheme
+  case spellings in Base64, bounded prefix probing, attachment boundaries
+  and bounded decoding. They replace
+  the old non-failing harness that expected rewritten destinations.
+- Real supervised `full --no-egress` CLI regressions use 11 constructed messages:
+  plain, ordinary HTML, failed-only candidates, the review's invalid-only HTML
+  attribute, hidden HTML attributes, inline script, a JavaScript MIME body,
+  uppercase/mixed-case/defanged Base64 attributes, and three multipart cases with
+  an unclosed script/style/comment preceding an independent HTML document.
+  They preserve original bytes, verify case inventories, and assert that
+  malformed URLs, comparison strings and embedded candidates are not network
+  targets. These fixtures are not classifier accuracy ground truth.
+- The full Windows contract suite passes: 144 tests, five POSIX-only skips.
+  Real CLI/API shared-directory and crash-recovery integration also passes.
+- A private pilot of 20 distinct original EMLs contains 300 MIME-extracted URLs.
+  Before the change, 50 were altered and appended as additional reported URLs
+  across three messages. After the change, all 300 retain their bytes and no
+  additional rewritten targets appear. Expanded hidden HTML coverage retains
+  four more byte-identical URL literals found in the originals, for 304 network
+  inventory entries. The previous 50 embedded candidates remain available
+  separately (28 in decoded JSON tracking containers), with one more found by
+  expanded coverage, for 51. Additional literals are not proof of active redirects
+  or authenticity; their syntax and source are inspected offline.
+- All 20 real cases complete with verified seals, preserved original bytes and
+  explicit no-egress. The run after the review fixes takes 24.00 seconds with a
+  peak sampled process-tree RSS of 134.75 MiB, observed every 50 ms. Tests ran concurrently;
+  this single run does not establish a performance improvement or reproduce the
+  historical four-hour online workload.
+
+Verdicts remain 19 Inconclusive and one Suspicious or compromised account. Three
+scores fall by 0.01 because routine link interpretation no longer counts as a
+destination transformation; scoring thresholds are unchanged. This does not
+establish detection accuracy. Original spam labels need per-message adjudication;
+Inconclusive is not a benign classification. Detonation, network enrichment and
+DNS-dependent authentication checks remain excluded/unavailable on this host.
+Raw emails, account identifiers, tracking values and private run files are not
+included in the repository. UI and the separate Linux lab remain deferred.

@@ -85,52 +85,12 @@ class DeobfuscationEngine:
         return results
 
     def deobfuscate_url(self, url: str) -> Dict[str, Any]:
-        """Deoffusca un singolo URL con approccio iterativo multi-layer.
+        """Use the URL-specific contract once; preserve all evidence metadata.
 
-        Applica ripetutamente ogni layer finché l'output non si stabilizza
-        o si raggiunge il numero massimo di iterazioni.
+        Reapplying generic text/homoglyph layers can fabricate destinations and
+        multiply decoder budgets. Visual comparison stays inside URL metadata.
         """
-        current = url
-        transformations: List[Dict[str, Any]] = []
-        max_iter = 5
-
-        for _ in range(max_iter):
-            changed = False
-            for layer in self.layers:
-                if hasattr(layer, 'deobfuscate_url'):
-                    try:
-                        res = layer.deobfuscate_url(current)
-                        # layer may return dict with 'final_url' or a simple string
-                        new_url = res.get('final_url') if isinstance(res, dict) else res
-
-                        # Collect transformations if provided
-                        if isinstance(res, dict):
-                            layer_trans = res.get('transformations', [])
-                            if layer_trans:
-                                transformations.extend(layer_trans)
-
-                        if new_url and new_url != current:
-                            changed = True
-                            current = new_url
-                    except Exception as e:
-                        logger.debug(f"deobfuscate_url layer error: {e}")
-                        continue
-
-            if not changed:
-                break
-
-        # Build result
-        suspicion = self.calculate_suspicion_score(transformations)
-        techniques = [t.get('technique', '') for t in transformations]
-
-        return {
-            'original_url': url,
-            'final_url': current,
-            'transformations': transformations,
-            'suspicion_indicators': techniques,
-            'suspicion_score': suspicion,
-            'is_changed': current != url
-        }
+        return self.layers[0].deobfuscate_url(url)
 
     def deobfuscate_html(self, html_content: str) -> Dict[str, Any]:
         """Deoffusca contenuto HTML con passaggi iterativi."""

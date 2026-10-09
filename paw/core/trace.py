@@ -408,10 +408,10 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
             print(f"[pgp] signing failed: {e}")
     write_json(os.path.join(case_dir, 'mime_analysis.json'), mime_result['metadata'])
     body_text = mime_result['body_text']
-    urls = list(dict.fromkeys(mime_result['urls'] +
-        re.findall(r'https?://[^\s<>"\']+', headers.get('subject', '')) +
-        re.findall(r'https?://[^\s<>"\']+', headers.get('from', ''))))
-    headers['urls'] = urls
+    from .mime_analysis import extract_urls
+    from .url_evidence import extract_mime_url_candidates, build_url_evidence
+    observed_urls = list(dict.fromkeys(mime_result['urls'] +
+        extract_urls(headers.get('subject', '')) + extract_urls(headers.get('from', ''))))
     headers['mime_status'] = mime_result['metadata']['status']
 
     # Deobfuscate content to reveal hidden URLs and malicious content
@@ -423,39 +423,11 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
     if headers.get("subject"):
         full_text += " " + headers["subject"]
     
-    # Extract potential URLs from text for deobfuscation analysis
-    potential_urls = []
-    # Look for URL-like patterns in the text (including obfuscated ones)
-    import re
-    url_patterns = [
-        r'https?://[^\s<>"\']+',  # Standard URLs
-        r'hxxps?://[^\s<>"\']+',  # Obfuscated hxxp/hxxps
-        r'[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}[^\s<>"\']*',  # Domain-like patterns
-        r'%[0-9A-Fa-f]{2}.*?[^\s<>"\']*',  # Percent-encoded sequences
-    ]
-    for pattern in url_patterns:
-        matches = re.findall(pattern, full_text)
-        for match in matches:
-            # Skip email addresses (contain @ and look like user@domain)
-            if '@' in match and re.match(r'^[^@]+@[^@]+\.[^@]+$', match):
-                continue
-            # Skip obvious email domains in context
-            if any(email_domain in match.lower() for email_domain in ['@gmail.com', '@yahoo.com', '@hotmail.com', '@outlook.com']):
-                continue
-            potential_urls.append(match)
-    
-    # Also add any URLs that contain suspicious characters (but not email addresses)
-    words = re.findall(r'\S+', full_text)
-    for word in words:
-        if any(char in word for char in ['%', '!', '€', '£']) and len(word) > 10:
-            # Skip if it looks like an email address
-            if '@' in word and re.match(r'^[^@]+@[^@]+\.[^@]+$', word):
-                continue
-            potential_urls.append(word)
+    potential_urls = extract_mime_url_candidates(mime_result, headers.get('subject', ''))
     
     deobfuscation_artifacts = {
         "text": full_text,
-        "urls": list(set(potential_urls + urls)),  # Include both extracted and regex-found URLs
+        "urls": list(dict.fromkeys(observed_urls + potential_urls)),
         "html": mime_result["html"],
         "javascript": mime_result["javascript"],
         "attachments": []
@@ -469,18 +441,13 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
     except Exception as e:
         print(f"[deobfuscate] failed to write deobfuscation_results.json: {e}")
     
-    # Add any newly discovered URLs from deobfuscation
+    # Keep network destinations separate from decoded payloads and comparison
+    # metadata. Malformed observations remain evidence, without entering URLs.
     deobfuscated = deobfuscation_results.get("deobfuscated_artifacts", {})
-    if deobfuscated.get("urls"):
-        for url_data in deobfuscated["urls"]:
-            final_url = url_data.get("final_url")
-            # Skip email addresses - don't report them as discovered URLs
-            if url_data.get("is_email", False):
-                continue
-            if final_url and final_url.startswith(('http://', 'https://')) and final_url not in urls:
-                urls.append(final_url)
-                print(f"[deobfuscate] discovered hidden URL: {final_url}")
-        headers["urls"] = urls
+    urls, url_evidence = build_url_evidence(observed_urls, deobfuscated.get('urls', []))
+    headers['urls'] = urls
+    headers['url_evidence'] = url_evidence
+    write_json(os.path.join(case_dir, 'url_evidence.json'), url_evidence)
     
     # Analyze content for phishing indicators
     subject = headers.get("subject", "")
@@ -526,6 +493,15 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
     stage_status = {'detonation': {'status': 'skipped', 'reason': 'no-egress' if no_egress else 'No URLs'},
                     'network_enrichment': {'status': 'skipped' if no_egress else 'not_evaluated', 'reason': 'no-egress' if no_egress else 'Individual lookup outcomes apply'},
                     'attachment_metadata': {'status': 'not_evaluated'}}
+    url_results = deobfuscated.get('urls', [])
+    stage_status['url_interpretation'] = {
+        'status':'partial' if any(r.get('status') != 'completed' or r.get('analysis_status') == 'partial'
+                                  for r in url_results) else 'completed',
+        'observed_count':len(observed_urls), 'network_target_count':len(urls),
+        'invalid_or_unresolved_count':sum(r.get('status') != 'completed' for r in url_results),
+        'limited_analysis_count':sum(r.get('analysis_status') == 'partial' for r in url_results),
+        'embedded_candidate_count':sum(len(r.get('embedded_url_candidates', [])) for r in url_results),
+        'limitation':'Embedded destinations and visual comparisons are unverified; syntax validity is not authenticity'}
     # Automatic detonation if URLs found
     mark_stage('detonation')
     if urls and not no_egress:

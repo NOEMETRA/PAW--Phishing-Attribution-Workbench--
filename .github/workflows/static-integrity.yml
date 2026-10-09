@@ -31,6 +31,9 @@ jobs:
       - name: Verify MIME and attachment evidence contracts
         run: python -m unittest discover -s tests -p 'test_mime_contracts.py' -v
 
+      - name: Verify URL identity, candidate provenance and decoding bounds
+        run: python -m unittest discover -s tests -p 'test_url_contracts.py' -v
+
       - name: Verify real process supervision and interrupted evidence
         run: python -m unittest discover -s tests -p 'test_runtime_contracts.py' -v
 
@@ -47,3 +50,5 @@ jobs:
         run: python -m pip install 'requests>=2.31,<3' 'rich>=13.7,<14' 'ipwhois>=1.2,<2' 'python-dateutil>=2.8.2,<3' 'uvicorn>=0.24,<1'
       - name: Verify real CLI/API shared ownership, concurrent readers and CLI crash
         run: python tests/integration_cli_api_real.py
+      - name: Verify real offline CLI URL evidence and coverage
+        run: python tests/integration_url_evidence_real.py
