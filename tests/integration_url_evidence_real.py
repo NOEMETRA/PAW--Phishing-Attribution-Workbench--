@@ -75,6 +75,14 @@ def main():
         hidden_base64 = base64.b64encode(hidden_target.encode()).decode()
         bad_encoded = quote(failed_target, safe='')
         js_observed = 'https://script.invalid/a%2Fb?x=a%26b'
+        uppercase_target = 'HTTPS://uppercase.invalid/a%2Fb'
+        mixed_target = 'hTtPs://mixed.invalid/a'
+        defanged_upper = 'HXXPS://refanged[.]invalid/a?x=%FF'
+        bad_upper = 'HTTPS://bad.invalid/%ZZ'
+        uppercase_base64, mixed_base64, defanged_base64, bad_base64 = [
+            base64.b64encode(value.encode()).decode() for value in
+            [uppercase_target, mixed_target, defanged_upper, bad_upper]]
+        invalid_sources = {hidden_bad:failed_target, bad_encoded:failed_target, bad_base64:bad_upper}
         # subtype, body, expected targets, candidate sources, MIME observed count
         hidden_fixtures = {
             'html-bad-only.eml':('html', '<a href="' + hidden_bad + '">go</a>',
@@ -88,10 +96,30 @@ def main():
                 [hidden_target], [bad_encoded, hidden_base64], 0),
             'javascript.eml':('javascript', 'const bad="' + bad_encoded + '";const good="' + hidden_defanged + '";const raw="' + js_observed + '";',
                 [js_observed, hidden_target], [bad_encoded, hidden_defanged, js_observed], 1),
+            'base64-schemes.eml':('html', ''.join('<a data-url="' + value + '">go</a>'
+                for value in [uppercase_base64, mixed_base64, defanged_base64, bad_base64]),
+                [uppercase_target, mixed_target, 'https://refanged.invalid/a?x=%FF'],
+                [uppercase_base64, mixed_base64, defanged_base64, bad_base64], 0),
         }
         for name, (subtype, body, _, _, _) in hidden_fixtures.items():
             item.set_content(body, subtype=subtype)
             originals[name] = item.as_bytes()
+            (inputs / name).write_bytes(originals[name])
+        multipart_sources = {}
+        for kind, incomplete in [('script', '<script>unfinished'), ('style', '<style>unfinished'),
+                                 ('comment', '<!-- unfinished')]:
+            multi = EmailMessage(policy=policy.SMTP)
+            for name in ['From', 'To', 'Subject', 'X-PAW-Fixture']:
+                multi[name] = item[name]
+            multi.make_mixed()
+            for body in [incomplete, '<div xmlns="https://namespace.invalid/schema">'
+                         '<a href="hxxps://later[.]invalid/a?x=1&amp;y=2">go</a></div>']:
+                part = EmailMessage(policy=policy.SMTP)
+                part.set_content(body, subtype='html')
+                multi.attach(part)
+            name = 'multipart-' + kind + '.eml'
+            multipart_sources[name] = 'hxxps://later[.]invalid/a?x=1&y=2'
+            originals[name] = multi.as_bytes()
             (inputs / name).write_bytes(originals[name])
         env = dict(os.environ, PYTHONPATH=str(REPO), PYTHONDONTWRITEBYTECODE='1', PYTHONUTF8='1')
         command = [sys.executable, '-X', 'utf8', '-m', 'paw', 'full', str(inputs),
@@ -159,13 +187,21 @@ def main():
                 assert len(evidence) == len(candidate_sources)
                 for value in candidate_sources:
                     record = next(e for e in evidence if e.get('source_url', e['url']) == value)
-                    if value in [hidden_bad, bad_encoded]:
+                    if value in invalid_sources:
                         assert record['status'] == 'invalid' and record['network_target'] is False
                         assert record['reason'] == 'Malformed percent escape in URL'
-                        assert record['decoding_attempts'][-1]['to'] == failed_target
+                        assert record['decoding_attempts'][-1]['to'] == invalid_sources[value]
                     else:
                         assert record['status'] == 'completed' and record['network_target'] is True
                         assert record['url'] in expected_targets
+            elif source in multipart_sources:
+                assert headers['urls'] == ['https://later.invalid/a?x=1&y=2']
+                assert coverage['status'] == 'completed'
+                assert coverage['observed_count'] == coverage['invalid_or_unresolved_count'] == 0
+                assert coverage['network_target_count'] == 1
+                assert len(evidence) == 1
+                assert evidence[0]['source_url'] == multipart_sources[source]
+                assert evidence[0]['network_target'] is True
             else:
                 assert headers['urls'] == []
                 assert coverage['status'] == 'partial'

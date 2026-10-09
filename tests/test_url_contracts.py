@@ -1,6 +1,7 @@
 """URL evidence regressions; constructed strings are not accuracy ground truth."""
 import base64
 import json
+from itertools import product
 from email.message import EmailMessage
 import unittest
 from urllib.parse import quote
@@ -449,6 +450,58 @@ class URLContracts(unittest.TestCase):
         results = [self.engine.deobfuscate_url(value) for value in candidates]
         self.assertEqual(build_url_evidence(mime['urls'], results)[0],
                          ['https://example.invalid/a%2Fb?x=a%26b', 'https://other.invalid/login'])
+
+    def test_html_parser_state_does_not_cross_independent_mime_parts(self):
+        source = 'hxxps://later[.]invalid/a?x=1&y=2'
+        for incomplete in ['<script>unfinished', '<style>unfinished', '<!-- unfinished']:
+            with self.subTest(incomplete=incomplete):
+                message = EmailMessage()
+                message.make_mixed()
+                for html in [incomplete, '<div xmlns="https://namespace.invalid/schema">'
+                             '<a href="hxxps://later[.]invalid/a?x=1&amp;y=2">go</a></div>']:
+                    part = EmailMessage()
+                    part.set_content(html, subtype='html')
+                    message.attach(part)
+                mime = analyze_mime(message)
+                candidates = extract_mime_url_candidates(mime)
+                self.assertEqual(candidates, [source])
+                results = [self.engine.deobfuscate_url(value) for value in candidates]
+                self.assertEqual(build_url_evidence(mime['urls'], results)[0],
+                                 ['https://later.invalid/a?x=1&y=2'])
+
+    def test_base64_extraction_accepts_every_supported_scheme_case(self):
+        for scheme in ['http', 'https', 'hxxp', 'hxxps']:
+            for letters in product(*[(c.lower(), c.upper()) for c in scheme]):
+                spelling = ''.join(letters)
+                value = spelling + '://example.invalid/a%2Fb'
+                expected = ('http' + ('s' if scheme.endswith('s') else '') if scheme.startswith('hxx') else spelling) + '://example.invalid/a%2Fb'
+                for token in [encoded(value), encoded(value).rstrip('=')]:
+                    with self.subTest(scheme=spelling, token=token):
+                        self.assertEqual(extract_text_url_candidates(token), [token])
+                        message = EmailMessage()
+                        message.set_content('<a data-url="' + token + '">go</a>', subtype='html')
+                        self.assertEqual(extract_mime_url_candidates(analyze_mime(message)), [token])
+                        self.assertEqual(self.engine.deobfuscate_url(token)['network_url'], expected)
+
+    def test_base64_prefix_probe_is_bounded_and_preserves_unicode_url_bytes(self):
+        for value in ['HTTPS://例.invalid/a%2Fb', 'HXXPS://example[.]invalid/a?x=%FF']:
+            for token in [encoded(value), base64.urlsafe_b64encode(value.encode()).decode().rstrip('=')]:
+                self.assertEqual(extract_text_url_candidates(token), [token])
+                self.assertTrue(self.engine.deobfuscate_url(token)['network_target'])
+        oversized = encoded('HTTPS://example.invalid/a') + 'a' * 65536
+        self.assertEqual(extract_text_url_candidates(oversized), [oversized])
+        result = self.engine.deobfuscate_url(oversized)
+        self.assertEqual(result['status'], 'partial')
+        self.assertEqual(build_url_evidence([], [result])[0], [])
+        self.assertEqual(extract_text_url_candidates('SPECIAL-OFFER invoice.pdf user@example.invalid'), [])
+
+    def test_expanded_base64_recognition_keeps_previously_unresolved_candidates(self):
+        sources = [encoded('https is mentioned but this is not a URL'), 'aHR0c!!!', 'aHR0c']
+        self.assertEqual(extract_text_url_candidates(' '.join(sources)), sources)
+        results = [self.engine.deobfuscate_url(value) for value in sources]
+        targets, evidence = build_url_evidence([], results)
+        self.assertEqual(targets, [])
+        self.assertEqual([r['status'] for r in evidence], ['not_url'] * len(sources))
 
     def test_url_interpretation_uses_no_network_or_child_process(self):
         before = len(violations())

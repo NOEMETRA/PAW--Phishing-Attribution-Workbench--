@@ -1,8 +1,24 @@
 """Offline URL inventory: observed/refanged targets and derived candidates."""
+import base64
 import json
 import re
 from html.parser import HTMLParser
 from ..deobfuscate.url import http_url_status
+
+
+def _has_base64_url_scheme(value):
+    # All supported schemes start with ASCII h/H, encoded as a/S. Inspect at
+    # most 12 Base64 characters (9 bytes), independent of the token length.
+    if value[:1] not in {'a', 'S'}:
+        return False
+    prefix = value[:12]
+    try:
+        decoded = base64.b64decode(prefix + '=' * (-len(prefix) % 4), altchars=b'-_', validate=True)
+    except (ValueError, UnicodeError):
+        return False
+    # A scheme-like marker only: malformed/unresolved inputs must still reach
+    # the decoder and remain non-target evidence, as with the legacy prefix.
+    return decoded.lower().startswith((b'http', b'hxxp'))
 
 
 def extract_text_url_candidates(text):
@@ -11,7 +27,8 @@ def extract_text_url_candidates(text):
     # Encoded whole URL candidates require a scheme-like prefix. Final syntax
     # validation and bounded decoding are handled by URLDeobfuscator.
     for token in re.findall(r'[^\s<>"\']+', text):
-        if re.match(r'(?:h(?:tt|xx)ps?%|%(?:25){0,3}(?:68|48)|\\x(?:68|48)|aHR0c)', token, re.IGNORECASE):
+        if (re.match(r'(?:h(?:tt|xx)ps?%|%(?:25){0,3}(?:68|48)|\\x(?:68|48)|aHR0c)', token, re.IGNORECASE)
+                or _has_base64_url_scheme(token)):
             candidates.append(token)
     return list(dict.fromkeys(candidates))
 
@@ -57,10 +74,12 @@ def extract_mime_url_candidates(mime_result, subject=''):
     """
     candidates = extract_text_url_candidates(mime_result['body_text'])
     candidates.extend(extract_text_url_candidates(subject))
-    parser = _HtmlURLCandidateParser()
-    parser.feed(mime_result['html'])
-    parser.close()
-    candidates.extend(parser.candidates)
+    for html_part in mime_result['html_parts']:
+        # Independent MIME documents must never inherit malformed parser state.
+        parser = _HtmlURLCandidateParser()
+        parser.feed(html_part)
+        parser.close()
+        candidates.extend(parser.candidates)
     candidates.extend(extract_text_url_candidates(mime_result['javascript']))
     return list(dict.fromkeys(candidates))
 

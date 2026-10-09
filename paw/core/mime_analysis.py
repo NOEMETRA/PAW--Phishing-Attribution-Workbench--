@@ -155,7 +155,8 @@ def analyze_mime(message, limits=MimeLimits()):
                 text.append(value)
                 urls.extend(extract_urls(value))
         parts.append(item)
-    return {'body_text':'\n'.join(text), 'html':'\n'.join(html), 'javascript':'\n'.join(javascript),
+    return {'body_text':'\n'.join(text), 'html':'\n'.join(html), 'html_parts':html,
+            'javascript':'\n'.join(javascript),
             'urls':list(dict.fromkeys(urls)), 'attachments':attachments,
             'metadata':{'status':'partial' if issues else 'completed', 'parts':parts, 'issues':issues,
                 'decoded_bytes':decoded_total, 'text_bytes':text_total,
