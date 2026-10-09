@@ -280,6 +280,11 @@ the unrounded decision value. Display rounding cannot change a verdict. See
 [score explanations](docs/score-explanations.md) for the contract, numeric
 regressions and the provisional private original-EML triage.
 
+The text path preserves decoded MIME text. Visual comparisons are descriptive
+metadata and do not add risk points; actual URL recovery remains separate.
+See [text preservation](docs/text-deobfuscation.md) for the audited rewriting
+defect and remaining HTML/JavaScript validation.
+
 The result is a **heuristic score**, not a calibrated probability that an email is malicious.
 
 For example, a value such as `0.85` should not be interpreted as "85% probability of phishing."

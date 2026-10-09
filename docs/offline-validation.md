@@ -83,6 +83,12 @@ contributions and the correction for verdict changes caused by intermediate
 rounding/clipping. This exposes the existing heuristics; it does not calibrate
 them or supply independently adjudicated phishing labels.
 
+The next audited defect was text rewriting: all 20 original messages saturated
+the text-transformation score, including the ten owner-recognized legitimate
+messages. [Text preservation](text-deobfuscation.md) separates original text from
+descriptive visual comparisons and removes that unsupported contribution. URL
+recovery remains separate; HTML/JavaScript heuristics still need validation.
+
 Codex review is requested in GitHub PR comments. Treat the review as an additional
 check and resolve actionable findings with reproductions and focused tests; do
 not interpret an empty review as full software validation.

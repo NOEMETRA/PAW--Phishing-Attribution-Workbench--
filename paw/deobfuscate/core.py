@@ -161,38 +161,10 @@ class DeobfuscationEngine:
         }
 
     def deobfuscate_text(self, text: str) -> Dict[str, Any]:
-        """Deoffusca testo con passaggi iterativi (homoglyphs, entity decode, etc.)."""
-        current = text
-        transformations: List[Dict[str, Any]] = []
-        max_iter = 4
-
-        for _ in range(max_iter):
-            changed = False
-            for layer in self.layers:
-                if hasattr(layer, 'deobfuscate_text'):
-                    try:
-                        res = layer.deobfuscate_text(current)
-                        new_text = res.get('final_text') if isinstance(res, dict) else res
-                        if isinstance(res, dict):
-                            transformations.extend(res.get('transformations', []))
-                        if new_text and new_text != current:
-                            changed = True
-                            current = new_text
-                    except Exception as e:
-                        logger.debug(f"deobfuscate_text layer error: {e}")
-                        continue
-            if not changed:
-                break
-
-        suspicion = self.calculate_suspicion_score(transformations)
-        techniques = [t.get('technique', '') for t in transformations]
-
-        return {
-            'final_text': current,
-            'transformations': transformations,
-            'suspicion_indicators': techniques,
-            'suspicion_score': suspicion
-        }
+        """Preserve text once; visual comparison is not an iterative decoder."""
+        result = self.layers[3].deobfuscate_text(text)
+        result['suspicion_indicators'] = []
+        return result
 
     def calculate_suspicion_score(self, transformations: List[Dict]) -> float:
         """Calcola punteggio di sospetto basato sulle trasformazioni"""
