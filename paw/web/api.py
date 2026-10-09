@@ -12,7 +12,7 @@ import sqlite3
 import sys
 import uuid
 import time
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, closing
 from typing import Literal
 from fastapi import BackgroundTasks, FastAPI, File, HTTPException, UploadFile, Request
 from fastapi.responses import FileResponse, JSONResponse
@@ -61,6 +61,7 @@ _workers = asyncio.Semaphore(1)
 MAX_ANALYSIS_SECONDS = 900
 _cancel_events = {}
 _recovery_locks = {}
+UNSTABLE_CASE_STATUSES = {'queued','running','recovery_blocked'}
 
 class RuntimeOptions(BaseModel):
     wall_seconds: float = Field(default=900, gt=0, le=3600, strict=True)
@@ -177,7 +178,7 @@ async def stable_case_status(directory):
 
 async def require_stable_case(directory):
     status = await stable_case_status(directory)
-    if status in {'queued','running','recovery_blocked'}:
+    if status in UNSTABLE_CASE_STATUSES:
         raise HTTPException(409,'Worker shutdown not confirmed; evidence access blocked')
     return status
 
@@ -342,17 +343,27 @@ async def get_analysis_status(analysis_id: str):
         except FileNotFoundError: raise HTTPException(404,'Analysis not found')
         control = control_path(DATA_DIR,JOBS_DIR,analysis_id)
         stopped = read_progress(control/'supervisor.json').get('tree_stopped')
-        needs_recovery = (job.get('status') in {'running','recovery_blocked'} or
-                          (job.get('status') == 'interrupted' and stopped is not True) or stopped is False)
         external = job.get('origin') in {'cli','legacy_cli'}
         owner = job.get('supervisor_owner') or read_progress(control/'process.json').get('supervisor_owner',{})
         owner_live = identity_alive(owner) if external else False
+        if external and owner_live is False:
+            # The CLI may have published completion after the first snapshot and
+            # before its owner exited. Once that owner is gone, reload its final
+            # acknowledgment before deciding whether recovery is still needed.
+            job = job_state(DATA_DIR,JOBS_DIR,analysis_id)
+            stopped = read_progress(control/'supervisor.json').get('tree_stopped')
+            external = job.get('origin') in {'cli','legacy_cli'}
+            owner = job.get('supervisor_owner') or read_progress(control/'process.json').get('supervisor_owner',{})
+            owner_live = identity_alive(owner) if external else False
+        needs_recovery = (job.get('status') in {'running','recovery_blocked'} or
+                          (job.get('status') == 'interrupted' and stopped is not True) or stopped is False)
         if external and job.get('status') in {'running','queued','recovery_blocked'} and (
-                owner_live is True or (stopped is not True and owner_live is None)):
+                owner_live is True or owner_live is None):
             # API must not kill an active CLI or guess ownership for legacy jobs.
             if owner_live is None:
                 job.update(status='recovery_blocked',error='CLI supervisor identity cannot be established')
-                save(path,job)
+                # Do not overwrite state owned by a possibly live modern CLI.
+                # Legacy discovery caches are refreshed from controls below.
         elif analysis_id not in analysis_queue and needs_recovery:
             outcome = await recover_worker(control)
             job['supervisor'] = outcome
@@ -371,7 +382,8 @@ async def get_analysis_status(analysis_id: str):
                 'error':'API restarted before worker launch'})
             job.update(status='interrupted',error='API restarted before worker launch',completed_at=now())
             save(path,job)
-        if not path.exists(): save(path,job)
+        if not path.exists() or (job.get('origin') == 'legacy_cli' and job != read_progress(path)):
+            save(path,job)
     progress = read_progress(control/'progress.json')
     if progress: job['observed_progress'] = progress
     return job
@@ -384,7 +396,7 @@ async def list_cases(limit: int = 20, offset: int = 0):
     for path in paths[offset:offset+limit]:
         execution, score = path.parent/'execution.json', path.parent/'report/score.json'
         status = await stable_case_status(path.parent)
-        if status == 'recovery_blocked':
+        if status in UNSTABLE_CASE_STATUSES:
             cases.append({'case_id':path.parent.name,'status':status,'summary':{},'artifact_errors':{}})
             continue
         errors = {}
@@ -419,7 +431,7 @@ async def get_case_detail(case_id: str):
 async def query_cases(query: CaseQuery):
     database, matches = CASES_DIR/'index.db', []
     if database.exists():
-        with sqlite3.connect(f'{database.as_uri()}?mode=ro', uri=True) as connection:
+        with closing(sqlite3.connect(f'{database.as_uri()}?mode=ro', uri=True)) as connection:
             connection.row_factory = sqlite3.Row
             matches = [dict(row) for row in connection.execute(
                 'SELECT c.* FROM cases c JOIN indicators i ON c.id=i.case_id WHERE i.type=? AND i.value=?',
@@ -429,7 +441,7 @@ async def query_cases(query: CaseQuery):
         identifier = 'case-' + match['id']
         if Path(identifier).name == identifier:
             match['execution_status'] = await stable_case_status(CASES_DIR/identifier)
-            if match['execution_status'] == 'recovery_blocked': continue
+            if match['execution_status'] in UNSTABLE_CASE_STATUSES: continue
             stable_matches.append(match)
     return {'query_type':query.query_type,'value':query.value,'matches':stable_matches}
 

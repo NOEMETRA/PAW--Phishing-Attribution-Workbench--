@@ -1,10 +1,12 @@
 """Original EML -> real CLI + HTTP API in one directory, including CLI crash."""
 import io
+from contextlib import closing
 import json
 import os
 from pathlib import Path
 import signal
 import socket
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -39,9 +41,10 @@ def main():
         checks = []
         processes = []
 
-        def request(path,method='GET'):
+        def request(path,method='GET',body=None):
             with urllib.request.urlopen(urllib.request.Request(
-                    f'http://127.0.0.1:{port}'+path,method=method),timeout=15) as response:
+                    f'http://127.0.0.1:{port}'+path,method=method,data=body,
+                    headers={'Content-Type':'application/json'} if body is not None else {}),timeout=15) as response:
                 return response.read()
 
         def blocked(path,method='GET'):
@@ -50,7 +53,7 @@ def main():
                 assert error.code == 409,(path,error.code)
             else: raise AssertionError('Evidence access permitted: '+path)
 
-        def start_cli(label):
+        def start_cli(label,wait_for_index=False):
             known = set((root/'jobs').glob('analysis_*'))
             stream = (root/(label+'.log')).open('wb')
             process = subprocess.Popen([sys.executable,'-X','utf8','-m','paw','full',str(inputs),
@@ -64,8 +67,15 @@ def main():
                     control = candidates[0]
                     record = read(control/'process.json')
                     progress = read(control/'progress.json')
+                    # Let the first case complete and enter the real SQLite index
+                    # while the batch is still active. Its rows must stay hidden.
+                    if wait_for_index and len(progress.get('case_ids',[])) < 2:
+                        time.sleep(.01)
+                        continue
                     for case_id in progress.get('case_ids',[]):
                         case = root/'cases'/case_id
+                        if wait_for_index and read(case/'execution.json').get('status') != 'completed':
+                            continue
                         if record and read(case/'manifest.json').get('analysis_job') == control.name:
                             current = psutil.Process(record['pid'])
                             assert current.create_time() == record['created_at']
@@ -79,7 +89,7 @@ def main():
             raise TimeoutError('CLI did not register a case')
 
         try:
-            cli,control,case,worker = start_cli('active')
+            cli,control,case,worker = start_cli('active',wait_for_index=True)
             with (root/'api.log').open('wb') as log:
                 # Startup recovery must leave the identified live CLI untouched.
                 api_process = subprocess.Popen([sys.executable,'-m','uvicorn','paw.web.api:app',
@@ -93,6 +103,15 @@ def main():
                 state = json.loads(request('/api/analysis/'+control.name))
                 assert state['origin']=='cli' and state['status']=='running',state
                 assert cli.poll() is None and worker.is_running()
+                listing = json.loads(request('/api/cases?limit=100'))['cases']
+                assert listing and all(item['status']=='running' for item in listing),listing
+                assert all(set(item)=={'case_id','status','summary','artifact_errors'} for item in listing),listing
+                with closing(sqlite3.connect(root/'cases'/'index.db')) as connection:
+                    indicator = connection.execute("SELECT type,value FROM indicators WHERE case_id=? AND type IN ('ip','domain','asn') LIMIT 1",
+                        (case.name[5:],)).fetchone()
+                assert indicator is not None,'Original EML did not produce an indexed indicator'
+                query_body = json.dumps({'query_type':indicator[0],'value':indicator[1]}).encode()
+                assert json.loads(request('/api/query','POST',query_body))['matches']==[]
                 for path,method in [(f'/api/cases/{case.name}','GET'),
                         (f'/api/cases/{case.name}/verify','POST'),(f'/api/export/{case.name}','GET')]:
                     blocked(path,method)
@@ -117,7 +136,11 @@ def main():
                 assert json.loads(request('/api/cases/'+case.name+'/verify','POST'))['integrity']=='verified'
                 with zipfile.ZipFile(io.BytesIO(request('/api/export/'+case.name))) as archive:
                     assert archive.read('input.eml')==source
-                checks.append({'flow':'active original-EML CLI + API startup; HTTP and CLI readers blocked; completed case verify/export','status':'passed'})
+                matches = json.loads(request('/api/query','POST',query_body))['matches']
+                assert len(matches)==8 and all(item['execution_status']=='completed' for item in matches),matches
+                listing = json.loads(request('/api/cases?limit=100'))['cases']
+                assert len(listing)==8 and all(item['status']=='completed' and 'subject' in item for item in listing),listing
+                checks.append({'flow':'active original-EML CLI + API startup; collections redacted and indexed matches hidden; HTTP and CLI readers blocked; completed collection/query/verify/export','status':'passed'})
 
                 cli,control,case,worker=start_cli('crash')
                 cli.kill(); cli.wait(timeout=10)

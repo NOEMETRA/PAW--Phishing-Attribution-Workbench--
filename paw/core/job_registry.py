@@ -38,17 +38,25 @@ def case_owner(directory, data_dir, jobs_dir):
 def job_state(data_dir, jobs_dir, identifier):
     validate_job_id(identifier)
     state = Path(jobs_dir)/(identifier+'.json')
-    if state.exists(): return read_progress(state)
+    job = {}
+    if state.exists():
+        job = read_progress(state)
+        if job.get('origin') != 'legacy_cli': return job
     control = control_path(data_dir,jobs_dir,identifier)
     if not control.is_dir(): raise FileNotFoundError(identifier)
     # Old CLI controls have no job state or recorded supervisor identity. Discover
     # them, but never kill a potentially live CLI to make its files readable.
-    job = {'origin':'legacy_cli','status':'recovery_blocked'}
+    # Synthesized API state is only a discovery cache. Old CLI supervisors do not
+    # update that cache, so always consult their current shutdown acknowledgment.
+    job.update(origin='legacy_cli',status='recovery_blocked')
     outcome = read_progress(control/'supervisor.json')
+    job['supervisor'] = outcome
     if outcome.get('tree_stopped') is True:
         result = read_progress(control/'result.json')
         if outcome.get('status') == 'exited' and outcome.get('returncode') == 0 and result.get('status') == 'completed':
             job.update(result)
+            job.pop('error',None)
+            job.pop('partial_cases',None)
         else:
             job.update(status='interrupted',error='Legacy CLI worker stopped')
     return job

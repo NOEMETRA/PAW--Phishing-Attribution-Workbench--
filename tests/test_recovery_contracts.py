@@ -1,13 +1,16 @@
 """Real launch attempts and crash recovery; no email targets or mocked workers."""
 import asyncio
+from contextlib import closing
 import json
 import os
 from pathlib import Path
 import signal
+import sqlite3
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 import psutil
 from fastapi import HTTPException
@@ -130,6 +133,82 @@ class RecoveryContracts(unittest.IsolatedAsyncioTestCase):
         self.assertFalse((self.control/'supervisor.json').exists())
         with self.assertRaises(RuntimeError): require_stopped_case(self.case)
 
+    async def test_collection_endpoints_hide_all_unstable_cases(self):
+        atomic_json(self.case/'headers.json',{'subject':'Private active subject'})
+        with closing(sqlite3.connect(api.CASES_DIR/'index.db')) as connection, connection:
+            connection.execute('CREATE TABLE cases (id TEXT, subject TEXT)')
+            connection.execute('CREATE TABLE indicators (case_id TEXT, type TEXT, value TEXT)')
+            connection.execute('INSERT INTO cases VALUES (?,?)',('crash','Private indexed subject'))
+            connection.execute('INSERT INTO indicators VALUES (?,?,?)',('crash','domain','fixture.invalid'))
+        for status,origin in [('running','cli'),('running','api'),('queued','api'),('recovery_blocked','cli')]:
+            with self.subTest(status=status,origin=origin):
+                job = {'status':status,'origin':origin}
+                if origin == 'cli' and status == 'running':
+                    job['supervisor_owner'] = process_identity(os.getpid(),dedicated_group=False)
+                atomic_json(api.JOBS_DIR/(self.identifier+'.json'),job)
+                api.analysis_queue = {self.identifier:job} if origin == 'api' else {}
+                listing = (await api.list_cases())['cases']
+                self.assertEqual(listing,[{'case_id':self.case.name,'status':status,
+                    'summary':{},'artifact_errors':{}}])
+                query = await api.query_cases(api.CaseQuery(query_type='domain',value='fixture.invalid'))
+                self.assertEqual(query['matches'],[])
+
+    async def test_cli_completion_between_snapshot_and_owner_check_is_preserved(self):
+        # A real publisher writes its acknowledgment and exits while the reader
+        # holds an older snapshot. The read hook only synchronizes this ordering;
+        # identity checks, file publication and recovery remain real operations.
+        source = '''import time
+from pathlib import Path
+from paw.core.runtime import atomic_json
+root=Path.cwd()
+(root/'publisher-ready').touch()
+while not (root/'release-publisher').exists(): time.sleep(.01)
+atomic_json(root/'jobs/analysis_crash/supervisor.json',{'tree_stopped':True,'status':'exited','returncode':0})
+atomic_json(root/'jobs/analysis_crash.json',{'origin':'cli','status':'completed','case_ids':['case-crash'],'acknowledgment':'publisher-success'})
+'''
+        publisher = subprocess.Popen([sys.executable,'-c',source],cwd=self.root,
+            env=dict(os.environ,PYTHONPATH=str(REPO)),stdout=subprocess.DEVNULL,stderr=subprocess.PIPE)
+        try:
+            for _ in range(300):
+                if (self.root/'publisher-ready').exists(): break
+                if publisher.poll() is not None: self.fail('Publisher exited before release')
+                await asyncio.sleep(.01)
+            else: self.fail('Publisher did not become ready')
+            atomic_json(api.JOBS_DIR/(self.identifier+'.json'),{'origin':'cli','status':'running',
+                'supervisor_owner':process_identity(publisher.pid,dedicated_group=False)})
+            original_read = api.job_state
+            released = False
+            def synchronized_read(*args):
+                nonlocal released
+                snapshot = original_read(*args)
+                if not released:
+                    released = True
+                    (self.root/'release-publisher').touch()
+                    self.assertEqual(publisher.wait(timeout=5),0)
+                return snapshot
+            with patch.object(api,'job_state',side_effect=synchronized_read):
+                job = await api.get_analysis_status(self.identifier)
+            self.assertEqual(job['status'],'completed')
+            self.assertEqual(job['acknowledgment'],'publisher-success')
+            self.assertEqual(read_progress(api.JOBS_DIR/(self.identifier+'.json'))['status'],'completed')
+            self.assertFalse((self.case/'execution.json').exists())
+        finally:
+            if publisher.poll() is None: publisher.kill()
+            publisher.wait(timeout=5)
+            publisher.stderr.close()
+
+    async def test_unknown_cli_owner_never_overwrites_its_pending_acknowledgment(self):
+        state = api.JOBS_DIR/(self.identifier+'.json')
+        original = {'status':'running','origin':'cli','supervisor_owner':{}}
+        atomic_json(state,original)
+        for stopped in (False,True):
+            with self.subTest(tree_stopped=stopped):
+                atomic_json(self.control/'supervisor.json',{'tree_stopped':stopped})
+                job = await api.get_analysis_status(self.identifier)
+                self.assertEqual(job['status'],'recovery_blocked')
+                self.assertEqual(read_progress(state),original)
+                self.assertFalse((self.case/'execution.json').exists())
+
     async def test_legacy_control_without_known_supervisor_blocks_access(self):
         identifier = 'analysis_oldcli'
         legacy = self.root/'.paw-jobs'/'oldcli'
@@ -156,6 +235,27 @@ class RecoveryContracts(unittest.IsolatedAsyncioTestCase):
         atomic_json(legacy/'result.json',{'status':'completed','case_ids':[legacy_case.name]})
         self.assertEqual(await api.stable_case_status(legacy_case),'completed')
         require_stopped_case(legacy_case)
+
+    async def test_cached_legacy_state_refreshes_after_successful_shutdown(self):
+        identifier = 'analysis_oldcached'
+        legacy = self.root/'.paw-jobs'/'oldcached'
+        legacy.mkdir(parents=True)
+        legacy_case = api.CASES_DIR/'case-legacy-cached'
+        legacy_case.mkdir()
+        atomic_json(legacy_case/'manifest.json',{})
+        atomic_json(legacy/'progress.json',{'case_ids':[legacy_case.name]})
+        self.assertEqual((await api.get_analysis_status(identifier))['status'],'recovery_blocked')
+        self.assertEqual(read_progress(api.JOBS_DIR/(identifier+'.json'))['origin'],'legacy_cli')
+        with self.assertRaises(RuntimeError): require_stopped_case(legacy_case)
+        # Completion of old controls must supersede the API's discovery cache.
+        atomic_json(legacy/'result.json',{'status':'completed','case_ids':[legacy_case.name]})
+        atomic_json(legacy/'supervisor.json',{'tree_stopped':True,'status':'exited','returncode':0})
+        require_stopped_case(legacy_case)
+        self.assertEqual((await api.get_analysis_status(identifier))['status'],'completed')
+        self.assertEqual(await api.stable_case_status(legacy_case),'completed')
+        cached = read_progress(api.JOBS_DIR/(identifier+'.json'))
+        self.assertEqual(cached['status'],'completed')
+        self.assertNotIn('error',cached)
 
     @unittest.skipIf(os.name=='nt','Real POSIX process groups run in Linux CI')
     async def test_killed_supervisor_orphans_are_stopped_before_api_publishes(self):

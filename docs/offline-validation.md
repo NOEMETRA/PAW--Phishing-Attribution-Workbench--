@@ -126,3 +126,27 @@ readers and unchanged worker ownership, then resumes analysis and verifies exact
 original bytes and the completed ZIP. A second real CLI supervisor is killed;
 HTTP recovery must confirm worker shutdown before partial verification/export.
 The same integration runs locally on Windows and in the Linux GitHub workflow.
+
+## GitHub review follow-up: collections and completion acknowledgment
+
+Collection endpoints now apply the same unstable-state rules as detail, verify
+and export: queued/running/recovery-blocked cases expose only ID and status in the
+case list, and their SQLite matches are omitted from query results. SQLite reader
+connections are explicitly closed, including on Windows.
+
+After observing that an external CLI owner has exited, API recovery reloads its
+persisted state and shutdown proof before deciding whether recovery is necessary.
+A successful acknowledgment published between the first read and the owner check
+therefore remains completed. An unknown CLI owner is blocked without overwriting
+its state. Synthesized legacy states are discovery caches: every registry read
+refreshes them from the old control's supervisor/result files, and successful
+completion removes stale recovery errors.
+
+Regression tests cover all unstable collection states, discovery before legacy
+completion, unknown-owner preservation, and a deterministic completion race with
+a real subprocess publishing state then exiting. A read hook synchronizes that
+race; it does not replace process identity or recovery outcomes. These metadata
+fixtures are contract tests, not analysis outputs or an accuracy corpus. The real
+original-EML CLI/HTTP integration additionally pauses a batch after its first case
+has entered the actual index, checks list redaction and empty query results, then
+resumes and checks completed collection/query results and verified original bytes.
