@@ -261,18 +261,24 @@ Deobfuscation can create false positives. A recovered string should be treated a
 
 Signals currently include combinations of:
 
-- SPF/DKIM/DMARC and ARC results;
+- independently verified SPF/DKIM/DMARC and ARC failures;
 - header inconsistencies;
 - newly registered domains;
 - display-name and reply-to mismatches;
 - selected TLDs;
-- mixed-script domains;
+- non-ASCII domain spelling;
 - brand-string similarity;
 - deobfuscation score;
 - detonation artifacts;
-- canary observations;
-- enrichment artifacts;
-- recurrence across indexed cases.
+- canary observations.
+
+Availability of enrichment carries no score bonus. The main CLI leaves ASN and
+recurrence flags disabled, and campaign correlation remains unavailable.
+
+Version-2 score artifacts record additive components, provenance, thresholds and
+the unrounded decision value. Display rounding cannot change a verdict. See
+[score explanations](docs/score-explanations.md) for the contract, numeric
+regressions and the provisional private original-EML triage.
 
 The result is a **heuristic score**, not a calibrated probability that an email is malicious.
 

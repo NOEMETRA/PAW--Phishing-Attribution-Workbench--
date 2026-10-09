@@ -3,6 +3,7 @@ from email.message import EmailMessage
 from email import policy
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import subprocess
@@ -59,6 +60,17 @@ def main():
             execution = read(case / 'execution.json')
             assert execution['no_egress'] is True
             headers = read(case / 'headers.json')
+            score = read(case / 'report/score.json')
+            assert abs(math.fsum(score['score_components'].values()) - score['raw_score']) < 1e-12
+            assert score['score'] == round(score['decision_score'], 2)
+            assert score['decision_score'] == max(0, min(1, score['raw_score']))
+            assert score['calibrated'] is False
+            assert score['thresholds'] == {'suspicious':.52, 'malicious':.68}
+            assert score['score_components']['verified_authentication_failures'] == 0
+            assert score['score_components']['dynamic_observations'] == 0
+            assert all(name in score['component_sources'] for name in score['score_components'])
+            reports = list((case / 'report').glob('*.md'))
+            assert any('Score components:' in path.read_text(encoding='utf-8') for path in reports)
             auxiliary = headers['ml_score']
             assert auxiliary['schema_version'] == 2
             assert auxiliary['assessment_status'] == 'heuristic_only'
@@ -80,7 +92,7 @@ def main():
         assert indicator['recommendations']['flag_for_review'] is True
         assert 'verify your account' in indicator['evidence']['threat_score']
         assert indicator['features']['mixed_languages'] == 1
-        print('PASS: 8 real full --no-egress cases; originals, seals, field boundaries, content evidence and action contracts verified')
+        print('PASS: 8 real full --no-egress cases; originals, seals, field boundaries, content and unrounded score explanations verified')
 
 
 if __name__ == '__main__':

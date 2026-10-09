@@ -1014,14 +1014,11 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
     if os.path.exists(det_summary_path):
         det_summary = read_json(det_summary_path) or {}
     score = score_case(hop_diag, auth, {"domain":from_domain, "nrd_days": dominfo["from_domain"].get("nrd_days")}, brand_seeds=None, suspicious_asn=suspicious_asn, ns_mx_recurrent=ns_mx_recurrent, profile=profile, headers=headers, detonation_endpoints=detonation_endpoints, canary_ips=canary_ips, det_summary=det_summary, origin_domain=from_domain, deobfuscation_weight=deob_weight)
-    # Integrate forgery anomalies into scoring
-    if anomalies.get("non_monotonic_dates"):
-        score["score"] = round(score["score"] + 0.1, 2)
-    if anomalies.get("private_ip_before_boundary"):
-        score["score"] = round(score["score"] + 0.1, 2)
-    if anomalies.get("invalid_fqdn_count", 0) >= 1:
-        score["score"] = round(score["score"] + 0.05, 2)
-    score = finalize_score(score, profile)
+    # Preserve each unverified structural signal and the unrounded base sum.
+    score = finalize_score(score, profile, additional_components={
+        'received_non_monotonic_dates': .1 if anomalies.get('non_monotonic_dates') else 0.0,
+        'received_private_ip_before_boundary': .1 if anomalies.get('private_ip_before_boundary') else 0.0,
+        'received_invalid_fqdn': .05 if anomalies.get('invalid_fqdn_count', 0) >= 1 else 0.0})
     stage_status['header_parsing'] = {'status': 'partial' if headers.get('header_defects') or headers.get('from_header_count') != 1 else 'completed',
                                      'defects': headers.get('header_defects') or [], 'from_header_count': headers.get('from_header_count')}
     stage_status['mime_parsing'] = {'status': mime_result['metadata']['status'], 'issues': mime_result['metadata']['issues']}
@@ -1068,6 +1065,11 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
     exec_md = f"> TRANSMITTING SERVER CANDIDATE: **{ip}** — AS{ip_res.get('asn')} {ip_res.get('asn_org')} ({ip_res.get('cc')})\n> *Unverified Received-header candidate; does not establish the original sender or attacker*\n> Recipient MX chain hops marked as [MX-internal].\n\n# Attribution Summary\n\n**Transmitting Server Candidate**: {ip} / AS{ip_res.get('asn')} {ip_res.get('asn_org')} ({ip_res.get('cc')})\n\n**From Domain**: {from_domain}\nRegistrar: {dominfo['from_domain'].get('registrar')}\nCreated: {dominfo['from_domain'].get('created')} (NRD: {dominfo['from_domain'].get('nrd_days')}d)\nNS: {', '.join(dominfo['from_domain'].get('ns',[]))}\nMX: {', '.join(dominfo['from_domain'].get('mx',[]))}\n\n**Decision**: {score['decision']} (score={score['score']})\n"
     exec_md += "\n" + authentication_report(auth)
     exec_md += f"\nAssessment coverage: {score.get('assessment_status', 'partial')}. Missing checks do not establish safety.\n"
+    exec_md += f"\nDecision score (before display rounding): {score['decision_score']:.12g}. " \
+               f"Thresholds: suspicious={score['thresholds']['suspicious']}, malicious={score['thresholds']['malicious']}. " \
+               "Uncalibrated attribution heuristic; not a binary phishing classification.\n"
+    exec_md += "\nScore components:\n\n" + '\n'.join(
+        f"- {name}: {value:.12g} — {score['component_sources'][name]}" for name, value in score['score_components'].items()) + '\n'
     exec_md += "\n" + "\n".join(f"- {name}: {value['status']}" for name, value in stage_status.items()) + "\n"
     # Add detonation/canary sections if they exist
     det = {}
@@ -1203,7 +1205,7 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
     # Punteggio e decisione
     print("⚖️  VALUTAZIONE RISCHIO")
     print("-" * 40)
-    print(f"📊 Punteggio: {score.get('score', 0):.2f}/1.00")
+    print(f"📊 Punteggio (prima dell'arrotondamento): {score.get('decision_score', score.get('score', 0)):.12g}/1.00")
     print(f"🎯 Decisione: {score.get('decision', 'N/A')}")
     print(f"📈 Categoria: {score.get('category', 'N/A')}")
     print()
@@ -1311,7 +1313,7 @@ def print_beautiful_summary(case_dir: str, case_id: str, score: dict, ip: str, i
         findings.append("🟡 DMARC policy: none")
     
     # Determine verdict emoji and color
-    score_val = score.get("score", 0)
+    score_val = score.get("decision_score", score.get("score", 0))
     verdict = f"{score.get('decision', 'Inconclusive')} (heuristic score: {score_val})"
     verdict_color = 'red' if score_val >= 0.72 else 'yellow'
     
