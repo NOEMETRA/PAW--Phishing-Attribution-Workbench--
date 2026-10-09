@@ -14,8 +14,8 @@ COMPONENT_SOURCES = {
     'dynamic_observations': 'Detonation/canary metadata; not attribution to an actor',
     'profile_modifier': 'Selected analysis profile; not independently observed evidence',
     'received_non_monotonic_dates': 'Claimed Received timestamps; unverified structural observation',
-    'received_private_ip_before_boundary': 'Parsed Received IPs and heuristic boundary; unverified observation',
-    'received_invalid_fqdn': 'Received by-host syntax; unverified structural observation',
+    'received_private_ip_before_boundary': 'Descriptive only; recipient trust boundary not independently established',
+    'received_invalid_fqdn': 'Descriptive hostname syntax; automatic risk contribution disabled',
     'legacy_base': 'Legacy caller numeric value; no independent evidence established',
     'additional_signals': 'Caller-provided signal; requires its own evidence and context',
 }

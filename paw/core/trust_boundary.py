@@ -3,7 +3,7 @@ KNOWN_MX_SUFFIXES = ("outlook.com", "office365.com", "protection.outlook.com", "
 def classify_hop(h: dict) -> str:
     """Classify hop role based on MX boundaries and IP characteristics."""
     by_domain = h.get("by", "").lower()
-    from_domain = h.get("from", "").lower()
+    from_domain = h.get('from_host',h.get("from", "")).lower()
     
     # Extract just the domain from "from" field (e.g., "intelcouncil.com (23.94.26.11)" -> "intelcouncil.com")
     # Split on whitespace and take first token
@@ -15,9 +15,9 @@ def classify_hop(h: dict) -> str:
     from_is_recipient_mx = False
 
     for suffix in KNOWN_MX_SUFFIXES:
-        if by_domain.endswith("." + suffix) or by_domain == suffix:
+        if by_domain.rstrip('.').endswith("." + suffix) or by_domain.rstrip('.') == suffix:
             by_is_recipient_mx = True
-        if from_domain_clean.endswith("." + suffix) or from_domain_clean == suffix:
+        if from_domain_clean.rstrip('.').endswith("." + suffix) or from_domain_clean.rstrip('.') == suffix:
             from_is_recipient_mx = True
 
     # If receiver is recipient MX but sender is NOT, this is an ingress hop (external email entering)
@@ -37,9 +37,8 @@ def classify_hop(h: dict) -> str:
 
 def _is_public_ip(ip: str) -> bool:
     """Check if IP is public (not private/reserved)."""
-    import ipaddress
+    from .ip_observations import classify_ip
     try:
-        addr = ipaddress.ip_address(ip)
-        return not (addr.is_private or addr.is_reserved or addr.is_loopback or addr.is_link_local)
+        return classify_ip(ip)['category'] == 'public'
     except:
         return False
