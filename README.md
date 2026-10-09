@@ -68,6 +68,10 @@ and all domain ownership remain unverified.
 registrable labels without counting the same domain-label signal twice. Missing
 or ambiguous domain evidence has explicit partial/unevaluated coverage.
 
+[TLD-list observations](docs/tld-observations.md) use normalized spelling and the
+From availability gate. Static list membership and its contribution are explicit;
+domain reputation remains unevaluated.
+
 PAW is a **research workbench**, not a production incident-response platform or an attribution oracle.
 
 [JavaScript schema v2](docs/javascript-evidence.md) preserves original source,
