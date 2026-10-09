@@ -138,7 +138,7 @@ def _from_domain_available(headers, normalized_domain):
     # Legacy callers may supply just dominfo; full mail parsing always records
     # occurrence/identity metadata. Validate any supplied From before comparison.
     if value is None:
-        return identity is None
+        return not any(key in headers for key in ('from','from_header_count','from_identity'))
     try:
         field = value if hasattr(value,'addresses') else policy.default.header_factory('From',str(value))
         if field.defects or len(field.groups) != 1 or field.groups[0].display_name is not None or len(field.addresses) != 1:

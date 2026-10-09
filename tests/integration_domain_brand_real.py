@@ -69,6 +69,12 @@ def main():
             persisted=score_case({}, {}, {'domain':auth.get('from_domain') or ''},headers=headers)
             assert persisted['sender_domain_observations']==score['sender_domain_observations']
             assert persisted['score_components']['sender_domain_heuristics']==expected
+            if name in {'missing','empty'}:
+                hinted=score_case({}, {}, {'domain':'mail.paypa1.com'},headers=headers)
+                hinted_record=hinted['sender_domain_observations']['domain_brand_comparison']
+                assert hinted_record['source']=='message_headers'
+                assert hinted_record['status']=='not_evaluated' and hinted_record['comparisons']==[]
+                assert hinted['bk_score'] is None and hinted['score_components']['sender_domain_heuristics']==0
             observed[name]=record
         assert set(observed)=={Path(name).stem for name in samples}
         assert observed['service']==observed['uppercase']

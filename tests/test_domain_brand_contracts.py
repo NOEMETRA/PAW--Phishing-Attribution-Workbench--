@@ -69,6 +69,33 @@ class DomainBrandContracts(unittest.TestCase):
                     self.assertEqual(record['contribution'],0)
                     self.assertIsNone(record['max_similarity'])
 
+    def test_incomplete_from_metadata_cannot_promote_a_domain_hint(self):
+        incomplete=({'from':None}, {'from_header_count':1},
+                    {'from_identity':None},
+                    {'from':None,'from_header_count':1,'from_identity':None})
+        for headers in incomplete:
+            for version in (headers,json.loads(json.dumps(headers))):
+                with self.subTest(headers=version):
+                    result=self.score('mail.paypa1.com',headers=version)
+                    record=result['sender_domain_observations']['domain_brand_comparison']
+                    self.assertEqual(record['source'],'message_headers')
+                    self.assertEqual(record['status'],'not_evaluated')
+                    self.assertEqual(record['comparisons'],[])
+                    self.assertIsNone(result['bk_score'])
+                    self.assertEqual(result['score_components']['sender_domain_heuristics'],0)
+                    self.assertEqual(result['sender_domain_observations']['unicode_domain']['status'],'unavailable')
+                    self.assertIsNone(result['sender_domain_observations']['unicode_domain']['normalized_domain'])
+                    with_reply=self.score('mail.paypa1.com',headers=dict(version,reply_to='b@other.com'))
+                    self.assertEqual(with_reply['sender_domain_observations']['reply_to_comparison']['status'],'not_evaluated')
+                    self.assertEqual(with_reply['score_components']['sender_domain_heuristics'],0)
+
+    def test_headerless_legacy_hints_and_complete_from_stay_available(self):
+        for headers in ({}, {'subject':'Legacy'}, {'from':'a@mail.paypa1.com'},
+                        {'from':'a@mail.paypa1.com','from_header_count':1}):
+            result=self.score('mail.paypa1.com',headers=headers)
+            self.assertEqual(result['score_components']['sender_domain_heuristics'],.2)
+            self.assertEqual(result['sender_domain_observations']['domain_brand_comparison']['status'],'observed_unverified')
+
     def test_missing_or_defective_identity_does_not_create_similarity_evidence(self):
         for headers in ({'from_header_count':0},{'from_header_count':2},
                         {'from_identity':{'status':'partial'}},

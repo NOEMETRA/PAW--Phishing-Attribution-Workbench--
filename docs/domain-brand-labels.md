@@ -40,6 +40,10 @@ records `source=supplied_domain` rather than claiming original From evidence.
 Presence of From fields or parser occurrence/identity metadata retains
 `source=message_headers`, including missing/empty From observations. Unavailable
 identity remains unevaluated; provenance does not assert a usable mailbox.
+An explicit null From or occurrence/identity metadata without an actual From value
+cannot promote a supplied domain hint into message evidence. The shared From gate
+also prevents Reply-To comparison or Unicode observation from using that hint.
+The legacy fallback is reserved for callers without any From metadata.
 
 The legacy `bk_score` is now the rounded maximum of these label similarities and
 is null when the domain comparison cannot be evaluated. It is a spelling metric,
@@ -73,7 +77,7 @@ python -m unittest discover -s tests -p 'test_domain_brand_contracts.py' -v
 python tests/integration_domain_brand_real.py
 ```
 
-Fifteen unit contracts reproduce the hidden registrable-label signal and check
+Seventeen unit contracts reproduce the hidden registrable-label signal and check
 root/service equivalence, retained first-label rules, one contribution, private
 tenants, unknown suffixes, authoritative From gates, JSON defects, normalization,
 unrounded thresholds and no egress attempts. Twenty-two constructed EMLs run
