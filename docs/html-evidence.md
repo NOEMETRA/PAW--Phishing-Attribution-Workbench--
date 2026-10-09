@@ -78,6 +78,8 @@ contribution in this pilot. Nineteen messages have descriptive HTML observation;
 one has no HTML. No data-URI candidate occurred in the original pilot, so candidate
 behavior is checked by constructed regression inputs, not measured accuracy.
 
-The historical four-hour online run remains unreproduced. The next audits cover
-standalone JavaScript and header/domain signals, plus legacy/installation
+The historical four-hour online run remains unreproduced. The subsequent
+[standalone JavaScript contract](javascript-evidence.md) removes simulated eval
+results and iterative rewriting; it does not evaluate JavaScript risk/execution.
+The next audits cover header/domain signals, plus legacy/installation
 coverage and representative independent holdout labels. UI and Linux lab deferred.

@@ -44,6 +44,10 @@ successful completion of the analysis process.
 
 PAW is a **research workbench**, not a production incident-response platform or an attribution oracle.
 
+[JavaScript schema v2](docs/javascript-evidence.md) preserves original source,
+exposes bounded unexecuted literal candidates and explicitly leaves JavaScript
+risk/execution unassessed. It never fabricates eval results or rewrites code.
+
 | Area | Current status |
 |---|---|
 | `.eml` parsing | Implemented |
@@ -56,7 +60,7 @@ PAW is a **research workbench**, not a production incident-response platform or 
 | DMARC policy DNS lookup | Implemented |
 | Independent end-to-end DKIM verification in the main trace path | Not established |
 | URL extraction | Implemented |
-| Content deobfuscation | Implemented experimentally |
+| Content deobfuscation | Original text/HTML/JavaScript preserved; descriptive candidates and uncalibrated URL heuristics |
 | Attachment inspection | Hashes, metadata and bounded ZIP inventory; malware/macros not evaluated |
 | RDAP / infrastructure enrichment | Implemented where network access is available |
 | Case scoring | Implemented as hand-authored heuristics |
@@ -243,17 +247,13 @@ Authentication results are strong evidence when their provenance is trusted, but
 
 ## Deobfuscation
 
-The trace pipeline inspects body text, HTML, JavaScript, and URL-like strings for transformations such as:
-
-- ordinary HTTP/HTTPS URLs;
-- `hxxp` / `hxxps` forms;
-- percent encoding;
-- domain-like strings;
-- selected character and encoding transformations.
-
-Newly recovered URLs are added to the case as candidate indicators.
-
-Deobfuscation can create false positives. A recovered string should be treated as a candidate IOC until its syntax, context, and provenance are verified.
+The trace pipeline preserves original decoded text, HTML and standalone JavaScript.
+Visual/markup observations and decoded literal candidates are descriptive;
+JavaScript candidates are never execution results or automatic network targets.
+The independent URL path distinguishes valid observed/refanged HTTP(S) targets
+from embedded, malformed or unresolved candidates. Domain-like prose alone is
+not a network URL. See [JavaScript evidence](docs/javascript-evidence.md) and
+[URL evidence](docs/url-evidence.md) for provenance, bounds and limitations.
 
 ## Heuristic scoring
 
@@ -283,11 +283,11 @@ regressions and the provisional private original-EML triage.
 The text path preserves decoded MIME text. Visual comparisons are descriptive
 metadata and do not add risk points; actual URL recovery remains separate.
 See [text preservation](docs/text-deobfuscation.md) for the audited rewriting
-defect and remaining HTML/JavaScript validation.
+defect and its measured limits.
 
 The [HTML evidence contract](docs/html-evidence.md) also preserves original markup
 and separates bounded decoded attribute candidates. Routine entity handling adds
-no points; text/HTML risk detection remains explicitly not evaluated.
+no points; text/HTML/JavaScript risk detection remains explicitly not evaluated.
 
 The result is a **heuristic score**, not a calibrated probability that an email is malicious.
 

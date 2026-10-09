@@ -40,6 +40,9 @@ jobs:
       - name: Verify original HTML markup, bounded candidates and descriptive coverage
         run: python -m unittest discover -s tests -p 'test_html_contracts.py' -v
 
+      - name: Verify JavaScript source preservation and unexecuted bounded candidates
+        run: python -m unittest discover -s tests -p 'test_javascript_contracts.py' -v
+
       - name: Verify MIME and attachment evidence contracts
         run: python -m unittest discover -s tests -p 'test_mime_contracts.py' -v
 
@@ -69,3 +72,6 @@ jobs:
 
       - name: Verify real offline HTML markup, candidate evidence and descriptive coverage
         run: python tests/integration_html_evidence_real.py
+
+      - name: Verify real offline JavaScript evidence and explicit unassessed risk
+        run: python tests/integration_javascript_evidence_real.py
