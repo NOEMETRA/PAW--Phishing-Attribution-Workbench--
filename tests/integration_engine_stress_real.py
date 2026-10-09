@@ -136,7 +136,7 @@ def run(spec, root):
                 raise RuntimeError('Outer harness deadline exceeded; inspect owned process tree before continuing')
             time.sleep(.05)
     cli_elapsed=time.perf_counter()-started
-    controls=list((directory/'.paw-jobs').glob('*'))
+    controls=[path for path in (directory/'jobs').glob('analysis_*') if path.is_dir()]
     control=controls[0] if len(controls)==1 else directory/'absent'
     supervisor=read(control/'supervisor.json')
     result=read(control/'result.json')

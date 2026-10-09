@@ -190,7 +190,9 @@ async def supervise(command, *, cwd, control, limits=RunLimits(), cancel=None, e
                 **({'start_new_session':True} if os.name != 'nt' else {}))
             if os.name == 'nt': job = WindowsJob(process.pid, limits.memory_bytes)
             from .process_recovery import process_identity
-            atomic_json(control/'process.json', process_identity(process.pid))
+            identity = process_identity(process.pid)
+            identity['supervisor_owner'] = process_identity(os.getpid(), dedicated_group=False)
+            atomic_json(control/'process.json', identity)
             gate.touch()
             while True:
                 progress = read_progress(progress_path)

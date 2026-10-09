@@ -6,34 +6,54 @@ from .core.runtime import RunLimits, atomic_json, supervise, preserve_interrupte
 from .core.verify import verify_case
 from .core.exporter import export_case
 from .core.scoring import validate_deobfuscation_weight
+from .core.process_recovery import process_identity
+from .core.runtime import read_progress
+from .core.job_registry import require_stopped_case
 
 _analysis_limits = RunLimits()
 
 def trace_sources(src, lang, stix, abuse, anchor, no_egress, profile='default', deob_weight=.30):
     """CLI and API share the same supervised worker and honest terminal states."""
-    control = Path.cwd()/'.paw-jobs'/uuid.uuid4().hex
+    identifier = 'analysis_'+uuid.uuid4().hex
+    control = Path.cwd()/'jobs'/identifier
     control.mkdir(parents=True)
+    state = control.parent/(identifier+'.json')
+    job = {'origin':'cli','status':'running','no_egress':bool(no_egress),
+           'filename':Path(src).name,
+           'supervisor_owner':process_identity(os.getpid(),dedicated_group=False)}
+    atomic_json(state,job)
     request, result = control/'request.json', control/'result.json'
     atomic_json(request, {'file_path':str(Path(src).resolve()),'lang':lang,'stix':stix,
         'abuse':abuse,'anchor':anchor,'no_egress':no_egress,'profile':profile,'deob_weight':deob_weight})
-    env = {'PYTHONPATH':str(Path(__file__).resolve().parents[1])}
+    env = {'PYTHONPATH':str(Path(__file__).resolve().parents[1]),'PAW_ANALYSIS_ID':identifier}
     try:
         outcome = asyncio.run(supervise([sys.executable,'-X','utf8','-m','paw.web.worker',str(request),str(result)],
             cwd=Path.cwd(), control=control, limits=_analysis_limits, env=env))
+        job['supervisor'] = outcome
+        with (control/'worker.log').open('rb') as log:
+            print(log.read(_analysis_limits.log_bytes).decode('utf-8', errors='replace'))
+        if outcome['status'] != 'exited':
+            job.update(status=outcome['status'],error=outcome['error'])
+            raise RuntimeError(f"{outcome['status']}: {outcome['error']}; logs: {control}")
+        value = read_progress(result)
+        if outcome['returncode'] or value.get('status') != 'completed':
+            raise RuntimeError(value.get('error',f'Worker failed; logs: {control}'))
+        job.update(value)
+        job['case_id'] = value['case_ids'][0]
+        return [str(Path.cwd()/'cases'/case_id) for case_id in value['case_ids']]
     except KeyboardInterrupt:
-        preserve_interrupted(Path.cwd(), control, 'cancelled', 'CLI interrupted by operator')
+        job.update(status='cancelled',error='CLI interrupted by operator')
         print(f'Cancelled; evidence and logs preserved in {control}')
         raise
-    with (control/'worker.log').open('rb') as log:
-        print(log.read(_analysis_limits.log_bytes).decode('utf-8', errors='replace'))
-    if outcome['status'] != 'exited':
-        preserve_interrupted(Path.cwd(), control, outcome['status'], outcome['error'])
-        raise RuntimeError(f"{outcome['status']}: {outcome['error']}; logs: {control}")
-    value = json.loads(result.read_text(encoding='utf-8')) if result.exists() else {}
-    if outcome['returncode'] or value.get('status') != 'completed':
-        preserve_interrupted(Path.cwd(), control, 'failed', value.get('error','Worker failed'))
-        raise RuntimeError(value.get('error',f'Worker failed; logs: {control}'))
-    return [str(Path.cwd()/'cases'/case_id) for case_id in value['case_ids']]
+    except Exception as exc:
+        if job['status'] == 'running': job['status'] = 'failed'
+        job['error'] = str(exc)
+        raise
+    finally:
+        job['supervisor'] = read_progress(control/'supervisor.json')
+        if job['status'] != 'completed':
+            job['partial_cases'] = preserve_interrupted(Path.cwd(),control,job['status'],job.get('error'))
+        atomic_json(state,job)
 
 # Suppress SSL verification warnings for security testing
 try:
@@ -301,10 +321,12 @@ For help: paw help <command>
             trace_sources(args.src, args.lang, args.stix, args.abuse, args.anchor, args.no_egress, args.profile, args.deob_weight)
 
         elif args.cmd == "verify":
+            require_stopped_case(args.case)
             ok = verify_case(args.case)
             sys.exit(0 if ok else 2)
 
         elif args.cmd == "export":
+            require_stopped_case(args.case)
             export_case(args.case, args.format)
 
         elif args.cmd == "query":

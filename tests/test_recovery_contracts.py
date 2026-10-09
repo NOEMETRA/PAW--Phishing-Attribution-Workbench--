@@ -13,6 +13,7 @@ import psutil
 from fastapi import HTTPException
 from paw.core.runtime import atomic_json, read_progress, preserve_interrupted
 from paw.core.process_recovery import process_identity, recover_worker, group_writers
+from paw.core.job_registry import require_stopped_case
 from paw.core.verify import verify_case
 from paw.web import api
 
@@ -116,6 +117,45 @@ class RecoveryContracts(unittest.IsolatedAsyncioTestCase):
         job = await api.get_analysis_status(self.identifier)
         self.assertEqual(job['status'],'interrupted')
         self.assertTrue(read_progress(self.control/'supervisor.json')['tree_stopped'])
+
+    async def test_live_cli_supervisor_is_not_recovered_or_terminated(self):
+        identity = process_identity(os.getpid(),dedicated_group=False)
+        atomic_json(api.JOBS_DIR/(self.identifier+'.json'),
+            {'status':'running','origin':'cli','supervisor_owner':identity})
+        for _ in range(2):
+            self.assertEqual((await api.get_analysis_status(self.identifier))['status'],'running')
+            with self.assertRaises(HTTPException) as caught:
+                await api.export_case(self.case.name)
+            self.assertEqual(caught.exception.status_code,409)
+        self.assertFalse((self.control/'supervisor.json').exists())
+        with self.assertRaises(RuntimeError): require_stopped_case(self.case)
+
+    async def test_legacy_control_without_known_supervisor_blocks_access(self):
+        identifier = 'analysis_oldcli'
+        legacy = self.root/'.paw-jobs'/'oldcli'
+        legacy.mkdir(parents=True)
+        legacy_case = api.CASES_DIR/'case-legacy'
+        legacy_case.mkdir()
+        atomic_json(legacy_case/'manifest.json',{})
+        atomic_json(legacy/'progress.json',{'case_ids':[legacy_case.name]})
+        self.assertEqual(api.case_job_id(legacy_case),identifier)
+        for operation in (api.get_case_detail,api.verify_evidence,api.export_case):
+            with self.assertRaises(HTTPException) as caught: await operation(legacy_case.name)
+            self.assertEqual(caught.exception.status_code,409)
+        self.assertFalse((legacy/'supervisor.json').exists())
+        with self.assertRaises(RuntimeError): require_stopped_case(legacy_case)
+
+    async def test_completed_legacy_cli_case_is_discovered_without_losing_ownership(self):
+        legacy = self.root/'.paw-jobs'/'oldcompleted'
+        legacy.mkdir(parents=True)
+        legacy_case = api.CASES_DIR/'case-legacy-completed'
+        legacy_case.mkdir()
+        atomic_json(legacy_case/'manifest.json',{})
+        atomic_json(legacy/'progress.json',{'case_ids':[legacy_case.name]})
+        atomic_json(legacy/'supervisor.json',{'tree_stopped':True,'status':'exited','returncode':0})
+        atomic_json(legacy/'result.json',{'status':'completed','case_ids':[legacy_case.name]})
+        self.assertEqual(await api.stable_case_status(legacy_case),'completed')
+        require_stopped_case(legacy_case)
 
     @unittest.skipIf(os.name=='nt','Real POSIX process groups run in Linux CI')
     async def test_killed_supervisor_orphans_are_stopped_before_api_publishes(self):

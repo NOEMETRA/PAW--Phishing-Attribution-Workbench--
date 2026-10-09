@@ -8,21 +8,47 @@ import os
 from pathlib import Path
 import signal
 import time
+import math
 
 import psutil
 
 from .runtime import atomic_json, read_progress
 
 
-def process_identity(pid):
+def process_identity(pid, *, dedicated_group=True):
     process = psutil.Process(pid)
     value = {'pid': pid, 'created_at': process.create_time(),
              'boot_time': psutil.boot_time(), 'platform': os.name}
     if os.name != 'nt':
         value.update(pgid=os.getpgid(pid), sid=os.getsid(pid))
-        if value['pgid'] != pid or value['sid'] != pid:
+        if dedicated_group and (value['pgid'] != pid or value['sid'] != pid):
             raise ValueError('Worker must lead its dedicated process group and session')
     return value
+
+
+def identity_alive(record):
+    """True for the same live process, False for an exited/reused PID, None if unknown."""
+    try:
+        pid = record.get('pid')
+        if (type(pid) is not int or pid <= 1 or record.get('platform') != os.name
+                or not same_boot(record)):
+            return None
+        process = psutil.Process(pid)
+        return (process.create_time() == record.get('created_at') and
+                process.status() not in {psutil.STATUS_ZOMBIE, psutil.STATUS_DEAD})
+    except psutil.NoSuchProcess:
+        return False
+    except (OSError, psutil.Error, TypeError):
+        return None
+
+
+def same_boot(record):
+    # Windows boot_time is estimated separately in each interpreter and differs
+    # by small fractions of a second. PID creation time is still compared exactly.
+    boot = record.get('boot_time')
+    if not isinstance(boot,(int,float)) or isinstance(boot,bool) or not math.isfinite(boot):
+        return False
+    return abs(boot-psutil.boot_time()) <= (2 if os.name=='nt' else 0)
 
 
 def group_writers(pgid):
@@ -51,7 +77,7 @@ async def recover_worker(control):
     try:
         pid = record.get('pid')
         if (type(pid) is not int or pid <= 1 or record.get('platform') != os.name
-                or record.get('boot_time') != psutil.boot_time()):
+                or not same_boot(record)):
             raise ValueError('Missing or incompatible worker identity')
         try:
             process = psutil.Process(pid)

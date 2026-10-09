@@ -43,3 +43,7 @@ jobs:
 
       - name: Verify batch, numeric inputs, export and local integrity regressions
         run: python -m unittest discover -s tests -p 'test_engine_contracts.py' -v
+      - name: Install dependencies for the real offline CLI and HTTP API check
+        run: python -m pip install 'requests>=2.31,<3' 'rich>=13.7,<14' 'ipwhois>=1.2,<2' 'python-dateutil>=2.8.2,<3' 'uvicorn>=0.24,<1'
+      - name: Verify real CLI/API shared ownership, concurrent readers and CLI crash
+        run: python tests/integration_cli_api_real.py

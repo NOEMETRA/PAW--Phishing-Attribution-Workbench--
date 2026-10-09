@@ -99,3 +99,30 @@ a real supervisor, observes its worker and child's file writes continue, then
 tests startup recovery, stable evidence, sealing and export; a mismatching process
 identity test confirms an unrelated live group is left alone. These controlled
 writer fixtures are process-recovery tests, not simulated analysis results.
+
+## GitHub review follow-up: shared CLI/API ownership
+
+The next review found that CLI cases used `.paw-jobs` without an `analysis_job`
+manifest field, so the API's ownership guard could miss a live CLI writer. CLI
+analyses now use the same `jobs/analysis_*` registry as API analyses, publish their
+supervisor identity and final acknowledgment, and set `PAW_ANALYSIS_ID` before
+starting the worker. The initial manifest write includes that owner.
+
+The API recognizes an identified live CLI supervisor and leaves it running while
+blocking case detail, verification and export. It recovers only after the owner
+has exited. Shared discovery also recognizes legacy `.paw-jobs` progress records;
+unknown legacy supervisors remain blocked until investigation or confirmed stop.
+CLI `verify` and `export` apply the ownership guard as well. Internal worker
+verification and post-shutdown sealing retain their existing execution context.
+
+On Windows, psutil's boot timestamp estimate varies slightly between interpreters;
+boot comparisons allow two seconds of estimation difference. PID creation time
+is always compared exactly, and unknown or mismatching identity fails closed.
+
+`tests/integration_cli_api_real.py` runs original public EML bytes through a real
+CLI and a loopback HTTP API sharing one directory. It pauses the test's worker
+while the CLI supervisor stays alive, starts the API, confirms blocked HTTP/CLI
+readers and unchanged worker ownership, then resumes analysis and verifies exact
+original bytes and the completed ZIP. A second real CLI supervisor is killed;
+HTTP recovery must confirm worker shutdown before partial verification/export.
+The same integration runs locally on Windows and in the Linux GitHub workflow.

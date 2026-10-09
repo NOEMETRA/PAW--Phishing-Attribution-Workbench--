@@ -66,6 +66,7 @@ class EngineContracts(unittest.TestCase):
                 '--no-egress','--deob-weight=nan'],cwd=root,env=environment,capture_output=True,timeout=10)
             self.assertEqual(process.returncode,2)
             self.assertFalse((root/'.paw-jobs').exists())
+            self.assertFalse((root/'jobs').exists())
 
     @unittest.skipUnless(os.name=='nt','Windows handle sharing regression')
     def test_real_windows_reader_does_not_break_progress_replacement(self):

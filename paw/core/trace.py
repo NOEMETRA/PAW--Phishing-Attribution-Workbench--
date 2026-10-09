@@ -393,10 +393,9 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
         original.write(b)
     manifest = {"case_id": case_id, "created_utc": utc_now_iso(), "inputs":[{"path":"input.eml","blake3": eml_hash, "size": len(b)}], "policy":{"no_egress": bool(no_egress)}, "deobfuscation_weight": float(deob_weight)}
     manifest['source_name'] = os.path.basename(eml_path)
-    write_json(os.path.join(case_dir,"manifest.json"), manifest)
     if os.environ.get('PAW_ANALYSIS_ID'):
         manifest['analysis_job'] = os.environ['PAW_ANALYSIS_ID']
-        write_json(os.path.join(case_dir, 'manifest.json'), manifest)
+    write_json(os.path.join(case_dir, 'manifest.json'), manifest)
     # PGP sign manifest if keys available
     if os.environ.get("PAW_PGP_PRIV"):
         try:

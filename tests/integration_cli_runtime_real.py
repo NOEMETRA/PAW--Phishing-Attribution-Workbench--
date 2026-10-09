@@ -13,11 +13,11 @@ source = next((repo/'inbox').glob('*.eml'))
 env = dict(os.environ, PYTHONPATH=str(repo), PYTHONIOENCODING='utf-8', PYTHONPYCACHEPREFIX=str(root/'pycache'))
 checks = []
 for deadline, expected in ((30,'exited'),(.05,'timed_out')):
-    before = set((data/'.paw-jobs').glob('*'))
+    before = set((data/'jobs').glob('analysis_*'))
     command = [sys.executable,'-X','utf8','-m','paw','full',str(source),'--no-egress',
         '--deadline',str(deadline),'--stage-timeout','10']
     process = subprocess.run(command,cwd=data,env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=45)
-    control, = set((data/'.paw-jobs').glob('*')) - before
+    control, = {path for path in (data/'jobs').glob('analysis_*') if path.is_dir()} - before
     (control/'cli.log').write_bytes(process.stdout)
     outcome = json.loads((control/'supervisor.json').read_text())
     assert outcome['status'] == expected and outcome['tree_stopped'], outcome

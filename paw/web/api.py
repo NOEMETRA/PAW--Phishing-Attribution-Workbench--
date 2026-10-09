@@ -20,14 +20,16 @@ from fastapi.staticfiles import StaticFiles
 from urllib.parse import urlsplit
 from pydantic import BaseModel, Field
 from ..core.runtime import RunLimits, supervise, preserve_interrupted, read_progress
-from ..core.process_recovery import recover_worker
+from ..core.process_recovery import recover_worker, identity_alive
+from ..core.job_registry import control_path, case_owner, job_state, controls
 
 @asynccontextmanager
 async def lifespan(application):
     # Recover before accepting requests; a killed API may leave POSIX writers.
-    for path in JOBS_DIR.glob('analysis_*.json'):
-        if path.stem[9:].isalnum():
-            await get_analysis_status(path.stem)
+    identifiers = {path.stem for path in JOBS_DIR.glob('analysis_*.json') if path.stem[9:].isalnum()}
+    identifiers.update(identifier for identifier,_ in controls(DATA_DIR,JOBS_DIR))
+    for identifier in identifiers:
+        await get_analysis_status(identifier)
     yield
 
 app = FastAPI(title='PAW', version='2.0.0', lifespan=lifespan)
@@ -143,11 +145,14 @@ def case_status(directory):
     job_id = case_job_id(directory)
     if job_id:
         if not job_id.startswith('analysis_') or not job_id[9:].isalnum(): return 'incomplete'
-        job = read_progress(JOBS_DIR/(job_id+'.json'))
+        try: job = job_state(DATA_DIR,JOBS_DIR,job_id)
+        except FileNotFoundError: return 'recovery_blocked'
         status = job.get('status', 'interrupted')
+        if job.get('origin') == 'cli' and status in {'running','queued'}:
+            return status  # get_analysis_status establishes live-owner or recovery first.
         if job_id not in analysis_queue and (
                 status in {'running','queued','recovery_blocked'} or
-                read_progress(JOBS_DIR/job_id/'supervisor.json').get('tree_stopped') is not True):
+                read_progress(control_path(DATA_DIR,JOBS_DIR,job_id)/'supervisor.json').get('tree_stopped') is not True):
             return 'recovery_blocked'
         if status == 'completed':
             return 'completed' if directory.name in job.get('case_ids', []) else 'incomplete'
@@ -162,13 +167,7 @@ def case_status(directory):
     return execution.get('status', 'incomplete')
 
 def case_job_id(directory):
-    identifier = read_progress(directory/'manifest.json').get('analysis_job')
-    if identifier: return identifier
-    # A truncated manifest must not hide its still-running owner.
-    for control in JOBS_DIR.glob('analysis_*'):
-        if control.is_dir() and directory.name in read_progress(control/'progress.json').get('case_ids', []):
-            return control.name
-    return None
+    return case_owner(directory,DATA_DIR,JOBS_DIR)
 
 async def stable_case_status(directory):
     job_id = case_job_id(directory)
@@ -306,13 +305,16 @@ async def cancel_analysis(analysis_id: str):
 async def list_analyses(limit: int = 30):
     if not 1 <= limit <= 100: raise HTTPException(400,'Invalid limit')
     paths = [path for path in JOBS_DIR.glob('analysis_*.json') if path.stem[9:].isalnum()]
+    for identifier,_ in controls(DATA_DIR,JOBS_DIR):
+        if not (JOBS_DIR/(identifier+'.json')).exists(): await get_analysis_status(identifier)
+    paths = [path for path in JOBS_DIR.glob('analysis_*.json') if path.stem[9:].isalnum()]
     paths.sort(key=lambda path:path.stat().st_mtime, reverse=True)
     return {'jobs':[dict(await get_analysis_status(path.stem),analysis_id=path.stem) for path in paths[:limit]], 'total':len(paths)}
 
 @app.get('/api/analysis/{analysis_id}/log')
 async def job_log(analysis_id: str):
     await get_analysis_status(analysis_id)
-    path = JOBS_DIR/analysis_id/'worker.log'
+    path = control_path(DATA_DIR,JOBS_DIR,analysis_id)/'worker.log'
     if not path.exists(): return {'text':'Il worker non ha ancora prodotto un log.','truncated':False}
     size = path.stat().st_size
     with path.open('rb') as stream:
@@ -335,14 +337,23 @@ async def get_analysis_status(analysis_id: str):
     if not analysis_id.startswith('analysis_') or not analysis_id[9:].isalnum():
         raise HTTPException(400, 'Invalid analysis ID')
     path = JOBS_DIR / (analysis_id + '.json')
-    if not path.exists(): raise HTTPException(404, 'Analysis not found')
     async with _recovery_locks.setdefault(analysis_id, asyncio.Lock()):
-        job = load(path)
-        control = JOBS_DIR/analysis_id
+        try: job = job_state(DATA_DIR,JOBS_DIR,analysis_id)
+        except FileNotFoundError: raise HTTPException(404,'Analysis not found')
+        control = control_path(DATA_DIR,JOBS_DIR,analysis_id)
         stopped = read_progress(control/'supervisor.json').get('tree_stopped')
         needs_recovery = (job.get('status') in {'running','recovery_blocked'} or
                           (job.get('status') == 'interrupted' and stopped is not True) or stopped is False)
-        if analysis_id not in analysis_queue and needs_recovery:
+        external = job.get('origin') in {'cli','legacy_cli'}
+        owner = job.get('supervisor_owner') or read_progress(control/'process.json').get('supervisor_owner',{})
+        owner_live = identity_alive(owner) if external else False
+        if external and job.get('status') in {'running','queued','recovery_blocked'} and (
+                owner_live is True or (stopped is not True and owner_live is None)):
+            # API must not kill an active CLI or guess ownership for legacy jobs.
+            if owner_live is None:
+                job.update(status='recovery_blocked',error='CLI supervisor identity cannot be established')
+                save(path,job)
+        elif analysis_id not in analysis_queue and needs_recovery:
             outcome = await recover_worker(control)
             job['supervisor'] = outcome
             if outcome['tree_stopped']:
@@ -360,7 +371,8 @@ async def get_analysis_status(analysis_id: str):
                 'error':'API restarted before worker launch'})
             job.update(status='interrupted',error='API restarted before worker launch',completed_at=now())
             save(path,job)
-    progress = read_progress(JOBS_DIR/analysis_id/'progress.json')
+        if not path.exists(): save(path,job)
+    progress = read_progress(control/'progress.json')
     if progress: job['observed_progress'] = progress
     return job
 
