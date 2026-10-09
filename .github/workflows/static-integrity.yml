@@ -99,3 +99,9 @@ jobs:
 
       - name: Verify real offline Received timing observations and score parity
         run: python tests/integration_received_timing_real.py
+
+      - name: Verify domain Unicode representation and unavailable script analysis
+        run: python -m unittest discover -s tests -p 'test_domain_unicode_contracts.py' -v
+
+      - name: Verify real offline Unicode and ACE spelling observations
+        run: python tests/integration_domain_unicode_real.py
