@@ -120,6 +120,12 @@ spellings are descriptive observations, with script/homograph analysis explicitl
 unevaluated. Other domain/brand/TLD heuristics and thresholds remain unchanged;
 those heuristics still require validation.
 
+The [display-brand comparison fix](display-brand-comparison.md) removes a name
+mismatch penalty caused solely by a service subdomain beneath a matching public
+registrable label. Hosted tenant exceptions, unambiguous From gating and numeric
+provenance are explicit. Domain ownership is unverified; other domain-label/TLD
+heuristics and attribution accuracy remain separate validation work.
+
 ## GitHub review follow-up: process launch and crash recovery
 
 The first GitHub review found two P1 issues: audited `spawn`/`fork`/`exec` paths
