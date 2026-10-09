@@ -5,8 +5,8 @@ Deoffusca contenuto HTML offuscato nei phishing
 """
 
 import re
-import html as html_module
 import base64
+import hashlib
 from typing import Dict, List, Any, Optional
 import logging
 
@@ -45,30 +45,10 @@ class HTMLDeobfuscator:
         Returns:
             Dizionario con HTML finale e trasformazioni applicate
         """
-        transformations = []
+        # Parse original markup only. Global entity decoding turns literal
+        # escaped text into fabricated nodes; decoded attributes are candidates.
         current_html = html_content
-
-        # 1. Decodifica entità HTML
-        decoded_entities = html_module.unescape(current_html)
-        if decoded_entities != current_html:
-            transformations.append({
-                'technique': 'html_entity_decode',
-                'from': current_html,
-                'to': decoded_entities,
-                'description': 'Decodifica entità HTML (&amp;, &lt;, ecc.)'
-            })
-            current_html = decoded_entities
-
-        # 2. Decodifica base64 in attributi
-        base64_decoded = self._decode_base64_in_html(current_html)
-        if base64_decoded != current_html:
-            transformations.append({
-                'technique': 'base64_in_html',
-                'from': current_html,
-                'to': base64_decoded,
-                'description': 'Decodifica base64 in attributi HTML'
-            })
-            current_html = base64_decoded
+        candidates = self._observe_base64_attributes(html_content)
 
         # 3. Analizza elementi nascosti
         hidden_analysis = self._analyze_hidden_elements(current_html)
@@ -84,54 +64,67 @@ class HTMLDeobfuscator:
 
         return {
             'original_html': html_content,
-            'final_html': current_html,
-            'transformations': transformations,
+            'final_html': html_content,
+            'html_schema_version': 2,
+            'transformations': [],
+            'suspicion_indicators': [],
+            'encoded_attribute_candidates': candidates,
+            'entity_reference_count': len(re.findall(r'&(?:#[0-9]+|#x[0-9a-fA-F]+|[A-Za-z][A-Za-z0-9]+);', html_content)),
             'hidden_elements': hidden_analysis,
             'form_analysis': form_analysis,
             'iframe_analysis': iframe_analysis,
             'javascript_analysis': js_analysis,
-            'suspicion_score': self._calculate_html_suspicion(
-                transformations, hidden_analysis, form_analysis,
-                iframe_analysis, js_analysis
-            )
+            'assessment_status': 'partial' if candidates['status'] != 'completed' else 'descriptive_only',
+            'parsing_status': 'available' if HAS_BEAUTIFULSOUP else 'not_evaluated',
+            'risk_detection': 'not_evaluated',
+            'suspicion_score': 0.0,
+            'calibrated': False,
+            'limitation': 'Best-effort static HTML observations and decoded attribute candidates do not establish safety or phishing; no browser rendering or script execution',
         }
 
-    def _decode_base64_in_html(self, html_content: str) -> str:
-        """Decodifica base64 negli attributi HTML"""
+    def _observe_base64_attributes(self, html_content: str) -> Dict[str, Any]:
+        """Bounded data-URI observations, without changing source attributes."""
+        result = {'status':'completed', 'candidates':[],
+                  'limits':{'nodes':1024, 'candidates':32, 'encoded_characters':16384}}
         if not HAS_BEAUTIFULSOUP:
-            return html_content
-
+            result.update(status='not_evaluated', reason='Optional HTML parser unavailable')
+            return result
         try:
             soup = BeautifulSoup(html_content, 'html.parser')
-            modified = False
-
-            # Cerca base64 in attributi comuni
-            attributes_to_check = ['src', 'href', 'data', 'value', 'alt']
-
-            for tag in soup.find_all():
-                for attr in attributes_to_check:
-                    if tag.has_attr(attr):
-                        value = tag[attr]
-                        # Pattern per base64 (data:base64, o semplice base64)
-                        base64_match = re.search(r'base64,([A-Za-z0-9+/]+={0,2})', value)
-                        if base64_match:
-                            try:
-                                encoded = base64_match.group(1)
-                                decoded_bytes = base64.b64decode(encoded)
-                                decoded_str = decoded_bytes.decode('utf-8', errors='ignore')
-
-                                # Sostituisci nel valore dell'attributo
-                                new_value = value.replace(base64_match.group(0), decoded_str)
-                                tag[attr] = new_value
-                                modified = True
-                            except Exception:
-                                continue
-
-            return str(soup) if modified else html_content
-
+            nodes = soup.find_all(limit=1025)
+            if len(nodes) > 1024: result['status'] = 'partial'
+            for index, tag in enumerate(nodes[:1024]):
+                for attr in ('src','href','data','value','alt'):
+                    value = tag.get(attr)
+                    if not isinstance(value,str): continue
+                    match = re.fullmatch(r'data:([^,]*);base64,(.*)',value,re.IGNORECASE|re.DOTALL)
+                    if not match: continue
+                    if len(result['candidates']) == 32:
+                        result['status'] = 'partial'
+                        return result
+                    candidate = {'tag':tag.name, 'node_index':index, 'attribute':attr,
+                                 'original_attribute':value, 'attribute_source':'parsed_original_html_attribute',
+                                 'declared_media_type':match.group(1), 'candidate_only':True,
+                                 'network_target':False, 'decoded_text':None}
+                    result['candidates'].append(candidate)
+                    token = match.group(2)
+                    if len(token) > 16384:
+                        candidate.update(status='partial',reason='Encoded attribute size limit exceeded')
+                        result['status'] = 'partial'
+                        continue
+                    try:
+                        decoded = base64.b64decode(token,validate=True)
+                        candidate.update(decoded_size=len(decoded),sha256=hashlib.sha256(decoded).hexdigest())
+                        try:
+                            candidate.update(status='decoded_text_candidate',decoded_text=decoded.decode('utf-8',errors='strict'))
+                        except UnicodeError:
+                            candidate['status'] = 'opaque_bytes'
+                    except ValueError:
+                        candidate.update(status='invalid',reason='Invalid base64 data URI')
+            return result
         except Exception as e:
-            logger.warning(f"Errore nella decodifica base64 HTML: {e}")
-            return html_content
+            result.update(status='partial',reason=f'HTML candidate parsing failed: {type(e).__name__}')
+            return result
 
     def _analyze_hidden_elements(self, html_content: str) -> List[Dict]:
         """Analizza elementi HTML nascosti"""
@@ -146,13 +139,12 @@ class HTMLDeobfuscator:
                 try:
                     elements = soup.select(selector)
                     for elem in elements:
-                        suspicion_score = self._rate_hidden_element_suspicion(elem)
-
                         hidden_elements.append({
                             'element': str(elem)[:200] + '...' if len(str(elem)) > 200 else str(elem),
                             'selector': selector,
                             'tag': elem.name,
-                            'suspicion_score': suspicion_score,
+                            'observation_only': True,
+                            'risk_detection': 'not_evaluated',
                             'attributes': dict(elem.attrs) if elem.attrs else {}
                         })
                 except Exception:
@@ -274,9 +266,16 @@ class HTMLDeobfuscator:
             'suspicious_patterns': []
         }
 
-        # Trova script inline
-        script_pattern = r'<script[^>]*>(.*?)</script>'
-        scripts = re.findall(script_pattern, html_content, re.DOTALL | re.IGNORECASE)
+        if not HAS_BEAUTIFULSOUP:
+            return analysis
+        # A raw regex sees tags inside comments as scripts. Parse original
+        # markup; this is static observation, not browser execution semantics.
+        try:
+            soup = BeautifulSoup(html_content, 'html.parser')
+            scripts = [tag.get_text() for tag in soup.find_all('script')
+                       if not tag.find_parent(['textarea','title','style'])]
+        except Exception:
+            return analysis
 
         for script in scripts:
             script_data = {
@@ -306,21 +305,6 @@ class HTMLDeobfuscator:
 
         return analysis
 
-    def _rate_hidden_element_suspicion(self, element) -> float:
-        """Valuta quanto è sospetto un elemento nascosto"""
-        score = 0.3  # Base per essere nascosto
-
-        # Bonus se contiene testo significativo
-        text_content = element.get_text().strip()
-        if text_content and len(text_content) > 10:
-            score += 0.3
-
-        # Bonus se ha attributi onclick o simili
-        if element.has_attr('onclick') or element.has_attr('onload'):
-            score += 0.4
-
-        return min(1.0, score)
-
     def _is_suspicious_url(self, url: str) -> bool:
         """Verifica se un URL sembra sospetto"""
         if not url:
@@ -341,31 +325,3 @@ class HTMLDeobfuscator:
                 return True
 
         return False
-
-    def _calculate_html_suspicion(self, transformations, hidden_elements,
-                                form_analysis, iframe_analysis, js_analysis) -> float:
-        """Calcola punteggio di sospetto per l'HTML"""
-        score = 0.0
-
-        # Peso per trasformazioni
-        score += len(transformations) * 0.2
-
-        # Peso per elementi nascosti
-        score += len(hidden_elements) * 0.15
-
-        # Peso per form sospetti
-        for form in form_analysis.get('forms', []):
-            score += len(form.get('suspicious_indicators', [])) * 0.1
-
-        # Peso per iframe sospetti
-        score += iframe_analysis.get('suspicious_count', 0) * 0.2
-
-        # Peso per JavaScript sospetto
-        suspicious_scripts = [s for s in js_analysis.get('inline_scripts', [])
-                            if s.get('suspicious_indicators')]
-        score += len(suspicious_scripts) * 0.25
-
-        # Peso per pattern JavaScript sospetti
-        score += len(js_analysis.get('suspicious_patterns', [])) * 0.1
-
-        return min(1.0, score)

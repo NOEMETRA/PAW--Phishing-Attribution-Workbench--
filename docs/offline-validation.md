@@ -89,6 +89,11 @@ messages. [Text preservation](text-deobfuscation.md) separates original text fro
 descriptive visual comparisons and removes that unsupported contribution. URL
 recovery remains separate; HTML/JavaScript heuristics still need validation.
 
+The subsequent [HTML audit](html-evidence.md) identifies the residual contribution
+as routine entity decoding in 13 cases. Original markup is now preserved and
+decoded attribute candidates remain separate, with explicit descriptive/partial
+coverage. Standalone JavaScript and header/domain signals still need validation.
+
 Codex review is requested in GitHub PR comments. Treat the review as an additional
 check and resolve actionable findings with reproductions and focused tests; do
 not interpret an empty review as full software validation.

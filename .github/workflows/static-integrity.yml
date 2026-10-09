@@ -22,7 +22,7 @@ jobs:
       - name: Check public metadata and safety wording
         run: python -m unittest discover -s tests -p 'test_static_contracts.py' -v
       - name: Install evidence hashing dependency
-        run: python -m pip install 'blake3>=1.0.0,<2.0.0' 'dnspython>=2.4.2,<3.0.0' 'tldextract>=5,<6' 'dkimpy>=1.1.4,<2' 'cryptography>=42,<47' 'psutil>=5.9,<8'
+        run: python -m pip install 'blake3>=1.0.0,<2.0.0' 'dnspython>=2.4.2,<3.0.0' 'tldextract>=5,<6' 'dkimpy>=1.1.4,<2' 'cryptography>=42,<47' 'psutil>=5.9,<8' 'beautifulsoup4>=4.12,<5'
       - name: Verify execution and evidence contracts
         run: python -m unittest discover -s tests -p 'test_execution_contracts.py' -v
       - name: Verify authentication and missing evidence contracts
@@ -36,6 +36,9 @@ jobs:
 
       - name: Verify text preservation and comparison-only deobfuscation observations
         run: python -m unittest discover -s tests -p 'test_deobfuscation_contracts.py' -v
+
+      - name: Verify original HTML markup, bounded candidates and descriptive coverage
+        run: python -m unittest discover -s tests -p 'test_html_contracts.py' -v
 
       - name: Verify MIME and attachment evidence contracts
         run: python -m unittest discover -s tests -p 'test_mime_contracts.py' -v
@@ -63,3 +66,6 @@ jobs:
         run: python tests/integration_url_evidence_real.py
       - name: Verify real offline full CLI content observations and actions
         run: python tests/integration_content_assessment_real.py
+
+      - name: Verify real offline HTML markup, candidate evidence and descriptive coverage
+        run: python tests/integration_html_evidence_real.py

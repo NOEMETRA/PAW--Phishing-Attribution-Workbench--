@@ -56,6 +56,9 @@ aggregate score; nested text scores remain zero compatibility contributions.
 URL refanging/decoding, original URL identities and candidate provenance remain
 in the URL-specific module. HTML and JavaScript analysis and their heuristics
 are outside this correction; ordinary HTML decoding may still add points.
+The subsequent [HTML correction](html-evidence.md) removes that routine-decoding
+contribution and extends descriptive coverage to HTML. The historical pilot
+measurements below remain as recorded; JavaScript requires a separate audit.
 Historical sealed cases are not rewritten. Consumers of the old altered text
 must use preserved text or the explicitly descriptive comparison metadata.
 

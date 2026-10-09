@@ -377,12 +377,14 @@ For help: paw help <command>
                 print(f"Assessment: {results['assessment_status']}")
                 print(f"Text observations: {results['coverage']['text']['status']}")
                 print(f"Text risk detection: {results['coverage']['text']['risk_detection']}")
+                print(f"HTML observations: {results['coverage']['html']['status']}")
+                print(f"HTML risk detection: {results['coverage']['html']['risk_detection']}")
                 if results['suspicion_score'] is not None:
                     print(f"Transformation heuristic ({results['score_scope']}, uncalibrated): {results['suspicion_score']:.3f}")
                     print(f"Nontext transformation complexity: {results['complexity_rating']}")
                     print(f"Nontext techniques detected: {len(results['techniques_detected'])}")
                 else:
-                    print("Suspicion assessment: not_evaluated; text observations are descriptive only")
+                    print("Suspicion assessment: not_evaluated; text/HTML observations are descriptive")
                 print(results['limitation'])
                 deobfuscated = results.get('deobfuscated_artifacts', {})
                 if deobfuscated.get('urls'):
