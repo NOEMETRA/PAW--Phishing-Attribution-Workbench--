@@ -48,8 +48,9 @@ The list remains `.click`, `.icu`, `.cfd`, `.rest`, `.tk`, `.gq`, `.ml`, `.ga`, 
 and the 0.10 weight is unchanged. Neither is calibrated or updated by this change.
 This comparison performs no network request. Domain age/RDAP, brand/display-name,
 Reply-To, Unicode, authentication, dynamic contributions and thresholds are
-unchanged. Future registration dates currently becoming age zero require a
-separate domain-age correction. UI and the Linux detonation lab remain deferred.
+unchanged by the TLD fix. Future registration dates are handled separately by the
+[nullable domain-age calculation](domain-age.md). UI and the Linux detonation lab
+remain deferred.
 
 ## Verification
 

@@ -72,6 +72,10 @@ or ambiguous domain evidence has explicit partial/unevaluated coverage.
 From availability gate. Static list membership and its contribution are explicit;
 domain reputation remains unevaluated.
 
+[Registration-age calculations](docs/domain-age.md) reject future or unusable
+timestamps instead of interpreting them as age zero. Reports preserve the
+calculation reference and keep unavailable age null, including the pipeline index.
+
 PAW is a **research workbench**, not a production incident-response platform or an attribution oracle.
 
 [JavaScript schema v2](docs/javascript-evidence.md) preserves original source,
