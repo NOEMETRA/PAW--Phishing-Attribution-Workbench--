@@ -64,6 +64,10 @@ explicitly unevaluated; the legacy mixed-script flag is nullable.
 registrable labels when evaluating service subdomains. Hosted tenant spelling
 and all domain ownership remain unverified.
 
+[Domain brand spelling](docs/domain-brand-labels.md) compares leftmost and PSL
+registrable labels without counting the same domain-label signal twice. Missing
+or ambiguous domain evidence has explicit partial/unevaluated coverage.
+
 PAW is a **research workbench**, not a production incident-response platform or an attribution oracle.
 
 [JavaScript schema v2](docs/javascript-evidence.md) preserves original source,

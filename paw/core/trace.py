@@ -1029,6 +1029,7 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
     stage_status['reply_to_comparison'] = score['sender_domain_observations']['reply_to_comparison']
     stage_status['unicode_domain'] = score['sender_domain_observations']['unicode_domain']
     stage_status['display_brand_comparison'] = score['sender_domain_observations']['display_brand_comparison']
+    stage_status['domain_brand_comparison'] = score['sender_domain_observations']['domain_brand_comparison']
     stage_status['mime_parsing'] = {'status': mime_result['metadata']['status'], 'issues': mime_result['metadata']['issues']}
     stage_status['received_path'] = {'status': 'partial' if norm['status']=='partial' else 'parsed_unverified' if hops else 'unavailable',
         'verified':False,'schema_version':norm['received_schema_version'],
