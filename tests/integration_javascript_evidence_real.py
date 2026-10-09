@@ -24,7 +24,8 @@ def main():
                'expressions.eml':'String.fromCharCode(65+1,variable2);',
                'recursive.eml':'atob("YXRvYignWVE9PScp");',
                'uri.eml':'decodeURIComponent("%FF"); decodeURIComponent("a+b%2Fc");',
-               'limited.eml':'atob("YQ==");'*33,
+               'limited.eml':'atob("YQ==");'*33+' '*10000,
+               'nested.eml':'eval(("hello")); String.fromCharCode(foo(65),66);',
                'decoded-url.eml':'String.fromCharCode('+char_codes+');'}
     with tempfile.TemporaryDirectory(prefix='paw-js-',dir=REPO.parent) as temporary:
         root = Path(temporary).resolve()
@@ -75,9 +76,16 @@ def main():
         assert observed['uri.eml']['literal_candidates']['candidates'][0]['status'] == 'invalid_encoding'
         assert observed['limited.eml']['assessment_status'] == 'partial'
         assert len(observed['limited.eml']['literal_candidates']['candidates']) == 32
+        limited = observed['limited.eml']['literal_candidates']
+        assert limited['scanned_characters'] == len('atob("YQ==");'*32)
+        assert limited['available_window_characters'] > limited['scanned_characters']
+        assert limited['unprocessed_source_span'] == [limited['scanned_characters'],len(observed['limited.eml']['original_code'])]
+        nested = observed['nested.eml']['literal_candidates']['candidates']
+        assert [candidate['original'] for candidate in nested] == ['eval(("hello"))','String.fromCharCode(foo(65),66)']
+        assert all(candidate['status'] == 'unsupported_literal' for candidate in nested)
         hidden, = observed['decoded-url.eml']['literal_candidates']['candidates']
         assert hidden['decoded_text'] == hidden_url and hidden['network_target'] is False
-        print('PASS: 7 real full --no-egress JavaScript cases; source, candidates, no execution, coverage, URL inventory, scores and seals verified')
+        print('PASS: 8 real full --no-egress JavaScript cases; source, full nested spans, bounded coverage, candidates, no execution, URL inventory, scores and seals verified')
 
 
 if __name__ == '__main__':

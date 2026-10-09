@@ -140,6 +140,39 @@ class JavaScriptContracts(unittest.TestCase):
         self.assertEqual(mixed['transformations'],url_only['transformations'])
         self.assertEqual(mixed['assessment_status'],'partial')
 
+    def test_candidate_limit_reports_processed_prefix_and_unprocessed_range(self):
+        prefix = 'atob("YQ==");'*32
+        source = prefix+'eval("later");'+' '*100000
+        result = JavaScriptDeobfuscator().deobfuscate_javascript(source)
+        scan = result['literal_candidates']
+        self.assertEqual(scan['scanned_characters'],len(prefix))
+        self.assertEqual(scan['available_window_characters'],len(source))
+        self.assertEqual(scan['unprocessed_source_span'],[len(prefix),len(source)])
+        self.assertEqual(scan['coverage_scope'],'literal_candidate_search')
+        self.assertEqual(len(scan['candidates']),32)
+
+    def test_nested_parentheses_preserve_whole_unsupported_candidate_spans(self):
+        for source in ('eval(("hello"))', 'String.fromCharCode(foo(65),66)',
+                       'eval((("quoted ) (")))'):
+            with self.subTest(source=source):
+                result = JavaScriptDeobfuscator().deobfuscate_javascript(source)
+                candidate, = result['literal_candidates']['candidates']
+                self.assertEqual(candidate['original'],source)
+                self.assertEqual(candidate['source_span'],[0,len(source)])
+                self.assertEqual(candidate['status'],'unsupported_literal')
+                self.assertIsNone(candidate['decoded_text'])
+
+    def test_window_and_argument_limits_keep_bounded_nested_spans(self):
+        decoder = JavaScriptDeobfuscator()
+        source = 'eval('+'('*decoder.MAX_ARGUMENT_CHARS+')'*decoder.MAX_ARGUMENT_CHARS
+        result = decoder.deobfuscate_javascript(source)['literal_candidates']
+        candidate, = result['candidates']
+        self.assertEqual(candidate['status'],'limited')
+        self.assertEqual(candidate['source_span'],[0,len('eval(')+decoder.MAX_ARGUMENT_CHARS])
+        capped = decoder.deobfuscate_javascript(' '*decoder.MAX_SCAN_CHARS+'eval("later")')['literal_candidates']
+        self.assertEqual(capped['scanned_characters'],decoder.MAX_SCAN_CHARS)
+        self.assertEqual(capped['unprocessed_source_span'],[decoder.MAX_SCAN_CHARS,decoder.MAX_SCAN_CHARS+len('eval("later")')])
+
 
 if __name__ == '__main__':
     unittest.main()

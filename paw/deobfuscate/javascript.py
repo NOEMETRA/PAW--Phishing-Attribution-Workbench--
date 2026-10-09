@@ -22,11 +22,13 @@ class JavaScriptDeobfuscator:
     def deobfuscate_javascript(self, js_code: str) -> Dict[str, Any]:
         scan = js_code[:self.MAX_SCAN_CHARS]
         candidates, reasons = [], []
+        search_stop = len(scan)
         if len(js_code) > len(scan):
             reasons.append('source_scan_limit')
         for match in self._CALL.finditer(scan):
             if len(candidates) >= self.MAX_CANDIDATES:
                 reasons.append('candidate_limit')
+                search_stop = match.start()
                 break
             candidate = self._observe_call(scan, match)
             candidates.append(candidate)
@@ -45,13 +47,18 @@ class JavaScriptDeobfuscator:
             'calibrated': False,
             'literal_candidates': {
                 'status': 'partial' if reasons else 'completed', 'candidates': candidates,
-                'scanned_characters': len(scan), 'reasons': sorted(set(reasons)),
+                'coverage_scope': 'literal_candidate_search',
+                'scanned_characters': search_stop,
+                'available_window_characters': len(scan),
+                'unprocessed_source_span': [search_stop,len(js_code)] if search_stop < len(js_code) else None,
+                'reasons': sorted(set(reasons)),
                 'limits': {'source_characters': self.MAX_SCAN_CHARS,
                            'candidates': self.MAX_CANDIDATES,
                            'argument_characters': self.MAX_ARGUMENT_CHARS},
             },
             'lexical_observations': {
                 'source': 'original_code', 'syntax_verified': False,
+                'scanned_characters': len(scan),
                 'hex_escape_count': len(re.findall(r'\\x[0-9a-fA-F]{2}', scan)),
                 'unicode_escape_count': len(re.findall(r'\\u[0-9a-fA-F]{4}', scan)),
             },
@@ -63,8 +70,9 @@ class JavaScriptDeobfuscator:
     def _observe_call(self, source, match):
         start, argument_start = match.start(), match.end()
         stop = min(len(source), argument_start + self.MAX_ARGUMENT_CHARS)
-        # Scan one bounded argument region, respecting quoted parentheses.
-        quote, escaped, end = None, False, None
+        # Balance nested parentheses within the bounded region; quoted ones do
+        # not delimit calls. This still does not verify full JS lexical syntax.
+        quote, escaped, end, depth = None, False, None, 1
         for position in range(argument_start, stop):
             char = source[position]
             if quote:
@@ -76,9 +84,13 @@ class JavaScriptDeobfuscator:
                     quote = None
             elif char in ('"', "'"):
                 quote = char
+            elif char == '(':
+                depth += 1
             elif char == ')':
-                end = position + 1
-                break
+                depth -= 1
+                if depth == 0:
+                    end = position + 1
+                    break
         candidate = {'kind': match.group('name'), 'source_span': [start,end or stop],
                      'original': source[start:end or stop], 'source': 'original_code',
                      'candidate_only': True, 'syntax_verified': False,

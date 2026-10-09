@@ -34,6 +34,9 @@ has `candidate_only:true`, `syntax_verified:false` and `network_target:false`.
 Matches may be inside comments/strings, refer to shadowed functions or occur in
 invalid code. This is bounded lexical scanning, not AST analysis, a complete
 string-literal parser or proof of a runtime call. Names are case sensitive.
+Within the bounded argument region, parentheses are balanced outside supported
+quoted strings so nested unsupported arguments retain their whole call excerpt.
+Comments, regex literals and templates are not parsed as JavaScript syntax.
 
 The supported literal subset is conservative:
 
@@ -67,6 +70,12 @@ Full CLI MIME/worker limits apply independently. `completed` means the bounded
 lexical scan completed, not complete JavaScript analysis. Newly decoded candidates
 never enter URL inventory/network targets; the independent URL pipeline still
 examines original MIME representations under its existing contract.
+`coverage_scope:literal_candidate_search` specifies the meaning of
+`scanned_characters`: the processed search prefix ends at the first omitted call
+when the candidate cap is reached. `available_window_characters` is separate;
+`unprocessed_source_span` identifies the rest of the original source for that
+search (or null when exhausted). Independent escape counts report their own
+scanned window and cannot establish candidate-search coverage.
 
 ## Aggregate and migration
 
@@ -83,22 +92,32 @@ Historical sealed cases retain original artifacts.
 
 ## Validation scope
 
-Twelve contracts cover source/API parity, fake eval, recursion, repeated spans,
+Fifteen contracts cover source/API parity, fake eval, recursion, repeated/nested spans,
 binary/invalid/forgiving base64, strict URI decoding, expressions/UTF-16 units,
 lexical context, limits and unchanged URL heuristics. Initial seven regressions
-fail on legacy code. Seven supervised full `--no-egress` CLI MIME fixtures check
+fail on legacy code. Eight supervised full `--no-egress` CLI MIME fixtures check
 persisted source, seals, candidates, zero deobfuscation contribution, explicit
 unavailable execution and URL inventory, including a decoded URL that must never
 become a network target.
 
-The Windows serial suite passes 200 tests with five POSIX-only skips (205 total).
-All seven new real JavaScript CLI cases pass, as do eleven URL, five HTML and eight
+The first Windows serial suite passed 200 tests with five POSIX-only skips (205 total).
+The initial seven real JavaScript CLI cases passed, as did eleven URL, five HTML and eight
 content full CLI fixtures. A fresh private `full --no-egress` replay completes
 20/20 original EMLs with verified seals/original bytes. Text, HTML, URL inventory,
 MIME/authentication/remaining evidence and all final scores/verdicts are identical
 to the prior HTML phase; JavaScript risk/execution coverage is now explicit.
 All 20 remain Inconclusive. The run took 18.353 seconds with 112.78 MiB peak
 sampled process-tree RSS (50 ms sampling). Source-file hashes match the run.
+
+The GitHub review reproduced two provenance defects: candidate-limit scanning
+reported the whole window, and nested parentheses truncated unsupported calls.
+New regressions fail before the correction; processed prefix/unprocessed range
+and quote-aware bounded parenthesis depth now preserve those boundaries.
+The corrected Windows suite passes 203 tests with five POSIX skips (208 total);
+eight real JavaScript CLI cases additionally verify both reviewed paths.
+A fresh 20-original replay again preserves all evidence, final score artifacts
+and verdicts, with matching source hashes and valid seals (20.569 seconds,
+127.12 MiB sampled process-tree RSS). This remains execution/integrity validation.
 
 The private original pilot has no standalone JavaScript artifacts. Fixture results
 verify evidence contracts, not phishing accuracy or the historical four-hour
