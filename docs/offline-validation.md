@@ -137,7 +137,11 @@ The [TLD observation fix](tld-observations.md) normalizes final-label comparison
 requires usable From identity or an explicit legacy domain hint, and exposes
 unevaluated cases without TLD points. Static-list membership is not a reputation
 verdict. List/weight calibration and domain-age/RDAP correctness remain separate;
-future registration dates currently becoming age zero are not corrected here.
+future registration dates are addressed separately by the
+[nullable registration-age calculation](domain-age.md). Its real local contracts
+reject future/naive/invalid timestamps without recent-domain points. Offline CLI
+cases expose unavailable age/null indexed age; no registry date is simulated.
+RDAP provenance/binding and numeric legacy hints still require separate validation.
 
 ## GitHub review follow-up: process launch and crash recovery
 

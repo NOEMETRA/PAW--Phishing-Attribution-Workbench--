@@ -123,3 +123,9 @@ jobs:
 
       - name: Verify actual offline TLD observations and scoring
         run: python tests/integration_tld_real.py
+
+      - name: Verify nullable domain age and future timestamp rejection
+        run: python -m unittest discover -s tests -p 'test_domain_age_contracts.py' -v
+
+      - name: Verify actual offline domain-age coverage and nullable index
+        run: python tests/integration_domain_age_real.py

@@ -10,7 +10,7 @@ from .runtime import mark_stage, read_progress
 from .received import normalize_received
 from .auth import infer_alignment, authentication_report
 from .dkim_offline import verify_dkim_offline
-from .profiler import ip_rdap, domain_rdap, nrd_days
+from .profiler import ip_rdap, domain_rdap, nrd_days, observe_domain_age
 from .scoring import score_case, finalize_score, validate_deobfuscation_weight
 from .network_policy import enforce_trace_policy, network_allowed, violations
 from .batch import BatchAnalysisError, select_inputs
@@ -56,15 +56,12 @@ def check_domain_reputation(domain):
         rdap = domain_rdap(domain)
         created = rdap.get("created")
         if created:
-            from datetime import datetime
-            created_date = datetime.fromisoformat(created.replace('Z', '+00:00'))
-            now = datetime.now(created_date.tzinfo)
-            age_days = (now - created_date).days
+            age_days = nrd_days(created)
             
-            if age_days < 30:
+            if age_days is not None and age_days < 30:
                 reputation["score"] += 5  # Very suspicious
                 reputation["sources"].append(f"very_new_domain:{age_days}d")
-            elif age_days < 365:
+            elif age_days is not None and age_days < 365:
                 reputation["score"] += 2  # Moderately suspicious
                 reputation["sources"].append(f"new_domain:{age_days}d")
     except:
@@ -875,9 +872,11 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
     dominfo = {"from_domain": {"domain": from_domain}}
     if from_domain:
         dr = domain_rdap(from_domain)
-        nd = nrd_days(dr.get("created"))
-        dr["nrd_days"] = nd
         dominfo["from_domain"] = dr
+    age_observation = observe_domain_age(dominfo['from_domain'].get('created'))
+    age_observation['source'] = 'domains.json.from_domain.created'
+    dominfo['from_domain']['domain_age'] = age_observation
+    dominfo['from_domain']['nrd_days'] = age_observation['age_days']
     write_json(os.path.join(case_dir,"domains.json"), dominfo)
     
     # 🚀 NUOVO: Correlazione automatica Threat Intelligence
@@ -1031,6 +1030,9 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
     stage_status['display_brand_comparison'] = score['sender_domain_observations']['display_brand_comparison']
     stage_status['domain_brand_comparison'] = score['sender_domain_observations']['domain_brand_comparison']
     stage_status['tld_comparison'] = score['sender_domain_observations']['tld_comparison']
+    stage_status['domain_age'] = age_observation
+    if age_observation['status'] != 'observed_unverified':
+        score['coverage']['not_evaluated'].append('domain_age')
     stage_status['mime_parsing'] = {'status': mime_result['metadata']['status'], 'issues': mime_result['metadata']['issues']}
     stage_status['received_path'] = {'status': 'partial' if norm['status']=='partial' else 'parsed_unverified' if hops else 'unavailable',
         'verified':False,'schema_version':norm['received_schema_version'],
