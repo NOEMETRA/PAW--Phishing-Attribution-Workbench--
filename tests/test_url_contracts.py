@@ -300,6 +300,63 @@ class URLContracts(unittest.TestCase):
         self.assertEqual(result['embedded_url_candidates'], [])
         self.assertEqual(build_url_evidence([wrapper], [result])[0], [wrapper])
 
+    def test_failed_url_recovery_paths_remain_in_evidence(self):
+        malformed = 'https://example.invalid/%ZZ'
+        sources = ['hxxps://example[.]invalid/%ZZ', quote(malformed, safe=''),
+                   encoded(malformed), ''.join('\\x%02x' % ord(c) for c in malformed)]
+        results = [self.engine.deobfuscate_url(source) for source in sources]
+        targets, evidence = build_url_evidence([], results + results)
+        self.assertEqual(targets, [])
+        self.assertEqual([e['source_url'] for e in evidence], sources)
+        for record, result in zip(evidence, results):
+            self.assertEqual(record['url'], result['original_url'])
+            self.assertEqual(record['provenance'], 'text_url_candidate')
+            self.assertEqual(record['status'], 'invalid')
+            self.assertEqual(record['reason'], 'Malformed percent escape in URL')
+            self.assertFalse(record['network_target'])
+            self.assertEqual(record['decoding_attempts'], result['decoding_attempts'])
+            self.assertEqual(record['decoding_attempts'][-1]['to'], malformed)
+
+    def test_partial_url_recovery_and_oversize_inputs_remain_in_evidence(self):
+        deep = 'https://example.invalid/a'
+        for _ in range(10):
+            deep = quote(deep, safe='')
+        oversize = 'https://example.invalid/' + 'a' * 65536
+        results = [self.engine.deobfuscate_url(value) for value in [deep, oversize]]
+        targets, evidence = build_url_evidence([], results)
+        self.assertEqual(targets, [])
+        self.assertEqual([e['source_url'] for e in evidence], [deep, oversize])
+        for record in evidence:
+            self.assertEqual(record['status'], 'partial')
+            self.assertTrue(record['reason'])
+            self.assertFalse(record['network_target'])
+        self.assertEqual(len(evidence[0]['decoding_attempts']), 4)
+        self.assertEqual(evidence[1]['decoding_attempts'], [])
+
+    def test_unresolved_text_candidates_remain_in_evidence(self):
+        sources = [encoded('https is mentioned but this is not a URL'), 'https%ZZ',
+                   base64.b64encode(b'https://example.invalid/\xff').decode('ascii')]
+        results = [self.engine.deobfuscate_url(value) for value in sources]
+        targets, evidence = build_url_evidence([], results)
+        self.assertEqual(targets, [])
+        self.assertEqual([e['source_url'] for e in evidence], sources)
+        for record, result in zip(evidence, results):
+            self.assertEqual(record['status'], 'not_url')
+            self.assertEqual(record['reason'], result['reason'])
+            self.assertEqual(record['decoding_attempts'], result['decoding_attempts'])
+            self.assertFalse(record['network_target'])
+
+    def test_observed_invalid_evidence_is_not_duplicated_by_unchanged_results(self):
+        invalid = 'https://example.invalid/%ZZ'
+        oversize = 'https://example.invalid/' + 'a' * 65536
+        results = [self.engine.deobfuscate_url(value) for value in [invalid, oversize]]
+        targets, evidence = build_url_evidence([invalid, oversize], results + results)
+        self.assertEqual(targets, [])
+        self.assertEqual(len(evidence), 2)
+        self.assertEqual([e['source_url'] for e in evidence], [invalid, oversize])
+        self.assertTrue(all(e['provenance'] == 'observed' for e in evidence))
+        self.assertTrue(all(e['decoding_attempts'] == [] for e in evidence))
+
     def test_mime_extraction_preserves_case_entities_and_reserved_url_bytes(self):
         message = EmailMessage()
         message.set_content('<a href="HTTPS://example.invalid/a%2Fb?x=a%26b&amp;next=1">go</a>', subtype='html')

@@ -23,12 +23,22 @@ def build_url_evidence(observed, results):
     """
     targets, evidence, seen = [], [], set()
     seen_evidence = set()
+
+    def add_evidence(record):
+        key = json.dumps(record, sort_keys=True)
+        if key not in seen_evidence:
+            seen_evidence.add(key)
+            evidence.append(record)
+
     observed = list(dict.fromkeys(observed))
     observed_set = set(observed)
     for value in observed:
         status, reason = http_url_status(value)
-        evidence.append({'url':value, 'provenance':'observed', 'status':status,
-            'reason':reason, 'network_target':status == 'completed'})
+        record = {'url':value, 'provenance':'observed', 'status':status,
+            'reason':reason, 'network_target':status == 'completed'}
+        if status != 'completed':
+            record.update(source_url=value, decoding_attempts=[])
+        add_evidence(record)
         if status == 'completed':
             targets.append(value)
             seen.add(value)
@@ -46,8 +56,13 @@ def build_url_evidence(observed, results):
             record = {'url':value, 'source_url':result['original_url'],
                 'provenance':result['url_provenance'], 'status':'completed', 'network_target':True,
                 'transformations':result.get('transformations', [])}
-            key = json.dumps(record, sort_keys=True)
-            if key not in seen_evidence:
-                seen_evidence.add(key)
-                evidence.append(record)
+        else:
+            # Recovery failure is evidence too. Keep the source as the record
+            # URL; intermediate decoded values are only in decoding_attempts.
+            source = result['original_url']
+            record = {'url':source, 'source_url':source,
+                'provenance':'observed' if source in observed_set else 'text_url_candidate',
+                'status':result['status'], 'reason':result.get('reason'), 'network_target':False,
+                'decoding_attempts':result.get('decoding_attempts', [])}
+        add_evidence(record)
     return targets, evidence

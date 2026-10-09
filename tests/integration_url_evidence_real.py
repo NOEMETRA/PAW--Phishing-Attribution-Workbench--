@@ -53,6 +53,19 @@ def main():
         item.set_content('<a href="HTTPS://example.invalid/upper%2Fpath?x=a%26b&amp;y=2">go</a>', subtype='html')
         html_bytes = item.as_bytes()
         (inputs / 'html.eml').write_bytes(html_bytes)
+        failed_target = 'https://example.invalid/%ZZ'
+        deep = 'https://example.invalid/a'
+        for _ in range(10):
+            deep = quote(deep, safe='')
+        oversize = 'hxxps://example[.]invalid/' + 'a' * 65536
+        unresolved = base64.b64encode(b'https is mentioned but this is not a URL').decode()
+        failed_sources = ['hxxps://example[.]invalid/%ZZ', quote(failed_target, safe=''),
+            base64.b64encode(failed_target.encode()).decode(),
+            ''.join('\\x%02x' % ord(c) for c in failed_target), deep, oversize, unresolved]
+        item.set_content('\n'.join(failed_sources))
+        failed_bytes = item.as_bytes()
+        (inputs / 'failed.eml').write_bytes(failed_bytes)
+        originals = {'plain.eml':plain_bytes, 'html.eml':html_bytes, 'failed.eml':failed_bytes}
         env = dict(os.environ, PYTHONPATH=str(REPO), PYTHONDONTWRITEBYTECODE='1', PYTHONUTF8='1')
         command = [sys.executable, '-X', 'utf8', '-m', 'paw', 'full', str(inputs),
             '--no-egress', '--deadline', '60', '--stage-timeout', '30']
@@ -62,10 +75,10 @@ def main():
         sys.path.insert(0, str(REPO))
         from paw.core.verify import verify_case
         cases = list((root / 'cases').glob('case-*'))
-        assert len(cases) == 2
+        assert len(cases) == 3
         for case in cases:
             source = read(case / 'manifest.json')['source_name']
-            original = plain_bytes if source == 'plain.eml' else html_bytes
+            original = originals[source]
             assert hashlib.sha256((case / 'input.eml').read_bytes()).digest() == hashlib.sha256(original).digest()
             assert verify_case(str(case))
             execution = read(case / 'execution.json')
@@ -104,9 +117,28 @@ def main():
                 assert coverage['status'] == 'partial'
                 assert coverage['invalid_or_unresolved_count'] == 4
                 assert coverage['embedded_candidate_count'] == 2
-            else:
+            elif source == 'html.eml':
                 assert headers['urls'] == [html_url]
                 assert coverage['status'] == 'completed'
+            else:
+                assert headers['urls'] == []
+                assert coverage['status'] == 'partial'
+                assert coverage['observed_count'] == coverage['network_target_count'] == 0
+                assert coverage['invalid_or_unresolved_count'] == len(failed_sources)
+                assert coverage['limited_analysis_count'] == 2
+                assert len(evidence) == len(failed_sources)
+                assert {e['source_url'] for e in evidence} == set(failed_sources)
+                url_results = read(case / 'deobfuscation_results.json')['deobfuscated_artifacts']['urls']
+                for value in failed_sources:
+                    record = next(e for e in evidence if e['source_url'] == value)
+                    result = next(r for r in url_results if r['original_url'] == value)
+                    assert record['url'] == value and record['provenance'] == 'text_url_candidate'
+                    assert record['network_target'] is False and record['reason'] == result['reason']
+                    assert record['decoding_attempts'] == result.get('decoding_attempts', [])
+                    expected = 'partial' if value in [deep, oversize] else 'not_url' if value == unresolved else 'invalid'
+                    assert record['status'] == expected
+                    if expected == 'invalid':
+                        assert record['decoding_attempts'][-1]['to'] == failed_target
         print(json.dumps({'real_cli_cases':len(cases), 'integrity_verified':True,
             'original_bytes_preserved':True, 'explicit_no_egress':True,
             'url_identity_and_candidate_provenance_verified':True}))

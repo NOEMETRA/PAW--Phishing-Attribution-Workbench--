@@ -31,13 +31,18 @@ the main deobfuscation engine preserve this same contract.
 recovered textual URLs with provenance. Network targets are deduplicated separately
 from evidence records: distinct source strings and transformation paths remain
 visible even when they recover the same target, while identical records appear
-once. Malformed observations remain evidence
-without entering `headers.json.urls`. Ports, missing hosts, controls, ambiguous
+once. Invalid, unresolved and decoding-limited textual candidates also remain in
+the inventory, even when no observed HTTP(S) URL exists. Their `url` and
+`source_url` retain the original input; `decoding_attempts` records the failed
+recovery path, with the outcome in `status` and `reason`. They have
+`network_target: false` and never enter `headers.json.urls`. Non-target inputs
+already observed by MIME extraction retain observed provenance; other textual
+inputs have `provenance: text_url_candidate`. Ports, missing hosts, controls, ambiguous
 backslashes, encoded hostname delimiters and malformed percent escapes in any
 component are checked locally. Each `%` must be followed by two hexadecimal
 digits; complete octets such as `%FF` are retained without UTF-8 decoding of
-resource components. These are
-bounded conservative syntax checks, not a full browser URL parser or proof of
+resource components. These are bounded conservative syntax checks, not a full
+browser URL parser or proof of
 authenticity. URL interpretation coverage reports invalid/unresolved inputs,
 decoding limits and candidate counts.
 
@@ -55,16 +60,18 @@ The local comparison map is not presented as a complete UTS #39 implementation.
 
 ## Validation
 
-- 27 URL contract tests exercise resource identity, whole URL recovery, Base64,
+- 31 URL contract tests exercise resource identity, whole URL recovery, Base64,
   nested JSON tracking, invalid UTF-8, IDN/visual comparisons, user information,
   malformed inputs, colliding provenance, all 256 complete resource percent
-  octets, deterministic inventories and bounded decoding. They replace
+  octets, deterministic inventories, failed/unresolved/limited source retention
+  and bounded decoding. They replace
   the old non-failing harness that expected rewritten destinations.
-- Real supervised `full --no-egress` CLI regressions use constructed plain/HTML
-  messages, preserve original bytes, verify case inventories, and assert that
+- Real supervised `full --no-egress` CLI regressions use three constructed messages
+  (plain, HTML and one containing only failed/unresolved/limited candidates).
+  They preserve original bytes, verify case inventories, and assert that
   malformed URLs, comparison strings and embedded candidates are not network
   targets. These fixtures are not classifier accuracy ground truth.
-- The full Windows contract suite passes: 129 tests, five POSIX-only skips.
+- The full Windows contract suite passes: 133 tests, five POSIX-only skips.
   Real CLI/API shared-directory and crash-recovery integration also passes.
 - A private pilot of 20 distinct original EMLs contains 300 MIME-extracted URLs.
   Before the change, 50 were altered and appended as additional reported URLs
@@ -72,8 +79,8 @@ The local comparison map is not presented as a complete UTS #39 implementation.
   additional rewritten targets appear; 50 embedded candidates remain available
   separately (28 in decoded JSON tracking containers).
 - All 20 real cases complete with verified seals, preserved original bytes and
-  explicit no-egress. The run after the review fixes takes 25.58 seconds with a
-  peak sampled process-tree RSS of 127.27 MiB, observed every 50 ms;
+  explicit no-egress. The run after the review fixes takes 26.03 seconds with a
+  peak sampled process-tree RSS of 117.04 MiB, observed every 50 ms;
   this single run does not establish a performance improvement or reproduce the
   historical four-hour online workload.
 
