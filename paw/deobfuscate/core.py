@@ -84,20 +84,24 @@ class DeobfuscationEngine:
 
         analyzed = results['deobfuscated_artifacts']
         has_text = 'text' in analyzed
-        has_nontext = bool(analyzed.get('urls') or analyzed.get('html') or analyzed.get('javascript'))
-        results['assessment_status'] = ('partial' if has_text and has_nontext else
+        html_result = analyzed.get('html') or {}
+        has_descriptive = has_text or bool(html_result)
+        has_nontext = bool(analyzed.get('urls') or analyzed.get('javascript'))
+        results['assessment_status'] = ('partial' if html_result.get('assessment_status') == 'partial' or (has_descriptive and has_nontext) else
                                         'heuristic_only' if has_nontext else
-                                        'descriptive_only' if has_text else 'not_evaluated')
+                                        'descriptive_only' if has_descriptive else 'not_evaluated')
         results['coverage'] = {
             'text': {'status': 'descriptive_only' if has_text else 'not_evaluated',
                      'risk_detection': 'not_evaluated'},
             **{kind: {'status': 'heuristic_only' if analyzed.get(kind) else 'not_evaluated'}
-               for kind in ('urls', 'html', 'javascript')},
+               for kind in ('urls', 'javascript')},
+            'html': {'status': html_result.get('assessment_status', 'not_evaluated'),
+                     'risk_detection': 'not_evaluated'},
             'attachments': {'status': 'not_evaluated'},
         }
         results['score_scope'] = 'nontext_transformations_only'
         results['calibrated'] = False
-        results['limitation'] = ('Text risk detection is not evaluated; visual observations are descriptive. '
+        results['limitation'] = ('Text/HTML risk detection is not evaluated; visual and markup observations are descriptive. '
                                  'Nontext transformation heuristics do not establish safety or phishing.')
         if not has_nontext:
             results['suspicion_score'] = None
@@ -114,38 +118,8 @@ class DeobfuscationEngine:
         return self.layers[0].deobfuscate_url(url)
 
     def deobfuscate_html(self, html_content: str) -> Dict[str, Any]:
-        """Deoffusca contenuto HTML con passaggi iterativi."""
-        current = html_content
-        transformations: List[Dict[str, Any]] = []
-        max_iter = 4
-
-        for _ in range(max_iter):
-            changed = False
-            for layer in self.layers:
-                if hasattr(layer, 'deobfuscate_html'):
-                    try:
-                        res = layer.deobfuscate_html(current)
-                        new_html = res.get('final_html') if isinstance(res, dict) else res
-                        if isinstance(res, dict):
-                            transformations.extend(res.get('transformations', []))
-                        if new_html and new_html != current:
-                            changed = True
-                            current = new_html
-                    except Exception as e:
-                        logger.debug(f"deobfuscate_html layer error: {e}")
-                        continue
-            if not changed:
-                break
-
-        suspicion = self.calculate_suspicion_score(transformations)
-        techniques = [t.get('technique', '') for t in transformations]
-
-        return {
-            'final_html': current,
-            'transformations': transformations,
-            'suspicion_indicators': techniques,
-            'suspicion_score': suspicion
-        }
+        """Observe original markup once; decoded candidates are never markup."""
+        return self.layers[1].deobfuscate_html(html_content)
 
     def deobfuscate_javascript(self, js_code: str) -> Dict[str, Any]:
         """Deoffusca codice JavaScript con passaggi iterativi."""
