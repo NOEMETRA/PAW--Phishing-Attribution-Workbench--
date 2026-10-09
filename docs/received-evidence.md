@@ -30,6 +30,10 @@ Bracket scanning also protects incomplete or nested fragments inside comments
 from bare-address fallback. Unmatched or nested brackets before the timestamp
 delimiter make selection unsupported and coverage partial. This is a conservative
 parser scope limit, not a claim that every bracket in a comment violates RFC syntax.
+Complete bracketed literals use the same token-boundary policy as bare addresses.
+An adjacent hostname prefix/suffix, CIDR, interface identifier or port-like suffix
+makes the whole fragment unsupported; its interior is protected from fallback.
+Whitespace, comment parentheses, quotes and commas remain supported delimiters.
 
 The selected `ip` requires one unique recognized address in the supported From
 clause, with one ordered From/By pair and supported host tokens. Identical
@@ -80,18 +84,18 @@ HELO/PTR comparison also need separate validation.
 
 ## Verification scope
 
-Seventeen contracts cover field provenance, IPv4/IPv6 precedence, complete mapped
+Nineteen contracts cover field provenance, IPv4/IPv6 precedence, complete mapped
 literals, comments, multiple IPs, missing/duplicate/unsupported clauses, limits,
 address categories, malformed bracket fragments, non-truncation and offline
-operation. Seventeen real supervised
+operation. Twenty-one real supervised
 `full --no-egress` CLI fixtures verify bytes/seals, selected origin provenance,
 candidate spans, explicit boundary uncertainty and zero category/syntax penalties.
 The selected strict profile's 0.05 modifier is kept separate from observed risk.
 
-On Windows/Python 3.13, the combined contract suite passes 243 tests with five
-POSIX-specific skips (248 total); all seventeen supervised CLI fixtures pass.
+On Windows/Python 3.13, the combined contract suite passes 245 tests with five
+POSIX-specific skips (250 total); all twenty-one supervised CLI fixtures pass.
 Replaying the protected twenty-original corpus against the preceding merged
-version completes twenty cases in 27.688 seconds, with 138.691 MiB peak sampled
+version completes twenty cases in 21.520 seconds, with 131.793 MiB peak sampled
 process-tree RSS (50 ms sampling). Original bytes and all seals verify; the
 no-egress guard reports no attempted blocked operations. Source-file hashes
 match the tested implementation. These are offline workload measurements, not
@@ -114,6 +118,14 @@ replay, the corrected twenty-original run has identical Received paths,
 anomalies, origin/transmitting-server, scores, coverage, header, authentication,
 domain, URL, MIME and deobfuscation JSON (240 artifacts). Original bytes and
 both runs' seals verify. No score, origin IP or decision changes on this corpus.
+
+The whole-token boundary regression separately reproduces seventeen failures
+before correction for IPv4/mapped-IPv6 with adjacent prefixes or suffixes. Positive
+delimiter controls also verify exact source spans. Four further CLI cases reject
+bracketed hostname/CIDR suffixes and prefixes through persisted origin and partial
+coverage. Compared with the preceding bracket-only fix, all 240 protected-corpus
+JSON artifacts above remain identical; original bytes, seals and source hashes
+verify. The follow-up changes no scoring rules or thresholds.
 
 Independent sender authenticity, binary classifier accuracy, speedup and the
 historical four-hour online analysis remain unestablished. Remaining timestamp,

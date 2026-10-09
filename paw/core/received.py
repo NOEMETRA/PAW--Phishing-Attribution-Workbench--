@@ -8,6 +8,12 @@ from .authentication import normalize_domain
 from .ip_observations import classify_ip
 
 MAX_RECEIVED_CHARACTERS = 65536
+IP_TOKEN_CHARACTER = r'[\w.:%/\[\]-]'
+
+
+def _ip_token_boundaries(line, start, stop):
+    return not (start and re.fullmatch(IP_TOKEN_CHARACTER,line[start-1])) and not (
+        stop < len(line) and re.fullmatch(IP_TOKEN_CHARACTER,line[stop]))
 
 
 def _bracket_regions(line):
@@ -28,8 +34,9 @@ def _bracket_regions(line):
             else:
                 depth -= 1
                 if not depth:
-                    regions.append((start,index+1,not nested))
-                    malformed = malformed or nested
+                    bounded = _ip_token_boundaries(line,start,index+1)
+                    regions.append((start,index+1,not nested and bounded))
+                    malformed = malformed or nested or not bounded
     if depth:
         regions.append((start,len(line),False))
         malformed = True
@@ -85,7 +92,7 @@ def _structure(line):
     # Candidate scanning also recognizes literals inside comments. Validate
     # those brackets here, so malformed fragments cannot establish a sender IP.
     if _bracket_regions(line[:end])[1]:
-        issues.append('Malformed Received address brackets; selection unsupported')
+        issues.append('Malformed Received address brackets or token boundaries; selection unsupported')
     masked = ''.join(visible[:end])
     tokens = list(re.finditer(r'(?<!\S)(from|by|with|id|for|via)(?=\s|$)',masked,re.I))
     if tokens and masked[:tokens[0].start()].strip():
@@ -126,7 +133,7 @@ def _ip_candidates(line, clauses, date_start):
         ip = _valid_ip(line[start+1:stop-1]) if complete else None
         if ip: output.append({'ip':ip,'source_span':[start,stop]})
     bracket_index = 0
-    for match in re.finditer(r'(?<![\w.:%/\[\]-])(?:IPv6:)?[0-9a-f:.]+(?![\w.:%/\[\]-])',line,re.I):
+    for match in re.finditer(rf'(?<!{IP_TOKEN_CHARACTER})(?:IPv6:)?[0-9a-f:.]+(?!{IP_TOKEN_CHARACTER})',line,re.I):
         while bracket_index < len(protected) and protected[bracket_index][1] <= match.start():
             bracket_index += 1
         if bracket_index < len(protected) and protected[bracket_index][0] <= match.start():

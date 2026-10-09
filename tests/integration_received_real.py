@@ -32,7 +32,11 @@ def main():
              'unclosed-mapped':('from sender.example ([IPv6:::ffff:8.8.8.8) by mx.example',None),
              'unopened-ipv4':('from sender.example (8.8.8.8]) by mx.example',None),
              'unopened-mapped':('from sender.example (IPv6:::ffff:8.8.8.8]) by mx.example',None),
-             'nested-brackets':('from sender.example ([[8.8.8.8]]) by mx.example',None)}
+             'nested-brackets':('from sender.example ([[8.8.8.8]]) by mx.example',None),
+             'literal-domain-suffix':('from sender.example ([8.8.8.8].example) by mx.example',None),
+             'literal-network-suffix':('from sender.example ([8.8.8.8]/24) by mx.example',None),
+             'mapped-domain-suffix':('from sender.example ([IPv6:::ffff:8.8.8.8].example) by mx.example',None),
+             'literal-host-prefix':('from sender.example (host[8.8.8.8]) by mx.example',None)}
     base = b'From: a@example.invalid\r\nSubject: Constructed Received contract\r\n'
     samples = {name+'.eml':base+b'Received: '+(line+DATE).encode()+b'\r\n\r\nhello'
                for name,(line,_) in lines.items()}
@@ -69,7 +73,8 @@ def main():
             assert anomalies['receiver_boundary']['status'] == 'not_evaluated'
             assert origin['verified'] is False
             assert coverage['stages']['received_path']['receiver_boundary'] == anomalies['receiver_boundary']
-            if name in {'unclosed-ipv4','unclosed-mapped','unopened-ipv4','unopened-mapped','nested-brackets'}:
+            if name in {'unclosed-ipv4','unclosed-mapped','unopened-ipv4','unopened-mapped','nested-brackets',
+                        'literal-domain-suffix','literal-network-suffix','mapped-domain-suffix','literal-host-prefix'}:
                 assert value['ip_candidates'] == []
                 assert value['ip_observation']['status'] == 'unsupported'
                 assert value['parsing']['status'] == 'partial'
@@ -93,7 +98,7 @@ def main():
                 assert candidate['verified'] is False
             seen.add(name)
         assert seen == set(lines)
-        print('PASS: 17 real full --no-egress Received cases; malformed bracket rejection, scoped IPs, raw strings, partial coverage, unverified boundary, zero category penalties and valid seals')
+        print('PASS: 21 real full --no-egress Received cases; whole-token and malformed bracket rejection, scoped IPs, raw strings, partial coverage, unverified boundary, zero category penalties and valid seals')
 
 
 if __name__ == '__main__':
