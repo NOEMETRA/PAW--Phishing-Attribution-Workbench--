@@ -63,6 +63,16 @@ def main():
                 assert 'tld_comparison' not in score['coverage']['not_evaluated']
             persisted=score_case({}, {}, {'domain':auth.get('from_domain') or ''},headers=headers)
             assert persisted['sender_domain_observations']==score['sender_domain_observations']
+            if name=='defective':
+                from_defects=[issue for issue in headers['header_field_defects']
+                              if str(issue.get('field','')).lower()=='from']
+                assert from_defects
+                defect_only=score_case({}, {}, {'domain':'example.click'},headers={'header_field_defects':from_defects})
+                defect_record=defect_only['sender_domain_observations']['tld_comparison']
+                assert defect_record['source']=='message_headers'
+                assert defect_record['status']=='not_evaluated' and defect_record['listed'] is None
+                assert defect_record['tld'] is None and defect_record['result'] is None
+                assert defect_only['score_components']['sender_domain_heuristics']==0
             if name in {'missing','empty','duplicate','group','defective','fragment','root-dot'}:
                 hinted=score_case({}, {}, {'domain':'example.click'},headers=headers)
                 assert hinted['sender_domain_observations']['tld_comparison']['status']=='not_evaluated'

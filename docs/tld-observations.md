@@ -10,7 +10,7 @@ existing normalized-domain/From availability gate and exposes its own observatio
 `report/score.json.sender_domain_observations.tld_comparison` and
 `analysis_coverage.json.stages.tld_comparison` share `tld_schema_version=1`:
 
-- `source`: `message_headers` for From/occurrence/identity metadata, including
+- `source`: `message_headers` for From/occurrence/identity/From-field-defect metadata, including
   incomplete metadata; `supplied_domain` for headerless legacy domain hints;
 - `normalized_domain`, `tld`: the final label of a validated dotted domain;
 - `listed`, `result`: membership in the recorded legacy static list;
@@ -33,6 +33,9 @@ respected during scoring of persisted JSON; a clean rendered field cannot erase
 recorded defects. An absent/null actual From with explicit metadata cannot promote
 a supplied domain into message evidence. Legacy headerless hints remain supported
 with their own source.
+From field defects alone retain `message_headers` provenance even if the original
+field/count/identity is no longer supplied. Defects for unrelated headers or
+unstructured defect entries do not establish From provenance.
 
 Normalization retains PAW's IDNA 2003 codec and DNS label/domain size checks.
 `EXAMPLE.CLICK` and `example.click.` domain hints agree with `example.click`, but a
@@ -56,7 +59,7 @@ python -m unittest discover -s tests -p 'test_tld_contracts.py' -v
 python tests/integration_tld_real.py
 ```
 
-Twelve unit contracts check normalized spelling, identity gates, original/JSON
+Fourteen unit contracts check normalized spelling, identity gates, original/JSON
 defects, static list and weight preservation, unknown/single-label inputs, hint
 provenance, separate numeric contributions and no egress attempts. Twenty-four
 constructed EMLs pass through the actual supervised `full --no-egress` CLI with

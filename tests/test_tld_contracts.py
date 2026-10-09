@@ -54,6 +54,29 @@ class TldContracts(unittest.TestCase):
         score=self.score(headers={'from':'a@example.click','header_field_defects':[{'field':'From'}]})
         self.assertEqual(score['score_components']['sender_domain_heuristics'],0)
 
+    def test_from_defect_only_metadata_retains_message_provenance(self):
+        for field in ('From','from','FROM'):
+            headers={'header_field_defects':[{'field':field,'type':'InvalidHeaderDefect'}]}
+            for version in (headers,json.loads(json.dumps(headers))):
+                with self.subTest(headers=version):
+                    score=self.score(headers=version)
+                    record=score['sender_domain_observations']['tld_comparison']
+                    self.assertEqual(record['source'],'message_headers')
+                    self.assertEqual(record['status'],'not_evaluated')
+                    self.assertIsNone(record['listed'])
+                    self.assertIsNone(record['tld'])
+                    self.assertIsNone(record['result'])
+                    self.assertEqual(record['contribution'],0)
+                    self.assertEqual(score['score_components']['sender_domain_heuristics'],0)
+                    self.assertIn('tld_comparison',score['coverage']['not_evaluated'])
+
+    def test_unrelated_or_unstructured_defects_do_not_claim_from_provenance(self):
+        for defects in ([],[{'field':'Subject'}],[{'field':'Reply-To'}],[{}],[None,'From']):
+            record=self.observation(headers={'header_field_defects':defects})
+            self.assertEqual(record['source'],'supplied_domain')
+            self.assertEqual(record['status'],'observed_unverified')
+            self.assertEqual(record['contribution'],.1)
+
     def test_valid_unlisted_suffix_does_not_establish_reputation(self):
         record=self.observation(domain='example.com',headers={'from':'a@example.com'})
         self.assertEqual(record['status'],'observed_unverified')

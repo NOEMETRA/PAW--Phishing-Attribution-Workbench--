@@ -225,8 +225,11 @@ def _display_brand_comparison(headers, from_domain, brand_seeds):
 def _tld_comparison(headers, from_domain):
     headers = headers or {}
     normalized = normalize_domain(from_domain)
+    from_metadata = any(key in headers for key in ('from','from_header_count','from_identity')) or any(
+        isinstance(issue,dict) and str(issue.get('field','')).lower() == 'from'
+        for issue in headers.get('header_field_defects') or [])
     record = {'tld_schema_version':1,'status':'not_evaluated','verified':False,
-              'source':'message_headers' if any(key in headers for key in ('from','from_header_count','from_identity')) else 'supplied_domain',
+              'source':'message_headers' if from_metadata else 'supplied_domain',
               'scope':'normalized_final_domain_label_static_list',
               'normalized_domain':None,'tld':None,'listed':None,'result':None,
               'list_source':'PAW_legacy_static_TLD_list','list_version':1,
