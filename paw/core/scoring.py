@@ -13,7 +13,7 @@ COMPONENT_SOURCES = {
     'deobfuscation_heuristics': 'Transformation heuristics; ordinary encoding also transforms, not proof of phishing',
     'dynamic_observations': 'Detonation/canary metadata; not attribution to an actor',
     'profile_modifier': 'Selected analysis profile; not independently observed evidence',
-    'received_non_monotonic_dates': 'Claimed Received timestamps; unverified structural observation',
+    'received_non_monotonic_dates': 'Descriptive claimed timestamp order; automatic risk contribution disabled',
     'received_private_ip_before_boundary': 'Descriptive only; recipient trust boundary not independently established',
     'received_invalid_fqdn': 'Descriptive hostname syntax; automatic risk contribution disabled',
     'legacy_base': 'Legacy caller numeric value; no independent evidence established',
@@ -195,7 +195,7 @@ def score_case(hop_diag: dict, auth: dict, dominfo: dict, brand_seeds=None, susp
     # Header integrity
     header_score = 0.0
     authentication_score = 0.0
-    if hop_diag.get("skew_s", 0) > 600: header_score += 0.2
+    if hop_diag.get("skew_s") is not None and hop_diag['skew_s'] > 600: header_score += 0.2
     if hop_diag.get("helo_ptr_match") is False: header_score += 0.1
     if hop_diag.get("fqdn_ok") is False: header_score += 0.1
     # Only independently verified failures affect authentication risk.

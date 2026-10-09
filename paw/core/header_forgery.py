@@ -1,20 +1,20 @@
-import datetime
 import re
 import ipaddress
 from typing import List, Dict, Any
 from .ip_observations import classify_ip
+from .received_timing import observe_received_timing
 
-def analyze_received_anomalies(hops: list) -> dict:
+def analyze_received_anomalies(hops: list, reference_time=None) -> dict:
     """Analyze Received headers for forgery indicators."""
     anomalies = {
-        "non_monotonic_dates": False,
+        "non_monotonic_dates": None,
         "private_ip_before_boundary": None,
         "invalid_fqdn_count": 0,
-        "impossible_negative_skew": False,
+        "impossible_negative_skew": None,
         "ip_fqdn_mismatch": False,
-        "suspicious_relay_chain": False,
+        "suspicious_relay_chain": None,
         "missing_auth_headers": False,
-        "timestamp_manipulation": False,
+        "timestamp_manipulation": None,
         "spoofing_patterns": [],
         "auth_failures": []
     }
@@ -23,37 +23,22 @@ def analyze_received_anomalies(hops: list) -> dict:
     anomalies['ip_observations'] = [{'header_index':hop.get('header_index'),
         'ip':hop['ip'],'category':classify_ip(hop['ip'])['category'],
         'source':'Received header claim','verified':False} for hop in hops if hop.get('ip')]
+    timing = observe_received_timing(hops,reference_time)
+    anomalies['timing_observations'] = timing
+    if any(pair['result']=='backward' for pair in timing['adjacent_pairs']):
+        anomalies['non_monotonic_dates'] = True
+    elif timing['comparison_status']=='completed':
+        anomalies['non_monotonic_dates'] = False
 
     if not hops:
         anomalies.update(status='not_evaluated', reason='No Received headers')
         return anomalies
-
-    # Check for non-monotonic dates
-    prev_date = None
-    for hop in hops:
-        date_str = hop.get("date")
-        if date_str:
-            try:
-                current_date = datetime.datetime.fromisoformat(date_str.replace('Z', '+00:00'))
-                if prev_date and current_date < prev_date:
-                    anomalies["non_monotonic_dates"] = True
-                    break
-                prev_date = current_date
-            except:
-                pass
 
     # Address categories and provider-name roles cannot establish a trusted
     # receiver boundary. Keep syntax counts descriptive, never infer malice.
     for hop in hops:
         if hop.get("fqdn_ok") is False:
             anomalies["invalid_fqdn_count"] += 1
-
-    # Check for impossible negative skew (time going backwards)
-    for hop in hops:
-        skew = hop.get("skew_s", 0)
-        if skew < -300:  # More than 5 minutes backwards
-            anomalies["impossible_negative_skew"] = True
-            break
 
     # Advanced spoofing detection
     anomalies.update(_detect_advanced_spoofing(hops))
@@ -63,8 +48,8 @@ def analyze_received_anomalies(hops: list) -> dict:
 
 
 def received_score_components(anomalies):
-    """Only retain the existing timestamp signal; hostname/IP categories are descriptive."""
-    return {'received_non_monotonic_dates': .1 if anomalies.get('non_monotonic_dates') else 0.0,
+    """Header timestamp, hostname and address claims are descriptive only."""
+    return {'received_non_monotonic_dates': 0.0,
             'received_private_ip_before_boundary': 0.0,
             'received_invalid_fqdn': 0.0}
 
@@ -72,8 +57,6 @@ def _detect_advanced_spoofing(hops: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Detect advanced header spoofing patterns."""
     results = {
         "ip_fqdn_mismatch": False,
-        "suspicious_relay_chain": False,
-        "timestamp_manipulation": False,
         "spoofing_patterns": [],
         "auth_failures": []
     }
@@ -86,16 +69,6 @@ def _detect_advanced_spoofing(hops: List[Dict[str, Any]]) -> Dict[str, Any]:
             if _validate_ip_fqdn_consistency(ip, fqdn) is False:
                 results["ip_fqdn_mismatch"] = True
                 results["spoofing_patterns"].append("ip_fqdn_mismatch")
-
-    # Detect suspicious relay chaining patterns
-    if _detect_suspicious_relay_chain(hops):
-        results["suspicious_relay_chain"] = True
-        results["spoofing_patterns"].append("suspicious_relay_chain")
-
-    # Check for timestamp manipulation
-    if _detect_timestamp_manipulation(hops):
-        results["timestamp_manipulation"] = True
-        results["spoofing_patterns"].append("timestamp_manipulation")
 
     # Check for authentication failures
     auth_failures = _check_authentication_failures(hops)
@@ -119,66 +92,6 @@ def _validate_ip_fqdn_consistency(ip: str, fqdn: str) -> bool:
         if fqdn and not re.match(r'^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', fqdn):
             return False
         return None
-
-def _detect_suspicious_relay_chain(hops: List[Dict[str, Any]]) -> bool:
-    """Detect suspicious patterns in relay chaining."""
-    if len(hops) < 2:
-        return False
-
-    # Check for rapid successive hops (potential spoofing)
-    for i in range(len(hops) - 1):
-        current = hops[i]
-        next_hop = hops[i + 1]
-
-        current_time = current.get("date")
-        next_time = next_hop.get("date")
-
-        if current_time and next_time:
-            try:
-                dt1 = datetime.datetime.fromisoformat(current_time.replace('Z', '+00:00'))
-                dt2 = datetime.datetime.fromisoformat(next_time.replace('Z', '+00:00'))
-
-                # If time difference is suspiciously small (< 1 second)
-                if abs((dt2 - dt1).total_seconds()) < 1:
-                    return True
-            except:
-                pass
-
-    # Check for identical IPs in different hops (unusual)
-    ips = [hop.get("ip") for hop in hops if hop.get("ip")]
-    if len(ips) != len(set(ips)):
-        return True
-
-    return False
-
-def _detect_timestamp_manipulation(hops: List[Dict[str, Any]]) -> bool:
-    """Detect timestamp manipulation patterns."""
-    timestamps = []
-    for hop in hops:
-        date_str = hop.get("date")
-        if date_str:
-            try:
-                dt = datetime.datetime.fromisoformat(date_str.replace('Z', '+00:00'))
-                timestamps.append(dt)
-            except:
-                pass
-
-    if len(timestamps) < 2:
-        return False
-
-    # Check for unrealistic time jumps
-    for i in range(len(timestamps) - 1):
-        diff = abs((timestamps[i + 1] - timestamps[i]).total_seconds())
-        if diff > 3600:  # More than 1 hour jump
-            return True
-
-    # Check for future timestamps
-    now = datetime.datetime.now(datetime.timezone.utc)
-    for ts in timestamps:
-        if ts.tzinfo is not None and ts > now + datetime.timedelta(hours=1):  # More than 1 hour in future
-            return True
-
-    return False
 
 def _check_authentication_failures(hops: List[Dict[str, Any]]) -> List[str]:
     """Check for authentication-related failures."""

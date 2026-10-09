@@ -50,9 +50,11 @@ does not invent a display name; parser defects are not authentication failures.
 ambiguity and original defects, normalize domain spelling and expose unavailable
 comparisons without adding risk points.
 
-[Received evidence schema v2](docs/received-evidence.md) preserves candidate field
+[Received evidence schema v3](docs/received-evidence.md) preserves candidate field
 scope and source spans, separates address categories and leaves the recipient
 trust boundary unverified. Hostname/address categories alone add no pipeline risk.
+[Received timing](docs/received-timing.md) compares adjacent timestamp claims,
+keeps unavailable intervals null and reports relay observations descriptively.
 
 PAW is a **research workbench**, not a production incident-response platform or an attribution oracle.
 
