@@ -97,6 +97,10 @@ reports bounded unexecuted candidates and leaves risk/execution unassessed.
 The [header identity audit](header-identity.md) corrects display-name parsing and
 exposes selected field defects without risk penalties. Remaining domain/Received
 signals still need validation; these fixture contracts do not measure accuracy.
+The [Reply-To comparison audit](reply-domain-comparison.md) corrects first-mailbox
+selection, raw-domain comparisons and points from unavailable operands, retaining
+explicit persisted uncertainty. Remaining domain and Received heuristics are
+separate unresolved checks.
 
 Codex review is requested in GitHub PR comments. Treat the review as an additional
 check and resolve actionable findings with reproductions and focused tests; do

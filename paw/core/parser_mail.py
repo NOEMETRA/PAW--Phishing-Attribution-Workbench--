@@ -5,6 +5,7 @@ from email.parser import BytesParser
 from email.message import EmailMessage
 from .authentication import parse_authentication_results
 from .mime_analysis import MimeLimits, MimeLimitExceeded
+from .mailbox_domains import reply_domain_observation
 
 def parse_eml_bytes(b: bytes):
     return _parse_msg_obj(parse_message_bytes(b))
@@ -147,6 +148,10 @@ def _annotate(headers, msg):
                         'field':field,'header_index':index,'type':kind,
                         'description':str(defect),'source':'message_headers'})
                     headers['header_defects'].append(f'{field}[{index}]: {kind}: {defect}')
+        reply_fields = msg.get_all('Reply-To') or []
+        headers['reply_to_header_count'] = len(reply_fields)
+        headers['reply_to_domain'] = reply_domain_observation(
+            reply_fields[0] if reply_fields else '',count=len(reply_fields))
     else:
         headers['from_header_count'] = None
         headers['from_identity'] = {'status':'not_evaluated','scope':'single_ungrouped_mailbox',
@@ -156,4 +161,6 @@ def _annotate(headers, msg):
         headers['dkim_signature_present'] = None
         headers['header_defects'] = ['MSG transport header completeness not validated']
         headers['header_field_defects'] = []
+        headers['reply_to_header_count'] = None
+        headers['reply_to_domain'] = reply_domain_observation('',count=None)
     return headers
