@@ -92,7 +92,9 @@ recovery remains separate; HTML/JavaScript heuristics still need validation.
 The subsequent [HTML audit](html-evidence.md) identifies the residual contribution
 as routine entity decoding in 13 cases. Original markup is now preserved and
 decoded attribute candidates remain separate, with explicit descriptive/partial
-coverage. Standalone JavaScript and header/domain signals still need validation.
+coverage. [Standalone JavaScript](javascript-evidence.md) now preserves source,
+reports bounded unexecuted candidates and leaves risk/execution unassessed.
+Header/domain signals still need validation; JavaScript fixtures do not measure accuracy.
 
 Codex review is requested in GitHub PR comments. Treat the review as an additional
 check and resolve actionable findings with reproductions and focused tests; do

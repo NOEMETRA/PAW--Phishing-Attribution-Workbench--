@@ -1,240 +1,184 @@
-#!/usr/bin/env python3
-"""
-PAW - JavaScript Deobfuscation Module
-Deoffusca codice JavaScript offuscato nei phishing
-"""
-
-import re
+"""Preserve JavaScript source and expose bounded, unexecuted lexical candidates."""
 import base64
-from typing import Dict, List, Any, Optional
-import logging
+import binascii
+import hashlib
+import re
+from typing import Any, Dict
+from urllib.parse import unquote
 
-logger = logging.getLogger(__name__)
 
 class JavaScriptDeobfuscator:
-    """Deoffuscatore specializzato per JavaScript"""
+    """Static candidate scanner, not a parser or interpreter.
 
-    def __init__(self):
-        self.max_iterations = 10  # Massimo iterazioni per evitare loop infiniti
-        self.safe_execution_enabled = False  # Per default disabilitato per sicurezza
+    Matches may occur in comments/strings or refer to shadowed functions. No
+    candidate establishes a runtime call, network destination or phishing risk.
+    """
+
+    MAX_SCAN_CHARS = 262144
+    MAX_CANDIDATES = 32
+    MAX_ARGUMENT_CHARS = 16384
+    _CALL = re.compile(r'\b(?P<name>String\.fromCharCode|decodeURIComponent|atob|eval)\s*\(')
 
     def deobfuscate_javascript(self, js_code: str) -> Dict[str, Any]:
-        """
-        Deoffusca codice JavaScript applicando multiple tecniche
-
-        Args:
-            js_code: Codice JavaScript potenzialmente offuscato
-
-        Returns:
-            Dizionario con codice finale e trasformazioni applicate
-        """
-        transformations = []
-        current_code = js_code
-        iteration = 0
-
-        # Pattern di offuscamento comuni
-        deobfuscation_patterns = [
-            (r'String\.fromCharCode\(([^)]+)\)', self._decode_fromcharcode),
-            (r'atob\(["\']([^"\']+)["\']', self._decode_base64),
-            (r'decodeURIComponent\(["\']([^"\']+)["\']', self._decode_uri_component),
-            (r'\\x([0-9a-fA-F]{2})', self._decode_hex_escape),
-            (r'\\u([0-9a-fA-F]{4})', self._decode_unicode_escape),
-            (r'eval\(["\']([^"\']+)["\']', self._decode_eval_string),
-        ]
-
-        while iteration < self.max_iterations:
-            found_transformation = False
-
-            for pattern, decoder_func in deobfuscation_patterns:
-                matches = re.finditer(pattern, current_code, re.IGNORECASE)
-                for match in matches:
-                    try:
-                        original = match.group(0)
-                        decoded = decoder_func(match)
-
-                        if decoded and decoded != original:
-                            # Sostituisci nel codice
-                            current_code = current_code.replace(original, f"/*DECODED:*/ {repr(decoded)}")
-                            transformations.append({
-                                'iteration': iteration,
-                                'technique': decoder_func.__name__.replace('_decode_', ''),
-                                'original': original,
-                                'decoded': decoded,
-                                'pattern': pattern
-                            })
-                            found_transformation = True
-
-                    except Exception as e:
-                        logger.warning(f"Errore nella decodifica {pattern}: {e}")
-                        continue
-
-            # Se non abbiamo trovato trasformazioni in questa iterazione, fermiamoci
-            if not found_transformation:
+        scan = js_code[:self.MAX_SCAN_CHARS]
+        candidates, reasons = [], []
+        search_stop = len(scan)
+        if len(js_code) > len(scan):
+            reasons.append('source_scan_limit')
+        for match in self._CALL.finditer(scan):
+            if len(candidates) >= self.MAX_CANDIDATES:
+                reasons.append('candidate_limit')
+                search_stop = match.start()
                 break
-
-            iteration += 1
-
-        # Analizza il codice finale
-        analysis = self._analyze_final_code(current_code)
-
+            candidate = self._observe_call(scan, match)
+            candidates.append(candidate)
+            if candidate['status'] == 'limited':
+                reasons.append('argument_scan_limit')
         return {
-            'original_code': js_code,
-            'final_code': current_code,
-            'transformations': transformations,
-            'iterations_performed': iteration,
-            'analysis': analysis,
-            'complexity_score': len(transformations) / max(1, len(js_code) / 1000),  # Trasformazioni per KB
-            'suspicion_score': self._calculate_js_suspicion(transformations, analysis)
+            'javascript_schema_version': 2,
+            'original_code': js_code, 'final_code': js_code,
+            'transformations': [], 'suspicion_indicators': [],
+            'iterations_performed': 0, 'complexity_score': None,
+            # Nested zero is only a compatibility contribution, not assessed risk.
+            'suspicion_score': 0.0,
+            'assessment_status': 'partial' if reasons else 'descriptive_only',
+            'risk_detection': 'not_evaluated',
+            'execution': {'status': 'not_evaluated', 'reason': 'No JavaScript execution is implemented'},
+            'calibrated': False,
+            'literal_candidates': {
+                'status': 'partial' if reasons else 'completed', 'candidates': candidates,
+                'coverage_scope': 'literal_candidate_search',
+                'scanned_characters': search_stop,
+                'available_window_characters': len(scan),
+                'unprocessed_source_span': [search_stop,len(js_code)] if search_stop < len(js_code) else None,
+                'reasons': sorted(set(reasons)),
+                'limits': {'source_characters': self.MAX_SCAN_CHARS,
+                           'candidates': self.MAX_CANDIDATES,
+                           'argument_characters': self.MAX_ARGUMENT_CHARS},
+            },
+            'lexical_observations': {
+                'source': 'original_code', 'syntax_verified': False,
+                'scanned_characters': len(scan),
+                'hex_escape_count': len(re.findall(r'\\x[0-9a-fA-F]{2}', scan)),
+                'unicode_escape_count': len(re.findall(r'\\u[0-9a-fA-F]{4}', scan)),
+            },
+            'limitation': ('Bounded lexical candidates may occur in comments, strings or shadowed calls; '
+                           'syntax, runtime behavior and JavaScript risk are not evaluated. '
+                           'Decoded candidates are never executed, reparsed or promoted to network targets.'),
         }
 
-    def _decode_fromcharcode(self, match) -> Optional[str]:
-        """Decodifica String.fromCharCode(...)"""
+    def _observe_call(self, source, match):
+        start, argument_start = match.start(), match.end()
+        stop = min(len(source), argument_start + self.MAX_ARGUMENT_CHARS)
+        # Balance nested parentheses within the bounded region; quoted ones do
+        # not delimit calls. This still does not verify full JS lexical syntax.
+        quote, escaped, end, depth = None, False, None, 1
+        for position in range(argument_start, stop):
+            char = source[position]
+            if quote:
+                if escaped:
+                    escaped = False
+                elif char == '\\':
+                    escaped = True
+                elif char == quote:
+                    quote = None
+            elif char in ('"', "'"):
+                quote = char
+            elif char == '(':
+                depth += 1
+            elif char == ')':
+                depth -= 1
+                if depth == 0:
+                    end = position + 1
+                    break
+        candidate = {'kind': match.group('name'), 'source_span': [start,end or stop],
+                     'original': source[start:end or stop], 'source': 'original_code',
+                     'candidate_only': True, 'syntax_verified': False,
+                     'network_target': False, 'decoded_text': None}
+        if end is None:
+            candidate['status'] = 'limited' if stop - argument_start >= self.MAX_ARGUMENT_CHARS else 'unsupported_literal'
+            return candidate
+        argument = source[argument_start:end-1].strip()
         try:
-            char_codes = match.group(1)
-            # Estrai numeri separati da virgola
-            numbers = re.findall(r'\d+', char_codes)
-            decoded = ''.join(chr(int(code)) for code in numbers)
-            return decoded
-        except Exception:
-            return None
+            if candidate['kind'] == 'String.fromCharCode':
+                # Decimal integer subset, without expressions or rounded Numbers.
+                if argument and not re.fullmatch(r'[+-]?(?:0|[1-9][0-9]*)(?:\s*,\s*[+-]?(?:0|[1-9][0-9]*))*', argument):
+                    raise NotImplementedError
+                parts = argument.split(',') if argument else []
+                if any(len(part.strip().lstrip('+-')) > 16 for part in parts):
+                    raise NotImplementedError
+                numbers = [int(part) for part in parts]
+                if any(abs(number) > 2**53-1 for number in numbers):
+                    raise NotImplementedError
+                self._set_units(candidate, [number % 65536 for number in numbers])
+            else:
+                value = self._literal(argument)
+                if candidate['kind'] == 'atob':
+                    # WHATWG forgiving-base64: ASCII whitespace/omitted padding
+                    # allowed, invalid alphabet/padding rejected.
+                    token = re.sub(r'[\t\n\f\r ]', '', value)
+                    if len(token) % 4 == 0:
+                        token = re.sub(r'={1,2}$', '', token)
+                    if len(token) % 4 == 1 or not re.fullmatch(r'[A-Za-z0-9+/]*', token):
+                        raise ValueError
+                    raw = base64.b64decode(token + '='*((-len(token))%4), validate=True)
+                    candidate.update(status='decoded_literal_candidate', decoded_text=raw.decode('latin-1'),
+                                     text_encoding='javascript_binary_string', decoded_size=len(raw),
+                                     sha256=hashlib.sha256(raw).hexdigest())
+                elif candidate['kind'] == 'decodeURIComponent':
+                    if re.search(r'%(?![0-9a-fA-F]{2})', value):
+                        raise ValueError
+                    candidate.update(status='decoded_literal_candidate',
+                                     decoded_text=unquote(value,encoding='utf-8',errors='strict'))
+                else:
+                    candidate.update(status='not_executed',decoded_text=value)
+        except NotImplementedError:
+            candidate['status'] = 'unsupported_literal'
+        except (ValueError, UnicodeError, binascii.Error):
+            candidate['status'] = 'invalid_encoding'
+        return candidate
 
-    def _decode_base64(self, match) -> Optional[str]:
-        """Decodifica atob(...)"""
+    @staticmethod
+    def _set_units(candidate, units):
+        candidate['code_units'] = units
+        raw = b''.join(unit.to_bytes(2,'little') for unit in units)
         try:
-            encoded = match.group(1)
-            decoded_bytes = base64.b64decode(encoded)
-            return decoded_bytes.decode('utf-8', errors='ignore')
-        except Exception:
-            return None
+            candidate.update(status='decoded_literal_candidate',decoded_text=raw.decode('utf-16-le',errors='strict'))
+        except UnicodeError:
+            # Retain unpaired surrogates as units, never silently drop them.
+            candidate['status'] = 'utf16_code_units'
 
-    def _decode_uri_component(self, match) -> Optional[str]:
-        """Decodifica decodeURIComponent(...)"""
-        try:
-            from urllib.parse import unquote
-            encoded = match.group(1)
-            return unquote(encoded)
-        except Exception:
-            return None
-
-    def _decode_hex_escape(self, match) -> Optional[str]:
-        """Decodifica \\xHH"""
-        try:
-            hex_value = match.group(1)
-            return chr(int(hex_value, 16))
-        except Exception:
-            return None
-
-    def _decode_unicode_escape(self, match) -> Optional[str]:
-        """Decodifica \\uHHHH"""
-        try:
-            unicode_value = match.group(1)
-            return chr(int(unicode_value, 16))
-        except Exception:
-            return None
-
-    def _decode_eval_string(self, match) -> Optional[str]:
-        """Decodifica eval("...") - con cautela"""
-        if not self.safe_execution_enabled:
-            # In modalità sicura, non eseguiamo eval
-            return f"[EVAL BLOCKED] {match.group(1)}"
-
-        # NOTA: Questa è pericolosa e dovrebbe essere usata solo in sandbox isolate
-        try:
-            code = match.group(1)
-            # Qui si potrebbe implementare esecuzione sicura, ma per ora restituiamo il codice
-            return f"[EVAL RESULT] {code}"
-        except Exception:
-            return None
-
-    def _analyze_final_code(self, code: str) -> Dict[str, Any]:
-        """Analizza il codice JavaScript finale per pattern sospetti"""
-        analysis = {
-            'suspicious_functions': [],
-            'network_calls': [],
-            'obfuscation_indicators': [],
-            'payload_indicators': []
-        }
-
-        # Funzioni sospette
-        suspicious_funcs = [
-            'eval', 'Function', 'setTimeout', 'setInterval',
-            'XMLHttpRequest', 'fetch', 'WebSocket', 'sendBeacon'
-        ]
-
-        for func in suspicious_funcs:
-            if re.search(r'\b' + re.escape(func) + r'\b', code):
-                analysis['suspicious_functions'].append(func)
-
-        # Chiamate di rete
-        network_patterns = [
-            r'fetch\(["\']([^"\']+)["\']',
-            r'XMLHttpRequest\(\)',
-            r'\.open\(["\']([^"\']+)["\']',
-            r'sendBeacon\(["\']([^"\']+)["\']',
-            r'WebSocket\(["\']([^"\']+)["\']'
-        ]
-
-        for pattern in network_patterns:
-            matches = re.findall(pattern, code)
-            analysis['network_calls'].extend(matches)
-
-        # Indicatori di payload
-        payload_indicators = [
-            'document\\.location',
-            'window\\.location',
-            'location\\.href',
-            'location\\.replace',
-            'location\\.assign',
-            'document\\.write',
-            'document\\.writeln',
-            'innerHTML',
-            'outerHTML'
-        ]
-
-        for indicator in payload_indicators:
-            if indicator in code:
-                analysis['payload_indicators'].append(indicator)
-
-        # Indicatori di offuscamento residuo
-        obfuscation_patterns = [
-            r'\\x[0-9a-fA-F]{2}',
-            r'\\u[0-9a-fA-F]{4}',
-            r'String\.fromCharCode',
-            r'atob\(',
-            r'eval\('
-        ]
-
-        for pattern in obfuscation_patterns:
-            if re.search(pattern, code):
-                analysis['obfuscation_indicators'].append(pattern)
-
-        return analysis
-
-    def _calculate_js_suspicion(self, transformations: List, analysis: Dict) -> float:
-        """Calcola punteggio di sospetto per il codice JavaScript"""
-        score = 0.0
-
-        # Peso per trasformazioni
-        score += len(transformations) * 0.2
-
-        # Peso per funzioni sospette
-        suspicious_funcs = analysis.get('suspicious_functions', [])
-        score += len(suspicious_funcs) * 0.15
-
-        # Peso per chiamate di rete
-        network_calls = analysis.get('network_calls', [])
-        score += len(network_calls) * 0.1
-
-        # Peso per indicatori payload
-        payload_indicators = analysis.get('payload_indicators', [])
-        score += len(payload_indicators) * 0.2
-
-        # Peso per offuscamento residuo
-        obfuscation_indicators = analysis.get('obfuscation_indicators', [])
-        score += len(obfuscation_indicators) * 0.1
-
-        # Bonus per eval (molto sospetto)
-        if 'eval' in suspicious_funcs:
-            score += 0.3
-
-        return min(1.0, score)
+    @staticmethod
+    def _literal(argument):
+        if len(argument) < 2 or argument[0] not in ('"',"'") or argument[-1] != argument[0]:
+            raise NotImplementedError
+        quote, body = argument[0], argument[1:-1]
+        output, position = [], 0
+        escapes = {'n':'\n','r':'\r','t':'\t','b':'\b','f':'\f','v':'\v',
+                   '\\':'\\',"'":"'",'"':'"'}
+        while position < len(body):
+            char = body[position]
+            if char in (quote,'\n','\r','\u2028','\u2029'):
+                raise NotImplementedError
+            if char != '\\':
+                output.append(char)
+                position += 1
+                continue
+            position += 1
+            if position >= len(body):
+                raise NotImplementedError
+            escape = body[position]
+            if escape in escapes:
+                output.append(escapes[escape])
+                position += 1
+            elif escape in ('x','u'):
+                width = 2 if escape == 'x' else 4
+                digits = body[position+1:position+1+width]
+                if len(digits) != width or not re.fullmatch(r'[0-9a-fA-F]+',digits):
+                    raise NotImplementedError
+                output.append(chr(int(digits,16)))
+                position += width + 1
+            else:
+                # No guessed octal, line continuations, templates or expressions.
+                raise NotImplementedError
+        return ''.join(output).encode('utf-16-le',errors='surrogatepass').decode('utf-16-le',errors='strict')
