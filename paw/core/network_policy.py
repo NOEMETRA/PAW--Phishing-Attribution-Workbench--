@@ -23,7 +23,9 @@ def violations():
 def _audit(event, args):
     if not network_allowed() and (
         (event.startswith('socket.') and event != 'socket.gethostname')
-        or event in {'subprocess.Popen', 'os.system', 'os.posix_spawn'}
+        or event in {'subprocess.Popen', 'os.system', 'os.posix_spawn',
+                     'os.spawn', 'os.fork', 'os.forkpty', 'os.exec',
+                     'os.startfile', 'os.startfile/2', '_winapi.CreateProcess'}
     ):
         with _lock:
             _violations.append(event)

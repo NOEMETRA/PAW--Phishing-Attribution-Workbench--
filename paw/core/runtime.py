@@ -10,6 +10,7 @@ from pathlib import Path
 import signal
 import time
 import uuid
+import psutil
 
 
 @dataclass(frozen=True)
@@ -172,6 +173,8 @@ async def supervise(command, *, cwd, control, limits=RunLimits(), cancel=None, e
     gate, progress_path, log_path = control/'start.gate', control/'progress.json', control/'worker.log'
     gate.unlink(missing_ok=True)
     progress_path.unlink(missing_ok=True)
+    (control/'process.json').unlink(missing_ok=True)
+    (control/'supervisor.json').unlink(missing_ok=True)
     environment = dict(os.environ)
     environment.update(env or {})
     environment.update(PAW_START_GATE=str(gate),
@@ -186,6 +189,8 @@ async def supervise(command, *, cwd, control, limits=RunLimits(), cancel=None, e
                 stdout=log, stderr=asyncio.subprocess.STDOUT,
                 **({'start_new_session':True} if os.name != 'nt' else {}))
             if os.name == 'nt': job = WindowsJob(process.pid, limits.memory_bytes)
+            from .process_recovery import process_identity
+            atomic_json(control/'process.json', process_identity(process.pid))
             gate.touch()
             while True:
                 progress = read_progress(progress_path)
@@ -219,6 +224,15 @@ async def supervise(command, *, cwd, control, limits=RunLimits(), cancel=None, e
             if os.name != 'nt':
                 try: os.killpg(process.pid, signal.SIGKILL)
                 except ProcessLookupError: pass
+                from .process_recovery import group_writers
+                end = time.monotonic() + 5
+                try:
+                    while group_writers(process.pid):
+                        if time.monotonic() >= end:
+                            tree_stopped = False
+                            break
+                        await asyncio.sleep(.02)
+                except (OSError, psutil.Error): tree_stopped = False
             elif process.returncode is None: process.kill()
         if process is not None: await process.wait()
         if not tree_stopped and status == 'exited':
@@ -235,7 +249,7 @@ async def supervise(command, *, cwd, control, limits=RunLimits(), cancel=None, e
 def preserve_interrupted(cwd, control, status, error):
     """Called only after the entire worker tree has stopped. Never delete evidence."""
     from .evidence import seal_case
-    if read_progress(Path(control)/'supervisor.json').get('tree_stopped') is False:
+    if read_progress(Path(control)/'supervisor.json').get('tree_stopped') is not True:
         return []  # Keep raw evidence; do not race a still-running writer with sealing.
     cases = []
     for case_id in read_progress(Path(control)/'progress.json').get('case_ids', []):

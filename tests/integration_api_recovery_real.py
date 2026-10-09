@@ -27,6 +27,12 @@ async def main():
         (case/'evidence/merkle_root.bin').write_text('truncated')
         (case/'report/score.json').write_text('{')
         atomic_json(api.JOBS_DIR/(job_id+'.json'),{'status':'running'})
+        control = api.JOBS_DIR/job_id
+        control.mkdir()
+        # These deliberately truncated files have no live worker. Declare the
+        # fixture's stopped state; real crash/kill recovery has its own contracts.
+        atomic_json(control/'supervisor.json',{'tree_stopped':True})
+        atomic_json(control/'progress.json',{'case_ids':[case.name]})
         job = await api.get_analysis_status(job_id)
         assert job['status'] == 'interrupted'
         listing = await api.list_cases()
@@ -37,8 +43,6 @@ async def main():
         assert detail['score'] is None and 'score.json' in detail['artifact_errors']
         assert (case/'report/score.json').read_bytes() == b'{'
         # Recover a stopped worker: damaged artifacts remain original bytes in the partial seal.
-        control = api.JOBS_DIR/job_id
-        control.mkdir()
         atomic_json(control/'progress.json',{'case_ids':[case.name]})
         recovered = preserve_interrupted(root,control,'interrupted','Stopped while sealing')
         assert recovered[0]['integrity'] == 'sealed_partial'

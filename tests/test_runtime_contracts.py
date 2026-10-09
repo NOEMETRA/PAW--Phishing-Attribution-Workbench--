@@ -81,6 +81,7 @@ class RuntimeContracts(unittest.IsolatedAsyncioTestCase):
             (case/'evidence/merkle_index.json').write_text('{')
             (case/'evidence/merkle_root.bin').write_text('incomplete')
             atomic_json(control/'progress.json',{'case_ids':['case-partial']})
+            atomic_json(control/'supervisor.json',{'tree_stopped':True})
             result = preserve_interrupted(root,control,'timed_out','Interrupted while sealing')
             self.assertEqual(result[0]['status'],'timed_out')
             self.assertTrue(verify_case(case))

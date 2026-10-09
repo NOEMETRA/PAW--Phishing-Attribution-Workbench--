@@ -20,8 +20,17 @@ from fastapi.staticfiles import StaticFiles
 from urllib.parse import urlsplit
 from pydantic import BaseModel, Field
 from ..core.runtime import RunLimits, supervise, preserve_interrupted, read_progress
+from ..core.process_recovery import recover_worker
 
-app = FastAPI(title='PAW', version='2.0.0')
+@asynccontextmanager
+async def lifespan(application):
+    # Recover before accepting requests; a killed API may leave POSIX writers.
+    for path in JOBS_DIR.glob('analysis_*.json'):
+        if path.stem[9:].isalnum():
+            await get_analysis_status(path.stem)
+    yield
+
+app = FastAPI(title='PAW', version='2.0.0', lifespan=lifespan)
 STATIC_DIR = Path(__file__).parent/'static'
 app.mount('/assets', StaticFiles(directory=STATIC_DIR), name='assets')
 
@@ -49,6 +58,7 @@ analysis_queue = {}
 _workers = asyncio.Semaphore(1)
 MAX_ANALYSIS_SECONDS = 900
 _cancel_events = {}
+_recovery_locks = {}
 
 class RuntimeOptions(BaseModel):
     wall_seconds: float = Field(default=900, gt=0, le=3600, strict=True)
@@ -130,12 +140,15 @@ def case_path(case_id):
 def case_status(directory):
     """Completed requires worker acknowledgment, not a preliminary execution file."""
     execution = read_progress(directory/'execution.json')
-    job_id = read_progress(directory/'manifest.json').get('analysis_job')
+    job_id = case_job_id(directory)
     if job_id:
         if not job_id.startswith('analysis_') or not job_id[9:].isalnum(): return 'incomplete'
         job = read_progress(JOBS_DIR/(job_id+'.json'))
         status = job.get('status', 'interrupted')
-        if status in {'running','queued'} and job_id not in analysis_queue: return 'interrupted'
+        if job_id not in analysis_queue and (
+                status in {'running','queued','recovery_blocked'} or
+                read_progress(JOBS_DIR/job_id/'supervisor.json').get('tree_stopped') is not True):
+            return 'recovery_blocked'
         if status == 'completed':
             return 'completed' if directory.name in job.get('case_ids', []) else 'incomplete'
         if any(item.get('case_id') == directory.name and item.get('status') == 'completed'
@@ -147,6 +160,27 @@ def case_status(directory):
         try: return 'completed' if verify_case(directory) else 'incomplete'
         except (OSError, ValueError, KeyError, TypeError): return 'incomplete'
     return execution.get('status', 'incomplete')
+
+def case_job_id(directory):
+    identifier = read_progress(directory/'manifest.json').get('analysis_job')
+    if identifier: return identifier
+    # A truncated manifest must not hide its still-running owner.
+    for control in JOBS_DIR.glob('analysis_*'):
+        if control.is_dir() and directory.name in read_progress(control/'progress.json').get('case_ids', []):
+            return control.name
+    return None
+
+async def stable_case_status(directory):
+    job_id = case_job_id(directory)
+    if job_id:
+        await get_analysis_status(job_id)
+    return case_status(directory)
+
+async def require_stable_case(directory):
+    status = await stable_case_status(directory)
+    if status in {'queued','running','recovery_blocked'}:
+        raise HTTPException(409,'Worker shutdown not confirmed; evidence access blocked')
+    return status
 
 class AnalysisRequest(BaseModel):
     file_path: str
@@ -290,7 +324,7 @@ async def job_log(analysis_id: str):
 async def verify_evidence(case_id: str):
     from ..core.verify import verify_case
     directory = case_path(case_id)
-    if case_status(directory) in {'queued','running'}: raise HTTPException(409,'Analysis still writing evidence')
+    await require_stable_case(directory)
     try: valid = await asyncio.to_thread(verify_case,directory)
     except (OSError,ValueError,TypeError,KeyError): valid = False
     return {'case_id':case_id,'integrity':'verified' if valid else 'failed','checked_at':now(),
@@ -302,12 +336,32 @@ async def get_analysis_status(analysis_id: str):
         raise HTTPException(400, 'Invalid analysis ID')
     path = JOBS_DIR / (analysis_id + '.json')
     if not path.exists(): raise HTTPException(404, 'Analysis not found')
-    job = load(path)
+    async with _recovery_locks.setdefault(analysis_id, asyncio.Lock()):
+        job = load(path)
+        control = JOBS_DIR/analysis_id
+        stopped = read_progress(control/'supervisor.json').get('tree_stopped')
+        needs_recovery = (job.get('status') in {'running','recovery_blocked'} or
+                          (job.get('status') == 'interrupted' and stopped is not True) or stopped is False)
+        if analysis_id not in analysis_queue and needs_recovery:
+            outcome = await recover_worker(control)
+            job['supervisor'] = outcome
+            if outcome['tree_stopped']:
+                error = outcome.get('error') or 'API restarted after worker shutdown'
+                job.update(status='interrupted',error=error,completed_at=now())
+                job['partial_cases'] = preserve_interrupted(DATA_DIR,control,'interrupted',error)
+            else:
+                job.update(status='recovery_blocked',error=outcome['error'])
+            save(path,job)
+        elif analysis_id not in analysis_queue and job.get('status') == 'queued':
+            # run_analysis persists running before launching a worker.
+            control.mkdir(parents=True,exist_ok=True)
+            from ..core.runtime import atomic_json
+            atomic_json(control/'supervisor.json',{'status':'interrupted','tree_stopped':True,
+                'error':'API restarted before worker launch'})
+            job.update(status='interrupted',error='API restarted before worker launch',completed_at=now())
+            save(path,job)
     progress = read_progress(JOBS_DIR/analysis_id/'progress.json')
     if progress: job['observed_progress'] = progress
-    if analysis_id not in analysis_queue and job['status'] in {'running','queued'}:
-        job.update(status='interrupted', error='Worker state lost after API restart')
-        save(path, job)
     return job
 
 @app.get('/api/cases')
@@ -317,7 +371,10 @@ async def list_cases(limit: int = 20, offset: int = 0):
     cases = []
     for path in paths[offset:offset+limit]:
         execution, score = path.parent/'execution.json', path.parent/'report/score.json'
-        status = case_status(path.parent)
+        status = await stable_case_status(path.parent)
+        if status == 'recovery_blocked':
+            cases.append({'case_id':path.parent.name,'status':status,'summary':{},'artifact_errors':{}})
+            continue
         errors = {}
         manifest = artifact(path, errors) or {}
         cases.append({'case_id':path.parent.name, 'created_at':manifest.get('created_utc'),
@@ -330,7 +387,7 @@ async def list_cases(limit: int = 20, offset: int = 0):
 @app.get('/api/cases/{case_id}')
 async def get_case_detail(case_id: str):
     directory = case_path(case_id)
-    result = {'case_id':case_id, 'status':case_status(directory)}
+    result = {'case_id':case_id, 'status':await require_stable_case(directory)}
     headers = read_progress(directory/'headers.json')
     result['email'] = {key:headers.get(key) for key in ('subject','from','to','date')}
     files = {'manifest':'manifest.json','score':'report/score.json','origin':'origin.json',
@@ -355,18 +412,21 @@ async def query_cases(query: CaseQuery):
             matches = [dict(row) for row in connection.execute(
                 'SELECT c.* FROM cases c JOIN indicators i ON c.id=i.case_id WHERE i.type=? AND i.value=?',
                 (query.query_type,query.value))]
+    stable_matches = []
     for match in matches:
         identifier = 'case-' + match['id']
         if Path(identifier).name == identifier:
-            match['execution_status'] = case_status(CASES_DIR/identifier)
-    return {'query_type':query.query_type,'value':query.value,'matches':matches}
+            match['execution_status'] = await stable_case_status(CASES_DIR/identifier)
+            if match['execution_status'] == 'recovery_blocked': continue
+            stable_matches.append(match)
+    return {'query_type':query.query_type,'value':query.value,'matches':stable_matches}
 
 @app.get('/api/statistics')
 async def get_statistics():
     paths = list(CASES_DIR.glob('*/manifest.json'))
     countries, asns = Counter(), Counter()
     for path in paths:
-        if case_status(path.parent) != 'completed': continue
+        if await stable_case_status(path.parent) != 'completed': continue
         origin = path.parent/'origin.json'
         if origin.exists():
             data = read_progress(origin)
@@ -379,7 +439,7 @@ async def get_statistics():
 async def export_case(case_id: str, format: str = 'zip'):
     if format != 'zip': raise HTTPException(400, 'Only ZIP export supported')
     directory = case_path(case_id)
-    if case_status(directory) in {'queued','running'}: raise HTTPException(409,'Analysis still writing evidence')
+    await require_stable_case(directory)
     from ..core.evidence import file_inventory
     try: await asyncio.to_thread(file_inventory,directory)
     except ValueError as exc: raise HTTPException(409,str(exc)) from exc

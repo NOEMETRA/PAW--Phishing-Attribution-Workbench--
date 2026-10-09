@@ -70,3 +70,32 @@ Windows-specific resource/locking checks require the Windows host.
 Codex review is requested in GitHub PR comments. Treat the review as an additional
 check and resolve actionable findings with reproductions and focused tests; do
 not interpret an empty review as full software validation.
+
+## GitHub review follow-up: process launch and crash recovery
+
+The first GitHub review found two P1 issues: audited `spawn`/`fork`/`exec` paths
+could bypass the no-egress filter, and a crashed POSIX API could leave a worker
+writing a case subsequently exposed as interrupted. The filter now also covers
+these events and Windows shell/direct CreateProcess launch events.
+
+The supervisor persists PID, process creation time, boot identity and the POSIX
+group/session before releasing its worker gate. API startup and case readers
+recover lost jobs, verify ownership, terminate the recorded POSIX group and
+confirm there are no live writers before sealing/publishing an interrupted case.
+The normal POSIX shutdown path also waits for the group to stop. Zombies are
+already exited and cannot write files. Windows retains Job Object kill-on-close.
+`psutil` is now a runtime dependency for identity and shutdown checks.
+
+Missing identity, permission errors, a mismatching PID creation time, or live
+descendants whose group leader has disappeared leave `recovery_blocked`: the API
+does not seal, read case details, verify or export those files. Legacy lost jobs
+without process metadata require manual investigation; recovery does not guess
+which process to terminate. This change does not provide native-code/OS network
+isolation or protection against deliberately escaped process sessions.
+
+`tests/test_recovery_contracts.py` exercises real audited launch attempts and
+fail-closed evidence access on every supported host. Linux CI additionally kills
+a real supervisor, observes its worker and child's file writes continue, then
+tests startup recovery, stable evidence, sealing and export; a mismatching process
+identity test confirms an unrelated live group is left alone. These controlled
+writer fixtures are process-recovery tests, not simulated analysis results.
