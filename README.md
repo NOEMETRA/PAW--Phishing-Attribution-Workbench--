@@ -42,6 +42,10 @@ and missing keys do not add authentication risk points or establish safety.
 The evidence score remains heuristic, and partial coverage is separate from
 successful completion of the analysis process.
 
+[Header identity parsing](docs/header-identity.md) uses actual structured mailbox
+names and exposes reported field defects in parsing coverage. A bare address
+does not invent a display name; parser defects are not authentication failures.
+
 PAW is a **research workbench**, not a production incident-response platform or an attribution oracle.
 
 [JavaScript schema v2](docs/javascript-evidence.md) preserves original source,

@@ -117,9 +117,22 @@ def _annotate(headers, msg):
         headers['return_path_header_count'] = len(msg.get_all('Return-Path') or [])
         headers['dkim_signature_present'] = bool(msg.get_all('DKIM-Signature'))
         headers['header_defects'] = [str(defect) for defect in msg.defects]
+        # Message-level defects do not include each structured field's defects.
+        # Preserve occurrences for identity/date/subject fields, without turning
+        # malformed/unavailable observations into authentication or risk points.
+        headers['header_field_defects'] = []
+        for field in ('From','Reply-To','Return-Path','Date','Subject'):
+            for index, value in enumerate(msg.get_all(field) or []):
+                for defect in getattr(value,'defects',()):
+                    kind = type(defect).__name__
+                    headers['header_field_defects'].append({
+                        'field':field,'header_index':index,'type':kind,
+                        'description':str(defect),'source':'message_headers'})
+                    headers['header_defects'].append(f'{field}[{index}]: {kind}: {defect}')
     else:
         headers['from_header_count'] = None
         headers['return_path_header_count'] = None
         headers['dkim_signature_present'] = None
         headers['header_defects'] = ['MSG transport header completeness not validated']
+        headers['header_field_defects'] = []
     return headers

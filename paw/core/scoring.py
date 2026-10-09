@@ -1,6 +1,7 @@
 
 import re
 import math
+from email import policy
 
 
 COMPONENT_SOURCES = {
@@ -98,14 +99,21 @@ def is_mixed_script(domain: str):
         return True
 
 def extract_display_name(from_header: str):
-    """Extract display name from From header."""
+    """Read one defect-free mailbox's actual display name, never its local part."""
     if not from_header:
         return ""
-    # Match "Display Name" <email> or just email
-    m = re.match(r'^\s*"([^"]+)"\s*<[^>]+>|\s*([^<\s]+)\s*<[^>]+>|^([^@\s]+)@', from_header)
-    if m:
-        return (m.group(1) or m.group(2) or m.group(3) or "").strip()
-    return ""
+    try:
+        # Parsed HeaderRegistry objects retain original defects that a rendered
+        # string/reparse could hide. Direct callers also support RFC 2047 words.
+        parsed = from_header if hasattr(from_header,'addresses') else policy.default.header_factory('From',str(from_header))
+        if parsed.defects or len(parsed.addresses) != 1:
+            return ""
+        address = parsed.addresses[0]
+        if not address.username or not address.domain:
+            return ""
+        return address.display_name
+    except (ValueError, TypeError, AttributeError, IndexError):
+        return ""
 
 def risky_tlds():
     """Return set of risky TLDs."""
