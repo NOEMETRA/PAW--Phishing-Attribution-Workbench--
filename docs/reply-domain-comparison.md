@@ -34,12 +34,17 @@ or an actor's identity. Even equal domains do not authenticate the message.
 
 `score.json.sender_domain_observations.reply_to_comparison` and the coverage
 stage expose the operands, scope, result and exact contribution with
-`verified: false`. Missing/invalid normalized From domains, known ambiguous From
+`verified: false`. Missing/invalid normalized From domains, defective or ambiguous From
 identities, or unavailable/unsupported Reply-To domains produce `not_evaluated`,
 null result and zero contribution. From's normalized domain is the existing
 unverified auth-parser/caller observation; this change does not independently
-validate that identity. A defect in an unrelated From display name can coexist
-with an available normalized domain. Original Reply-To defects and counts remain
+validate that identity. The From gate requires `from_identity.status == parsed`
+when metadata exists and rejects all original From field defects. A supplied
+From must also parse as one defect-free ungrouped mailbox whose domain matches
+the supplied normalized domain. This deliberately excludes even defects in the
+display name: recovery does not prove that a defect is confined to that part.
+For example, `a@exa mple.invalid` can render as `a@exa`; that recovered fragment
+must not acquire a mismatch contribution. Original defects and counts remain
 effective after JSON reload. Legacy string callers use the same structured
 parser; historical sealed results are not rewritten.
 
@@ -50,21 +55,26 @@ field, defect or unsupported format adds numeric risk or authentication failure.
 
 ## Verification and remaining audit
 
-Ten focused contracts cover comments, quoted local parts, group/list ambiguity,
+Twelve focused contracts cover comments, quoted local parts, group/list ambiguity,
 duplicate fields, normalized domain equivalence, unavailable From, original
-Reply-To defects and JSON parity. Fifteen real supervised `full --no-egress` CLI
+Reply-To defects, defective From fragments, legacy callers and JSON parity.
+Seventeen real supervised `full --no-egress` CLI
 fixtures check original bytes, seals, comparison coverage, actual contributions
 and persisted scoring. Eight existing mailbox CLI fixtures also pass. The serial
-Windows suite passes 224 tests with five POSIX-only skips (229 total).
+Windows suite passes 226 tests with five POSIX-only skips (231 total).
 
-The private replay `full-20261009T194718Z` reconciles 20/20 original EMLs,
+The final private replay `full-20261009T200626Z` reconciles 20/20 original EMLs,
 preserved bytes and valid seals, with matching source hashes. All numeric scores
-and decisions remain unchanged (20 Inconclusive); MIME, URL, authentication,
-origin, Received and deobfuscation evidence remain identical. Sixteen Reply-To
-domains are parsed and four are unavailable: eight comparisons are
-same-or-subdomain, eight different and four unevaluated. The run took 21.026
-seconds with 122.05 MiB peak sampled process-tree RSS (50 ms), without accuracy or
-speedup claims.
+reconcile: the P1 correction removes only the prior 0.15 Reply-To contribution
+in six cases whose original From identity is defective. Decisions remain
+unchanged (20 Inconclusive); MIME, URL, authentication, origin, Received and
+deobfuscation evidence remain identical. Sixteen Reply-To domains are parsed and
+four are unavailable: eight comparisons are same-or-subdomain, two different
+and ten unevaluated (six defective From, four missing Reply-To). The run took
+24.324 seconds with 136.91 MiB peak sampled process-tree RSS (50 ms), without
+accuracy or speedup claims. Two new regression methods fail with six assertions
+before this P1 correction, including original objects, persisted metadata and
+legacy strings.
 
 The read-only Received audit finds nine non-FQDN `by` tokens across six cases,
 all single labels. Across all hops, `is_private` includes four RFC 1918/ULA

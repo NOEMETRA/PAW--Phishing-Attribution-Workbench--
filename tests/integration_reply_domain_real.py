@@ -26,6 +26,8 @@ def main():
     samples['duplicate-from.eml'] = b'From: b@example.invalid\r\n'+samples['unrelated.eml']
     samples['group-from.eml'] = samples['unrelated.eml'].replace(b'a@example.invalid',b'Team: a@example.invalid;',1)
     samples['no-reply.eml'] = base+b'\r\nhello'
+    samples['fragment-from.eml'] = samples['unrelated.eml'].replace(b'a@example.invalid',b'a@exa mple.invalid',1)
+    samples['defective-from.eml'] = samples['unrelated.eml'].replace(b'a@example.invalid',b'Name\xff <a@example.invalid>',1)
     with tempfile.TemporaryDirectory(prefix='paw-reply-domain-',dir=REPO.parent) as temporary:
         root = Path(temporary)
         inputs = root/'inputs'
@@ -61,11 +63,14 @@ def main():
             completed = name in {'plain.eml','comment.eml','quoted-local.eml','subdomain.eml','unrelated.eml','lookalike.eml'}
             assert comparison['status'] == ('completed' if completed else 'not_evaluated')
             assert comparison['result'] == ('different' if expected else 'same_or_subdomain' if completed else None)
-            if name in {'list.eml','group.eml','defective.eml','malformed.eml','duplicate-reply.eml','duplicate-from.eml','group-from.eml','missing-from.eml'}:
+            if name in {'list.eml','group.eml','defective.eml','malformed.eml','duplicate-reply.eml','duplicate-from.eml','group-from.eml','missing-from.eml','fragment-from.eml','defective-from.eml'}:
                 assert coverage['stages']['header_parsing']['status'] == 'partial'
+            if name in {'fragment-from.eml','defective-from.eml'}:
+                assert headers['from_identity']['status'] == 'partial'
+                assert headers['header_field_defects']
             observed[name] = True
         assert set(observed) == set(samples)
-        print('PASS: 15 real full --no-egress domain comparison cases; uncertainty, original bytes, JSON parity, contributions and seals verified')
+        print('PASS: 17 real full --no-egress domain comparison cases; defective From gating, uncertainty, original bytes, JSON parity, contributions and seals verified')
 
 
 if __name__ == '__main__':

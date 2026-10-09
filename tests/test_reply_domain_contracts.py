@@ -4,6 +4,7 @@ import unittest
 from paw.core.parser_mail import parse_eml_bytes
 from paw.core.scoring import score_case, _extract_domain
 from paw.core.network_policy import offline_policy, violations
+from paw.core.authentication import infer_alignment
 
 
 def headers(reply, extra=b'', sender=b'a@example.invalid'):
@@ -77,6 +78,33 @@ class ReplyDomainContracts(unittest.TestCase):
         absent = parse_eml_bytes(b'From: a@example.invalid\r\n\r\nhello')
         self.assertEqual(absent['reply_to_header_count'],0)
         self.assertEqual(absent['reply_to_domain']['status'],'unavailable')
+
+    def test_recovered_from_fragment_is_not_a_comparison_operand(self):
+        data = headers(b'a@other.invalid',sender=b'a@exa mple.invalid')
+        self.assertEqual(data['from_identity']['status'],'partial')
+        with offline_policy(True):
+            auth = infer_alignment(data,data['from'],'')
+        self.assertEqual(auth['from_domain'],'exa')
+        for value in (data,json.loads(json.dumps(data))):
+            with self.subTest(persisted=isinstance(value['from'],str) and not hasattr(value['from'],'defects')):
+                result = score_case({},auth,{'domain':auth['from_domain']},headers=value)
+                comparison = result['sender_domain_observations']['reply_to_comparison']
+                self.assertEqual(comparison['contribution'],0)
+                self.assertEqual(comparison['status'],'not_evaluated')
+                self.assertIsNone(comparison['result'])
+
+    def test_legacy_or_persisted_from_uncertainty_cannot_bypass_gate(self):
+        cases = [({'from':'a@exa mple.invalid','reply_to':'a@other.invalid'},'exa'),
+                 ({'from':'a@example.invalid','reply_to':'a@other.invalid',
+                   'from_identity':{'status':'partial'}},'example.invalid'),
+                 ({'from':'a@example.invalid','reply_to':'a@other.invalid',
+                   'header_field_defects':[{'field':'From','type':'InvalidHeaderDefect'}]},'example.invalid'),
+                 ({'from':'a@other.invalid','reply_to':'b@third.invalid'},'example.invalid')]
+        for value,domain in cases:
+            with self.subTest(headers=value):
+                comparison = score_case({}, {}, {'domain':domain},headers=value)['sender_domain_observations']['reply_to_comparison']
+                self.assertEqual(comparison['contribution'],0)
+                self.assertEqual(comparison['status'],'not_evaluated')
 
     def test_comparison_exposes_coverage_without_network_or_authentication(self):
         before = len(violations())

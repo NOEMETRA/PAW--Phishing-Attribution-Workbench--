@@ -128,6 +128,30 @@ def _extract_domain(addr: str):
     return reply_domain_observation(addr,count=1 if addr else 0)['domain'] or ''
 
 
+def _from_domain_available(headers, normalized_domain):
+    if not normalized_domain or headers.get('from_header_count',1) != 1:
+        return False
+    if any(isinstance(issue,dict) and str(issue.get('field','')).lower() == 'from'
+           for issue in headers.get('header_field_defects') or []):
+        return False
+    identity = headers.get('from_identity')
+    if identity is not None and (not isinstance(identity,dict) or identity.get('status') != 'parsed'):
+        return False
+    value = headers.get('from')
+    # Legacy callers may supply just dominfo; full mail parsing always records
+    # occurrence/identity metadata. Validate any supplied From before comparison.
+    if value is None:
+        return identity is None
+    try:
+        field = value if hasattr(value,'addresses') else policy.default.header_factory('From',str(value))
+        if field.defects or len(field.groups) != 1 or field.groups[0].display_name is not None or len(field.addresses) != 1:
+            return False
+        address = field.addresses[0]
+        return bool(address.username and normalize_domain(address.domain) == normalized_domain)
+    except (ValueError, TypeError, AttributeError, IndexError):
+        return False
+
+
 def _reply_to_comparison(headers, from_domain):
     headers = headers or {}
     normalized_from = normalize_domain(from_domain)
@@ -144,8 +168,7 @@ def _reply_to_comparison(headers, from_domain):
                    'source':'message_headers','from_domain':normalized_from,
                    'reply_domain':reply_domain,'reply_to':reply,'contribution':0.0,
                    'scope':'normalized_domain_equality_or_label_suffix'}
-    from_available = normalized_from and headers.get('from_header_count',1) == 1 and (
-        (headers.get('from_identity') or {}).get('status') not in {'unsupported','unavailable','not_evaluated'})
+    from_available = _from_domain_available(headers,normalized_from)
     if not from_available:
         observation['reason'] = 'Unambiguous normalized From domain unavailable'
     elif not reply_domain:
