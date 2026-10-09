@@ -21,8 +21,9 @@ later additions. These are arithmetic defects, not evidence for new thresholds.
   `score` is that value rounded to two decimals for compatibility/display only.
 - `profile`, `thresholds`, `decision_basis`, `decision_scope` and `calibrated`
   expose how the verdict was computed. Existing profile modifiers, weights and
-  thresholds remain. Comparisons allow 1e-12 absolute floating-point noise at
-  an exact boundary; they do not use two-decimal display rounding.
+  thresholds remain. Verdicts use exact `>=` comparisons with the unrounded
+  decision value; neither a tolerance interval nor display rounding promotes
+  a value below a threshold.
 - `component_sources` explains the provenance and limits of each contribution.
   Claimed headers, independent verification results and profile parameters are
   explicitly distinguished. Components are grouped contributions, not a claim
@@ -51,7 +52,19 @@ New callers add through `additional` or `additional_components`. Directly
 modifying the displayed value of a version-2 score or supplying a ledger that
 does not reconcile with its raw sum is rejected. Finalizing again without new
 signals is idempotent; omitting the profile retains the artifact's profile
-(legacy inputs default to `default`). Historical sealed cases are not rewritten.
+(legacy inputs default to `default`). Changing a version-2 artifact's profile
+is rejected: recompute with `score_case` under the requested profile so its
+modifier and thresholds agree. Legacy plain-score inputs still accept a profile
+on their first finalization. Historical sealed cases are not rewritten.
+
+Caller additions cannot use engine-owned names (`header_observations`,
+`verified_authentication_failures`, `sender_domain_heuristics`,
+`deobfuscation_heuristics`, `dynamic_observations`, `profile_modifier` or
+`legacy_base`), including when absent from the input ledger. Ordinary custom
+additions carry caller provenance; supported Received additions describe only
+unverified structural claims. This prevents the additions API from presenting
+a caller value as independently verified evidence. A ledger is not a trust
+boundary against arbitrary modification of an input dictionary.
 
 The executive Markdown report includes decision value, thresholds and components;
 CLI summaries also show the value before display rounding. The GUI rebuild
@@ -90,13 +103,13 @@ legacy scripts, clean installation and the separate Linux dynamic-analysis lab.
 
 ## Measured validation of this change
 
-The serial Windows suite ran 171 tests: 166 passed and five POSIX-only tests
-were skipped. Thirteen score-contract tests exercise the numerical defects and
+The serial Windows suite ran 175 tests: 170 passed and five POSIX-only tests
+were skipped. Seventeen score-contract tests exercise the numerical defects and
 ledger rules. Eight supervised full `--no-egress` CLI cases also passed, checking
 the persisted explanations, original bytes and evidence seals.
 
-The final private full run of all 20 original EMLs completed in 33.155 seconds,
-with 136.27 MiB peak sampled process-tree RSS (50 ms sampling). All originals,
+The final private full run of all 20 original EMLs completed in 33.021 seconds,
+with 123.42 MiB peak sampled process-tree RSS (50 ms sampling). All originals,
 seals and execution records verified; all raw component sums reconciled against
 the pre-change audit. Displayed scores and decisions changed in zero cases:
 19 Inconclusive and one Suspicious. Header/URL/auxiliary artifacts were

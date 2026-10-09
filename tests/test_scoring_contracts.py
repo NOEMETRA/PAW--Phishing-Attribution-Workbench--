@@ -7,6 +7,49 @@ from paw.core.scoring import score_case, finalize_score
 
 
 class ScoringContracts(unittest.TestCase):
+    def test_additions_cannot_impersonate_engine_owned_components(self):
+        import copy
+        names = ('header_observations', 'verified_authentication_failures',
+                 'sender_domain_heuristics', 'deobfuscation_heuristics',
+                 'dynamic_observations', 'profile_modifier', 'legacy_base')
+        for name in names:
+            for legacy in (False, True):
+                original = {'score':0} if legacy else score_case({}, {}, {'domain':'example.org'})
+                result = copy.deepcopy(original)
+                with self.subTest(name=name, legacy=legacy), self.assertRaises(ValueError):
+                    finalize_score(result, additional_components={name:.4})
+                self.assertEqual(result, original)
+
+    def test_subthreshold_values_within_old_tolerance_stay_below_the_boundary(self):
+        for profile, suspicious, malicious in (('default',.55,.72),('strict',.52,.68),('conservative',.58,.76)):
+            for threshold, decision in ((suspicious,'Inconclusive'),
+                                        (malicious,'Suspicious or compromised account')):
+                for value in (threshold-5e-13, math.nextafter(threshold, -math.inf)):
+                    with self.subTest(profile=profile, threshold=threshold, value=value):
+                        result = finalize_score({'score':value}, profile)
+                        self.assertLess(result['decision_score'], threshold)
+                        self.assertEqual(result['decision'], decision)
+
+    def test_deobfuscation_can_produce_a_genuinely_subthreshold_value(self):
+        result = score_case({'skew_s':601, 'fqdn_ok':False}, {}, {'domain':'example.org'},
+            profile='strict', headers={'deobfuscation_analysis':{'deobfuscated_artifacts':{
+                'text':{'suspicion_score':(.52-5e-13-.35)/.18}}}})
+        self.assertLess(result['decision_score'], .52)
+        self.assertEqual(result['decision'], 'Inconclusive')
+        self.assertEqual(finalize_score(result)['decision'], 'Inconclusive')
+
+    def test_version_two_profile_changes_are_rejected_without_mutation(self):
+        import copy
+        for original_profile in ('default', 'strict', 'conservative'):
+            for requested_profile in ('default', 'strict', 'conservative'):
+                if requested_profile == original_profile:
+                    continue
+                original = score_case({}, {}, {'domain':'example.org'}, profile=original_profile)
+                result = copy.deepcopy(original)
+                with self.subTest(original=original_profile, requested=requested_profile), self.assertRaises(ValueError):
+                    finalize_score(result, requested_profile, additional=.1)
+                self.assertEqual(result, original)
+
     def test_finalize_cannot_promote_a_score_rounded_up_to_threshold(self):
         with offline_policy(True):
             result = score_case({'skew_s':601, 'fqdn_ok':False}, {}, {'domain':'example.org'},

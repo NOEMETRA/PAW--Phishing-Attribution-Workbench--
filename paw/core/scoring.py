@@ -17,6 +17,14 @@ COMPONENT_SOURCES = {
     'additional_signals': 'Caller-provided signal; requires its own evidence and context',
 }
 
+# These contributions are established by score_case (or the legacy adapter),
+# never by caller-provided additions. Received additions remain unverified.
+ENGINE_OWNED_COMPONENTS = frozenset({
+    'header_observations', 'verified_authentication_failures',
+    'sender_domain_heuristics', 'deobfuscation_heuristics',
+    'dynamic_observations', 'profile_modifier', 'legacy_base',
+})
+
 
 def _finite_number(value):
     if isinstance(value, bool):
@@ -34,11 +42,8 @@ def _score_metadata(raw, components, profile):
     raw = _finite_number(raw)
     decision_score = max(0.0, min(1.0, raw))
     malicious, suspicious = {'strict': (.68, .52), 'conservative': (.76, .58)}.get(profile, (.72, .55))
-    # Tolerance only for floating-point noise at an exact mathematical boundary.
-    def reaches(threshold):
-        return decision_score >= threshold or math.isclose(decision_score, threshold, rel_tol=0, abs_tol=1e-12)
-    decision = ('Likely malicious infrastructure' if reaches(malicious) else
-                'Suspicious or compromised account' if reaches(suspicious) else 'Inconclusive')
+    decision = ('Likely malicious infrastructure' if decision_score >= malicious else
+                'Suspicious or compromised account' if decision_score >= suspicious else 'Inconclusive')
     return {'score_schema_version': 2,
             'score': round(decision_score, 2), 'raw_score': raw, 'decision_score': decision_score,
             'score_components': components, 'component_sources': {
@@ -273,6 +278,8 @@ def finalize_score(score, profile=None, additional=0.0, additional_components=No
     """Add signals to the unrounded ledger; displayed score is not an accumulator."""
     displayed = _finite_number(score['score'])
     profile = score.get('profile', 'default') if profile is None else profile
+    if score.get('score_schema_version') == 2 and profile != score.get('profile'):
+        raise ValueError('Cannot change a version-2 score profile; recompute with score_case')
     raw = _finite_number(score.get('raw_score', displayed))
     components = dict(score.get('score_components', {'legacy_base': raw}))
     if any(not isinstance(name, str) or not name for name in components):
@@ -286,6 +293,8 @@ def finalize_score(score, profile=None, additional=0.0, additional_components=No
     for name, value in additions.items():
         if not isinstance(name, str) or not name:
             raise ValueError('Additional score components need nonempty names')
+        if name in ENGINE_OWNED_COMPONENTS:
+            raise ValueError('Additional signals cannot use engine-owned score components')
         components[name] = math.fsum((components.get(name, 0.0), _finite_number(value)))
     additional = _finite_number(additional)
     if additional:
