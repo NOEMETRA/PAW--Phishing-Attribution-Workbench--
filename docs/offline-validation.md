@@ -114,6 +114,12 @@ Codex review is requested in GitHub PR comments. Treat the review as an addition
 check and resolve actionable findings with reproductions and focused tests; do
 not interpret an empty review as full software validation.
 
+The [Unicode domain audit](domain-unicode.md) removes the representation-dependent
+0.20 penalty that treated every non-ASCII domain as mixed-script. Supported IDNA
+spellings are descriptive observations, with script/homograph analysis explicitly
+unevaluated. Other domain/brand/TLD heuristics and thresholds remain unchanged;
+those heuristics still require validation.
+
 ## GitHub review follow-up: process launch and crash recovery
 
 The first GitHub review found two P1 issues: audited `spawn`/`fork`/`exec` paths

@@ -56,6 +56,10 @@ trust boundary unverified. Hostname/address categories alone add no pipeline ris
 [Received timing](docs/received-timing.md) compares adjacent timestamp claims,
 keeps unavailable intervals null and reports relay observations descriptively.
 
+[Domain Unicode observations](docs/domain-unicode.md) decode supported IDNA
+spellings without automatic risk points. Script and homograph detection remain
+explicitly unevaluated; the legacy mixed-script flag is nullable.
+
 PAW is a **research workbench**, not a production incident-response platform or an attribution oracle.
 
 [JavaScript schema v2](docs/javascript-evidence.md) preserves original source,

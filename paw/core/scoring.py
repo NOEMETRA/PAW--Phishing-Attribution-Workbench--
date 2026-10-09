@@ -4,6 +4,7 @@ import math
 from email import policy
 from .authentication import normalize_domain
 from .mailbox_domains import reply_domain_observation
+from .domain_unicode import observe_domain_unicode
 
 
 COMPONENT_SOURCES = {
@@ -93,12 +94,8 @@ def bk_similarity(label: str, brand: str):
     return max(0.0, 1.0 - (d / L))
 
 def is_mixed_script(domain: str):
-    # Simple heuristic: presence of non-ASCII letters suggests potential mixed script (not perfect)
-    try:
-        domain.encode('ascii')
-        return False
-    except Exception:
-        return True
+    """Legacy nullable adapter: PAW does not implement Unicode script analysis."""
+    return None
 
 def extract_display_name(from_header: str):
     """Read one defect-free mailbox's actual display name, never its local part."""
@@ -253,7 +250,9 @@ def score_case(hop_diag: dict, auth: dict, dominfo: dict, brand_seeds=None, susp
         if tld in risky_tlds():
             domain_score += 0.10
     
-    if is_mixed_script(dominfo.get("domain","")): domain_score += 0.2
+    normalized_from = normalize_domain(from_domain)
+    unicode_observation = observe_domain_unicode(
+        normalized_from if _from_domain_available(headers or {},normalized_from) else None)
 
     # Integrate deobfuscation analysis (if available) to penalize heavy obfuscation
     # headers["deobfuscation_analysis"] is expected to be a dict (or a JSON string) with
@@ -331,9 +330,12 @@ def score_case(hop_diag: dict, auth: dict, dominfo: dict, brand_seeds=None, susp
     missing = [method for method, status in verification.items() if status != 'completed']
     if not dominfo.get('domain'): missing.append('from_domain')
     if reply_observation['status'] != 'completed': missing.append('reply_to_comparison')
+    if unicode_observation['status'] != 'observed_unverified': missing.append('unicode_domain')
+    missing.extend(('domain_script_analysis', 'domain_homograph_analysis'))
     return {**_score_metadata(total, components, profile),
-            'sender_domain_observations': {'reply_to_comparison':reply_observation},
-            "bk_score": round(bk,2), "mixed_flag": is_mixed_script(dominfo.get("domain","")),
+            'sender_domain_observations': {'reply_to_comparison':reply_observation,
+                                           'unicode_domain':unicode_observation},
+            "bk_score": round(bk,2), "mixed_flag": None,
             "assessment_status": "partial" if missing else "completed",
             "coverage": {"authentication": verification, "not_evaluated": missing},
             "limitation": "Heuristic evidence score; missing checks do not establish safety"}
