@@ -287,95 +287,7 @@ class DNSEnrichmentAnalyzer:
         return ip_analysis
 
     def _get_geo_hint_from_ip(self, ip: str) -> Optional[str]:
-        """Get geographic hint from IP (simplified)"""
-        try:
-            # This is a very basic implementation
-            # In production, you'd use a proper GeoIP database
-            ip_obj = ipaddress.ip_address(ip)
-
-            # Some basic ranges for demonstration
-            if ip_obj in ipaddress.ip_network('5.0.0.0/8'):
-                return 'Romania'
-            elif ip_obj in ipaddress.ip_network('31.0.0.0/8'):
-                return 'Netherlands'
-            elif ip_obj in ipaddress.ip_network('41.0.0.0/8'):
-                return 'South Africa'
-            elif ip_obj in ipaddress.ip_network('43.0.0.0/8'):
-                return 'Japan'
-            elif ip_obj in ipaddress.ip_network('49.0.0.0/8'):
-                return 'Japan'
-            elif ip_obj in ipaddress.ip_network('58.0.0.0/8'):
-                return 'Japan'
-            elif ip_obj in ipaddress.ip_network('60.0.0.0/8'):
-                return 'Japan'
-            elif ip_obj in ipaddress.ip_network('61.0.0.0/8'):
-                return 'Australia'
-            elif ip_obj in ipaddress.ip_network('101.0.0.0/8'):
-                return 'China'
-            elif ip_obj in ipaddress.ip_network('103.0.0.0/8'):
-                return 'China'
-            elif ip_obj in ipaddress.ip_network('106.0.0.0/8'):
-                return 'China'
-            elif ip_obj in ipaddress.ip_network('110.0.0.0/8'):
-                return 'China'
-            elif ip_obj in ipaddress.ip_network('111.0.0.0/8'):
-                return 'China'
-            elif ip_obj in ipaddress.ip_network('112.0.0.0/8'):
-                return 'China'
-            elif ip_obj in ipaddress.ip_network('113.0.0.0/8'):
-                return 'China'
-            elif ip_obj in ipaddress.ip_network('114.0.0.0/8'):
-                return 'China'
-            elif ip_obj in ipaddress.ip_network('115.0.0.0/8'):
-                return 'China'
-            elif ip_obj in ipaddress.ip_network('116.0.0.0/8'):
-                return 'China'
-            elif ip_obj in ipaddress.ip_network('117.0.0.0/8'):
-                return 'China'
-            elif ip_obj in ipaddress.ip_network('118.0.0.0/8'):
-                return 'China'
-            elif ip_obj in ipaddress.ip_network('119.0.0.0/8'):
-                return 'China'
-            elif ip_obj in ipaddress.ip_network('120.0.0.0/8'):
-                return 'China'
-            elif ip_obj in ipaddress.ip_network('121.0.0.0/8'):
-                return 'China'
-            elif ip_obj in ipaddress.ip_network('122.0.0.0/8'):
-                return 'China'
-            elif ip_obj in ipaddress.ip_network('123.0.0.0/8'):
-                return 'China'
-            elif ip_obj in ipaddress.ip_network('124.0.0.0/8'):
-                return 'China'
-            elif ip_obj in ipaddress.ip_network('125.0.0.0/8'):
-                return 'China'
-            elif ip_obj in ipaddress.ip_network('126.0.0.0/8'):
-                return 'China'
-            elif ip_obj in ipaddress.ip_network('169.254.0.0/16'):
-                return 'Link-local'
-            elif ip_obj in ipaddress.ip_network('172.16.0.0/12'):
-                return 'Private'
-            elif ip_obj in ipaddress.ip_network('192.168.0.0/16'):
-                return 'Private'
-            elif ip_obj in ipaddress.ip_network('203.0.0.0/8'):
-                return 'Asia Pacific'
-            elif ip_obj in ipaddress.ip_network('210.0.0.0/8'):
-                return 'Asia Pacific'
-            elif ip_obj in ipaddress.ip_network('211.0.0.0/8'):
-                return 'Asia Pacific'
-            elif ip_obj in ipaddress.ip_network('218.0.0.0/8'):
-                return 'Asia Pacific'
-            elif ip_obj in ipaddress.ip_network('219.0.0.0/8'):
-                return 'Asia Pacific'
-            elif ip_obj in ipaddress.ip_network('220.0.0.0/8'):
-                return 'Asia Pacific'
-            elif ip_obj in ipaddress.ip_network('221.0.0.0/8'):
-                return 'Asia Pacific'
-            elif ip_obj in ipaddress.ip_network('222.0.0.0/8'):
-                return 'Asia Pacific'
-
-        except:
-            pass
-
+        """No GeoIP dataset is configured; never invent a country from /8 ranges."""
         return None
 
     def _generate_attribution_hints(self, result: Dict[str, Any]) -> Dict[str, Any]:
@@ -419,8 +331,7 @@ class DNSEnrichmentAnalyzer:
         if any(domain.endswith(tld) for tld in suspicious_tlds):
             risk_indicators.append('suspicious_tld')
 
-        # Check for short domain age indicators (would need WHOIS data)
-        # This is a placeholder for domain age analysis
+        hints['domain_age_status'] = 'unavailable: no registration evidence provided'
 
         hints['risk_indicators'] = risk_indicators
 

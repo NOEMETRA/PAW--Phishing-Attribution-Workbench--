@@ -25,8 +25,8 @@ class PublicContractTests(unittest.TestCase):
         cli = (ROOT / "paw" / "__main__.py").read_text(encoding="utf-8")
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         self.assertNotIn("Use --no-egress flag to skip network operations", cli)
-        self.assertIn("--no-egress flag does not currently enforce network isolation", cli)
-        self.assertIn("must not be treated as a reliable network kill switch", readme)
+        self.assertIn("--no-egress flag enforces application policy, not an OS sandbox", cli)
+        self.assertIn("not an OS sandbox", readme)
 
     def test_readme_preserves_evidence_boundaries(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")

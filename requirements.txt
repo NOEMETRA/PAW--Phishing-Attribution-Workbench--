@@ -1,54 +1,27 @@
-# PAW - Phishing Attribution Workbench
-# Requirements with pinned versions for security and reproducibility
-# Last updated: 2025-11-03
-
-# Core dependencies
-requests==2.31.0
-dnspython==2.4.2
-ipwhois==1.2.0
-blake3==0.3.4
-python-dateutil==2.8.2
-
-# Email authentication and parsing
-dkimpy==1.1.5
-pyspf==2.0.14
-tldextract==5.1.0
-
-# Cryptography (CRITICAL - must pin version)
-cryptography==42.0.2
-pgpy==0.6.0
-
-# Email parsing
-extract-msg==0.47.0
-python-magic==0.4.27
-oletools==0.60.1
-
-# Web automation and analysis
-playwright==1.40.0
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-pyOpenSSL==23.3.0
-selenium==4.16.0
-webdriver-manager==4.0.1
-
-# Infrastructure
-docker==6.1.3
-python-whois==0.8.0
-
-# UI and reporting
-rich==13.7.0
-
-# HTML/XML parsing (ADDED - was missing)
-beautifulsoup4==4.12.2
-lxml==4.9.3
-
-# Optional but recommended
-certifi==2023.11.17  # SSL certificates
-urllib3==2.1.0  # HTTP client
-charset-normalizer==3.3.2  # Character encoding detection
-idna==3.6  # Internationalized domain names
-
-# Security scanning (optional, for development)
-# Uncomment for security audits:
-# bandit==1.7.5
-# safety==2.3.5
+# Runtime constraints matching pyproject.toml; not a lockfile.
+requests>=2.31.0,<3.0.0
+dnspython>=2.4.2,<3.0.0
+ipwhois>=1.2.0,<2.0.0
+blake3>=1.0.0,<2.0.0
+python-dateutil>=2.8.2,<3.0.0
+dkimpy>=1.1.4,<2.0.0
+pyspf>=2.0.14,<3.0.0
+tldextract>=5.0.0,<6.0.0
+cryptography>=42.0.0,<47.0.0
+pgpy>=0.6.0,<1.0.0
+extract-msg>=0.46.0,<1.0.0
+python-magic>=0.4.27,<1.0.0
+oletools>=0.60.1,<1.0.0
+playwright>=1.40.0,<2.0.0
+fastapi>=0.104.0,<1.0.0
+python-multipart>=0.0.9,<1.0.0
+uvicorn>=0.24.0,<1.0.0
+pyOpenSSL>=24.0.0,<26.0.0
+selenium>=4.15.0,<5.0.0
+webdriver-manager>=4.0.0,<5.0.0
+docker>=6.1.0,<7.0.0
+python-whois>=0.8.0,<1.0.0
+rich>=13.7.0,<14.0.0
+beautifulsoup4>=4.12.0,<5.0.0
+lxml>=5.0.0,<7.0.0
+psutil>=5.9,<8

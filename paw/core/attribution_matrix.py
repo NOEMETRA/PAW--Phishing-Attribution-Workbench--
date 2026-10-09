@@ -37,44 +37,8 @@ class AttributionMatrix:
         self.known_operators = self._load_known_operators()
 
     def _load_known_operators(self) -> Dict[str, Dict[str, Any]]:
-        """Load known operator profiles (simplified for demo)"""
-        return {
-            'russian_financial_scammer': {
-                'indicators': ['yandex', 'mail.ru', 'qiwi', 'yoomoney', 'sberbank'],
-                'infrastructure': ['reg.ru', 'nic.ru', 'azure', 'digitalocean'],
-                'payment_processors': ['qiwi', 'yoomoney', 'webmoney'],
-                'tls_patterns': ['russian_cert_authorities'],
-                'risk_level': 'high'
-            },
-            'chinese_ecommerce_fraudster': {
-                'indicators': ['alipay', 'wechat', 'unionpay', 'taobao'],
-                'infrastructure': ['alibaba', 'tencent', 'baidu', 'cloudflare'],
-                'payment_processors': ['alipay', 'wechat_pay'],
-                'tls_patterns': ['chinese_cert_authorities'],
-                'risk_level': 'high'
-            },
-            'indian_tech_support_scammer': {
-                'indicators': ['airtel', 'vodafone', 'hathway', 'bsnl'],
-                'infrastructure': ['godaddy', 'hostinger', 'namecheap'],
-                'payment_processors': ['paytm', 'phonepe', 'google_pay'],
-                'tls_patterns': ['indian_cert_authorities'],
-                'risk_level': 'medium'
-            },
-            'nigerian_business_email_scammer': {
-                'indicators': ['gmail.com', 'yahoo.com', 'hotmail.com'],
-                'infrastructure': ['godaddy', 'namecheap', 'hostgator'],
-                'payment_processors': ['western_union', 'moneygram'],
-                'tls_patterns': ['generic_cert_authorities'],
-                'risk_level': 'medium'
-            },
-            'eastern_european_cybercrime': {
-                'indicators': ['privatbank', 'monobank', 'nova_poshta'],
-                'infrastructure': ['ukraine', 'poland', 'czech', 'azure', 'aws'],
-                'payment_processors': ['privat24', 'easypay'],
-                'tls_patterns': ['comodo', 'lets_encrypt'],
-                'risk_level': 'high'
-            }
-        }
+        """No sourced operator dataset is configured; attribution is unavailable."""
+        return {}
 
     def generate_attribution_matrix(self, enrichment_data: Dict[str, Any]) -> Dict[str, Any]:
         """Generate unified attribution matrix from all enrichment data"""
@@ -83,6 +47,7 @@ class AttributionMatrix:
             'target_url': enrichment_data.get('url', 'unknown'),
             'correlation_matrix': {},
             'hypotheses': [],
+            'operator_attribution': {'status': 'unavailable', 'reason': 'No sourced operator dataset configured'},
             'evidence_summary': {},
             'confidence_assessment': {},
             'recommendations': []

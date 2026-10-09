@@ -1,0 +1,19 @@
+LOCAL REVIEW DRAFT - NOT SENT
+
+Case: {case_id}
+Generated: {generated_utc}
+Sender declared in the email: {from_addr}
+IP candidate from Received headers, not independently established: {origin_candidate}
+Heuristic assessment: {decision}
+Heuristic score, not a probability: {score}
+
+Authentication analysis (header claims and verification have distinct statuses):
+{authentication_json}
+
+This draft does not establish a compromised mailbox, malicious infrastructure,
+or actor identity. Missing checks do not establish safety. Review the original
+email and case reports before deciding whether to report an incident.
+
+Case integrity: run paw verify against the case directory. The draft is included
+in the later evidence seal; the root is stored separately in evidence/merkle_root.bin.
+No report has been sent. No recipient or reporter identity was invented.

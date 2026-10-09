@@ -1,13 +1,13 @@
 # paw/core/ml_scorer.py
 """
-Machine Learning scorer for detecting phishing emails and deciding on canary injection.
+Heuristic scorer for detecting phishing emails and deciding on canary injection.
 """
 
 import re
 from typing import Dict, List, Tuple
 
 class MLScorer:
-    """Simple ML-like scorer for phishing detection and canary injection decisions."""
+    """Rule-based heuristic scorer; no trained model for phishing detection and canary injection decisions."""
 
     def __init__(self):
         # Feature weights for phishing detection

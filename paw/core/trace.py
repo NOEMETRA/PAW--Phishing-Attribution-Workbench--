@@ -3,11 +3,17 @@ import os, json, uuid, shutil, hashlib, time, ipaddress, re
 from ..util.timeutil import utc_now_iso
 from ..util.hashutil import blake3_hex, file_blake3_hex
 from ..util.fsutil import ensure_dir, write_json, write_text, sanitize_case_id, read_json
-from .parser_mail import parse_mail
+from .parser_mail import parse_mail, load_mail
+from .mime_analysis import analyze_mime
+from .evidence import seal_case
+from .runtime import mark_stage, read_progress
 from .received import normalize_received
-from .auth import infer_alignment
+from .auth import infer_alignment, authentication_report
+from .dkim_offline import verify_dkim_offline
 from .profiler import ip_rdap, domain_rdap, nrd_days
-from .scoring import score_case
+from .scoring import score_case, finalize_score, validate_deobfuscation_weight
+from .network_policy import enforce_trace_policy, network_allowed, violations
+from .batch import BatchAnalysisError, select_inputs
 from ..deobfuscate.core import DeobfuscationEngine
 
 # Rich imports for beautiful terminal output
@@ -23,7 +29,7 @@ def check_domain_reputation(domain):
     if not domain:
         return {"score": 0, "category": "unknown", "sources": []}
     
-    reputation = {"score": 0, "category": "clean", "sources": []}
+    reputation = {"score": 0, "category": "unknown", "sources": []}
     
     # Check for suspicious keywords in domain
     suspicious_keywords = [
@@ -72,148 +78,22 @@ def check_domain_reputation(domain):
     elif reputation["score"] > 0:
         reputation["category"] = "low_risk"
     else:
-        reputation["category"] = "clean"
+        reputation["category"] = "unknown"
     
+    reputation.update(status='partial', verified=False, source='local_heuristics',
+                      limitation='No verified reputation lookup; absence of local signals does not establish safety')
     return reputation
 
 def check_ip_reputation(ip):
-    """Check IP reputation using various sources."""
-    if not ip:
-        return {"score": 0, "category": "unknown", "sources": []}
-    
-    reputation = {"score": 0, "category": "clean", "sources": []}
-    
-    try:
-        ip_obj = ipaddress.ip_address(ip)
-        
-        # Check if it's a cloud provider IP (often used for phishing infrastructure)
-        cloud_ranges = [
-            # AWS
-            ipaddress.ip_network('52.0.0.0/8'),
-            ipaddress.ip_network('54.0.0.0/8'),
-            # Azure
-            ipaddress.ip_network('13.64.0.0/11'),
-            ipaddress.ip_network('20.0.0.0/8'),
-            # Google Cloud
-            ipaddress.ip_network('35.184.0.0/13'),
-            # DigitalOcean
-            ipaddress.ip_network('104.236.0.0/16'),
-        ]
-        
-        for cloud_range in cloud_ranges:
-            if ip_obj in cloud_range:
-                reputation["score"] += 1
-                reputation["sources"].append("cloud_provider")
-                break
-        
-        # Check for TOR exit nodes (suspicious)
-        tor_exits = [
-            '185.220.101.0/24',  # Example TOR range
-            '185.220.102.0/24',
-        ]
-        for tor_range in tor_exits:
-            if ip_obj in ipaddress.ip_network(tor_range):
-                reputation["score"] += 5
-                reputation["sources"].append("tor_exit_node")
-                break
-        
-        # Check RDAP for additional info
+    """IP syntax and scope do not establish reputation."""
+    result = {'score': 0, 'category': 'unknown', 'status': 'unavailable',
+              'sources': [], 'reason': 'No verified reputation provider', 'verified': False}
+    if ip:
         try:
-            from .profiler import ip_rdap
-            rdap = ip_rdap(ip)
-            if rdap:
-                # Check if it's a residential IP (less suspicious)
-                if rdap.get("type") == "residential":
-                    reputation["score"] -= 1
-                    reputation["sources"].append("residential_ip")
-                
-                # Check ASN country (historical registration - informational)
-                asn_country = rdap.get("asn_cc")
-                if asn_country:
-                    reputation["sources"].append(f"asn_registered_in:{asn_country}")
-                    # Only penalize if ASN is registered in high-spam countries AND physical location is also suspicious
-                    physical_country = rdap.get("cc")
-                    if asn_country in ['CN', 'RU', 'IN', 'BR'] and physical_country in ['CN', 'RU', 'IN', 'BR']:
-                        reputation["score"] += 1
-                        reputation["sources"].append(f"high_spam_asn_and_location:{asn_country}")
-                    elif asn_country in ['CN', 'RU', 'IN', 'BR']:
-                        reputation["sources"].append(f"high_spam_asn_only:{asn_country}")
-
-        except:
-            pass
-            
-    except Exception as e:
-        reputation["sources"].append(f"error:{str(e)}")
-    
-    # Determine category based on score
-    if reputation["score"] >= 5:
-        reputation["category"] = "high_risk"
-    elif reputation["score"] >= 2:
-        reputation["category"] = "medium_risk"
-    elif reputation["score"] > 0:
-        reputation["category"] = "low_risk"
-    elif reputation["score"] < 0:
-        reputation["category"] = "trusted"
-    else:
-        reputation["category"] = "clean"
-    
-    return reputation
-
-def inject_canary_link(case_id: str, headers: dict, body_text: str) -> str:
-    """Inject a canary link into email body for URL-less phishing detection."""
-    try:
-        # Generate unique canary URL for this case
-        canary_token = hashlib.sha256(f"{case_id}:{utc_now_iso()}".encode()).hexdigest()[:16]
-        canary_url = f"http://localhost:8787/c/{canary_token}"
-        
-        # Create attractive link text based on email content
-        subject = headers.get("subject", "").lower()
-        link_text = "Verify Your Account"
-        
-        # Customize link text based on email content
-        if "password" in body_text.lower() or "login" in body_text.lower():
-            link_text = "Reset Your Password"
-        elif "account" in body_text.lower():
-            link_text = "Access Your Account"
-        elif "verify" in body_text.lower():
-            link_text = "Complete Verification"
-        elif "urgent" in subject:
-            link_text = "Take Action Now"
-        
-        # Inject the link into the email body
-        # Find a good place to insert it (after common phishing phrases)
-        injection_points = [
-            "Click here",
-            "Follow this link",
-            "Visit:",
-            "Go to:",
-            "Access here:",
-            "Login here:"
-        ]
-        
-        modified_body = body_text
-        link_injected = False
-        
-        for point in injection_points:
-            if point in modified_body and not link_injected:
-                # Replace the injection point with our canary link
-                link_html = f'<a href="{canary_url}">{link_text}</a>'
-                modified_body = modified_body.replace(point, f'{point} {link_html}', 1)
-                link_injected = True
-                break
-        
-        # If no good injection point found, append at the end
-        if not link_injected:
-            modified_body += f"\n\n{link_text}: {canary_url}"
-        
-        # Update the body in headers for processing
-        headers["_modified_body"] = modified_body
-        
-        return canary_url
-        
-    except Exception as e:
-        print(f"[canary] failed to inject canary link: {e}")
-        return ""
+            parsed = ipaddress.ip_address(ip)
+            result['local_metadata'] = {'is_global': parsed.is_global, 'version': parsed.version}
+        except ValueError: result['reason'] = 'Invalid IP address'
+    return result
 
 def trace_campaign_origin(headers: dict, hops: list) -> dict:
     """Trace the true origin of phishing campaigns beyond the transmitting server."""
@@ -290,7 +170,7 @@ def trace_campaign_origin(headers: dict, hops: list) -> dict:
             origin_analysis["attribution_confidence"] = "high"
             
             # 🚀 NUOVO: Analisi ricorsiva dell'infrastruttura compromessa
-            recursive_analysis = analyze_compromised_infrastructure(origin_domain, origin_ip)
+            recursive_analysis = analyze_compromised_infrastructure(origin_domain, origin_ip) if network_allowed() else {}
             if recursive_analysis:
                 origin_analysis["infrastructure_chain"] = recursive_analysis
                 origin_analysis["attribution_confidence"] = "very_high"
@@ -394,6 +274,13 @@ def trace_campaign_origin(headers: dict, hops: list) -> dict:
         elif any("aws" in p or "azure" in p or "gcp" in p for p in sending_patterns):
             origin_analysis["campaign_origin"]["likely_source"] = "cloud_compromised_infrastructure"
     
+    # Header and hosting patterns are hypotheses, not calibrated attribution.
+    campaign = origin_analysis['campaign_origin']
+    if 'likely_source' in campaign:
+        campaign['heuristic_source_hypothesis'] = campaign.pop('likely_source')
+    origin_analysis['attribution_confidence'] = 'unavailable'
+    origin_analysis['status'] = 'hypotheses_only'
+    origin_analysis['limitation'] = 'Header patterns do not establish an actor or compromised infrastructure'
     return origin_analysis
 
 def analyze_phishing_content(body_text, subject, from_addr):
@@ -468,25 +355,47 @@ from ..intelligence.infrastructure_mapper import InfrastructureMapper
 from ..intelligence.enrich_last_hunt import safe_getcert, grab_banner, reverse_dns, whois_lookup, asn_lookup
 from ..intelligence.threat_intel import ThreatIntelligence
 
+@enforce_trace_policy
 def trace_sources(src, lang, stix, abuse, anchor, no_egress, profile="default", deob_weight: float = 0.30):
+    deob_weight = validate_deobfuscation_weight(deob_weight)
+    inputs = select_inputs(src)
     if os.path.isfile(src):
-        trace_one(src, lang, stix, abuse, anchor, no_egress, profile, deob_weight)
-    else:
-        for f in os.listdir(src):
-            if f.endswith(('.eml', '.msg')):
-                trace_one(os.path.join(src, f), lang, stix, abuse, anchor, no_egress, profile, deob_weight)
+        return [trace_one(str(inputs[0]), lang, stix, abuse, anchor, no_egress, profile, deob_weight)]
+    cases, failures = [], []
+    for path in inputs:
+        mark_stage('batch_input')
+        try:
+            cases.append(trace_one(str(path), lang, stix, abuse, anchor, no_egress, profile, deob_weight))
+        except Exception as exc:
+            failures.append({'input':path.name, 'error':f'{type(exc).__name__}: {exc}'})
+            print(f'[batch] failed {path.name}: {type(exc).__name__}: {exc}')
+    if failures:
+        raise BatchAnalysisError(cases, failures, [path.name for path in inputs])
+    return cases
 
+@enforce_trace_policy
 def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default", deob_weight: float = 0.30):
+    deob_weight = validate_deobfuscation_weight(deob_weight)
+    import re
+    mark_stage('mime_parsing')
+    started = time.perf_counter()
+    violations_before = len(violations())
+    headers, msg, b = load_mail(eml_path)
+    mime_result = analyze_mime(msg)
     case_id = sanitize_case_id(utc_now_iso().replace(":","").replace("Z","Z-") + str(uuid.uuid4())[:4])
     case_dir = os.path.join(os.getcwd(), "cases", "case-" + case_id)
     ensure_dir(case_dir)
+    mark_stage('ingest', os.path.basename(case_dir))
     
     # Ingest
-    with open(eml_path,"rb") as f: b = f.read()
     eml_hash = blake3_hex(b)
-    shutil.copy2(eml_path, os.path.join(case_dir,"input.eml"))
+    with open(os.path.join(case_dir,"input.eml"), "wb") as original:
+        original.write(b)
     manifest = {"case_id": case_id, "created_utc": utc_now_iso(), "inputs":[{"path":"input.eml","blake3": eml_hash, "size": len(b)}], "policy":{"no_egress": bool(no_egress)}, "deobfuscation_weight": float(deob_weight)}
-    write_json(os.path.join(case_dir,"manifest.json"), manifest)
+    manifest['source_name'] = os.path.basename(eml_path)
+    if os.environ.get('PAW_ANALYSIS_ID'):
+        manifest['analysis_job'] = os.environ['PAW_ANALYSIS_ID']
+    write_json(os.path.join(case_dir, 'manifest.json'), manifest)
     # PGP sign manifest if keys available
     if os.environ.get("PAW_PGP_PRIV"):
         try:
@@ -497,42 +406,16 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
             print(f"[pgp] manifest signed: {sig_path}")
         except Exception as e:
             print(f"[pgp] signing failed: {e}")
-    # Parse headers
-    headers = parse_mail(eml_path)
-    
-    # Extract URLs from email body
-    import email
-    from email import policy
-    from email.parser import BytesParser
-    with open(eml_path, "rb") as f:
-        b = f.read()
-    msg = BytesParser(policy=policy.default).parsebytes(b)
-    body_text = ""
-    if msg.is_multipart():
-        for part in msg.walk():
-            if part.get_content_type() == "text/plain":
-                body_text += part.get_payload(decode=True).decode('utf-8', errors='ignore')
-            elif part.get_content_type() == "text/html":
-                import re
-                html = part.get_payload(decode=True).decode('utf-8', errors='ignore')
-                # Remove HTML tags for URL extraction
-                body_text += re.sub(r'<[^>]+>', '', html)
-    else:
-        body_text = msg.get_payload(decode=True).decode('utf-8', errors='ignore')
-    
-    # Extract URLs using regex
-    import re
-    url_pattern = r'https?://[^\s<>"\']+'
-    urls = re.findall(url_pattern, body_text)
-    # Also check subject and other headers
-    subj_urls = re.findall(url_pattern, headers.get("subject", ""))
-    from_urls = re.findall(url_pattern, headers.get("from", ""))
-    urls.extend(subj_urls + from_urls)
-    # Deduplicate
-    urls = list(set(urls))
-    headers["urls"] = urls
-    
+    write_json(os.path.join(case_dir, 'mime_analysis.json'), mime_result['metadata'])
+    body_text = mime_result['body_text']
+    urls = list(dict.fromkeys(mime_result['urls'] +
+        re.findall(r'https?://[^\s<>"\']+', headers.get('subject', '')) +
+        re.findall(r'https?://[^\s<>"\']+', headers.get('from', ''))))
+    headers['urls'] = urls
+    headers['mime_status'] = mime_result['metadata']['status']
+
     # Deobfuscate content to reveal hidden URLs and malicious content
+    mark_stage('deobfuscation')
     deobfuscation_engine = DeobfuscationEngine()
     
     # Combine all text content for analysis
@@ -573,20 +456,10 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
     deobfuscation_artifacts = {
         "text": full_text,
         "urls": list(set(potential_urls + urls)),  # Include both extracted and regex-found URLs
-        "html": "",  # Will be populated if HTML is found
-        "javascript": "",  # Will be populated if JS is found
+        "html": mime_result["html"],
+        "javascript": mime_result["javascript"],
         "attachments": []
     }
-    
-    # Extract HTML and JavaScript content for deeper analysis
-    if msg.is_multipart():
-        for part in msg.walk():
-            if part.get_content_type() == "text/html":
-                html_content = part.get_payload(decode=True).decode('utf-8', errors='ignore')
-                deobfuscation_artifacts["html"] = html_content
-            elif part.get_content_type() in ["application/javascript", "text/javascript"]:
-                js_content = part.get_payload(decode=True).decode('utf-8', errors='ignore')
-                deobfuscation_artifacts["javascript"] = js_content
     
     deobfuscation_results = deobfuscation_engine.analyze_artifacts(deobfuscation_artifacts)
     headers["deobfuscation_analysis"] = deobfuscation_results
@@ -604,7 +477,7 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
             # Skip email addresses - don't report them as discovered URLs
             if url_data.get("is_email", False):
                 continue
-            if final_url and final_url not in urls:
+            if final_url and final_url.startswith(('http://', 'https://')) and final_url not in urls:
                 urls.append(final_url)
                 print(f"[deobfuscate] discovered hidden URL: {final_url}")
         headers["urls"] = urls
@@ -624,15 +497,8 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
     })
     headers["ml_score"] = ml_score
     
-    # Inject canary link if recommended and no URLs found
-    if ml_score.get('recommendations', {}).get('inject_canary') and not urls:
-        canary_url = inject_canary_link(case_id, headers, body_text)
-        if canary_url:
-            urls.append(canary_url)
-            headers["urls"] = urls
-            headers["canary_injected"] = True
-            print(f"[canary] injected canary link for URL-less phishing: {canary_url}")
-    
+    # Observed indicators are never augmented with analyst-created canary URLs.
+
     # Analyze domain reputation for found URLs
     if urls:
         domain_analysis = []
@@ -656,42 +522,38 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
                 })
         headers["domain_analysis"] = domain_analysis
     
-    write_json(os.path.join(case_dir,"headers.json"), headers)
+    write_json(os.path.join(case_dir,"headers.json"), {key: value for key, value in headers.items() if key != "_msg_obj"})
+    stage_status = {'detonation': {'status': 'skipped', 'reason': 'no-egress' if no_egress else 'No URLs'},
+                    'network_enrichment': {'status': 'skipped' if no_egress else 'not_evaluated', 'reason': 'no-egress' if no_egress else 'Individual lookup outcomes apply'},
+                    'attachment_metadata': {'status': 'not_evaluated'}}
     # Automatic detonation if URLs found
-    if urls:
+    mark_stage('detonation')
+    if urls and not no_egress:
         print(f"[detonate] found {len(urls)} URLs, starting automatic detonation...")
         try:
             from ..detonate.runner import run_detonation
             case_id_short = os.path.basename(case_dir)
-            for url in urls:
-                print(f"[detonate] detonating {url}...")
-                run_detonation(url=url, case_id=case_id_short, timeout=35, capture_pcap=False, headless=True, observe_only=True)
+            det_result = run_detonation(url=None, case_id=case_id_short, timeout=35, capture_pcap=False, headless=True, observe_only=True)
+            stage_status["detonation"] = {"status": (read_json(os.path.join(case_dir, "detonation", "summary.json")) or {}).get("status", "not_evaluated")}
         except Exception as e:
+            stage_status["detonation"] = {"status": "failed", "reason": str(e)}
             print(f"[detonate] automatic detonation failed: {e}")
         
-        # Automatic canary deployment
-        print(f"[canary] starting automatic canary server for {len(urls)} URLs...")
-        try:
-            import subprocess
-            case_id_short = os.path.basename(case_dir)
-            # Calculate unique port based on case_id hash
-            port = 8787 + (hash(case_id_short) % 1000)
-            # Start canary server in background
-            cmd = ["python", "-m", "paw", "canary", "--case", case_id_short, "--port", str(port)]
-            subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            print(f"[canary] canary server started on port {port} for case {case_id_short}")
-        except Exception as e:
-            print(f"[canary] automatic canary deployment failed: {e}")
+        # Canary deployment is an explicit CLI operation, never an analysis side effect.
     # Scan attachments if present
+    mark_stage('attachment_metadata')
     atts = []
-    if "_msg_obj" in headers:
+    if "_msg_obj" in headers or msg:
         try:
             from .attach import scan_attachments
-            atts = scan_attachments(headers["_msg_obj"])
+            atts = scan_attachments(msg, mime_result=mime_result, evidence_dir=os.path.join(case_dir, "attachments"))
             write_json(os.path.join(case_dir,"attachments.json"), atts)
+            stage_status["attachment_metadata"] = {"status": "partial" if any(item["status"] == "partial" for item in atts) else "completed", "count": len(atts), "malware_analysis": "not_evaluated"}
         except Exception as e:
+            stage_status["attachment_metadata"] = {"status": "failed", "reason": str(e)}
             print(f"[attach] scanning failed: {e}")
     # Normalize Received
+    mark_stage('headers_authentication')
     norm = normalize_received(headers.get("received") or [])
     hops = norm.get("ordered_hops") or []
     write_json(os.path.join(case_dir,"received_path.json"), {"ordered_hops": hops})
@@ -738,17 +600,22 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
         origin = hops[0]
     # Auth alignment (from Authentication-Results)
     auth = infer_alignment(headers, headers.get("from",""), headers.get("return_path",""))
+    auth["dkim"]["verification"] = verify_dkim_offline(b)
     write_json(os.path.join(case_dir,"auth.json"), auth)
     # Analyze received path for campaign origin
     campaign_origin = trace_campaign_origin(headers, hops)
     write_json(os.path.join(case_dir,"campaign_origin.json"), campaign_origin)
     
     # Profile IP RDAP
+    mark_stage('ip_enrichment')
     ip = origin.get("ip") or ""
     ip_res = ip_rdap(ip) if ip else {}
     origin_out = {"ip": ip, "asn": ip_res.get("asn"), "org": ip_res.get("asn_org"), "cc": ip_res.get("cc"), "abuse": ip_res.get("abuse", []),
                   "time_utc": origin.get("date"), "helo": origin.get("helo"), "ptr": origin.get("ptr"), "skew_s": origin.get("skew_s",0),
-                  "reputation": check_ip_reputation(ip)}
+                  "reputation": check_ip_reputation(ip),
+                  "status": "candidate" if ip else "unavailable", "source": "Received header",
+                  "verified": False, "limitation": "Header chain and receiver boundary are not independently authenticated",
+                  "enrichment_status": ip_res.get("status", "error" if ip_res.get("error") else "available" if ip else "unavailable")}
     write_json(os.path.join(case_dir,"transmitting_server.json"), origin_out)
     # Create origin.json alias for compatibility with abuse package
     write_json(os.path.join(case_dir,"origin.json"), origin_out)
@@ -792,15 +659,15 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
             print(f"[osint] analyzed {len(c2_analysis)} infrastructure endpoints")
 
             # 🚀 NUOVO: Analisi del phishing kit estratto per pattern C2
-            kit_dir = os.path.join(case_dir, "detonation", "phishing_kit")
+            kit_dir = os.path.join(case_dir, "detonation", "runs")
             if os.path.exists(kit_dir):
                 print("[kit] analyzing extracted phishing kit for C2 patterns...")
                 kit_content = {}
 
                 # Carica i file estratti
-                for filename in os.listdir(kit_dir):
-                    filepath = os.path.join(kit_dir, filename)
-                    if os.path.isfile(filepath):
+                for kit_root, _, kit_files in os.walk(kit_dir):
+                    for filename in kit_files:
+                        filepath = os.path.join(kit_root, filename)
                         try:
                             with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
                                 content = f.read()
@@ -825,7 +692,7 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
                     if kit_analysis.get('c2_servers') or kit_analysis.get('exfiltration_endpoints'):
                         campaign_origin.setdefault('infrastructure_chain', {})
                         campaign_origin['infrastructure_chain']['kit_c2_analysis'] = kit_analysis
-                        campaign_origin['attribution_confidence'] = 'very_high'
+                        campaign_origin['attribution_confidence'] = 'unavailable'
                         write_json(os.path.join(case_dir, "campaign_origin.json"), campaign_origin)
                         print("[kit] integrated kit analysis into campaign origin")
 
@@ -1022,10 +889,11 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
         write_json(os.path.join(case_dir,"canary_ips.json"), sorted([cip for cip in ips if cip]))
         write_json(os.path.join(case_dir,"canary_visitors.json"), canary_visitors)
     # From domain info
+    mark_stage('domain_enrichment')
     from_addr = headers.get("from","")
     import re
     m = re.search(r"@([^>]+)", from_addr or "")
-    from_domain = (m.group(1).strip().lower() if m else "")
+    from_domain = auth.get("from_domain") or ""
     dominfo = {"from_domain": {"domain": from_domain}}
     if from_domain:
         dr = domain_rdap(from_domain)
@@ -1082,7 +950,7 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
                     try:
                         domain_intel = ti.enrich_indicators(domain, [])
                         threat_correlations[f"domain_{domain}"] = domain_intel
-                        print(f"[threat_intel] correlated intelligence for domain: {domain}")
+                        print(f"[threat_intel] recorded provider availability for domain: {domain}")
                     except Exception as e:
                         print(f"[threat_intel] failed to correlate domain {domain}: {e}")
 
@@ -1091,13 +959,13 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
                 try:
                     ip_intel = ti.enrich_indicators("", all_ips)
                     threat_correlations["ip_intelligence"] = ip_intel
-                    print(f"[threat_intel] correlated intelligence for {len(all_ips)} IPs")
+                    print(f"[threat_intel] recorded provider availability for {len(all_ips)} IPs")
                 except Exception as e:
                     print(f"[threat_intel] failed to correlate IPs: {e}")
 
         if threat_correlations:
             write_json(os.path.join(case_dir, "threat_intelligence.json"), threat_correlations)
-            print(f"[threat_intel] completed correlation with {len(threat_correlations)} intelligence sources")
+            print(f"[threat_intel] recorded availability for {len(threat_correlations)} indicator groups")
 
             # Integra nell'attribution matrix
             matrix_file = os.path.join(case_dir, "attribution_matrix.json")
@@ -1144,13 +1012,14 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
         print(f"[attribution_matrix] failed to create: {e}")
     
     # Header forgery analysis
+    mark_stage('scoring')
     from .header_forgery import analyze_received_anomalies
     anomalies = analyze_received_anomalies(hops)
     write_json(os.path.join(case_dir,"received_anomalies.json"), anomalies)
     # Score
     suspicious_asn = False  # could be enhanced with local list
     ns_mx_recurrent = False # could be enhanced with local list
-    hop_diag = {"skew_s": origin.get("skew_s",0), "helo_ptr_match": origin.get("helo_ptr_match", True), "fqdn_ok": origin.get("fqdn_ok", True)}
+    hop_diag = {"skew_s": origin.get("skew_s",0), "helo_ptr_match": origin.get("helo_ptr_match"), "fqdn_ok": origin.get("fqdn_ok")}
     # Load detonation/canary data for scoring bonuses
     detonation_endpoints = []
     canary_ips = []
@@ -1175,28 +1044,31 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
         score["score"] = round(score["score"] + 0.1, 2)
     if anomalies.get("invalid_fqdn_count", 0) >= 1:
         score["score"] = round(score["score"] + 0.05, 2)
+    score = finalize_score(score, profile)
+    stage_status['header_parsing'] = {'status': 'partial' if headers.get('header_defects') or headers.get('from_header_count') != 1 else 'completed',
+                                     'defects': headers.get('header_defects') or [], 'from_header_count': headers.get('from_header_count')}
+    stage_status['mime_parsing'] = {'status': mime_result['metadata']['status'], 'issues': mime_result['metadata']['issues']}
+    stage_status['received_path'] = {'status': 'parsed_unverified' if hops else 'unavailable', 'verified': False}
+    correlations = correlate_campaigns(os.path.dirname(case_dir))
+    stage_status['campaign_correlation'] = {'status':correlations['status'], 'reason':correlations['reason']}
+    stage_status['stix_export'] = {'status':'unavailable' if stix else 'skipped',
+                                 'reason':'STIX schema conformance not validated' if stix else 'Not requested'}
+    stage_status['abuse_formats'] = {'status':'partial' if abuse else 'skipped',
+                                   'reason':'Local review drafts; ARF/X-ARF conformance not validated' if abuse else 'Not requested'}
+    score['coverage']['not_evaluated'].append('campaign_correlation')
+    if stix: score['coverage']['not_evaluated'].append('stix_export')
+    if abuse: score['coverage']['not_evaluated'].append('arf_xarf_conformance')
+    score['assessment_status'] = 'partial'
+    write_json(os.path.join(case_dir, 'campaign_correlations.json'), correlations)
+    score['coverage']['stages'] = stage_status
+    write_json(os.path.join(case_dir, 'analysis_coverage.json'), score['coverage'])
     write_json(os.path.join(case_dir,"report/score.json"), score)
     # Index case in database
     try:
         from .index import upsert_case
         upsert_case(case_dir, origin_out, headers, dominfo["from_domain"], score)
         
-        # Check for campaign patterns (boost score if similar cases exist)
-        from .index import query_recent
-        campaign_boost = 0.0
-        origin_ip = origin_out.get("ip", "")
-        if origin_ip:
-            recent_ip_cases = query_recent("ip", origin_ip, 30)
-            if len(recent_ip_cases) >= 2:
-                campaign_boost = 0.20
-                print(f"[campaign] IP {origin_ip} has {len(recent_ip_cases)} recent cases, boosting score by +0.20")
-        
-        if campaign_boost > 0:
-            score["score"] = round(score["score"] + campaign_boost, 2)
-            score["decision"] = "Campaign pattern detected - " + score["decision"]
-            # Re-save updated score
-            write_json(os.path.join(case_dir,"report/score.json"), score)
-            
+        # Repeated submissions are not independent evidence of maliciousness.
     except Exception as e:
         print(f"[index] failed to index case: {e}")
     # Graphs
@@ -1213,9 +1085,13 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
     mmd2 = domain_graph(dominfo.get("from_domain"))
     write_text(os.path.join(graphs_dir,"domain.mmd"), mmd2)
     # Reports (simple)
+    mark_stage('reports')
     rep_dir = os.path.join(case_dir,"report")
     ensure_dir(rep_dir)
-    exec_md = f"> TRANSMITTING SERVER: **{ip}** — AS{ip_res.get('asn')} {ip_res.get('asn_org')} ({ip_res.get('cc')})\\n> *Note: This IP may belong to a compromised server or cloud service used by the attacker*\\n> Recipient MX chain hops marked as [MX-internal].\\n\\n# Attribution Summary\\n\\n**Transmitting Server**: {ip} / AS{ip_res.get('asn')} {ip_res.get('asn_org')} ({ip_res.get('cc')})\\n\\n**From Domain**: {from_domain}\\nRegistrar: {dominfo['from_domain'].get('registrar')}\\nCreated: {dominfo['from_domain'].get('created')} (NRD: {dominfo['from_domain'].get('nrd_days')}d)\\nNS: {', '.join(dominfo['from_domain'].get('ns',[]))}\\nMX: {', '.join(dominfo['from_domain'].get('mx',[]))}\\n\\n**Auth**: SPF={auth['spf']['result']} | DKIM present={auth['dkim']['present']} aligned={auth['dkim']['aligned']} d={','.join(auth['dkim']['d_list'])} | DMARC={auth['dmarc']['inferred_result']}\\n\\n**Decision**: {score['decision']} (score={score['score']})\\n"
+    exec_md = f"> TRANSMITTING SERVER CANDIDATE: **{ip}** — AS{ip_res.get('asn')} {ip_res.get('asn_org')} ({ip_res.get('cc')})\n> *Unverified Received-header candidate; does not establish the original sender or attacker*\n> Recipient MX chain hops marked as [MX-internal].\n\n# Attribution Summary\n\n**Transmitting Server Candidate**: {ip} / AS{ip_res.get('asn')} {ip_res.get('asn_org')} ({ip_res.get('cc')})\n\n**From Domain**: {from_domain}\nRegistrar: {dominfo['from_domain'].get('registrar')}\nCreated: {dominfo['from_domain'].get('created')} (NRD: {dominfo['from_domain'].get('nrd_days')}d)\nNS: {', '.join(dominfo['from_domain'].get('ns',[]))}\nMX: {', '.join(dominfo['from_domain'].get('mx',[]))}\n\n**Decision**: {score['decision']} (score={score['score']})\n"
+    exec_md += "\n" + authentication_report(auth)
+    exec_md += f"\nAssessment coverage: {score.get('assessment_status', 'partial')}. Missing checks do not establish safety.\n"
+    exec_md += "\n" + "\n".join(f"- {name}: {value['status']}" for name, value in stage_status.items()) + "\n"
     # Add detonation/canary sections if they exist
     det = {}
     can_ips = []
@@ -1231,14 +1107,14 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
     canary_visitors_path = os.path.join(case_dir,"canary_visitors.json")
     canary_visitors = read_json(canary_visitors_path) if os.path.exists(canary_visitors_path) else []
     
-    exec_md += "\\n" + detonation_box(det) + "\\n\\n" + canary_box(can_ips, canary_visitors)
+    exec_md += "\n" + detonation_box(det) + "\n\n" + canary_box(can_ips, canary_visitors)
     write_text(os.path.join(rep_dir,"executive.md"), exec_md)
-    tech_md = "# Technical Details\\n\\n## Received Path\\n"
+    tech_md = "# Technical Details\n\n## Received Path\n"
     for i,h in enumerate(hops, start=1):
-        tech_md += f"- Hop {i}: by={h.get('by')} from={h.get('from')} ip={h.get('ip')} date={h.get('date')} helo={h.get('helo')} ptr={h.get('ptr')} skew_s={h.get('skew_s')} fqdn_ok={h.get('fqdn_ok')} helo_ptr_match={h.get('helo_ptr_match')} role={h.get('role')}\\n"
-    tech_md += "\\n## Auth Alignment\\n"
-    tech_md += json.dumps(auth, indent=2) + "\\n"
-    tech_md += "\\n## Forgery Checks\\n"
+        tech_md += f"- Hop {i}: by={h.get('by')} from={h.get('from')} ip={h.get('ip')} date={h.get('date')} helo={h.get('helo')} ptr={h.get('ptr')} skew_s={h.get('skew_s')} fqdn_ok={h.get('fqdn_ok')} helo_ptr_match={h.get('helo_ptr_match')} role={h.get('role')}\n"
+    tech_md += "\n## Auth Alignment\n"
+    tech_md += json.dumps(auth, indent=2) + "\n"
+    tech_md += "\n## Forgery Checks\n"
     tech_md += json.dumps(anomalies, indent=2) + "\n"
     # Include deobfuscation analysis details (if available)
     try:
@@ -1252,57 +1128,31 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
     rekor_anchor_path = os.path.join(case_dir, "evidence", "rekor_anchor.json")
     rekor_proof_path = os.path.join(case_dir, "evidence", "rekor_proof.json")
     if os.path.exists(rekor_anchor_path):
-        tech_md += "\\n## Rekor\\n"
+        tech_md += "\n## Rekor\n"
         with open(rekor_anchor_path, "r", encoding="utf-8") as f:
             anchor_data = json.load(f)
-        tech_md += f"Entry UUID: {anchor_data.get('entry_uuid')}\\n"
-        tech_md += f"Log Index: {anchor_data.get('logIndex')}\\n"
-        tech_md += f"Integrated Time: {anchor_data.get('integratedTime')}\\n"
+        tech_md += f"Entry UUID: {anchor_data.get('entry_uuid')}\n"
+        tech_md += f"Log Index: {anchor_data.get('logIndex')}\n"
+        tech_md += f"Integrated Time: {anchor_data.get('integratedTime')}\n"
         if os.path.exists(rekor_proof_path):
             with open(rekor_proof_path, "r", encoding="utf-8") as f:
                 proof_data = json.load(f)
-            tech_md += f"Inclusion verified: {proof_data.get('treeSize') is not None}\\n"
-        tech_md += "\\n"
+            tech_md += f"Inclusion verified: {proof_data.get('treeSize') is not None}\n"
+        tech_md += "\n"
     # Add attachments section
     if atts:
-        tech_md += "\\n## Attachments (metadata-only)\\n"
-        tech_md += "| Filename | Size | MIME | Macro | SHA256 |\\n"
-        tech_md += "|----------|------|------|-------|--------|\\n"
+        tech_md += "\n## Attachments (metadata-only)\n"
+        tech_md += "| Filename | Size | MIME | Macro | SHA256 |\n"
+        tech_md += "|----------|------|------|-------|--------|\n"
         for att in atts:
-            tech_md += f"| {att['filename']} | {att['size']} | {att['mime']} | {'Yes' if att['ole_macro'] else 'No'} | {att['sha256'][:16]}... |\\n"
-        tech_md += "\\n"
+            tech_md += f"| {att['filename']} | {att['size']} | {att['mime']} | {'not evaluated' if att.get('ole_macro') is None else 'Yes' if att['ole_macro'] else 'No'} | {att['sha256'][:16]}... |\n"
+        tech_md += "\n"
     write_text(os.path.join(rep_dir,"technical.md"), tech_md)
     # STIX
+    mark_stage('exports')
     if stix:
         stix_bundle = make_stix(case_id, ip, from_domain, ip_res.get("asn_org",""))
         write_json(os.path.join(rep_dir,"stix.json"), stix_bundle)
-    # Evidence index + root
-    ev_dir = os.path.join(case_dir,"evidence"); ensure_dir(ev_dir)
-    # Index files to include
-    index_files = {
-        "input.eml": None,
-        "manifest.json": None,
-        "headers.json": None,
-        "deobfuscation_results.json": None,
-        "received_path.json": None,
-        "auth.json": None,
-        "transmitting_server.json": None,
-        "domains.json": None,
-        "graphs/attribution.mmd": None,
-        "graphs/domain.mmd": None,
-        "report/executive.md": None,
-        "report/technical.md": None
-    }
-    if stix: index_files["report/stix.json"] = None
-    if atts: index_files["attachments.json"] = None  # Include attachments if present
-    for rel in list(index_files.keys()):
-        index_files[rel] = file_blake3_hex(os.path.join(case_dir, rel))
-    write_json(os.path.join(ev_dir,"merkle_index.json"), index_files)
-    # Simple root: blake3 of concatenated hashes (deterministic order)
-    concat = "".join(v for k,v in sorted(index_files.items()))
-    import blake3 as _b3
-    root = _b3.blake3(concat.encode()).hexdigest()
-    write_text(os.path.join(ev_dir,"merkle_root.bin"), root)
     # Abuse package
     if abuse:
         out = generate_abuse_package(case_dir, "it" if lang.startswith("it") else "en")
@@ -1312,8 +1162,125 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
         # create subject file as helper
         subj = f"[Abuse][Phishing] Case {case_id} – Origin {ip}/AS{ip_res.get('asn')} – Domain {from_domain}"
         write_text(os.path.join(case_dir, "package", "subject.txt"), subj)
+    print(f"[correlation] {correlations['status']}: {correlations['reason']}")
+
+    # ===============================
+    # REPORT FINALE COMPLETO
+    # ===============================
+    print("\n" + "="*80)
+    print("📋 ANALISI COMPLETA - Phishing Attribution Workbench")
+    print("="*80)
+    print(f"🆔 Case ID: {case_id}")
+    print(f"📅 Data analisi: {utc_now_iso()[:19].replace('T', ' ')}")
+    print(f"📧 File analizzato: {os.path.basename(eml_path)}")
+    print()
+
+    # Server di trasmissione
+    print("🌐 CANDIDATO DI TRASMISSIONE DAI RECEIVED (non verificato)")
+    print("-" * 40)
+    if ip:
+        print(f"📍 IP: {ip}")
+        print(f"🏢 ASN: AS{ip_res.get('asn', 'N/A')} {ip_res.get('asn_org', 'N/A')}")
+        print(f"🌍 Paese: {ip_res.get('cc', 'N/A')} (ASN: {ip_res.get('asn_cc', 'N/A')})")
+        print(f"📧 Abuse: {', '.join([c.get('value', '') for c in ip_res.get('abuse', []) if c.get('type') == 'email'])}")
+        print(f"⚖️  Reputazione: {origin_out.get('reputation', {}).get('category', 'unknown')} (score: {origin_out.get('reputation', {}).get('score', 0)})")
+    else:
+        print("❌ IP non identificato")
+    print()
+
+    # Infrastruttura attaccante
+    print("🎯 INFRASTRUTTURA OSSERVATA E LIMITI DI COPERTURA")
+    print("-" * 40)
+
+    # Carica dati dalla detonazione
+    c2_infra_path = os.path.join(case_dir, "c2_infrastructure.json")
+    if os.path.exists(c2_infra_path):
+        c2_infra = read_json(c2_infra_path) or []
+        if c2_infra:
+            print("📍 INFRASTRUTTURE OSSERVATE (attribuzione non verificata):")
+            for i, infra in enumerate(c2_infra[:5], 1):  # Mostra max 5
+                ip_addr = infra.get('ip', 'N/A')
+                country = infra.get('country', 'N/A')
+                asn = infra.get('asn', 'N/A')
+                org = infra.get('org', 'N/A')
+                if org and isinstance(org, str):
+                    org = org.replace('AS', '').strip()
+                else:
+                    org = 'N/A'
+                domain = infra.get('host', 'N/A')
+                rep = infra.get('reputation', {}).get('category', 'unknown')
+
+                flag = "🇱🇻" if country == "LV" else "🇹🇷" if country == "TR" else "🇺🇸" if country == "US" else "🌍"
+                risk = "rischio non stabilito dalla geografia"
+
+                print(f"  {i}. {flag} {ip_addr} ({country}) - {risk}")
+                print(f"     Dominio: {domain}")
+                print(f"     ASN: AS{asn} {org}")
+                print(f"     Reputazione: {rep}")
+                print()
+        else:
+            print("ℹ️  Nessun endpoint disponibile; questo non stabilisce sicurezza")
+    else:
+        print("ℹ️  Detonazione esclusa o non disponibile; attribuzione non stabilita")
+
+    # Punteggio e decisione
+    print("⚖️  VALUTAZIONE RISCHIO")
+    print("-" * 40)
+    print(f"📊 Punteggio: {score.get('score', 0):.2f}/1.00")
+    print(f"🎯 Decisione: {score.get('decision', 'N/A')}")
+    print(f"📈 Categoria: {score.get('category', 'N/A')}")
+    print()
+
+    # Raccomandazioni
+    print("🎯 RACCOMANDAZIONI AZIONE")
+    print("-" * 40)
+
+    # Raccomandazioni per IP attaccanti
+    if os.path.exists(c2_infra_path):
+        c2_infra = read_json(c2_infra_path) or []
+        if c2_infra:
+            print("Contatti registrati per eventuale revisione manuale (nessun invio):")
+            for infra in c2_infra[:3]:  # Top 3
+                ip_addr = infra.get('ip', '')
+                country = infra.get('country', '')
+                abuse_contacts = infra.get('abuse_contacts', [])
+                if abuse_contacts:
+                    abuse_emails = [c.get('value', '') for c in abuse_contacts if c.get('type') == 'email']
+                    if abuse_emails:
+                        print(f"  • {ip_addr} ({country}): {', '.join(abuse_emails[:2])}")
+
+    # Raccomandazioni generali
+    print("\n📋 Azioni consigliate:")
+    print("  • Esaminare le evidenze e le verifiche mancanti")
+    print("  • Confermare il contesto prima di segnalazioni o blocchi")
+    print("  • Verificare integrita dei file e autenticazione dell'email")
+
+    print("\n" + "="*80)
+    print(f"💾 Report salvato in: {case_dir}")
+    print("📄 File principali: report/executive.md, report/technical.md")
+    print("="*80)
+
+    print(f"[trace] case created: {case_dir}")
+
+    # Print beautiful summary
+    mark_stage('evidence_seal')
+    print_beautiful_summary(case_dir, case_id, score, ip, ip_res, from_domain, dominfo, auth, lang)
+    write_json(os.path.join(case_dir, 'execution.json'), {
+        'status': 'completed', 'scope': 'offline_local' if no_egress else 'network_enabled', 'elapsed_seconds': time.perf_counter() - started,
+        'no_egress': bool(no_egress),
+        'skipped_stages': ['detonation', 'network_enrichment', 'rekor_anchor'] if no_egress else [],
+        'blocked_operations': violations()[violations_before:],
+        'input_kind': 'derived_fixture' if msg.get('X-PAW-Fixture') else 'email',
+        'transport_headers_available': bool(headers.get('received')),
+        'assessment_status': score.get('assessment_status'),
+        'authentication_status': auth.get('status'),
+        'not_evaluated': score.get('coverage', {}).get('not_evaluated', []),
+        'runtime_limits': json.loads(os.environ.get('PAW_RUNTIME_LIMITS', '{}')),
+        'observed_stage_timings': read_progress(os.environ.get('PAW_PROGRESS_PATH', '')).get('stage_timings', []),
+    })
+    seal_case(case_dir)
     # Rekor anchor (optional)
-    if anchor:
+    if anchor and not no_egress:
         REKOR_URL = os.environ.get('PAW_REKOR_URL', 'https://rekor.sigstore.dev')
         PRIV = os.environ.get('PAW_REKOR_PRIVKEY_PEM')
         PUB = os.environ.get('PAW_REKOR_PUBKEY_PEM')
@@ -1336,129 +1303,8 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
                 print(f"[rekor] anchor failed: {e}")
         else:
             print('[rekor] skipping: set PAW_REKOR_PRIVKEY_PEM and PAW_REKOR_PUBKEY_PEM to use --anchor')
-    
-    # Re-check for detonation/canary data and regenerate report if needed
-    det_summary_path = os.path.join(case_dir,"detonation","summary.json")
-    canary_hits_path = os.path.join(case_dir, "canary", "hits.jsonl")
-    if os.path.exists(det_summary_path) or os.path.exists(canary_ips_path) or os.path.exists(canary_hits_path):
-        det = read_json(det_summary_path) if os.path.exists(det_summary_path) else {}
-        can_ips = read_json(canary_ips_path) if os.path.exists(canary_ips_path) else []
-        exec_md = f"> TRANSMITTING SERVER: **{ip}** — AS{ip_res.get('asn')} {ip_res.get('asn_org')} ({ip_res.get('cc')})\\n> *Note: This IP may belong to a compromised server or cloud service used by the attacker*\\n> Recipient MX chain hops marked as [MX-internal].\\n\\n# Attribution Summary\\n\\n**Transmitting Server**: {ip} / AS{ip_res.get('asn')} {ip_res.get('asn_org')} ({ip_res.get('cc')})\\n\\n**From Domain**: {from_domain}\\nRegistrar: {dominfo['from_domain'].get('registrar')}\\nCreated: {dominfo['from_domain'].get('created')} (NRD: {dominfo['from_domain'].get('nrd_days')}d)\\nNS: {', '.join(dominfo['from_domain'].get('ns',[]))}\\nMX: {', '.join(dominfo['from_domain'].get('mx',[]))}\\n\\n**Auth**: SPF={auth['spf']['result']} | DKIM present={auth['dkim']['present']} aligned={auth['dkim']['aligned']} d={','.join(auth['dkim']['d_list'])} | DMARC={auth['dmarc']['inferred_result']}\\n\\n**Decision**: {score['decision']} (score={score['score']})\\n"
-        exec_md += "\\n" + detonation_box(det) + "\\n\\n" + canary_box(can_ips)
-        write_text(os.path.join(rep_dir,"executive.md"), exec_md)
-        print("[trace] report updated with detonation/canary data")
 
-    # Correlazione campagne basata su pattern comuni
-    try:
-        cases_dir = os.path.dirname(case_dir)
-        correlations = correlate_campaigns(cases_dir)
-        if correlations.get("campaign_clusters") or correlations.get("attacker_groups"):
-            write_json(os.path.join(case_dir, "campaign_correlations.json"), correlations)
-            print(f"[correlation] analyzed {len(correlations.get('campaign_clusters', []))} campaign clusters")
-    except Exception as e:
-        print(f"[correlation] failed: {e}")
-
-    # ===============================
-    # REPORT FINALE COMPLETO
-    # ===============================
-    print("\n" + "="*80)
-    print("📋 ANALISI COMPLETA - Phishing Attribution Workbench")
-    print("="*80)
-    print(f"🆔 Case ID: {case_id}")
-    print(f"📅 Data analisi: {utc_now_iso()[:19].replace('T', ' ')}")
-    print(f"📧 File analizzato: {os.path.basename(eml_path)}")
-    print()
-
-    # Server di trasmissione
-    print("🌐 SERVER DI TRASMISSIONE (SMTP Relay)")
-    print("-" * 40)
-    if ip:
-        print(f"📍 IP: {ip}")
-        print(f"🏢 ASN: AS{ip_res.get('asn', 'N/A')} {ip_res.get('asn_org', 'N/A')}")
-        print(f"🌍 Paese: {ip_res.get('cc', 'N/A')} (ASN: {ip_res.get('asn_cc', 'N/A')})")
-        print(f"📧 Abuse: {', '.join([c.get('value', '') for c in ip_res.get('abuse', []) if c.get('type') == 'email'])}")
-        print(f"⚖️  Reputazione: {origin_out.get('reputation', {}).get('category', 'unknown')} (score: {origin_out.get('reputation', {}).get('score', 0)})")
-    else:
-        print("❌ IP non identificato")
-    print()
-
-    # Infrastruttura attaccante
-    print("🎯 INFRASTRUTTURA ATTACCANTE IDENTIFICATA")
-    print("-" * 40)
-
-    # Carica dati dalla detonazione
-    c2_infra_path = os.path.join(case_dir, "c2_infrastructure.json")
-    if os.path.exists(c2_infra_path):
-        c2_infra = read_json(c2_infra_path) or []
-        if c2_infra:
-            print("🔴 IP ATTACCANTI RILEVATI:")
-            for i, infra in enumerate(c2_infra[:5], 1):  # Mostra max 5
-                ip_addr = infra.get('ip', 'N/A')
-                country = infra.get('country', 'N/A')
-                asn = infra.get('asn', 'N/A')
-                org = infra.get('org', 'N/A')
-                if org and isinstance(org, str):
-                    org = org.replace('AS', '').strip()
-                else:
-                    org = 'N/A'
-                domain = infra.get('host', 'N/A')
-                rep = infra.get('reputation', {}).get('category', 'unknown')
-
-                flag = "🇱🇻" if country == "LV" else "🇹🇷" if country == "TR" else "🇺🇸" if country == "US" else "🌍"
-                risk = "🔴 HIGH" if country in ["LV", "RU", "CN"] else "🟡 MEDIUM" if country in ["TR", "IN", "BR"] else "🟢 LOW"
-
-                print(f"  {i}. {flag} {ip_addr} ({country}) - {risk}")
-                print(f"     Dominio: {domain}")
-                print(f"     ASN: AS{asn} {org}")
-                print(f"     Reputazione: {rep}")
-                print()
-        else:
-            print("✅ Nessun IP attaccante rilevato nella detonazione")
-    else:
-        print("ℹ️  Detonazione non completata - eseguire detonazione per identificare IP attaccanti")
-
-    # Punteggio e decisione
-    print("⚖️  VALUTAZIONE RISCHIO")
-    print("-" * 40)
-    print(f"📊 Punteggio: {score.get('score', 0):.2f}/1.00")
-    print(f"🎯 Decisione: {score.get('decision', 'N/A')}")
-    print(f"📈 Categoria: {score.get('category', 'N/A')}")
-    print()
-
-    # Raccomandazioni
-    print("🎯 RACCOMANDAZIONI AZIONE")
-    print("-" * 40)
-
-    # Raccomandazioni per IP attaccanti
-    if os.path.exists(c2_infra_path):
-        c2_infra = read_json(c2_infra_path) or []
-        if c2_infra:
-            print("🔴 Takedown prioritari:")
-            for infra in c2_infra[:3]:  # Top 3
-                ip_addr = infra.get('ip', '')
-                country = infra.get('country', '')
-                abuse_contacts = infra.get('abuse_contacts', [])
-                if abuse_contacts:
-                    abuse_emails = [c.get('value', '') for c in abuse_contacts if c.get('type') == 'email']
-                    if abuse_emails:
-                        print(f"  • {ip_addr} ({country}): {', '.join(abuse_emails[:2])}")
-
-    # Raccomandazioni generali
-    print("\n📋 Azioni consigliate:")
-    print("  • Segnalare a provider di abuso locali")
-    print("  • Implementare regole di blocco IP")
-    print("  • Monitorare domini simili")
-    print("  • Verificare autenticazione email (SPF/DKIM/DMARC)")
-
-    print("\n" + "="*80)
-    print(f"💾 Report salvato in: {case_dir}")
-    print("📄 File principali: report/executive.md, report/technical.md")
-    print("="*80)
-
-    print(f"[trace] case created: {case_dir}")
-
-    # Print beautiful summary
-    print_beautiful_summary(case_dir, case_id, score, ip, ip_res, from_domain, dominfo, auth, lang)
+    return case_dir
 
 def print_beautiful_summary(case_dir: str, case_id: str, score: dict, ip: str, ip_res: dict, 
                           from_domain: str, dominfo: dict, auth: dict, lang: str = "en"):
@@ -1471,7 +1317,7 @@ def print_beautiful_summary(case_dir: str, case_id: str, score: dict, ip: str, i
     # Check for criminal infrastructure
     criminal_intel = read_json(os.path.join(case_dir, "criminal_intelligence.json")) or {}
     if criminal_intel:
-        findings.append("🔴 Criminal infrastructure detected")
+        findings.append("Infrastructure analysis available; actor attribution not established")
     
     # Check attribution matrix for high confidence
     attr_matrix = read_json(os.path.join(case_dir, "attribution_matrix.json")) or {}
@@ -1489,15 +1335,8 @@ def print_beautiful_summary(case_dir: str, case_id: str, score: dict, ip: str, i
     
     # Determine verdict emoji and color
     score_val = score.get("score", 0)
-    if score_val >= 0.8:
-        verdict = f"🚨 LIKELY MALICIOUS (Score: {score_val})"
-        verdict_color = "red"
-    elif score_val >= 0.6:
-        verdict = f"⚠️  SUSPICIOUS (Score: {score_val})"
-        verdict_color = "yellow"
-    else:
-        verdict = f"✅ LOW RISK (Score: {score_val})"
-        verdict_color = "green"
+    verdict = f"{score.get('decision', 'Inconclusive')} (heuristic score: {score_val})"
+    verdict_color = 'red' if score_val >= 0.72 else 'yellow'
     
     # Get country flag
     cc = ip_res.get("cc", "")
@@ -1516,6 +1355,8 @@ def print_beautiful_summary(case_dir: str, case_id: str, score: dict, ip: str, i
     table = Table(box=box.SIMPLE)
     table.add_column("Property", style="dim", width=12)
     table.add_column("Value", style="bold")
+    table.add_row("Coverage", score.get("assessment_status", "partial"))
+    table.add_row("Auth checks", "not independently verified")
     
     table.add_row("Case ID", f"[cyan]{case_id}[/cyan]")
     table.add_row("Verdict", f"[{verdict_color}]{verdict}[/{verdict_color}]")
@@ -1554,10 +1395,14 @@ def print_beautiful_summary(case_dir: str, case_id: str, score: dict, ip: str, i
     
     # Next steps
     next_steps = [
-        f"1. Review full report: [link=file://{case_dir}/report/executive.md]cases/.../report/executive.md[/link]",
-        f"2. Submit abuse: [link=file://{case_dir}/evidence/abuse_package/]cases/.../evidence/abuse_package/[/link]",
-        f"3. Export STIX: [bold cyan]paw export --case {case_id} --format stix[/bold cyan]"
+        f"1. Review report: {os.path.join(case_dir, 'report', 'executive.md')}",
+        f"2. Verify files: paw verify --case \"{case_dir}\"",
+        f"3. Export ZIP: paw export --case \"{case_dir}\" --format zip"
     ]
+    if os.path.exists(os.path.join(case_dir, 'report', 'stix.json')):
+        next_steps.append(f"STIX availability status (bundle not generated): {os.path.join(case_dir, 'report', 'stix.json')}")
+    if os.path.isdir(os.path.join(case_dir, 'package')):
+        next_steps.append(f"Abuse package (not sent): {os.path.join(case_dir, 'package')}")
     
     steps_panel = Panel(
         "\n".join(next_steps),
@@ -1569,76 +1414,8 @@ def print_beautiful_summary(case_dir: str, case_id: str, score: dict, ip: str, i
     console.print()
 
 def update_report(case_dir):
-    """Update report with detonation/canary data if available"""
-    rep_dir = os.path.join(case_dir, "report")
-    if not os.path.exists(rep_dir):
-        return
-    
-    # Load existing data
-    score_path = os.path.join(rep_dir, "score.json")
-    if not os.path.exists(score_path):
-        return
-    score = read_json(score_path)
-    
-    headers_path = os.path.join(case_dir, "headers.json")
-    if not os.path.exists(headers_path):
-        return
-    headers = read_json(headers_path)
-    
-    origin_path = os.path.join(case_dir, "transmitting_server.json")
-    if not os.path.exists(origin_path):
-        return
-    origin_out = read_json(origin_path)
-    
-    ip = origin_out.get("ip", "")
-    ip_res = origin_out.get("rdap", {})
-    
-    # Extract from_domain from headers["from"]
-    import re
-    m = re.search(r'@([^\s>]+)', headers.get("from", ""))
-    from_domain = (m.group(1).strip().lower() if m else "")
-    
-    # Load detonation/canary data
-    det_summary_path = os.path.join(case_dir, "detonation", "summary.json")
-    det = read_json(det_summary_path) if os.path.exists(det_summary_path) else {}
-    
-    # Merge canary hits → attacker_visit
-    hits = os.path.join(case_dir, "canary", "hits.jsonl")
-    canary_ips = []
-    canary_visitors = []
-    if os.path.exists(hits):
-        ips = set()
-        with open(hits, "r", encoding="utf-8") as f:
-            for line in f:
-                try:
-                    j = json.loads(line)
-                    visitor_ip = j.get("ip")
-                    if visitor_ip:
-                        ips.add(visitor_ip)
-                        canary_visitors.append({
-                            "ip": visitor_ip,
-                            "timestamp": j.get("ts"),
-                            "user_agent": j.get("ua"),
-                            "url": j.get("url"),
-                            "reputation": check_ip_reputation(visitor_ip)
-                        })
-                except Exception:
-                    pass
-        canary_ips = sorted([cip for cip in ips if cip])
-        write_json(os.path.join(case_dir, "canary_ips.json"), canary_ips)
-        write_json(os.path.join(case_dir, "canary_visitors.json"), canary_visitors)
-    
-    canary_ips_path = os.path.join(case_dir, "canary_ips.json")
-    can_ips = read_json(canary_ips_path) if os.path.exists(canary_ips_path) else []
-    
-    canary_visitors_path = os.path.join(case_dir, "canary_visitors.json")
-    canary_visitors = read_json(canary_visitors_path) if os.path.exists(canary_visitors_path) else []
-    
-    # Regenerate executive report
-    exec_md = f"> TRANSMITTING SERVER: **{ip}** — AS{ip_res.get('asn')} {ip_res.get('asn_org')} ({ip_res.get('cc')})\\n> *Note: This IP may belong to a compromised server or cloud service used by the attacker*\\n> Recipient MX chain hops marked as [MX-internal].\\n\\n# Attribution Summary\\n\\n**Transmitting Server**: {ip} / AS{ip_res.get('asn')} {ip_res.get('asn_org')} ({ip_res.get('cc')})\\n\\n**From Domain**: {from_domain}\\n\\n**Decision**: {score['decision']} (score={score['score']})\\n"
-    exec_md += "\\n" + detonation_box(det) + "\\n\\n" + canary_box(can_ips, canary_visitors)
-    write_text(os.path.join(rep_dir, "executive.md"), exec_md)
-    print(f"[update] report updated for case: {case_dir}")
+    """Unavailable until versioned updates preserve the sealed evidence and coverage."""
+    raise RuntimeError('Report update unavailable: create a new analysis case; existing sealed evidence is preserved')
 
 
 def analyze_compromised_infrastructure(domain: str, ip: str) -> dict:
@@ -2244,80 +2021,11 @@ def analyze_kit_patterns(kit_analysis: dict) -> dict:
 
 
 def correlate_campaigns(cases_dir: str) -> dict:
-    """Correlazione tra campagne basata su pattern comuni."""
-    correlations = {
-        "campaign_clusters": [],
-        "attacker_groups": [],
-        "infrastructure_links": []
-    }
+    """Legacy evidence.json grouping was not compatible with current cases.
 
-    try:
-        import os
-        import json
-
-        # Carica tutti i casi
-        cases = []
-        if os.path.exists(cases_dir):
-            for case_dir in os.listdir(cases_dir):
-                case_path = os.path.join(cases_dir, case_dir, "evidence.json")
-                if os.path.exists(case_path):
-                    with open(case_path, 'r', encoding='utf-8') as f:
-                        case_data = json.load(f)
-                        cases.append(case_data)
-
-        # Raggruppa per famiglie malware
-        malware_families = {}
-        for case in cases:
-            family = case.get("kit_analysis", {}).get("patterns", {}).get("malware_family", "unknown")
-            if family not in malware_families:
-                malware_families[family] = []
-            malware_families[family].append(case)
-
-        # Identifica cluster di campagne
-        for family, family_cases in malware_families.items():
-            if len(family_cases) > 1:
-                cluster = {
-                    "family": family,
-                    "case_count": len(family_cases),
-                    "common_c2_domains": [],
-                    "time_range": "unknown"
-                }
-
-                # Estrai domini C2 comuni
-                all_c2_domains = []
-                for case in family_cases:
-                    kit_analysis = case.get("kit_analysis", {})
-                    if "js_analysis" in kit_analysis:
-                        for c2 in kit_analysis["js_analysis"].get("c2_servers", []):
-                            url = c2.get("url", "")
-                            if "://" in url:
-                                domain = url.split("://")[1].split("/")[0]
-                                all_c2_domains.append(domain)
-
-                # Trova domini comuni
-                from collections import Counter
-                domain_counts = Counter(all_c2_domains)
-                common_domains = [d for d, c in domain_counts.items() if c > 1]
-                cluster["common_c2_domains"] = common_domains
-
-                correlations["campaign_clusters"].append(cluster)
-
-        # Identifica gruppi attaccanti basati su fingerprint
-        attacker_groups = {}
-        for case in cases:
-            fingerprint = case.get("kit_analysis", {}).get("patterns", {}).get("attacker_fingerprint", {})
-            fp_key = str(sorted(fingerprint.items()))
-
-            if fp_key not in attacker_groups:
-                attacker_groups[fp_key] = {
-                    "fingerprint": fingerprint,
-                    "cases": []
-                }
-            attacker_groups[fp_key]["cases"].append(case.get("case_id", "unknown"))
-
-        correlations["attacker_groups"] = list(attacker_groups.values())
-
-    except Exception as e:
-        correlations["error"] = str(e)
-
-    return correlations
+    Neither missing fingerprints nor a shared 'unknown' family establish a
+    campaign or actor. Keep the gap explicit until a verified schema and corpus
+    support correlation; do not manufacture groups from legacy placeholders.
+    """
+    return {'status':'unavailable', 'reason':'Cross-case campaign correlation is not validated for the current case schema',
+            'campaign_clusters':[], 'attacker_groups':[], 'infrastructure_links':[]}

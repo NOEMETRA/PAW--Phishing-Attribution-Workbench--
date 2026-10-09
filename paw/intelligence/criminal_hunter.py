@@ -331,16 +331,7 @@ class CriminalHunter:
         except Exception:
             pass
 
-        # Infrastructure reuse: ASN analysis
-        try:
-            # Simula ASN lookup (già fatto in enrich, ma qui locale)
-            analysis['infrastructure_reuse'] = {
-                'ip_class': self._analyze_ip_locally(primary_ip)['ip_class'],
-                'is_cloud_provider': 'google' if '35.200.0.0/15' in str(primary_ip) else 'unknown',
-                'reuse_potential': 'high' if 'google' in analysis['infrastructure_reuse'].get('is_cloud_provider', '') else 'medium'
-            }
-        except Exception:
-            pass
+        analysis['infrastructure_reuse'] = {'status': 'unavailable', 'reason': 'No sourced ASN/provider dataset'}
 
         # Content fingerprinting: HTTP headers pattern
         try:
@@ -359,66 +350,10 @@ class CriminalHunter:
         return analysis
 
     def _identify_infrastructure_clusters(self, domain: str, ips: List[Dict]) -> Dict:
-        """Identifica cluster infrastrutturali basati su ASN, IP ranges, cloud providers"""
-        clusters = {
-            'asn_clusters': {},
-            'ip_range_clusters': {},
-            'cloud_provider_clusters': {},
-            'geographic_clusters': {}
-        }
-
-        if not ips:
-            return clusters
-
-        for ip_info in ips:
-            ip = ip_info['ip']
-            
-            # ASN clustering
-            try:
-                # Simula ASN lookup (in produzione usare enrich data)
-                if '35.200' in ip:  # Google Cloud range
-                    asn = '396982'
-                    provider = 'Google Cloud'
-                elif '172.66' in ip:  # Cloudflare range
-                    asn = '13335'
-                    provider = 'Cloudflare'
-                else:
-                    asn = 'unknown'
-                    provider = 'unknown'
-                
-                if asn not in clusters['asn_clusters']:
-                    clusters['asn_clusters'][asn] = {'ips': [], 'provider': provider}
-                clusters['asn_clusters'][asn]['ips'].append(ip)
-                
-                # Cloud provider clustering
-                if provider != 'unknown':
-                    if provider not in clusters['cloud_provider_clusters']:
-                        clusters['cloud_provider_clusters'][provider] = []
-                    clusters['cloud_provider_clusters'][provider].append(ip)
-                    
-            except Exception:
-                pass
-
-        return clusters
+        return {'status': 'unavailable', 'reason': 'No sourced ASN/provider dataset', 'asn_clusters': {}, 'ip_range_clusters': {}, 'cloud_provider_clusters': {}, 'geographic_clusters': {}}
 
     def _correlate_campaigns(self, domain: str, ips: List[Dict]) -> Dict:
-        """Correlazione campagne multiple basata su pattern comuni"""
-        correlation = {
-            'similar_domains': [],
-            'shared_infrastructure': [],
-            'temporal_patterns': {},
-            'technique_patterns': []
-        }
-
-        # Simula ricerca casi simili (in produzione scansionare cases/ directory)
-        # Per ora, pattern basati su dominio corrente
-        if 'hxzf4er' in domain:
-            correlation['similar_domains'] = ['possible related: *.hxzf4er.* domains']
-            correlation['shared_infrastructure'] = ['Google Cloud Platform common']
-            correlation['temporal_patterns'] = {'low_ttl_domains': 'evasion pattern detected'}
-            correlation['technique_patterns'] = ['nginx phishing pages', 'cloud hosting']
-
-        return correlation
+        return {'status': 'unavailable', 'reason': 'Historical case correlation is not implemented', 'similar_domains': [], 'shared_infrastructure': [], 'temporal_patterns': {}, 'technique_patterns': []}
 
     def _fingerprint_operational_techniques(self, domain: str, ips: List[Dict]) -> Dict:
         """Advanced operational techniques fingerprinting with composite analysis"""
@@ -508,29 +443,7 @@ class CriminalHunter:
             return False
 
     def _identify_threat_actor_patterns(self, domain: str, ips: List[Dict]) -> Dict:
-        """Real threat actor identification based on infrastructure features"""
-        features = {
-            'domain_keywords': self._extract_brand_keywords(domain),
-            'hosting_provider': self._identify_hosting_provider(ips),
-            'geolocation': self._analyze_geolocation_patterns(ips),
-            'infrastructure_type': self._classify_infrastructure_type(ips),
-            'domain_age': self._estimate_domain_age(domain),
-            'certificate_usage': self._analyze_certificate_patterns(domain),
-        }
-
-        # Calculate threat actor profile based on features
-        threat_profile = self._calculate_threat_profile(features)
-
-        # Identify campaign type based on brand targeting
-        campaign_type = self._identify_campaign_type(features['domain_keywords'])
-
-        return {
-            'threat_actor': threat_profile['actor_type'],
-            'campaigns': [campaign_type] if campaign_type != 'Generic Phishing' else [],
-            'confidence': threat_profile['confidence'],
-            'infrastructure_features': features,
-            'attribution_notes': threat_profile['notes']
-        }
+        return {'status': 'unavailable', 'reason': 'Domain keywords do not establish an actor', 'threat_actor': 'Unknown', 'campaign_type': None, 'campaigns': [], 'confidence': 0.0}
 
     def _extract_brand_keywords(self, domain: str) -> List[str]:
         """Extract brand-related keywords from domain"""
@@ -635,48 +548,7 @@ class CriminalHunter:
             return {'has_cert': False, 'is_self_signed': False}
 
     def _calculate_threat_profile(self, features: Dict) -> Dict:
-        """Calculate threat actor profile from features"""
-        confidence = 0.5
-        actor_type = 'Unknown Threat Actor'
-        notes = []
-
-        # Brand impersonation
-        if features['domain_keywords']:
-            brands = ', '.join(features['domain_keywords'])
-            actor_type = f'Brand Impersonation ({brands})'
-            confidence += 0.2
-            notes.append(f'Impersonating: {brands}')
-
-        # Geographic indicators
-        if features['geolocation']['is_high_risk']:
-            confidence += 0.15
-            countries = ', '.join(features['geolocation']['countries'])
-            notes.append(f'High-risk locations: {countries}')
-
-        # Domain age
-        if 'Very New' in features['domain_age']:
-            confidence += 0.1
-            notes.append('Newly registered domain (< 30 days)')
-
-        # Certificate
-        if not features['certificate_usage']['has_cert']:
-            confidence += 0.05
-            notes.append('No SSL certificate')
-        elif features['certificate_usage'].get('is_self_signed'):
-            confidence += 0.1
-            notes.append('Self-signed SSL certificate')
-
-        # Infrastructure type
-        if features['infrastructure_type'] == 'Distributed':
-            actor_type = 'Sophisticated Campaign (Distributed Infrastructure)'
-            confidence += 0.1
-            notes.append('Large-scale distributed infrastructure')
-
-        return {
-            'actor_type': actor_type,
-            'confidence': min(confidence, 1.0),
-            'notes': notes
-        }
+        return {'status': 'unavailable', 'actor_type': 'Unknown Threat Actor', 'confidence': 0.0, 'reason': 'Attribution confidence is not calibrated'}
 
     def _identify_campaign_type(self, keywords: List[str]) -> str:
         """Identify campaign type from keywords"""
@@ -881,64 +753,13 @@ Infrastructure analysis identified {len(ips)} associated IP addresses using {len
 
     
     def _check_bulletproof_hosting(self, ips: List[Dict]) -> bool:
-        """Controlla se IP è in bulletproof hosting"""
-        if not ips:
-            return False
-        
-        # Lista di ASN noti per bulletproof hosting (esempio)
-        bulletproof_asns = ['AS12345', 'AS67890']  # Sostituisci con lista reale
-        
-        ip_data = self._get_asn_info(ips[0]['ip'])
-        asn = ip_data.get('asn', '')
-        
-        return asn in bulletproof_asns
+        return None  # No sourced hosting reputation dataset.
     
     def _check_geolocation_risk(self, ips: List[Dict]) -> bool:
-        """Controlla se geolocalizzazione è a rischio"""
-        if not ips:
-            return False
-        
-        # Paesi ad alto rischio (personalizza)
-        high_risk_countries = ['RU', 'CN', 'UA', 'MD', 'RO']
-        
-        geo_data = self._get_ip_geolocation(ips[0]['ip'])
-        country = geo_data.get('country_code', '')
-        
-        return country in high_risk_countries
+        return None  # Geography alone does not establish malicious hosting.
     
     def _identify_threat_actor_patterns(self, domain: str, ips: List[Dict]) -> Dict:
-        """Identifica threat actor basandosi su pattern"""
-        # Pattern-based identification
-        domain_patterns = {
-            'azure': 'Microsoft Azure Phishing',
-            'office365': 'O365 Credential Harvesting', 
-            'paypal': 'PayPal Scam',
-            'bank': 'Banking Trojan',
-            'amazon': 'Amazon Phishing'
-        }
-        
-        campaign_type = 'Generic Phishing'
-        for pattern, campaign in domain_patterns.items():
-            if pattern in domain.lower():
-                campaign_type = campaign
-                break
-        
-        # Mappa campagne a threat actors conosciuti
-        threat_actors = {
-            'Microsoft Azure Phishing': 'Cosmic Lynx',
-            'O365 Credential Harvesting': 'TA505',
-            'PayPal Scam': 'Scattered Spider',
-            'Banking Trojan': 'Carbanak',
-            'Amazon Phishing': 'Lazarus Group'
-        }
-        
-        actor = threat_actors.get(campaign_type, 'Unknown Cybercrime Group')
-        
-        return {
-            'threat_actor': actor,
-            'campaign_type': campaign_type,
-            'campaigns': [campaign_type]
-        }
+        return {'status': 'unavailable', 'reason': 'Domain keywords do not establish an actor', 'threat_actor': 'Unknown', 'campaign_type': None, 'campaigns': [], 'confidence': 0.0}
     
     def _generate_le_package(self, domain: str, ips: List[Dict], infrastructure: Dict, threat_intel: Dict) -> Dict:
         """Genera package completo per law enforcement"""
@@ -1520,22 +1341,7 @@ Infrastructure analysis identified {len(ips)} associated IP addresses using {len
         """Behavioral pattern analysis with temporal and complexity metrics"""
         fingerprints = {}
 
-        # 1. Temporal patterns
-        current_time = datetime.now()
-        current_hour = current_time.hour
-        fingerprints['current_utc_hour'] = current_hour
-        fingerprints['current_day'] = current_time.strftime('%A')
-
-        # Activity pattern analysis
-        if 6 <= current_hour <= 18:  # Business hours Europe/US
-            fingerprints['activity_pattern'] = 'business_hours'
-            fingerprints['activity_score'] = 0.8  # Normal activity
-        elif 22 <= current_hour or current_hour <= 6:  # Night hours
-            fingerprints['activity_pattern'] = 'night_activity'
-            fingerprints['activity_score'] = 0.3  # Suspicious timing
-        else:
-            fingerprints['activity_pattern'] = 'evening_activity'
-            fingerprints['activity_score'] = 0.6  # Moderate
+        fingerprints['timing_analysis'] = {'status': 'unavailable', 'reason': 'No observed attacker activity timestamps'}
 
         # 2. Domain complexity analysis
         domain_length = len(domain)

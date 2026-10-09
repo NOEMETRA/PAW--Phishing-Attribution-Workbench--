@@ -76,68 +76,10 @@ CMD ["./init_crypto.sh"]"""
     def analyze_url_safely(self, url: str, case_id: str, enable_js: bool = False,
                           interaction_script: Optional[List[Dict]] = None) -> Dict[str, Any]:
         """Analizza URL in container Docker crittografato"""
-        try:
-            logger.info(f"Avvio analisi crittografata per URL: {url}")
-
-            # Prepara script di interazione
-            interactions_json = json.dumps(interaction_script) if interaction_script else "null"
-
-            # Directory per il caso
-            case_dir = os.path.join(self.cases_dir, case_id)
-            os.makedirs(case_dir, exist_ok=True)
-
-            # Genera password crittografica per la sessione
-            crypto_password = self.generate_session_password(case_id)
-
-            # Comando da eseguire nel container
-            command = [
-                "python3", "-c",
-                f"""
-import sys
-sys.path.append('/app')
-from encrypted_clicker import EncryptedClickAnalyzer
-import json
-
-analyzer = EncryptedClickAnalyzer()
-result = analyzer.analyze_url_encrypted('{url}', {interactions_json}, {str(enable_js).lower()})
-print(result)
-"""
-            ]
-
-            # Esegui container
-            container = self._get_docker_client().containers.run(
-                self.container_image,
-                command,
-                detach=True,
-                volumes={
-                    case_dir: {'bind': '/mnt/crypto_vault', 'mode': 'rw'}
-                },
-                environment={
-                    'CRYPTO_PASSWORD': crypto_password,
-                    'PYTHONPATH': '/app'
-                },
-                network_mode='none',  # Isolamento di rete completo
-                mem_limit='512m',     # Limite memoria
-                cpu_period=100000,
-                cpu_quota=50000,      # Limite CPU 50%
-                remove=True            # Auto-rimuovi container
-            )
-
-            # Attendi completamento
-            result = container.wait(timeout=300)  # 5 minuti timeout
-            logs = container.logs()
-
-            if result['StatusCode'] == 0:
-                encrypted_result = logs.decode().strip()
-                return self.process_encrypted_results(encrypted_result, case_id, crypto_password)
-            else:
-                error_msg = logs.decode()
-                logger.error(f"Container execution failed: {error_msg}")
-                return {'error': f'Container execution failed: {error_msg}'}
-
-        except Exception as e:
-            logger.error(f"Errore analisi URL: {e}")
-            return {'error': str(e)}
+        # The legacy Docker workflow has not been verified end to end. Do not
+        # expose a success result or generate interactions for an unavailable path.
+        return {'status': 'unavailable', 'reason':
+                'Encrypted Docker browser execution requires isolation and runtime validation'}
 
     def generate_session_password(self, case_id: str) -> str:
         """Genera password crittografica per la sessione basata sul case ID"""
@@ -154,137 +96,69 @@ print(result)
 
     def process_encrypted_results(self, encrypted_logs: str, case_id: str, crypto_password: str) -> Dict[str, Any]:
         """Processa e decrittografa i risultati"""
+        from pathlib import Path
         try:
-            # I log dovrebbero contenere il risultato crittografato
-            encrypted_data = encrypted_logs.strip()
-
-            # Per decrittografare, dovremmo avere la stessa chiave di sessione
-            # In produzione, questo richiederebbe un keystore sicuro
-            # Per ora, restituiamo i metadati dell'analisi
-
-            case_dir = os.path.join(self.cases_dir, case_id)
-            analysis_files = [f for f in os.listdir(case_dir) if f.endswith('.enc')]
-
-            if analysis_files:
-                latest_file = max(analysis_files, key=lambda x: os.path.getctime(os.path.join(case_dir, x)))
-                with open(os.path.join(case_dir, latest_file), 'r') as f:
-                    metadata = json.load(f)
-
-                return {
-                    'status': 'success',
-                    'case_id': case_id,
-                    'analysis_file': latest_file,
-                    'encrypted_result': encrypted_data,
-                    'metadata': metadata,
-                    'processing_timestamp': datetime.utcnow().isoformat()
-                }
-            else:
-                return {
-                    'status': 'success',
-                    'case_id': case_id,
-                    'encrypted_result': encrypted_data,
-                    'processing_timestamp': datetime.utcnow().isoformat()
-                }
-
-        except Exception as e:
-            logger.error(f"Errore processamento risultati: {e}")
-            return {'error': f"Processing failed: {str(e)}"}
+            root = Path(self.cases_dir).resolve()
+            case = (root / case_id).resolve()
+            if not case.is_relative_to(root):
+                raise ValueError('Case path outside cases directory')
+            files = list(case.glob('*.enc'))
+            if not files:
+                raise ValueError('No encrypted evidence file')
+            latest = max(files, key=lambda item: item.stat().st_mtime_ns)
+            payload = self.decrypt_analysis_results(case_id, latest.name, crypto_password)
+            return {'status': 'failed' if payload.get('error') else 'completed',
+                    'case_id': case_id, 'analysis_file': latest.name, 'analysis': payload}
+        except Exception as exc:
+            return {'status': 'failed', 'error': str(exc)}
 
     def generate_interaction_script(self, url: str, phishing_type: str = "generic") -> List[Dict]:
-        """Genera script di interazione basato su euristiche di phishing"""
-        base_interactions = []
+        """Observation only; interactions must be supplied by the analyst."""
+        return []
 
-        if phishing_type == "credential_harvesting":
-            base_interactions = [
-                {'type': 'wait', 'seconds': 3},
-                {'type': 'form_fill', 'selector': 'input[type="email"], input[name*="email"]', 'data': 'test@example.com'},
-                {'type': 'form_fill', 'selector': 'input[type="password"], input[name*="pass"]', 'data': 'testpassword123'},
-                {'type': 'click', 'selector': 'button[type="submit"], input[type="submit"]'},
-                {'type': 'wait', 'seconds': 2}
-            ]
-        elif phishing_type == "banking":
-            base_interactions = [
-                {'type': 'wait', 'seconds': 2},
-                {'type': 'form_fill', 'selector': 'input[name*="account"], input[name*="user"]', 'data': '123456789'},
-                {'type': 'form_fill', 'selector': 'input[type="password"]', 'data': 'securepass123'},
-                {'type': 'click', 'selector': 'button[type="submit"]'},
-                {'type': 'wait', 'seconds': 3}
-            ]
-        else:  # generic
-            base_interactions = [
-                {'type': 'wait', 'seconds': 2},
-                {'type': 'click', 'selector': 'a, button, input[type="submit"]'},
-                {'type': 'wait', 'seconds': 1},
-                {'type': 'form_fill', 'selector': 'input[type="text"], input[type="email"]', 'data': 'test@example.com'},
-                {'type': 'click', 'selector': 'button[type="submit"], input[type="submit"]'},
-                {'type': 'wait', 'seconds': 2}
-            ]
+    def decrypt_analysis_results(self, case_id: str, analysis_file: str,
+                                 crypto_password: Optional[str] = None) -> Dict:
+        """Authenticate and decrypt persisted evidence with the real session password."""
+        import base64
+        from pathlib import Path
+        from cryptography.fernet import Fernet, InvalidToken
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+        if not crypto_password:
+            raise ValueError('Session password required for decryption')
+        root = Path(self.cases_dir).resolve()
+        case = (root / case_id).resolve()
+        path = (case / analysis_file).resolve()
+        if not case.is_relative_to(root) or not path.is_relative_to(case):
+            raise ValueError('Evidence path outside case directory')
+        metadata = json.loads(path.read_text(encoding='utf-8'))
+        salt = base64.b64decode(metadata['salt'], validate=True)
+        if len(salt) != 32:
+            raise ValueError('Invalid encryption salt')
+        kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=100000)
+        cipher = Fernet(base64.urlsafe_b64encode(kdf.derive(crypto_password.encode())))
+        payload = json.loads(cipher.decrypt(base64.urlsafe_b64decode(metadata['encrypted_data'])))
 
-        return base_interactions
-
-    def decrypt_analysis_results(self, case_id: str, analysis_file: str) -> Optional[Dict]:
-        """Decrittografa risultati di analisi (richiede chiave di sessione)"""
-        try:
-            case_dir = os.path.join(self.cases_dir, case_id)
-            filepath = os.path.join(case_dir, analysis_file)
-
-            with open(filepath, 'r') as f:
-                metadata = json.load(f)
-
-            # In produzione, recuperare chiave dal keystore sicuro
-            # Per ora, restituiamo i metadati
-            return metadata
-
-        except Exception as e:
-            logger.error(f"Errore decrittografia: {e}")
-            return None
+        def decode_nested(value):
+            if isinstance(value, dict):
+                return {key: decode_nested(item) for key, item in value.items()}
+            if isinstance(value, list):
+                return [decode_nested(item) for item in value]
+            if isinstance(value, str):
+                try:
+                    token = base64.urlsafe_b64decode(value)
+                    if token.startswith(b'gAAAA'):
+                        return decode_nested(json.loads(cipher.decrypt(token)))
+                except (ValueError, InvalidToken):
+                    pass
+            return value
+        return decode_nested(payload)
 
     def enhance_scoring_with_click_analysis(self, decrypted_analysis: Dict, case_id: str) -> Dict:
-        """Migliora scoring PAW con dati dell'analisi clicking"""
-        enhanced_score = {
-            'original_score': 0,  # Dovrebbe venire da PAW esistente
-            'click_analysis_bonus': 0,
-            'indicators': []
-        }
+        """Click observations have no calibrated score mapping yet."""
+        return {'status': 'unavailable', 'reason': 'Click scoring is not calibrated',
+                'original_score': None, 'final_score': None}
 
-        try:
-            # Analizza risultati per indicatori di rischio
-            if 'security_indicators' in decrypted_analysis:
-                sec_indicators = decrypted_analysis['security_indicators']
-
-                if sec_indicators.get('has_password_fields'):
-                    enhanced_score['click_analysis_bonus'] += 20
-                    enhanced_score['indicators'].append('password_fields_detected')
-
-                if sec_indicators.get('has_credit_card_fields'):
-                    enhanced_score['click_analysis_bonus'] += 30
-                    enhanced_score['indicators'].append('credit_card_fields_detected')
-
-                if sec_indicators.get('has_login_forms'):
-                    enhanced_score['click_analysis_bonus'] += 15
-                    enhanced_score['indicators'].append('login_form_detected')
-
-                if sec_indicators.get('has_suspicious_keywords'):
-                    enhanced_score['click_analysis_bonus'] += 10
-                    enhanced_score['indicators'].append('suspicious_keywords')
-
-            # Analizza network requests
-            if 'network_requests' in decrypted_analysis and len(decrypted_analysis['network_requests']) > 0:
-                enhanced_score['click_analysis_bonus'] += 5
-                enhanced_score['indicators'].append('network_activity_detected')
-
-            # Analizza redirect chain
-            if 'security_indicators' in decrypted_analysis:
-                redirect_chain = decrypted_analysis['security_indicators'].get('redirect_chain', [])
-                if len(redirect_chain) > 1:
-                    enhanced_score['click_analysis_bonus'] += 10
-                    enhanced_score['indicators'].append('redirect_chain_detected')
-
-        except Exception as e:
-            logger.error(f"Errore enhancement scoring: {e}")
-
-        enhanced_score['final_score'] = enhanced_score['original_score'] + enhanced_score['click_analysis_bonus']
-        return enhanced_score
 
 def main():
     """CLI per testing del modulo"""

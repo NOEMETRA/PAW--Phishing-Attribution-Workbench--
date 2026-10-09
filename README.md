@@ -24,12 +24,30 @@ Those experimental layers should not be interpreted as an automated identity-att
 
 ## Project status
 
+Authentication output now separates header claims from independent verification.
+No receiver is trusted merely because its name appears in Authentication-Results;
+multiple receiver headers are preserved individually. Reported alignment requires
+a passing SPF or DKIM result and a matching identifier; it is never a reproduced
+DMARC verdict. ARC structure checks do not verify ARC signatures or sealer trust.
+These boundaries follow [RFC 8601](https://www.rfc-editor.org/rfc/rfc8601.html),
+[RFC 7489](https://www.rfc-editor.org/rfc/rfc7489.html), and
+[RFC 8617](https://www.rfc-editor.org/rfc/rfc8617.html).
+
+`paw.core.dkim_offline.verify_dkim_offline` verifies message signatures using
+explicitly supplied local public-key TXT records, without external DNS. The normal
+CLI has no local key input yet and marks DKIM verification as not evaluated.
+SPF, DMARC and ARC independent verification are also not evaluated; missing checks
+are listed in `analysis_coverage.json`, the API and the reports. Untrusted claims
+and missing keys do not add authentication risk points or establish safety.
+The evidence score remains heuristic, and partial coverage is separate from
+successful completion of the analysis process.
+
 PAW is a **research workbench**, not a production incident-response platform or an attribution oracle.
 
 | Area | Current status |
 |---|---|
 | `.eml` parsing | Implemented |
-| `.msg` parsing | Implemented through `extract-msg`, with format-specific limitations |
+| `.msg` parsing | Unavailable pending validated conversion and original-header preservation |
 | Case creation and input hashing | Implemented |
 | Received-path normalization | Implemented heuristically |
 | MX/trust-boundary classification | Implemented heuristically |
@@ -39,22 +57,64 @@ PAW is a **research workbench**, not a production incident-response platform or 
 | Independent end-to-end DKIM verification in the main trace path | Not established |
 | URL extraction | Implemented |
 | Content deobfuscation | Implemented experimentally |
-| Attachment inspection | Implemented for selected formats |
+| Attachment inspection | Hashes, metadata and bounded ZIP inventory; malware/macros not evaluated |
 | RDAP / infrastructure enrichment | Implemented where network access is available |
 | Case scoring | Implemented as hand-authored heuristics |
 | Local case index and indicator query | Implemented |
 | Evidence manifest / Merkle utilities | Implemented |
 | Optional PGP manifest signing | Implemented when a key is configured |
-| STIX export | Implemented |
-| Abuse-package generation | Implemented as report/package generation |
+| STIX export | Unavailable pending schema-conformance validation; status file only |
+| Abuse-package generation | Qualified local review drafts; ARF/X-ARF conformance not validated |
 | Playwright detonation | Implemented experimentally |
 | Network request logging | Implemented during detonation |
 | Resource collection / static kit analysis | Implemented experimentally |
 | Canary logging | Implemented experimentally |
-| Infrastructure correlation | Implemented |
+| Cross-case campaign correlation | Unavailable pending validated current-case schema and corpus |
 | Operator identity attribution | Not established |
 | Automated legal attribution | Not claimed |
 | Production readiness | Not claimed |
+
+## Local graphical workbench
+
+GUI development is paused while the engine undergoes wider correctness and load
+validation. The current UI covers an offline workflow, not all CLI capabilities.
+
+## Offline CLI validation and batch behavior
+
+`quick` uses the common pipeline offline, with default scoring and no STIX/abuse
+exports. `full --no-egress` uses strict scoring and both exports; external stages
+are skipped. `forensic --no-egress` has the same local scope: its optional anchoring
+is excluded offline. `analyze --forensic` requests anchoring only; it does not
+implicitly enable strict scoring or exports. Main reports are English; `--lang`
+currently selects Italian abuse-package text or the English fallback.
+
+Directory analyses select EML/MSG extensions without case sensitivity. A bad email
+or unsupported MSG is recorded as an individual failure while remaining emails
+are attempted within the common runtime budgets. Partial batches exit nonzero;
+worker results include successful input-to-case mappings and individual failures.
+Original basenames are preserved in case manifests. Empty directories fail.
+`trace --deob-weight` accepts finite values from 0 to 1 only.
+
+STIX requests currently write an explicit unavailable status in `report/stix.json`,
+not a STIX bundle. Abuse files are local review drafts with no automatic sender
+or recipient, separate authentication claims/verification and a byte-preserving
+original attachment. Compatibility filenames `arf_report.eml` and `xarf_report.json`
+do not establish ARF/X-ARF conformance. No messages are sent. The evidence root
+is stored outside the drafts to avoid embedding the later seal in its own input.
+
+`tests/integration_engine_stress_real.py` runs real supervised offline CLI processes
+on original repository EML and explicitly constructed load/regression inputs.
+CPU/RSS are sampled externally using psutil; it is an observer dependency, not
+a production PAW dependency. These loads do not establish accuracy on a labelled
+legitimate/phishing corpus or explain historic online four-hour analyses.
+
+## Local graphical workbench usage
+
+Run `paw gui` (or `python -m paw gui`) to open the replacement interface at `http://127.0.0.1:8765`. The launcher owns its socket and refuses occupied ports. Use `--port`, `--data-dir` and `--no-browser` to choose the port, analysis storage and automatic browser opening. Stop the server with Ctrl+C; closing its browser tab does not stop it.
+
+The old Tkinter workflow has been replaced. The new interface uploads original EML files, starts actual offline workers, displays observed stages and total elapsed time, cancels jobs, reopens persisted history/cases, verifies evidence and exports real ZIP packages. It separates execution status, assessment coverage, heuristic score and local file integrity. Attachments are metadata only; reports and captured content are inert text, with no clickable email URLs. Desktop/mobile layouts and keyboard-operated tabs are included. All assets are packaged locally, without a CDN or a frontend build step.
+
+The UI always requests `no_egress=true` and excludes detonation, network enrichment and anchoring. It does not offer MSG conversion, active investigation controls or local DKIM-key ingestion. Local resource controls do not establish an OS network sandbox. The local API enforces loopback Host and same-origin requests, plus CSP and non-sniffing headers; it is intended for a single local user. `tests/integration_gui_real.py` exercises actual Chromium, API, worker and ZIP export, including hostile email bytes, timeout and cancellation. Its separate authentication-rendering contract uses real RSA DKIM results without replacing API responses.
 
 ## Repository philosophy
 
@@ -109,7 +169,7 @@ The current parser extracts fields including:
 - ARC headers;
 - `Received-SPF`.
 
-`.eml` files use Python's standard email parser. `.msg` support uses `extract-msg` and depends on which transport headers are available in the original Outlook message.
+`.eml` files use Python's bounded standard email parser. `.msg` conversion is unavailable until transport headers, attachments and original evidence preservation have been validated.
 
 ### 2. Case preservation
 
@@ -270,22 +330,26 @@ The runner also performs additional HTTP requests when collecting resources.
 
 Use detonation only from an isolated research environment with an appropriate outbound-network policy.
 
-## Critical current issue: `--no-egress`
+## Offline analysis: `--no-egress`
 
-The CLI exposes `--no-egress`, and the selected value is stored in the case manifest.
+`analyze`, `trace`, `full`, `forensic`, and `quick` apply the offline policy.
+Offline runs skip detonation, RDAP/DNS enrichment, canary deployment and remote anchoring.
+A process-wide Python audit guard blocks socket operations and subprocess launches,
+including worker threads. API jobs run in separate processes and default to offline.
+`execution.json` records skipped stages and policy violations; skipped is not a successful measurement.
 
-**In the current code, that flag must not be treated as a reliable network kill switch.**
+This is application enforcement, not an OS sandbox for native extensions or hostile code.
+For containment of untrusted active code, use an OS firewall or isolated VM as well.
 
-The trace pipeline contains network-dependent operations and automatic detonation paths that are not consistently gated by `no_egress`. For example, after URL discovery the current `trace_one()` path can invoke the detonation runner automatically, and later stages can perform RDAP, DNS, reverse-DNS, certificate, banner, and threat-intelligence enrichment.
+## Real results and unavailable capabilities
 
-Until this is corrected in code:
-
-- do not rely on `--no-egress` for isolation;
-- use an OS firewall, VM network policy, container/network namespace, or physically isolated environment when offline analysis is required;
-- inspect the trace path before processing untrusted evidence;
-- treat the manifest value as analyst intent, not enforcement evidence.
-
-This is one of the highest-priority code fixes for PAW.
+Web jobs execute the real engine and verify the evidence index before completion.
+No database means no geographic report; absent provider adapters are explicitly unavailable.
+Unverified operator profiles and built-in JA3 labels have been removed.
+JA3 requires captured handshake fields, preserves wire order and excludes GREASE as defined by
+[the original JA3 specification](https://github.com/salesforce/ja3#how-it-works).
+HTTP request logs alone do not supply these fields. Scores are heuristic, not calibrated probabilities;
+merely creating enrichment files no longer raises the score.
 
 ## Phishing-kit collection
 
@@ -396,7 +460,7 @@ cases/case-.../
 
 Additional modules may produce files such as:
 
-- STIX bundles;
+- STIX capability status (bundle generation unavailable pending validation);
 - abuse packages;
 - enrichment reports;
 - infrastructure maps;
@@ -489,7 +553,7 @@ Because network gating is currently incomplete, inspect the code before assuming
 
 ## Known limitations
 
-- `--no-egress` is not consistently enforced.
+- `--no-egress` uses application enforcement; native-code containment needs OS isolation.
 - The main trace path automatically detonates discovered URLs in the current implementation.
 - Several network enrichments run from the same process as forensic parsing.
 - Authentication handling primarily interprets reported results rather than independently reproducing every authentication protocol.
@@ -584,6 +648,26 @@ PAW contains several generations of experimentation. Some modules are considerab
 The core value of the repository is not the number of enrichment modules. It is the attempt to preserve a traceable chain from an email artifact to infrastructure observations and then to clearly qualified hypotheses.
 
 The project should be judged by whether each conclusion can be traced back to evidence, not by how aggressive the attribution language sounds.
+
+## Current forensic validation limits
+
+Offline EML ingestion now preserves the original bytes and decodes MIME text with its declared charset. HTML links, inline attachments, empty attachments and embedded messages are retained, with explicit decoding defects and resource limits. Embedded-message representations are derived artifacts; the original EML remains primary evidence.
+
+Attachment output is metadata and hashes only. Malware, macros and independent MIME-type detection remain `not_evaluated`; absence of a finding does not establish safety. ZIP members are inventoried without extraction or execution. MSG conversion is unavailable pending validation of original headers and attachment preservation.
+
+New cases inventory all case files for integrity verification, except the fixed index/root and post-seal Rekor artifacts. Unsigned local hashes establish consistency, not independent authenticity. Rekor inclusion proofs remain unverified; the legacy presence-of-fields check has been removed. Updating an existing report is unavailable until a versioned workflow can preserve sealed evidence and assessment coverage; create a new case instead.
+
+Independent review regression coverage includes same-name browser downloads, complete evidence inventories and organizational-domain boundaries in scoring. Brand similarity remains a structural heuristic, not an ownership check or calibrated probability. Run `python -m unittest discover -s tests -p "test_*contracts.py"` for offline contracts. The real API, MIME-engine and controlled-loopback Chromium integrations are separate scripts under `tests/integration_*_real.py`.
+
+## Supervised analysis jobs
+
+CLI analysis commands (`analyze`, `quick`, `full`, `forensic`, `trace`) and API analysis jobs now use the same real process supervisor. Defaults are 900 seconds overall, 120 seconds per observed stage, 2 GiB memory, 512 MiB case artifacts, 10,000 artifact files and 8 MiB logs. API queue waiting consumes the overall deadline; at most 32 pending jobs are admitted. Progress reports actual stages and measured elapsed times.
+
+Use `paw full sample.eml --no-egress --deadline 300 --stage-timeout 60 --memory-mib 2048`. API `/api/analyze` accepts a `limits` object with `wall_seconds`, `stage_seconds`, `memory_bytes`, `artifact_bytes`, `artifact_files` and `log_bytes`. `POST /api/analysis/{analysis_id}/cancel` cancels queued or running jobs. Completed jobs stay completed. Terminal failures distinguish `timed_out`, `cancelled`, `resource_limited`, `failed` and `interrupted`.
+
+On Windows, analysis starts only after assignment to a Job Object, with tree-wide memory and process-count limits; the supervisor confirms that no job processes remain before sealing partial evidence. POSIX uses a process group and an inherited per-process address-space limit; equivalent full-browser behavior has not been verified on this Windows host. Disk/log budgets are sampled and can temporarily overshoot between checks. These resource controls are not an OS network sandbox: offline workers retain the application-level `no-egress` policy.
+
+Interrupted evidence is retained. Partial seals establish byte consistency, not completed analysis. After an API restart, lost jobs are marked interrupted; a preliminary `execution.json` alone cannot publish an API job case as completed. Damaged JSON artifacts are exposed as `artifact_errors` without rewriting their bytes. Jobs are not automatically resumed. Direct library calls and standalone legacy commands outside the listed analysis commands are not covered by this supervisor.
 
 ## License
 

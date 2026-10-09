@@ -3,6 +3,7 @@ import re, socket, datetime, ipaddress
 from email.utils import parsedate_to_datetime
 from typing import List, Dict, Any
 from .trust_boundary import classify_hop
+from .network_policy import network_allowed
 
 FQDN_RE = re.compile(r"(?=^.{4,253}$)(^((?!-)[A-Za-z0-9-]{1,63}(?<!-)\.)+[A-Za-z]{2,63}\.?$)")
 
@@ -65,7 +66,8 @@ def _parse_date(s: str):
     if len(parts) >= 2:
         dt = parts[-1].strip()
         try:
-            return parsedate_to_datetime(dt)
+            parsed = parsedate_to_datetime(dt)
+            return parsed if parsed.tzinfo is not None else None
         except Exception:
             return None
     return None
@@ -89,9 +91,9 @@ def normalize_received(received_lines: List[str]) -> Dict[str, Any]:
                         ip = v
                         break
         dt = _parse_date(line)
-        fqdn_ok = bool(FQDN_RE.match(by)) if by else False
+        fqdn_ok = bool(FQDN_RE.match(by)) if by else None
         ptr = None
-        if ip:
+        if ip and network_allowed():
             try:
                 ptr = socket.gethostbyaddr(ip)[0]
             except Exception:
@@ -104,8 +106,8 @@ def normalize_received(received_lines: List[str]) -> Dict[str, Any]:
         })
         # Add role classification
         hops[-1]["role"] = classify_hop(hops[-1])
-    # order by date ascending if available
-    hops_sorted = sorted(hops, key=lambda h: h["date"] or "", reverse=False)
+    # Received headers are prepended. Keep chain order; never sort by untrusted dates.
+    hops_sorted = list(reversed(hops))
     # compute skew
     prev_dt = None
     for h in hops_sorted:
@@ -116,8 +118,10 @@ def normalize_received(received_lines: List[str]) -> Dict[str, Any]:
             h["skew_s"] = 0
         prev_dt = cur if cur else prev_dt
         h["helo_ptr_match"] = (
+            None if not network_allowed() or not h.get('ptr') or not h.get('helo') else
             bool(h.get("ptr")) and bool(h.get("helo")) and
             h["ptr"].split(".")[0].lower() == h["helo"].split(".")[0].lower()
         )
     # origin candidate: first hop not belonging to local MX (caller will filter)
-    return {"ordered_hops": hops_sorted}
+    return {"ordered_hops": hops_sorted, "status": "parsed" if hops else "unavailable",
+            "order_source": "Received header position", "verified": False}

@@ -13,7 +13,7 @@ from pathlib import Path
 from .database import CampaignDatabase
 from ..util.fsutil import ensure_dir
 from ..util.timeutil import utc_now_iso
-from ..core.evidence import merkle_root
+from ..core.verify import verify_case
 
 
 class FileMonitor:
@@ -50,7 +50,8 @@ class FileMonitor:
                 # Skip certain file types
                 if filename.endswith(('.pyc', '__pycache__')) or filename.startswith('.'):
                     continue
-                files.append(os.path.join(root, filename))
+                path = Path(root) / filename
+                if not path.is_symlink(): files.append(str(path))
 
         return sorted(files)
 
@@ -58,11 +59,13 @@ class FileMonitor:
         """Calculate SHA256 hash of a file."""
         try:
             with open(file_path, 'rb') as f:
-                return hashlib.sha256(f.read()).hexdigest()
+                digest = hashlib.sha256()
+                while chunk := f.read(1024 * 1024): digest.update(chunk)
+                return digest.hexdigest()
         except (IOError, OSError):
             return None
 
-    def verify_merkle_integrity(self, case_id: str) -> Tuple[bool, str]:
+    def verify_merkle_integrity(self, case_id: str) -> Tuple[Optional[bool], str]:
         """Verify file integrity using Merkle root if available."""
         case_path = self.cases_dir / case_id
         evidence_dir = case_path / "evidence"
@@ -70,27 +73,11 @@ class FileMonitor:
         merkle_root_file = evidence_dir / "merkle_root.bin"
 
         if not merkle_index.exists() or not merkle_root_file.exists():
-            return True, "No Merkle root available for verification"
+            return None, "Evidence index or root missing; integrity not verified"
 
         try:
-            # Load expected Merkle root
-            with open(merkle_root_file, 'rb') as f:
-                expected_root = f.read().decode('utf-8').strip()
-
-            # Load file index
-            with open(merkle_index, 'r') as f:
-                file_index = json.load(f)
-
-            # Get current file list
-            current_files = [os.path.join(case_path, f) for f in file_index.keys()]
-
-            # Calculate current Merkle root
-            current_root = merkle_root(current_files)
-
-            if current_root == expected_root:
-                return True, "Merkle root verification passed"
-            else:
-                return False, f"Merkle root mismatch: expected {expected_root}, got {current_root}"
+            ok = verify_case(case_path)
+            return ok, "Case evidence verification passed" if ok else "Case evidence verification failed; inspect paw verify output"
 
         except Exception as e:
             return False, f"Error verifying Merkle integrity: {e}"
@@ -110,7 +97,7 @@ class FileMonitor:
 
         # Check Merkle integrity first
         integrity_ok, integrity_msg = self.verify_merkle_integrity(case_id)
-        changes['integrity_status'] = 'ok' if integrity_ok else 'compromised'
+        changes['integrity_status'] = 'unknown' if integrity_ok is None else 'ok' if integrity_ok else 'compromised'
         changes['integrity_message'] = integrity_msg
 
         # Check individual file changes
@@ -135,7 +122,10 @@ class FileMonitor:
                     })
 
         # Check for deleted files
-        for baseline_file in self._baseline_hashes:
+        case_root = (self.cases_dir / case_id).resolve()
+        case_baseline = {path:digest for path,digest in self._baseline_hashes.items()
+                         if Path(path).resolve().is_relative_to(case_root)}
+        for baseline_file in case_baseline:
             if baseline_file not in current_hashes:
                 changes['deleted_files'].append({
                     'path': baseline_file,
@@ -143,6 +133,7 @@ class FileMonitor:
                 })
 
         # Update baseline with current state
+        for path in case_baseline: self._baseline_hashes.pop(path, None)
         self._baseline_hashes.update(current_hashes)
 
         return changes
@@ -155,7 +146,7 @@ class FileMonitor:
         for case_id in case_ids:
             try:
                 changes = self.check_file_changes(case_id)
-                if changes['new_files'] or changes['modified_files'] or changes['deleted_files'] or changes['integrity_status'] == 'compromised':
+                if changes['new_files'] or changes['modified_files'] or changes['deleted_files'] or changes['integrity_status'] != 'ok':
                     results.append(changes)
                     self._record_file_check(case_id, changes)
             except Exception as e:
@@ -191,7 +182,7 @@ class FileMonitor:
 
         for case_id in case_ids:
             integrity_ok, integrity_msg = self.verify_merkle_integrity(case_id)
-            status = 'ok' if integrity_ok else 'compromised'
+            status = 'unknown' if integrity_ok is None else 'ok' if integrity_ok else 'compromised'
 
             report['integrity_summary'][status] += 1
             report['cases'].append({

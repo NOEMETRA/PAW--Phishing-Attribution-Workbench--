@@ -332,7 +332,7 @@ class EncryptedClickAnalyzer:
     def save_encrypted_analysis(self, encrypted_data, url):
         """Salva analisi crittografata con path traversal protection"""
         try:
-            timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+            timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S_%f')
             filename = f"analysis_{timestamp}.enc"
 
             # Path traversal protection
@@ -351,17 +351,19 @@ class EncryptedClickAnalyzer:
                 'original_url': url,
                 'analysis_date': datetime.utcnow().isoformat(),
                 'encrypted_data': encrypted_data,
-                'session_key_hash': base64.b64encode(self.session_key).decode(),
+                'encryption_scheme': 'PBKDF2-SHA256-100000/Fernet',
                 'salt': base64.b64encode(self.salt).decode(),  # Store salt for decryption
                 'analyzer_version': '2.0.0'
             }
 
             with open(filepath, 'w') as f:
                 json.dump(metadata, f, indent=2)
+            return filepath
 
             logger.info(f"Analisi salvata: {filepath}")
         except Exception as e:
             logger.error(f"Errore salvataggio: {e}")
+            raise
 
 def main():
     """Funzione principale per esecuzione standalone"""
@@ -395,7 +397,7 @@ def main():
 
     # Output risultato crittografato
     print(json.dumps({
-        'status': 'success',
+        'status': 'encrypted',
         'encrypted_result': result,
         'timestamp': datetime.utcnow().isoformat()
     }))

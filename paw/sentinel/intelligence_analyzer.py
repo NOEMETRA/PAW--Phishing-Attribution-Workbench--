@@ -395,11 +395,7 @@ class IntelligenceAnalyzer:
             'indicators': []
         }
 
-        # 1. Time-based analysis (immediate clicks after deployment)
-        if self._is_suspicious_timing(click_time, case_id):
-            classification['type'] = 'attacker_test'
-            classification['confidence'] = 0.8
-            classification['indicators'].append('immediate_post_deployment_click')
+        classification['timing_analysis'] = {'status': 'unavailable', 'reason': 'Deployment timestamp not recorded'}
 
         # 2. Geographic analysis (attacker locations)
         geo_risk = self._analyze_geographic_risk(analysis.get('geolocation', {}))
@@ -422,30 +418,9 @@ class IntelligenceAnalyzer:
             classification['confidence'] = max(classification['confidence'], ip_risk['confidence'])
             classification['indicators'].extend(ip_risk['indicators'])
 
-        # 5. Behavioral analysis (future: session patterns, navigation)
-        # TODO: Implement session tracking and behavioral analysis
+        classification['behavioral_analysis'] = {'status': 'unavailable', 'reason': 'Session tracking not implemented'}
 
         return classification
-
-    def _is_suspicious_timing(self, click_time: str, case_id: str) -> bool:
-        """Check if click happened suspiciously soon after campaign deployment."""
-        try:
-            from datetime import datetime
-            click_dt = datetime.fromisoformat(click_time.replace(' ', 'T'))
-
-            # Get campaign creation time (simplified - in production, store campaign metadata)
-            # For now, assume clicks within 1 hour of "case creation" are suspicious
-            # This is a placeholder - real implementation needs campaign deployment timestamps
-
-            # Check if click is within first hour of campaign
-            # This is a heuristic - attackers often test immediately
-            current_hour = click_dt.hour
-            if current_hour in [0, 1, 2]:  # Early morning clicks often suspicious
-                return True
-
-            return False
-        except:
-            return False
 
     def _analyze_geographic_risk(self, geolocation: Dict[str, Any]) -> Dict[str, Any]:
         """Analyze geographic location for attacker indicators."""

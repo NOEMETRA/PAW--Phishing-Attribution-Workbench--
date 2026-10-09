@@ -2,198 +2,124 @@
 import email, re, os
 from email import policy
 from email.parser import BytesParser
+from email.message import EmailMessage
+from .authentication import parse_authentication_results
+from .mime_analysis import MimeLimits, MimeLimitExceeded
 
 def parse_eml_bytes(b: bytes):
-    msg = BytesParser(policy=policy.default).parsebytes(b)
-    return _parse_msg_obj(msg)
+    return _parse_msg_obj(parse_message_bytes(b))
+
+
+def parse_message_bytes(raw, limits=MimeLimits()):
+    if len(raw) > limits.max_input_bytes: raise MimeLimitExceeded('Input email byte limit exceeded')
+    if not raw.strip(): raise ValueError('Empty email input')
+    count = 0
+    def bounded_factory(**kwargs):
+        nonlocal count
+        count += 1
+        if count > limits.max_parts: raise MimeLimitExceeded('MIME part count limit exceeded during parsing')
+        return EmailMessage(**kwargs)
+    try:
+        return BytesParser(_class=bounded_factory, policy=policy.default).parsebytes(raw)
+    except RecursionError as exc:
+        raise MimeLimitExceeded('MIME nesting exceeds parser capability') from exc
 
 def parse_msg_bytes(b: bytes):
-    try:
-        import extract_msg
-        msg = extract_msg.Message(b)
-        return _parse_msg_obj(msg)
-    except ImportError:
-        raise RuntimeError("extract-msg not installed for MSG support")
-    except Exception as e:
-        raise RuntimeError(f"Failed to parse MSG: {e}")
+    raise RuntimeError('MSG analysis is unavailable until a validated conversion preserves transport headers and attachments; provide original EML')
+
+
+def load_mail(path: str, limits=MimeLimits()):
+    if os.path.splitext(path)[1].lower() == '.msg': parse_msg_bytes(b'')
+    with open(path, 'rb') as stream:
+        raw = stream.read(limits.max_input_bytes + 1)
+    if len(raw) > limits.max_input_bytes: raise MimeLimitExceeded('Input email byte limit exceeded')
+    msg = parse_message_bytes(raw, limits)
+    return _parse_msg_obj(msg), msg, raw
+
 
 def parse_mail(path: str):
-    """Dispatch based on file extension."""
-    ext = os.path.splitext(path)[1].lower()
-    with open(path, "rb") as f:
-        b = f.read()
-    
-    if ext == ".msg":
-        result = parse_msg_bytes(b)
-        # Store msg object for attachment processing
-        result["_msg_obj"] = parse_msg_bytes(b)["_msg_obj"] if "extract_msg" in globals() else None
-        return result
-    else:
-        return parse_eml_bytes(b)
+    return load_mail(path)[0]
+
 
 def _parse_msg_obj(msg):
     """Parse email.Message or extract_msg.Message object."""
-    # Handle extract_msg.Message
-    if hasattr(msg, 'sender'):
-        # extract_msg object
-        def get(h):
-            # Map common headers
-            header_map = {
-                "From": getattr(msg, 'sender', ''),
-                "Reply-To": getattr(msg, 'reply_to', ''),
-                "Return-Path": getattr(msg, 'return_path', ''),
-                "Message-ID": getattr(msg, 'message_id', ''),
-                "Date": getattr(msg, 'date', ''),
-                "Subject": getattr(msg, 'subject', ''),
-            }
-            return header_map.get(h, "")
-        
-        # Get received headers from transport_headers if available
-        received = []
-        if hasattr(msg, 'transport_headers') and msg.transport_headers:
-            for header_line in msg.transport_headers:
-                if header_line.lower().startswith('received:'):
-                    received.append(header_line[9:].strip())
-        
-        headers = {
-            "from": get("From"),
-            "reply_to": get("Reply-To") or "",
-            "return_path": get("Return-Path") or "",
-            "message_id": get("Message-ID") or "",
-            "date": str(get("Date")) if get("Date") else "",
-            "subject": get("Subject") or "",
-            "received": received,
-            "_msg_obj": msg  # Store for attachment processing
-        }
-        
-        # Parse authentication results from headers
-        auth_res = []
-        if hasattr(msg, 'transport_headers'):
-            for header in msg.transport_headers:
-                if header.lower().startswith('authentication-results:'):
-                    auth_res.append(header[23:].strip())
-        
-        spf, dkim_list, dmarc = None, [], None
-        for ar in auth_res:
-            ar_lower = ar.lower()
-            m_spf = re.search(r"spf=(pass|fail|softfail|neutral|temperror|permerror)", ar_lower)
-            if m_spf: spf = m_spf.group(1)
-            for m in re.finditer(r"dkim=(pass|fail|none)[^;]*;[^d]*d=([^;\s]+)", ar_lower):
-                dkim_list.append({"result": m.group(1), "d": m.group(2)})
-            m_dmarc = re.search(r"dmarc=(pass|fail|temperror|permerror)", ar_lower)
-            if m_dmarc: dmarc = m_dmarc.group(1)
-        
-        headers["auth_results"] = {"spf": spf, "dkim": dkim_list, "dmarc": dmarc}
-        
-        # ARC headers (if present in transport_headers)
-        arc_seals, arc_msgsigs, arc_authres = [], [], []
-        if hasattr(msg, 'transport_headers'):
-            for header in msg.transport_headers:
-                header_lower = header.lower()
-                if header_lower.startswith('arc-seal:'):
-                    arc_seals.append(header[9:].strip())
-                elif header_lower.startswith('arc-message-signature:'):
-                    arc_msgsigs.append(header[21:].strip())
-                elif header_lower.startswith('arc-authentication-results:'):
-                    arc_authres.append(header[26:].strip())
-        
-        headers["arc"] = {
-            "seals": arc_seals,
-            "message_signatures": arc_msgsigs,
-            "auth_results": arc_authres
-        }
-        
-        # Received-SPF (if present)
-        received_spf_raw = []
-        if hasattr(msg, 'transport_headers'):
-            for header in msg.transport_headers:
-                if header.lower().startswith('received-spf:'):
-                    received_spf_raw.append(header[13:].strip())
-        
-        # Parse Received-SPF components
-        received_spf_parsed = []
-        for rspf in received_spf_raw:
-            parsed = {"result": None, "helo": None, "client_ip": None}
-            # Extract result
-            m_result = re.search(r'(pass|fail|softfail|neutral|permerror|temperror)', rspf.lower())
-            if m_result:
-                parsed["result"] = m_result.group(1)
-            # Extract client-ip
-            m_client_ip = re.search(r'client-ip=([^\s;]+)', rspf.lower())
-            if m_client_ip:
-                parsed["client_ip"] = m_client_ip.group(1)
-            # Extract helo
-            m_helo = re.search(r'helo=([^\s;]+)', rspf.lower())
-            if m_helo:
-                parsed["helo"] = m_helo.group(1)
-            received_spf_parsed.append(parsed)
-        
-        headers["received_spf"] = received_spf_parsed
-        
-        return headers
+    # Standard email.Message object
+    hdr = msg._headers if hasattr(msg, "_headers") else list(msg.items())
+    def get(h):
+        v = msg.get(h)
+        return v if v is not None else ""
+    headers = {
+        "from": get("From"),
+        "reply_to": get("Reply-To") or "",
+        "return_path": get("Return-Path") or "",
+        "message_id": get("Message-ID") or "",
+        "date": get("Date") or "",
+        "subject": get("Subject") or ""
+    }
+    # Collect Authentication-Results (may have multiple)
+    auth_res = msg.get_all("Authentication-Results") or []
+    headers["authentication_results"] = [parse_authentication_results(str(raw), index) for index, raw in enumerate(auth_res)]
+    headers["auth_results"] = _legacy_auth(headers["authentication_results"])
     
+    # Parse ARC headers
+    arc_seals = msg.get_all("ARC-Seal") or []
+    arc_msgsigs = msg.get_all("ARC-Message-Signature") or []
+    arc_authres = msg.get_all("ARC-Authentication-Results") or []
+    headers["arc"] = {
+        "seals": arc_seals,
+        "message_signatures": arc_msgsigs,
+        "auth_results": arc_authres
+    }
+
+    # Parse Received-SPF
+    received_spf_raw = msg.get_all("Received-SPF") or []
+
+    # Parse Received-SPF components
+    received_spf_parsed = []
+    for rspf in received_spf_raw:
+        parsed = {"result": None, "helo": None, "client_ip": None}
+        # Extract result
+        m_result = re.match(r'\s*(pass|fail|softfail|neutral|none|permerror|temperror)\b', str(rspf).lower())
+        if m_result:
+            parsed["result"] = m_result.group(1)
+        # Extract client-ip
+        m_client_ip = re.search(r'client-ip=([^\s;]+)', rspf.lower())
+        if m_client_ip:
+            parsed["client_ip"] = m_client_ip.group(1)
+        # Extract helo
+        m_helo = re.search(r'helo=([^\s;]+)', rspf.lower())
+        if m_helo:
+            parsed["helo"] = m_helo.group(1)
+        received_spf_parsed.append(parsed)
+
+    headers["received_spf"] = received_spf_parsed
+
+    # Received lines (preserve order as in message - topmost is last hop)
+    received = msg.get_all("Received") or []
+    headers["received"] = received
+    return _annotate(headers, msg)
+
+
+def _legacy_auth(records):
+    """Compatibility fields from one header; never merge unrelated receivers."""
+    methods = records[0]['methods'] if len(records) == 1 and records[0]['status'] == 'parsed' else []
+    def one(name):
+        values = [method['result'] for method in methods if method['method'] == name]
+        return values[0] if len(values) == 1 else None
+    return {'spf': one('spf'), 'dmarc': one('dmarc'), 'dkim': [
+        {'result': method['result'], 'd': method['properties'].get('header.d')}
+        for method in methods if method['method'] == 'dkim']}
+
+
+def _annotate(headers, msg):
+    if hasattr(msg, 'get_all'):
+        headers['from_header_count'] = len(msg.get_all('From') or [])
+        headers['return_path_header_count'] = len(msg.get_all('Return-Path') or [])
+        headers['dkim_signature_present'] = bool(msg.get_all('DKIM-Signature'))
+        headers['header_defects'] = [str(defect) for defect in msg.defects]
     else:
-        # Standard email.Message object
-        hdr = msg._headers if hasattr(msg, "_headers") else list(msg.items())
-        def get(h): 
-            v = msg.get(h)
-            return v if v is not None else ""
-        headers = {
-            "from": get("From"),
-            "reply_to": get("Reply-To") or "",
-            "return_path": get("Return-Path") or "",
-            "message_id": get("Message-ID") or "",
-            "date": get("Date") or "",
-            "subject": get("Subject") or ""
-        }
-        # Collect Authentication-Results (may have multiple)
-        auth_res = msg.get_all("Authentication-Results") or []
-        spf, dkim_list, dmarc = None, [], None
-        for ar in auth_res:
-            # crude parsing, but effective in practice
-            ar_lower = ar.lower()
-            m_spf = re.search(r"spf=(pass|fail|softfail|neutral|temperror|permerror)", ar_lower)
-            if m_spf: spf = m_spf.group(1)
-            for m in re.finditer(r"dkim=(pass|fail|none)[^;]*;[^d]*d=([^;\s]+)", ar_lower):
-                dkim_list.append({"result": m.group(1), "d": m.group(2)})
-            m_dmarc = re.search(r"dmarc=(pass|fail|temperror|permerror)", ar_lower)
-            if m_dmarc: dmarc = m_dmarc.group(1)
-        headers["auth_results"] = {"spf": spf, "dkim": dkim_list, "dmarc": dmarc}
-        
-        # Parse ARC headers
-        arc_seals = msg.get_all("ARC-Seal") or []
-        arc_msgsigs = msg.get_all("ARC-Message-Signature") or []
-        arc_authres = msg.get_all("ARC-Authentication-Results") or []
-        headers["arc"] = {
-            "seals": arc_seals,
-            "message_signatures": arc_msgsigs,
-            "auth_results": arc_authres
-        }
-        
-        # Parse Received-SPF
-        received_spf_raw = msg.get_all("Received-SPF") or []
-        
-        # Parse Received-SPF components
-        received_spf_parsed = []
-        for rspf in received_spf_raw:
-            parsed = {"result": None, "helo": None, "client_ip": None}
-            # Extract result
-            m_result = re.search(r'(pass|fail|softfail|neutral|permerror|temperror)', rspf.lower())
-            if m_result:
-                parsed["result"] = m_result.group(1)
-            # Extract client-ip
-            m_client_ip = re.search(r'client-ip=([^\s;]+)', rspf.lower())
-            if m_client_ip:
-                parsed["client_ip"] = m_client_ip.group(1)
-            # Extract helo
-            m_helo = re.search(r'helo=([^\s;]+)', rspf.lower())
-            if m_helo:
-                parsed["helo"] = m_helo.group(1)
-            received_spf_parsed.append(parsed)
-        
-        headers["received_spf"] = received_spf_parsed
-        
-        # Received lines (preserve order as in message - topmost is last hop)
-        received = msg.get_all("Received") or []
-        headers["received"] = received
-        return headers
+        headers['from_header_count'] = None
+        headers['return_path_header_count'] = None
+        headers['dkim_signature_present'] = None
+        headers['header_defects'] = ['MSG transport header completeness not validated']
+    return headers
