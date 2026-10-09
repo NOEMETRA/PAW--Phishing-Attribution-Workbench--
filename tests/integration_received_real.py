@@ -36,7 +36,11 @@ def main():
              'literal-domain-suffix':('from sender.example ([8.8.8.8].example) by mx.example',None),
              'literal-network-suffix':('from sender.example ([8.8.8.8]/24) by mx.example',None),
              'mapped-domain-suffix':('from sender.example ([IPv6:::ffff:8.8.8.8].example) by mx.example',None),
-             'literal-host-prefix':('from sender.example (host[8.8.8.8]) by mx.example',None)}
+             'literal-host-prefix':('from sender.example (host[8.8.8.8]) by mx.example',None),
+             'mailbox-literal':('from sender.example (foo@[8.8.8.8]) by mx.example',None),
+             'mailbox-bare':('from sender.example (foo@8.8.8.8) by mx.example',None),
+             'mailbox-mapped':('from sender.example (foo@[IPv6:::ffff:8.8.8.8]) by mx.example',None),
+             'mailbox-and-peer':('from sender.example (foo@8.8.8.8 [9.9.9.9]) by mx.example','9.9.9.9')}
     base = b'From: a@example.invalid\r\nSubject: Constructed Received contract\r\n'
     samples = {name+'.eml':base+b'Received: '+(line+DATE).encode()+b'\r\n\r\nhello'
                for name,(line,_) in lines.items()}
@@ -74,12 +78,20 @@ def main():
             assert origin['verified'] is False
             assert coverage['stages']['received_path']['receiver_boundary'] == anomalies['receiver_boundary']
             if name in {'unclosed-ipv4','unclosed-mapped','unopened-ipv4','unopened-mapped','nested-brackets',
-                        'literal-domain-suffix','literal-network-suffix','mapped-domain-suffix','literal-host-prefix'}:
+                        'literal-domain-suffix','literal-network-suffix','mapped-domain-suffix','literal-host-prefix',
+                        'mailbox-literal','mailbox-mapped'}:
                 assert value['ip_candidates'] == []
                 assert value['ip_observation']['status'] == 'unsupported'
                 assert value['parsing']['status'] == 'partial'
                 assert coverage['stages']['received_path']['status'] == 'partial'
                 assert any('bracket' in issue.lower() for issue in value['parsing']['issues'])
+            if name == 'mailbox-bare':
+                assert value['ip_candidates'] == []
+                assert value['ip_observation']['status'] == 'unavailable'
+                assert value['parsing']['status'] == 'parsed'
+            if name == 'mailbox-and-peer':
+                assert [candidate['text'] for candidate in value['ip_candidates']] == ['[9.9.9.9]']
+                assert value['parsing']['status'] == 'parsed'
             assert score['score_components']['received_private_ip_before_boundary'] == 0
             assert score['score_components']['received_invalid_fqdn'] == 0
             assert score['score_components']['verified_authentication_failures'] == 0
@@ -98,7 +110,7 @@ def main():
                 assert candidate['verified'] is False
             seen.add(name)
         assert seen == set(lines)
-        print('PASS: 21 real full --no-egress Received cases; whole-token and malformed bracket rejection, scoped IPs, raw strings, partial coverage, unverified boundary, zero category penalties and valid seals')
+        print('PASS: 25 real full --no-egress Received cases; mailbox-domain exclusion, whole-token and malformed bracket rejection, scoped IPs, raw strings, partial coverage, unverified boundary, zero category penalties and valid seals')
 
 
 if __name__ == '__main__':

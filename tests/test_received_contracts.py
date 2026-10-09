@@ -186,6 +186,29 @@ class ReceivedContracts(unittest.TestCase):
                 self.assertEqual(candidate['text'],'[8.8.8.8]')
                 self.assertEqual(value['raw'][slice(*candidate['source_span'])],candidate['text'])
 
+    def test_mailbox_address_tokens_cannot_supply_a_peer_ip(self):
+        for token in ('foo@[8.8.8.8]','foo@8.8.8.8','foo@[IPv6:::ffff:8.8.8.8]',
+                      'foo@IPv6:::ffff:8.8.8.8','8.8.8.8@foo.example',
+                      '[8.8.8.8]@foo.example','"foo"@[8.8.8.8]','<foo@[8.8.8.8]>'):
+            with self.subTest(token=token):
+                line = 'from sender.example ('+token+') by mx.example'
+                value = hop(line)
+                self.assertEqual(value['raw'],line+DATE)
+                self.assertIsNone(value['ip'])
+                self.assertEqual(value['ip_candidates'],[])
+                self.assertEqual(value['ip_observation']['status'],'unsupported' if '[' in token else 'unavailable')
+                self.assertEqual(value['parsing']['status'],'partial' if '[' in token else 'parsed')
+
+    def test_mailbox_domain_and_separate_peer_candidate_remain_distinct(self):
+        for token,expected in (('foo@8.8.8.8','9.9.9.9'),('foo@[8.8.8.8]',None)):
+            with self.subTest(token=token):
+                value = hop('from sender.example ('+token+' [9.9.9.9]) by mx.example')
+                self.assertEqual(value['ip'],expected)
+                candidate, = value['ip_candidates']
+                self.assertEqual(candidate['text'],'[9.9.9.9]')
+                self.assertEqual(candidate['scope'],'from')
+                self.assertEqual(value['raw'][slice(*candidate['source_span'])],candidate['text'])
+
 
 if __name__ == '__main__':
     unittest.main()

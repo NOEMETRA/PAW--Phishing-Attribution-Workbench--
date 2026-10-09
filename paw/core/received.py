@@ -8,7 +8,7 @@ from .authentication import normalize_domain
 from .ip_observations import classify_ip
 
 MAX_RECEIVED_CHARACTERS = 65536
-IP_TOKEN_CHARACTER = r'[\w.:%/\[\]-]'
+IP_TOKEN_CHARACTER = r'[\w.@:%/\[\]-]'
 
 
 def _ip_token_boundaries(line, start, stop):
