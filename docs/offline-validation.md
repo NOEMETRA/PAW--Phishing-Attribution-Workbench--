@@ -77,6 +77,12 @@ contract documented in [Content assessment](content-assessment.md). It removes
 unvalidated action/risk recommendations caused by neutral text length; the final
 attribution thresholds and the remaining accuracy-validation work are unchanged.
 
+The original-MIME pilot now also has provisional content triage and a reconciled
+final-score audit. [Score explanations](score-explanations.md) documents additive
+contributions and the correction for verdict changes caused by intermediate
+rounding/clipping. This exposes the existing heuristics; it does not calibrate
+them or supply independently adjudicated phishing labels.
+
 Codex review is requested in GitHub PR comments. Treat the review as an additional
 check and resolve actionable findings with reproductions and focused tests; do
 not interpret an empty review as full software validation.

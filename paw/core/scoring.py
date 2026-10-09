@@ -3,6 +3,53 @@ import re
 import math
 
 
+COMPONENT_SOURCES = {
+    'header_observations': 'Received/header diagnostics; the header chain is unverified',
+    'verified_authentication_failures': 'Only completed independent verification reporting fail',
+    'sender_domain_heuristics': 'From/Reply-To spelling and optional domain metadata; not proof of malicious ownership',
+    'deobfuscation_heuristics': 'Transformation heuristics; ordinary encoding also transforms, not proof of phishing',
+    'dynamic_observations': 'Detonation/canary metadata; not attribution to an actor',
+    'profile_modifier': 'Selected analysis profile; not independently observed evidence',
+    'received_non_monotonic_dates': 'Claimed Received timestamps; unverified structural observation',
+    'received_private_ip_before_boundary': 'Parsed Received IPs and heuristic boundary; unverified observation',
+    'received_invalid_fqdn': 'Received by-host syntax; unverified structural observation',
+    'legacy_base': 'Legacy caller numeric value; no independent evidence established',
+    'additional_signals': 'Caller-provided signal; requires its own evidence and context',
+}
+
+
+def _finite_number(value):
+    if isinstance(value, bool):
+        raise ValueError('Score values must be finite numbers')
+    try:
+        value = float(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError('Score values must be finite numbers') from exc
+    if not math.isfinite(value):
+        raise ValueError('Score values must be finite numbers')
+    return value
+
+
+def _score_metadata(raw, components, profile):
+    raw = _finite_number(raw)
+    decision_score = max(0.0, min(1.0, raw))
+    malicious, suspicious = {'strict': (.68, .52), 'conservative': (.76, .58)}.get(profile, (.72, .55))
+    # Tolerance only for floating-point noise at an exact mathematical boundary.
+    def reaches(threshold):
+        return decision_score >= threshold or math.isclose(decision_score, threshold, rel_tol=0, abs_tol=1e-12)
+    decision = ('Likely malicious infrastructure' if reaches(malicious) else
+                'Suspicious or compromised account' if reaches(suspicious) else 'Inconclusive')
+    return {'score_schema_version': 2,
+            'score': round(decision_score, 2), 'raw_score': raw, 'decision_score': decision_score,
+            'score_components': components, 'component_sources': {
+                name: COMPONENT_SOURCES.get(name, 'Caller-provided signal; requires its own evidence and context')
+                for name in components},
+            'decision': decision, 'profile': profile,
+            'thresholds': {'suspicious': suspicious, 'malicious': malicious},
+            'decision_basis': 'Unrounded clamped sum; score is rounded to two decimals for display',
+            'decision_scope': 'heuristic_attribution_review', 'calibrated': False}
+
+
 def validate_deobfuscation_weight(value):
     if isinstance(value, bool):
         raise ValueError('Deobfuscation weight must be finite and between 0 and 1')
@@ -80,6 +127,7 @@ def score_case(hop_diag: dict, auth: dict, dominfo: dict, brand_seeds=None, susp
     
     # Header integrity
     header_score = 0.0
+    authentication_score = 0.0
     if hop_diag.get("skew_s", 0) > 600: header_score += 0.2
     if hop_diag.get("helo_ptr_match") is False: header_score += 0.1
     if hop_diag.get("fqdn_ok") is False: header_score += 0.1
@@ -89,6 +137,7 @@ def score_case(hop_diag: dict, auth: dict, dominfo: dict, brand_seeds=None, susp
         verification = (auth.get(method) or {}).get('verification') or {}
         if verification.get('status') == 'completed' and verification.get('result') == 'fail':
             header_score += weight
+            authentication_score += weight
     # Domain signals
     domain_score = 0.0
     nrd = dominfo.get("nrd_days")
@@ -143,6 +192,7 @@ def score_case(hop_diag: dict, auth: dict, dominfo: dict, brand_seeds=None, susp
     # keys like 'deobfuscated_artifacts' containing 'text','html','urls' each having a
     # 'suspicion_score' in [0.0, 1.0]. We compute a small weighted aggregate and add
     # it to domain_score multiplied by deobfuscation_weight (configurable).
+    deob_contribution = 0.0
     if headers:
         try:
             deob = headers.get("deobfuscation_analysis")
@@ -153,23 +203,28 @@ def score_case(hop_diag: dict, auth: dict, dominfo: dict, brand_seeds=None, susp
                 da = deob.get("deobfuscated_artifacts", {})
                 # weights for parts (tunable)
                 w_text, w_urls, w_html = 0.6, 0.25, 0.15
-                text_s = (da.get("text") or {}).get("suspicion_score", 0.0) or 0.0
-                html_s = (da.get("html") or {}).get("suspicion_score", 0.0) or 0.0
+                text_s = (da.get("text") or {}).get("suspicion_score", 0.0)
+                html_s = (da.get("html") or {}).get("suspicion_score", 0.0)
+                text_s = 0.0 if text_s is None else text_s
+                html_s = 0.0 if html_s is None else html_s
                 urls = da.get("urls") or []
                 urls_s = 0.0
                 if isinstance(urls, list) and urls:
                     # use max url suspicion as representative
                     try:
-                        urls_s = max((u.get("suspicion_score", 0.0) or 0.0) for u in urls)
-                    except Exception:
+                        urls_s = max(_finite_number(0.0 if u.get('suspicion_score') is None else u['suspicion_score']) for u in urls)
+                    except (TypeError, AttributeError):
                         urls_s = 0.0
 
-                deob_score = (w_text * float(text_s) + w_urls * float(urls_s) + w_html * float(html_s))
+                deob_score = (w_text * _finite_number(text_s) + w_urls * _finite_number(urls_s) + w_html * _finite_number(html_s))
                 # clamp
                 if deob_score < 0.0: deob_score = 0.0
                 if deob_score > 1.0: deob_score = 1.0
                 # apply into domain score
-                domain_score += deob_score * float(deobfuscation_weight)
+                deob_contribution = deob_score * float(deobfuscation_weight)
+                domain_score += deob_contribution
+        except (ValueError, OverflowError) as exc:
+            raise ValueError('Invalid deobfuscation score metadata') from exc
         except Exception:
             # fail silently on any malformed deob structure
             pass
@@ -195,41 +250,45 @@ def score_case(hop_diag: dict, auth: dict, dominfo: dict, brand_seeds=None, susp
                 break  # one time bonus
 
     # Coverage is metadata, never evidence of maliciousness.
-    enrichment_score = 0.0
-    total = header_score + domain_score + profile_modifier + campaign_score + enrichment_score
-    decision = "Inconclusive"
-    
-    # Apply profile-adjusted thresholds
-    malicious_threshold = 0.72
-    suspicious_threshold = 0.55
-    
-    if profile == "strict":
-        malicious_threshold = 0.68
-        suspicious_threshold = 0.52
-    elif profile == "conservative":
-        malicious_threshold = 0.76
-        suspicious_threshold = 0.58
-    
-    if total >= malicious_threshold: decision = "Likely malicious infrastructure"
-    elif total >= suspicious_threshold: decision = "Suspicious or compromised account"
+    components = {'header_observations': header_score - authentication_score,
+                  'verified_authentication_failures': authentication_score,
+                  'sender_domain_heuristics': domain_score - deob_contribution,
+                  'deobfuscation_heuristics': deob_contribution,
+                  'dynamic_observations': campaign_score,
+                  'profile_modifier': profile_modifier}
+    components = {name: _finite_number(value) for name, value in components.items()}
+    total = math.fsum(components.values())
     verification = {method: ((auth.get(method) or {}).get('verification') or {}).get('status', 'not_evaluated')
                     for method in ('spf', 'dkim', 'dmarc', 'arc')}
     missing = [method for method, status in verification.items() if status != 'completed']
     if not dominfo.get('domain'): missing.append('from_domain')
-    return {"score": round(max(0.0, min(1.0, total)),2), "decision": decision,
+    return {**_score_metadata(total, components, profile),
             "bk_score": round(bk,2), "mixed_flag": is_mixed_script(dominfo.get("domain","")),
             "assessment_status": "partial" if missing else "completed",
             "coverage": {"authentication": verification, "not_evaluated": missing},
             "limitation": "Heuristic evidence score; missing checks do not establish safety"}
 
 
-def finalize_score(score, profile='default', additional=0.0):
-    """Keep numeric score, thresholds and verdict consistent after added signals."""
-    if not math.isfinite(score['score']) or not math.isfinite(additional):
-        raise ValueError('Score and additional signals must be finite')
-    total = max(0.0, min(1.0, score['score'] + additional))
-    malicious, suspicious = {'strict': (0.68, 0.52), 'conservative': (0.76, 0.58)}.get(profile, (0.72, 0.55))
-    score['score'] = round(total, 2)
-    score['decision'] = ('Likely malicious infrastructure' if total >= malicious else
-                         'Suspicious or compromised account' if total >= suspicious else 'Inconclusive')
+def finalize_score(score, profile=None, additional=0.0, additional_components=None):
+    """Add signals to the unrounded ledger; displayed score is not an accumulator."""
+    displayed = _finite_number(score['score'])
+    profile = score.get('profile', 'default') if profile is None else profile
+    raw = _finite_number(score.get('raw_score', displayed))
+    components = dict(score.get('score_components', {'legacy_base': raw}))
+    if any(not isinstance(name, str) or not name for name in components):
+        raise ValueError('Score components need nonempty names')
+    components = {name: _finite_number(value) for name, value in components.items()}
+    if not math.isclose(math.fsum(components.values()), raw, rel_tol=0, abs_tol=1e-12):
+        raise ValueError('Score components do not match raw score')
+    if 'raw_score' in score and displayed != round(max(0.0, min(1.0, raw)), 2):
+        raise ValueError('Display score was modified; add signals through finalize_score')
+    additions = dict(additional_components or {})
+    for name, value in additions.items():
+        if not isinstance(name, str) or not name:
+            raise ValueError('Additional score components need nonempty names')
+        components[name] = math.fsum((components.get(name, 0.0), _finite_number(value)))
+    additional = _finite_number(additional)
+    if additional:
+        components['additional_signals'] = math.fsum((components.get('additional_signals', 0.0), additional))
+    score.update(_score_metadata(math.fsum(components.values()), components, profile))
     return score

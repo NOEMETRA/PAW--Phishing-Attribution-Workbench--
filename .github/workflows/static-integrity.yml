@@ -31,6 +31,9 @@ jobs:
       - name: Verify content observations cannot infer safety or authorize actions
         run: python -m unittest discover -s tests -p 'test_content_contracts.py' -v
 
+      - name: Verify score contributions, unrounded decisions and numeric contracts
+        run: python -m unittest discover -s tests -p 'test_scoring_contracts.py' -v
+
       - name: Verify MIME and attachment evidence contracts
         run: python -m unittest discover -s tests -p 'test_mime_contracts.py' -v
 
