@@ -5,6 +5,7 @@ from email import policy
 from .authentication import normalize_domain
 from .mailbox_domains import reply_domain_observation
 from .domain_unicode import observe_domain_unicode
+from .domain_age import usable_age_days
 
 
 COMPONENT_SOURCES = {
@@ -318,7 +319,7 @@ def score_case(hop_diag: dict, auth: dict, dominfo: dict, brand_seeds=None, susp
             authentication_score += weight
     # Domain signals
     domain_score = 0.0
-    nrd = dominfo.get("nrd_days")
+    nrd = usable_age_days(dominfo.get("nrd_days"))
     if nrd is not None and nrd < 30: domain_score += 0.15
     if nrd is not None and nrd < 7: domain_score += 0.20
     if suspicious_asn: domain_score += 0.3
