@@ -2,6 +2,8 @@
 import re
 import math
 from email import policy
+from .authentication import normalize_domain
+from .mailbox_domains import reply_domain_observation
 
 
 COMPONENT_SOURCES = {
@@ -122,12 +124,39 @@ def risky_tlds():
     return {".click", ".icu", ".cfd", ".rest", ".tk", ".gq", ".ml", ".ga", ".cf"}
 
 def _extract_domain(addr: str):
-    """Extract domain from email address."""
-    if not addr: return ""
-    m = re.search(r"<([^>]+)>", addr)
-    email_ = m.group(1) if m else addr
-    m2 = re.search(r"@([^>]+)$", email_.strip())
-    return (m2.group(1) if m2 else "").strip().lower()
+    """Compatibility adapter: one structured Reply-To domain, never a regex guess."""
+    return reply_domain_observation(addr,count=1 if addr else 0)['domain'] or ''
+
+
+def _reply_to_comparison(headers, from_domain):
+    headers = headers or {}
+    normalized_from = normalize_domain(from_domain)
+    reply_to = headers.get('reply_to','')
+    defects = [issue for issue in headers.get('header_field_defects') or []
+               if isinstance(issue,dict) and str(issue.get('field','')).lower() == 'reply-to']
+    count = headers.get('reply_to_header_count',1 if reply_to else 0)
+    # Prefer original parser observations: JSON rendering may erase defects.
+    reply = headers.get('reply_to_domain')
+    if not isinstance(reply,dict) or count != 1 or defects:
+        reply = reply_domain_observation(reply_to,count=count,field_defects=defects)
+    reply_domain = normalize_domain(reply.get('domain')) if reply.get('status') == 'parsed' else None
+    observation = {'status':'not_evaluated','result':None,'verified':False,
+                   'source':'message_headers','from_domain':normalized_from,
+                   'reply_domain':reply_domain,'reply_to':reply,'contribution':0.0,
+                   'scope':'normalized_domain_equality_or_label_suffix'}
+    from_available = normalized_from and headers.get('from_header_count',1) == 1 and (
+        (headers.get('from_identity') or {}).get('status') not in {'unsupported','unavailable','not_evaluated'})
+    if not from_available:
+        observation['reason'] = 'Unambiguous normalized From domain unavailable'
+    elif not reply_domain:
+        observation['reason'] = reply.get('reason','Reply-To domain unavailable')
+    else:
+        related = (reply_domain == normalized_from or reply_domain.endswith('.'+normalized_from)
+                   or normalized_from.endswith('.'+reply_domain))
+        observation.update(status='completed',result='same_or_subdomain' if related else 'different',
+            contribution=0.0 if related else 0.15,
+            reason='Unverified structural domain comparison; ownership not established')
+    return observation
 
 def score_case(hop_diag: dict, auth: dict, dominfo: dict, brand_seeds=None, suspicious_asn=False, ns_mx_recurrent=False, profile="default", headers=None, detonation_endpoints=None, canary_ips=None, det_summary=None, origin_domain="", deobfuscation_weight: float = 0.30):
     deobfuscation_weight = validate_deobfuscation_weight(deobfuscation_weight)
@@ -174,6 +203,8 @@ def score_case(hop_diag: dict, auth: dict, dominfo: dict, brand_seeds=None, susp
     # This is a structural heuristic, never proof of official brand ownership.
     
     # Display-Name lookalike
+    reply_observation = _reply_to_comparison(headers,from_domain)
+    domain_score += reply_observation['contribution']
     if headers:
         # Persisted JSON no longer carries HeaderRegistry objects. Respect its
         # original occurrence/defect metadata instead of trusting rendered text.
@@ -192,14 +223,6 @@ def score_case(hop_diag: dict, auth: dict, dominfo: dict, brand_seeds=None, susp
                         domain_score += 0.20
                         break
         
-        # Reply-To mismatch
-        reply_to = headers.get("reply_to", "")
-        if reply_to:
-            reply_domain = _extract_domain(reply_to)
-            if reply_domain and reply_domain != from_domain:
-                # Check if it's not a punycode variant or subdomain
-                if not (reply_domain.endswith("." + from_domain) or from_domain.endswith("." + reply_domain)):
-                    domain_score += 0.15
     
     # TLD risk
     if from_domain:
@@ -284,7 +307,9 @@ def score_case(hop_diag: dict, auth: dict, dominfo: dict, brand_seeds=None, susp
                     for method in ('spf', 'dkim', 'dmarc', 'arc')}
     missing = [method for method, status in verification.items() if status != 'completed']
     if not dominfo.get('domain'): missing.append('from_domain')
+    if reply_observation['status'] != 'completed': missing.append('reply_to_comparison')
     return {**_score_metadata(total, components, profile),
+            'sender_domain_observations': {'reply_to_comparison':reply_observation},
             "bk_score": round(bk,2), "mixed_flag": is_mixed_script(dominfo.get("domain","")),
             "assessment_status": "partial" if missing else "completed",
             "coverage": {"authentication": verification, "not_evaluated": missing},

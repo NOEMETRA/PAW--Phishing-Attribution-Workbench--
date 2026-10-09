@@ -31,6 +31,9 @@ jobs:
       - name: Verify mailbox display-name parsing and structured field defects
         run: python -m unittest discover -s tests -p 'test_header_identity_contracts.py' -v
 
+      - name: Verify structured Reply-To domains and comparison uncertainty
+        run: python -m unittest discover -s tests -p 'test_reply_domain_contracts.py' -v
+
       - name: Verify content observations cannot infer safety or authorize actions
         run: python -m unittest discover -s tests -p 'test_content_contracts.py' -v
 
@@ -81,3 +84,6 @@ jobs:
 
       - name: Verify real offline mailbox identity and header-field coverage
         run: python tests/integration_header_identity_real.py
+
+      - name: Verify real offline domain comparisons and persisted scoring parity
+        run: python tests/integration_reply_domain_real.py
