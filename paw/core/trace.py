@@ -455,9 +455,10 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
     phishing_analysis = analyze_phishing_content(body_text, subject, from_addr)
     headers["phishing_analysis"] = phishing_analysis
     
-    # ML scoring for canary injection decision
-    from .ml_scorer import score_email_for_canary
-    ml_score = score_email_for_canary({
+    # Auxiliary observations, not a trained classifier or authorization to act.
+    # Keep the legacy artifact key; schema_version=2 describes the new contract.
+    from .ml_scorer import analyze_content_indicators
+    ml_score = analyze_content_indicators({
         'subject': subject,
         'body': body_text,
         'from': from_addr

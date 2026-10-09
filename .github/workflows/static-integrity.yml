@@ -28,6 +28,9 @@ jobs:
       - name: Verify authentication and missing evidence contracts
         run: python -m unittest discover -s tests -p 'test_authentication_contracts.py' -v
 
+      - name: Verify content observations cannot infer safety or authorize actions
+        run: python -m unittest discover -s tests -p 'test_content_contracts.py' -v
+
       - name: Verify MIME and attachment evidence contracts
         run: python -m unittest discover -s tests -p 'test_mime_contracts.py' -v
 
@@ -52,3 +55,5 @@ jobs:
         run: python tests/integration_cli_api_real.py
       - name: Verify real offline CLI URL evidence and coverage
         run: python tests/integration_url_evidence_real.py
+      - name: Verify real offline full CLI content observations and actions
+        run: python tests/integration_content_assessment_real.py

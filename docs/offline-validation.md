@@ -72,6 +72,11 @@ regression set documented in [URL evidence](url-evidence.md). A private original
 EML pilot exposes real URL rewriting defects; it does not yet establish classifier
 accuracy or reproduce the historical online runtime.
 
+The auxiliary content scorer has a subsequent audit and versioned observation
+contract documented in [Content assessment](content-assessment.md). It removes
+unvalidated action/risk recommendations caused by neutral text length; the final
+attribution thresholds and the remaining accuracy-validation work are unchanged.
+
 Codex review is requested in GitHub PR comments. Treat the review as an additional
 check and resolve actionable findings with reproductions and focused tests; do
 not interpret an empty review as full software validation.
