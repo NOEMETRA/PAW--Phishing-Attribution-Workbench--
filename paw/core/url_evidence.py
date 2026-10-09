@@ -1,4 +1,5 @@
 """Offline URL inventory: observed/refanged targets and derived candidates."""
+import json
 import re
 from ..deobfuscate.url import http_url_status
 
@@ -21,7 +22,9 @@ def build_url_evidence(observed, results):
     never become observed URLs or automatic detonation/enrichment targets.
     """
     targets, evidence, seen = [], [], set()
+    seen_evidence = set()
     observed = list(dict.fromkeys(observed))
+    observed_set = set(observed)
     for value in observed:
         status, reason = http_url_status(value)
         evidence.append({'url':value, 'provenance':'observed', 'status':status,
@@ -32,10 +35,19 @@ def build_url_evidence(observed, results):
     for result in results:
         value = result.get('network_url')
         if (result.get('status') == 'completed' and result.get('network_target') is True
-                and value and value not in seen and http_url_status(value)[0] == 'completed'):
-            seen.add(value)
-            targets.append(value)
-            evidence.append({'url':value, 'source_url':result['original_url'],
+                and value and http_url_status(value)[0] == 'completed'):
+            if value not in seen:
+                seen.add(value)
+                targets.append(value)
+            # An unchanged observation is already inventoried above. Derived
+            # sources must remain evidence even when their target is shared.
+            if value in observed_set and result['url_provenance'] == 'observed':
+                continue
+            record = {'url':value, 'source_url':result['original_url'],
                 'provenance':result['url_provenance'], 'status':'completed', 'network_target':True,
-                'transformations':result.get('transformations', [])})
+                'transformations':result.get('transformations', [])}
+            key = json.dumps(record, sort_keys=True)
+            if key not in seen_evidence:
+                seen_evidence.add(key)
+                evidence.append(record)
     return targets, evidence

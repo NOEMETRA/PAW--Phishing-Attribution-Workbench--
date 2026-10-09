@@ -32,15 +32,21 @@ def main():
         json_token = base64.b64encode(json.dumps({'href':embedded, 'email_id':'fixture'}).encode()).decode()
         json_wrapper = 'https://tracking.invalid/json/' + json_token
         malformed = 'https://example.invalid:bad/a'
+        bad_escapes = ['https://example.invalid/%ZZ',
+            'https://example.invalid/?x=%0G', 'https://example.invalid/#%']
+        valid_octet = 'https://example.invalid/%FF'
         defanged = 'hxxps://refanged[.]invalid/a%2Fb'
         encoded_url = quote('https://encoded.invalid/a%2Fb', safe='')
+        colliding_sources = ['hxxps://example[.]invalid/a%2Fb?x=a%26admin%3D1',
+            quote(reserved, safe=''), base64.b64encode(reserved.encode()).decode()]
         item = EmailMessage(policy=policy.SMTP)
         item['From'] = 'regression@example.invalid'
         item['To'] = 'recipient@example.invalid'
         item['Subject'] = 'URL evidence regression fixture'
         item['X-PAW-Fixture'] = 'constructed regression; not classifier accuracy ground truth'
-        item.set_content('\n'.join([reserved, lookalike, wrapper, json_wrapper, malformed, defanged, encoded_url,
-            'Ordinary invoice.pdf sender@example.invalid special-offer!']))
+        item.set_content('\n'.join([reserved, lookalike, wrapper, json_wrapper, malformed,
+            valid_octet, defanged, encoded_url] + bad_escapes + colliding_sources +
+            ['Ordinary invoice.pdf sender@example.invalid special-offer!']))
         plain_bytes = item.as_bytes()
         (inputs / 'plain.eml').write_bytes(plain_bytes)
         html_url = 'HTTPS://example.invalid/upper%2Fpath?x=a%26b&y=2'
@@ -71,12 +77,22 @@ def main():
             coverage = read(case / 'analysis_coverage.json')['stages']['url_interpretation']
             if source == 'plain.eml':
                 assert headers['urls'] == [reserved, lookalike, wrapper, json_wrapper,
+                    valid_octet,
                     'https://refanged.invalid/a%2Fb', 'https://encoded.invalid/a%2Fb']
                 assert malformed not in headers['urls']
                 assert embedded not in headers['urls']
                 assert all('apple.com' not in url for url in headers['urls'])
                 invalid = next(e for e in evidence if e['url'] == malformed)
                 assert invalid['status'] == 'invalid' and invalid['network_target'] is False
+                for value in bad_escapes:
+                    assert value not in headers['urls']
+                    invalid = next(e for e in evidence if e['url'] == value)
+                    assert invalid['status'] == 'invalid' and invalid['network_target'] is False
+                collisions = [e for e in evidence if e['url'] == reserved]
+                assert collisions[0]['provenance'] == 'observed'
+                assert [e['source_url'] for e in collisions[1:]] == colliding_sources
+                assert all(e['transformations'] and e['provenance'] == 'derived_text_url'
+                           for e in collisions[1:])
                 derived = next(e for e in evidence if e['url'] == 'https://refanged.invalid/a%2Fb')
                 assert derived['source_url'] == defanged and derived['provenance'] == 'derived_text_url'
                 url_results = read(case / 'deobfuscation_results.json')['deobfuscated_artifacts']['urls']
@@ -86,7 +102,7 @@ def main():
                 assert json_nested[0]['url'] == embedded and json_nested[0]['source_json_pointer'] == '/href'
                 assert json_nested[0]['network_target'] is False
                 assert coverage['status'] == 'partial'
-                assert coverage['invalid_or_unresolved_count'] == 1
+                assert coverage['invalid_or_unresolved_count'] == 4
                 assert coverage['embedded_candidate_count'] == 2
             else:
                 assert headers['urls'] == [html_url]

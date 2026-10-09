@@ -10,7 +10,7 @@ from paw.core.network_policy import offline_policy, violations
 from paw.core.url_evidence import build_url_evidence, extract_text_url_candidates
 from paw.deobfuscate.core import DeobfuscationEngine
 from paw.deobfuscate.homoglyph import HomoglyphDetector
-from paw.deobfuscate.url import URLDeobfuscator
+from paw.deobfuscate.url import URLDeobfuscator, http_url_status
 
 
 def encoded(value):
@@ -226,6 +226,79 @@ class URLContracts(unittest.TestCase):
         self.assertEqual(len(evidence), 2)
         self.assertEqual(evidence[1]['source_url'], raw)
         self.assertEqual(evidence[1]['provenance'], 'derived_text_url')
+
+    def test_observed_target_keeps_each_distinct_derived_provenance(self):
+        target = 'https://example.invalid/a%2Fb'
+        sources = ['hxxps://example[.]invalid/a%2Fb', quote(target, safe=''), encoded(target)]
+        results = [self.engine.deobfuscate_url(value) for value in sources]
+        # Repeated results and the unchanged observed URL add no duplicate records.
+        results += [results[0], self.engine.deobfuscate_url(target)]
+        targets, evidence = build_url_evidence([target, target], results)
+        self.assertEqual(targets, [target])
+        self.assertEqual(evidence[0]['provenance'], 'observed')
+        self.assertEqual([e['source_url'] for e in evidence[1:]], sources)
+        for record, result in zip(evidence[1:], results):
+            self.assertEqual(record['url'], target)
+            self.assertEqual(record['transformations'], result['transformations'])
+            self.assertEqual(record['provenance'], 'derived_text_url')
+
+    def test_colliding_derived_targets_keep_distinct_sources_without_observation(self):
+        target = 'https://example.invalid/a'
+        sources = ['hxxps://example[.]invalid/a', quote(target, safe='')]
+        results = [self.engine.deobfuscate_url(value) for value in sources]
+        targets, evidence = build_url_evidence([], results + results)
+        self.assertEqual(targets, [target])
+        self.assertEqual([e['source_url'] for e in evidence], sources)
+        self.assertEqual([e['transformations'] for e in evidence],
+                         [r['transformations'] for r in results])
+
+    def test_malformed_percent_escapes_are_preserved_as_invalid_evidence(self):
+        malformed = ['%', '%0', '%ZZ', '%0G', '%G0', '%2%20', '%%20']
+        locations = ['https://example.invalid/{}', 'https://example.invalid/?x={}',
+                     'https://example.invalid/#{}', 'https://user{}@example.invalid/a',
+                     'https://example{}.invalid/a']
+        for location in locations:
+            for escape in malformed:
+                value = location.format(escape)
+                with self.subTest(url=value):
+                    self.assertEqual(http_url_status(value)[0], 'invalid')
+                    result = self.engine.deobfuscate_url(value)
+                    self.assertEqual(result['status'], 'invalid')
+                    self.assertEqual(result['final_url'], value)
+                    self.assertIsNone(result['network_url'])
+                    targets, evidence = build_url_evidence([value], [result])
+                    self.assertEqual(targets, [])
+                    self.assertEqual(evidence[0]['url'], value)
+                    self.assertEqual(evidence[0]['status'], 'invalid')
+                    self.assertFalse(evidence[0]['network_target'])
+
+    def test_complete_percent_octets_remain_unchanged_network_targets(self):
+        octets = ''.join('%%%02X' % value for value in range(256))
+        for value in ['https://example.invalid/' + octets,
+                      'https://example.invalid/?x=' + octets,
+                      'https://example.invalid/#' + octets,
+                      'https://example.invalid/%ff%2f%25ZZ%252']:
+            with self.subTest(url=value):
+                self.assertEqual(http_url_status(value), ('completed', None))
+                result = self.engine.deobfuscate_url(value)
+                self.assertEqual(result['network_url'], value)
+                self.assertEqual(result['final_url'], value)
+                self.assertEqual(build_url_evidence([value], [result])[0], [value])
+
+    def test_malformed_derived_and_embedded_urls_never_become_targets(self):
+        malformed = 'https://example.invalid/%ZZ?x=%0G'
+        for source in ['hxxps://example[.]invalid/%ZZ?x=%0G', quote(malformed, safe=''),
+                       encoded(malformed)]:
+            with self.subTest(source=source):
+                result = self.engine.deobfuscate_url(source)
+                self.assertEqual(result['status'], 'invalid')
+                self.assertEqual(result['final_url'], source)
+                self.assertFalse(result['network_target'])
+                self.assertEqual(build_url_evidence([], [result])[0], [])
+        wrapper = 'https://tracking.invalid/?next=' + encoded(malformed)
+        result = self.engine.deobfuscate_url(wrapper)
+        self.assertEqual(result['embedded_url_candidates'], [])
+        self.assertEqual(build_url_evidence([wrapper], [result])[0], [wrapper])
 
     def test_mime_extraction_preserves_case_entities_and_reserved_url_bytes(self):
         message = EmailMessage()

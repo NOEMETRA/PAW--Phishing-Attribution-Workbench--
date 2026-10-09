@@ -26,6 +26,8 @@ def http_url_status(value):
         return 'invalid', 'Whitespace/control characters in URL'
     if '\\' in value:
         return 'invalid', 'Backslashes have ambiguous HTTP URL parsing'
+    if re.search(r'%(?![0-9a-fA-F]{2})', value):
+        return 'invalid', 'Malformed percent escape in URL'
     try:
         parsed = urlsplit(value)
         if not parsed.hostname:
