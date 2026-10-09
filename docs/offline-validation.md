@@ -101,6 +101,10 @@ The [Reply-To comparison audit](reply-domain-comparison.md) corrects first-mailb
 selection, raw-domain comparisons and points from unavailable operands, retaining
 explicit persisted uncertainty. Remaining domain and Received heuristics are
 separate unresolved checks.
+The [Received audit](received-evidence.md) scopes selected IPs to supported From
+clauses, preserves other candidates and removes unsupported private-address and
+FQDN-only contributions. Recipient boundaries remain explicitly unevaluated;
+timestamp/relay heuristics and other domain signals still need validation.
 
 Codex review is requested in GitHub PR comments. Treat the review as an additional
 check and resolve actionable findings with reproductions and focused tests; do

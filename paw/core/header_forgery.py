@@ -2,12 +2,13 @@ import datetime
 import re
 import ipaddress
 from typing import List, Dict, Any
+from .ip_observations import classify_ip
 
 def analyze_received_anomalies(hops: list) -> dict:
     """Analyze Received headers for forgery indicators."""
     anomalies = {
         "non_monotonic_dates": False,
-        "private_ip_before_boundary": False,
+        "private_ip_before_boundary": None,
         "invalid_fqdn_count": 0,
         "impossible_negative_skew": False,
         "ip_fqdn_mismatch": False,
@@ -17,6 +18,11 @@ def analyze_received_anomalies(hops: list) -> dict:
         "spoofing_patterns": [],
         "auth_failures": []
     }
+    anomalies['receiver_boundary'] = {'status':'not_evaluated','verified':False,
+        'reason':'Recipient trust boundary not independently established; provider names are heuristic'}
+    anomalies['ip_observations'] = [{'header_index':hop.get('header_index'),
+        'ip':hop['ip'],'category':classify_ip(hop['ip'])['category'],
+        'source':'Received header claim','verified':False} for hop in hops if hop.get('ip')]
 
     if not hops:
         anomalies.update(status='not_evaluated', reason='No Received headers')
@@ -36,19 +42,8 @@ def analyze_received_anomalies(hops: list) -> dict:
             except:
                 pass
 
-    # Check for private IPs before boundary (simplified: before any MX internal hop)
-    boundary_found = False
-    for hop in hops:
-        if hop.get("role") == "recipient_mx_internal":
-            boundary_found = True
-            break
-
-        ip = hop.get("ip")
-        if ip and _is_private_ip(ip):
-            anomalies["private_ip_before_boundary"] = True
-            break
-
-    # Count invalid FQDNs
+    # Address categories and provider-name roles cannot establish a trusted
+    # receiver boundary. Keep syntax counts descriptive, never infer malice.
     for hop in hops:
         if hop.get("fqdn_ok") is False:
             anomalies["invalid_fqdn_count"] += 1
@@ -65,6 +60,13 @@ def analyze_received_anomalies(hops: list) -> dict:
 
     anomalies.update(status='heuristic_observations', verified=False)
     return anomalies
+
+
+def received_score_components(anomalies):
+    """Only retain the existing timestamp signal; hostname/IP categories are descriptive."""
+    return {'received_non_monotonic_dates': .1 if anomalies.get('non_monotonic_dates') else 0.0,
+            'received_private_ip_before_boundary': 0.0,
+            'received_invalid_fqdn': 0.0}
 
 def _detect_advanced_spoofing(hops: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Detect advanced header spoofing patterns."""

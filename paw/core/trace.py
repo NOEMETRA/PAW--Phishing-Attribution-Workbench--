@@ -533,14 +533,11 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
     mark_stage('headers_authentication')
     norm = normalize_received(headers.get("received") or [])
     hops = norm.get("ordered_hops") or []
-    write_json(os.path.join(case_dir,"received_path.json"), {"ordered_hops": hops})
+    write_json(os.path.join(case_dir,"received_path.json"), norm)
     # Choose origin candidate: prefer first hop with public IP NOT 'recipient_mx_internal'
     def _is_public_ip(s):
-        try:
-            ip = ipaddress.ip_address(s)
-            return ip.is_global
-        except Exception:
-            return False
+        from .ip_observations import classify_ip
+        return classify_ip(s)['category'] == 'public'
 
     origin = {}
     # Prefer external_ingress hops (email entering MX protection)
@@ -592,6 +589,9 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
                   "reputation": check_ip_reputation(ip),
                   "status": "candidate" if ip else "unavailable", "source": "Received header",
                   "verified": False, "limitation": "Header chain and receiver boundary are not independently authenticated",
+                  'received_header_index':origin.get('header_index'),
+                  'ip_observation':origin.get('ip_observation'),
+                  'role_observation':origin.get('role_observation'),
                   "enrichment_status": ip_res.get("status", "error" if ip_res.get("error") else "available" if ip else "unavailable")}
     write_json(os.path.join(case_dir,"transmitting_server.json"), origin_out)
     # Create origin.json alias for compatibility with abuse package
@@ -990,13 +990,15 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
     
     # Header forgery analysis
     mark_stage('scoring')
-    from .header_forgery import analyze_received_anomalies
+    from .header_forgery import analyze_received_anomalies, received_score_components
     anomalies = analyze_received_anomalies(hops)
     write_json(os.path.join(case_dir,"received_anomalies.json"), anomalies)
     # Score
     suspicious_asn = False  # could be enhanced with local list
     ns_mx_recurrent = False # could be enhanced with local list
-    hop_diag = {"skew_s": origin.get("skew_s",0), "helo_ptr_match": origin.get("helo_ptr_match"), "fqdn_ok": origin.get("fqdn_ok")}
+    # By-host syntax is descriptive; single labels and address literals cannot
+    # establish malicious routing or a verified receiver boundary.
+    hop_diag = {"skew_s": origin.get("skew_s",0), "helo_ptr_match": origin.get("helo_ptr_match"), "fqdn_ok": None}
     # Load detonation/canary data for scoring bonuses
     detonation_endpoints = []
     canary_ips = []
@@ -1015,10 +1017,7 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
         det_summary = read_json(det_summary_path) or {}
     score = score_case(hop_diag, auth, {"domain":from_domain, "nrd_days": dominfo["from_domain"].get("nrd_days")}, brand_seeds=None, suspicious_asn=suspicious_asn, ns_mx_recurrent=ns_mx_recurrent, profile=profile, headers=headers, detonation_endpoints=detonation_endpoints, canary_ips=canary_ips, det_summary=det_summary, origin_domain=from_domain, deobfuscation_weight=deob_weight)
     # Preserve each unverified structural signal and the unrounded base sum.
-    score = finalize_score(score, profile, additional_components={
-        'received_non_monotonic_dates': .1 if anomalies.get('non_monotonic_dates') else 0.0,
-        'received_private_ip_before_boundary': .1 if anomalies.get('private_ip_before_boundary') else 0.0,
-        'received_invalid_fqdn': .05 if anomalies.get('invalid_fqdn_count', 0) >= 1 else 0.0})
+    score = finalize_score(score, profile, additional_components=received_score_components(anomalies))
     stage_status['header_parsing'] = {'status': 'partial' if headers.get('header_defects') or headers.get('from_header_count') != 1 or (headers.get('from_identity') or {}).get('status') != 'parsed' or (headers.get('reply_to_domain') or {}).get('status') not in {'parsed','unavailable'} else 'completed',
                                      'defects': headers.get('header_defects') or [],
                                      'field_defects': headers.get('header_field_defects') or [],
@@ -1028,7 +1027,11 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
                                      'from_header_count': headers.get('from_header_count')}
     stage_status['reply_to_comparison'] = score['sender_domain_observations']['reply_to_comparison']
     stage_status['mime_parsing'] = {'status': mime_result['metadata']['status'], 'issues': mime_result['metadata']['issues']}
-    stage_status['received_path'] = {'status': 'parsed_unverified' if hops else 'unavailable', 'verified': False}
+    stage_status['received_path'] = {'status': 'partial' if norm['status']=='partial' else 'parsed_unverified' if hops else 'unavailable',
+        'verified':False,'schema_version':norm['received_schema_version'],
+        'parsing_issues':[{'header_index':h['header_index'],'issues':h['parsing']['issues']} for h in hops if h['parsing']['issues']],
+        'receiver_boundary':anomalies['receiver_boundary'],
+        'descriptive_components':['received_private_ip_before_boundary','received_invalid_fqdn']}
     correlations = correlate_campaigns(os.path.dirname(case_dir))
     stage_status['campaign_correlation'] = {'status':correlations['status'], 'reason':correlations['reason']}
     stage_status['stix_export'] = {'status':'unavailable' if stix else 'skipped',

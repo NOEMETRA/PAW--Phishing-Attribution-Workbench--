@@ -34,6 +34,9 @@ jobs:
       - name: Verify structured Reply-To domains and comparison uncertainty
         run: python -m unittest discover -s tests -p 'test_reply_domain_contracts.py' -v
 
+      - name: Verify scoped Received IP evidence and unverified receiver boundary
+        run: python -m unittest discover -s tests -p 'test_received_contracts.py' -v
+
       - name: Verify content observations cannot infer safety or authorize actions
         run: python -m unittest discover -s tests -p 'test_content_contracts.py' -v
 
@@ -87,3 +90,6 @@ jobs:
 
       - name: Verify real offline domain comparisons and persisted scoring parity
         run: python tests/integration_reply_domain_real.py
+
+      - name: Verify real offline Received IP provenance and descriptive categories
+        run: python tests/integration_received_real.py
