@@ -29,6 +29,8 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_execution_contracts.py' -v
       - name: Verify authentication and missing evidence contracts
         run: python -m unittest discover -s tests -p 'test_authentication_contracts.py' -v
+      - name: Verify bounded local DKIM key evidence and unverified provenance
+        run: python -m unittest discover -s tests -p 'test_dkim_key_evidence.py' -v
 
       - name: Verify mailbox display-name parsing and structured field defects
         run: python -m unittest discover -s tests -p 'test_header_identity_contracts.py' -v
@@ -86,6 +88,8 @@ jobs:
         run: python tests/integration_legacy_inbox_real.py
       - name: Verify legacy canary rejection preserves actual offline case evidence
         run: python tests/integration_canary_boundary_real.py
+      - name: Verify real signed offline CLI and HTTP analyses with supplied key snapshots
+        run: python tests/integration_dkim_keys_real.py
       - name: Verify real offline CLI URL evidence and coverage
         run: python tests/integration_url_evidence_real.py
       - name: Verify real offline full CLI content observations and actions

@@ -268,3 +268,14 @@ sending automatic mail. The launcher no longer changes directory at import time
 or uses a default example case. See [canary status](canary-status.md) for the
 measured reproduction and rejection tests. Existing observations remain readable;
 the offline analysis engine and deferred detonation/Sentinel paths are unchanged.
+
+## Local DKIM public key evidence
+
+Analysis presets accept `--dkim-keys` and HTTP analysis accepts `options.dkim_keys`.
+The supplied, bounded JSON is snapshotted into each new case before sealing; no
+DNS is queried. Actual signature pass/fail is kept separate from unverified key
+provenance and cannot automatically add authentication-risk points. Without key
+evidence the previous unavailable-check behavior remains. See
+[local DKIM keys](local-dkim-keys.md) for the input contract, provenance boundary
+and real RSA CLI/HTTP regression. No authentic key set for the private corpus has
+been established by these constructed cryptographic tests.

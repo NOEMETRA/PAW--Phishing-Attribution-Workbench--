@@ -383,6 +383,10 @@ Use detonation only from an isolated research environment with an appropriate ou
 
 `analyze`, `trace`, `full`, `forensic`, and `quick` apply the offline policy.
 Offline runs skip detonation, RDAP/DNS enrichment, canary deployment and remote anchoring.
+
+Offline signature verification can use explicitly supplied local public key
+evidence via `--dkim-keys`; the key snapshot is sealed with the case and its
+provenance remains unverified. See [local DKIM keys](docs/local-dkim-keys.md).
 A process-wide Python audit guard blocks socket operations and subprocess launches,
 including worker threads. API jobs run in separate processes and default to offline.
 `execution.json` records skipped stages and policy violations; skipped is not a successful measurement.

@@ -26,7 +26,8 @@ def main():
             from ..core.verify import verify_case
             paths = trace_sources(request['file_path'], request.get('lang', 'en'),
                 request.get('stix', True), request.get('abuse', True),
-                request.get('anchor', False), request['no_egress'], request['profile'], request.get('deob_weight', .30))
+                request.get('anchor', False), request['no_egress'], request['profile'], request.get('deob_weight', .30),
+                request.get('dkim_key_evidence'))
             if not paths or not all(verify_case(path) for path in paths):
                 raise RuntimeError('Analysis did not produce verifiable evidence')
             result = {'status': 'completed', 'case_ids': [Path(p).name for p in paths],

@@ -166,13 +166,29 @@ class RealDkimContracts(unittest.TestCase):
         self.assertEqual(result['status'], 'not_evaluated')
         self.assertIsNone(result['result'])
 
-    def test_score_uses_real_verified_failure_and_tracks_missing_checks(self):
+    def test_tampered_body_with_missing_key_is_still_not_evaluated(self):
+        with offline_policy():
+            result = verify_dkim_offline(self.signed.replace(b'Original body', b'Tampered body'),
+                {'other._domainkey.example.com': b'v=DKIM1; p='})
+        self.assertEqual(result['status'], 'not_evaluated')
+        self.assertIsNone(result['result'])
+
+    def test_malformed_local_public_key_is_not_a_signature_failure(self):
+        with offline_policy():
+            result = verify_dkim_offline(self.signed, {'test._domainkey.example.com':b'v=DKIM1; p=invalid'})
+        self.assertEqual(result['status'], 'not_evaluated')
+        self.assertIsNone(result['result'])
+        self.assertEqual(result['signatures'][0]['status'], 'error')
+
+    def test_signature_failure_with_unverified_local_key_does_not_add_risk(self):
         with offline_policy():
             passed = verify_dkim_offline(self.signed, self.records)
             failed = verify_dkim_offline(self.signed.replace(b'Original body', b'Tampered body'), self.records)
         good = score_case({}, {'dkim':{'verification':passed}}, {'domain':'example.com'})
         bad = score_case({}, {'dkim':{'verification':failed}}, {'domain':'example.com'})
-        self.assertGreater(bad['score'], good['score'])
+        self.assertEqual(bad['score'], good['score'])
+        self.assertEqual(failed['key_provenance_status'], 'unverified')
+        self.assertIn('dkim_key_provenance', bad['coverage']['not_evaluated'])
         self.assertEqual(bad['assessment_status'], 'partial')
         self.assertNotIn('dkim', bad['coverage']['not_evaluated'])
 

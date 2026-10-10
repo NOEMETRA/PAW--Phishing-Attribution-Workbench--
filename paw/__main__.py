@@ -9,11 +9,13 @@ from .core.scoring import validate_deobfuscation_weight
 from .core.process_recovery import process_identity
 from .core.runtime import read_progress
 from .core.job_registry import require_stopped_case
+from .core.dkim_keys import load_key_file, parse_key_evidence
 
 _analysis_limits = RunLimits()
 
-def trace_sources(src, lang, stix, abuse, anchor, no_egress, profile='default', deob_weight=.30):
+def trace_sources(src, lang, stix, abuse, anchor, no_egress, profile='default', deob_weight=.30, dkim_key_evidence=None):
     """CLI and API share the same supervised worker and honest terminal states."""
+    if dkim_key_evidence is not None: parse_key_evidence(dkim_key_evidence)
     identifier = 'analysis_'+uuid.uuid4().hex
     control = Path.cwd()/'jobs'/identifier
     control.mkdir(parents=True)
@@ -24,7 +26,8 @@ def trace_sources(src, lang, stix, abuse, anchor, no_egress, profile='default', 
     atomic_json(state,job)
     request, result = control/'request.json', control/'result.json'
     atomic_json(request, {'file_path':str(Path(src).resolve()),'lang':lang,'stix':stix,
-        'abuse':abuse,'anchor':anchor,'no_egress':no_egress,'profile':profile,'deob_weight':deob_weight})
+        'abuse':abuse,'anchor':anchor,'no_egress':no_egress,'profile':profile,'deob_weight':deob_weight,
+        **({'dkim_key_evidence':dkim_key_evidence} if dkim_key_evidence is not None else {})})
     env = {'PYTHONPATH':str(Path(__file__).resolve().parents[1]),'PAW_ANALYSIS_ID':identifier}
     try:
         outcome = asyncio.run(supervise([sys.executable,'-X','utf8','-m','paw.web.worker',str(request),str(result)],
@@ -270,6 +273,7 @@ For help: paw help <command>
         p_geo.add_argument("--output", choices=["html", "json", "both"], default="both", help="Output format")
 
         for analysis_parser in (p_analyze, p_quick, p_full, p_forensic, p_trace):
+            analysis_parser.add_argument('--dkim-keys', help='Local JSON key evidence; no DNS lookup or implied key trust')
             analysis_parser.add_argument('--deadline', type=float, default=900, help='Overall analysis deadline in seconds')
             analysis_parser.add_argument('--stage-timeout', type=float, default=120, help='Maximum elapsed time per analysis stage')
             analysis_parser.add_argument('--memory-mib', type=int, default=2048, help='Worker memory budget in MiB')
@@ -277,6 +281,7 @@ For help: paw help <command>
         if args.cmd in {'analyze','quick','full','forensic','trace'}:
             _analysis_limits = RunLimits(wall_seconds=args.deadline, stage_seconds=args.stage_timeout,
                 memory_bytes=args.memory_mib * 1024**2)
+            key_evidence = load_key_file(args.dkim_keys) if args.dkim_keys else None
 
         # Handle new commands
         if args.cmd == "analyze":
@@ -285,25 +290,25 @@ For help: paw help <command>
                 handle_error("file_not_found", args.email)
             trace_sources(args.email, args.lang, args.stix, args.abuse,
                          args.forensic,  # Use forensic as anchor
-                         args.no_egress, args.profile, 0.30)  # Default deob_weight
+                         args.no_egress, args.profile, 0.30, key_evidence)  # Default deob_weight
 
         elif args.cmd == "quick":
             # Quick preset: fast, no egress
             if not os.path.exists(args.email):
                 handle_error("file_not_found", args.email)
-            trace_sources(args.email, "en", False, False, False, True, "default", 0.30)
+            trace_sources(args.email, "en", False, False, False, True, "default", 0.30, key_evidence)
 
         elif args.cmd == "full":
             # Full preset: complete with exports
             if not os.path.exists(args.email):
                 handle_error("file_not_found", args.email)
-            trace_sources(args.email, args.lang, True, True, False, args.no_egress, "strict", 0.30)
+            trace_sources(args.email, args.lang, True, True, False, args.no_egress, "strict", 0.30, key_evidence)
 
         elif args.cmd == "forensic":
             # Forensic preset: maximum detail + anchoring
             if not os.path.exists(args.email):
                 handle_error("file_not_found", args.email)
-            trace_sources(args.email, args.lang, True, True, True, args.no_egress, "strict", 0.30)
+            trace_sources(args.email, args.lang, True, True, True, args.no_egress, "strict", 0.30, key_evidence)
 
         elif args.cmd == "help":
             if args.topic:
@@ -319,7 +324,7 @@ For help: paw help <command>
         elif args.cmd == "trace":
             if not os.path.exists(args.src):
                 handle_error("file_not_found", args.src)
-            trace_sources(args.src, args.lang, args.stix, args.abuse, args.anchor, args.no_egress, args.profile, args.deob_weight)
+            trace_sources(args.src, args.lang, args.stix, args.abuse, args.anchor, args.no_egress, args.profile, args.deob_weight, key_evidence)
 
         elif args.cmd == "verify":
             require_stopped_case(args.case)
@@ -748,6 +753,8 @@ EXAMPLES:
 
     if topic in help_topics:
         print(help_topics[topic])
+        if topic in {'analyze','quick','full','forensic'}:
+            print('  --dkim-keys PATH    Local JSON public key evidence; no DNS lookup or implied key trust')
     else:
         print(f"❌ Unknown help topic: {topic}")
         print("Available topics: analyze, quick, full, forensic, detonate, canary, geographic, export, query")

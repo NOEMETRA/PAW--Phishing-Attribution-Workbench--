@@ -314,7 +314,9 @@ def score_case(hop_diag: dict, auth: dict, dominfo: dict, brand_seeds=None, susp
     # Missing evidence and untrusted receiver claims are coverage limitations.
     for method, weight in [('spf', 0.4), ('dkim', 0.2), ('dmarc', 0.2), ('arc', 0.25)]:
         verification = (auth.get(method) or {}).get('verification') or {}
-        if verification.get('status') == 'completed' and verification.get('result') == 'fail':
+        if (verification.get('status') == 'completed' and verification.get('result') == 'fail'
+                and verification.get('source') != 'independent_DKIM_with_local_keys'
+                and verification.get('key_provenance_status') != 'unverified'):
             header_score += weight
             authentication_score += weight
     # Domain signals
@@ -419,6 +421,9 @@ def score_case(hop_diag: dict, auth: dict, dominfo: dict, brand_seeds=None, susp
     verification = {method: ((auth.get(method) or {}).get('verification') or {}).get('status', 'not_evaluated')
                     for method in ('spf', 'dkim', 'dmarc', 'arc')}
     missing = [method for method, status in verification.items() if status != 'completed']
+    dkim = auth.get('dkim') or {}
+    if dkim.get('key_evidence') or (dkim.get('verification') or {}).get('source') == 'independent_DKIM_with_local_keys':
+        missing.append('dkim_key_provenance')
     if not dominfo.get('domain'): missing.append('from_domain')
     if reply_observation['status'] != 'completed': missing.append('reply_to_comparison')
     if unicode_observation['status'] != 'observed_unverified': missing.append('unicode_domain')
