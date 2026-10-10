@@ -132,3 +132,9 @@ jobs:
 
       - name: Verify supplied whole-day ages in scorer and real SQLite index
         run: python -m unittest discover -s tests -p 'test_domain_age_inputs.py' -v
+
+      - name: Verify RDAP object binding and registration-event selection
+        run: python -m unittest discover -s tests -p 'test_rdap_registration.py' -v
+
+      - name: Verify actual loopback HTTP registration collector and no-egress skip
+        run: python tests/integration_rdap_registration_real.py
