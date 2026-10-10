@@ -379,9 +379,9 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
     violations_before = len(violations())
     headers, msg, b = load_mail(eml_path)
     mime_result = analyze_mime(msg)
-    case_id = sanitize_case_id(utc_now_iso().replace(":","").replace("Z","Z-") + str(uuid.uuid4())[:4])
+    case_id = sanitize_case_id(utc_now_iso().replace(":","").replace("Z","Z-") + uuid.uuid4().hex)
     case_dir = os.path.join(os.getcwd(), "cases", "case-" + case_id)
-    ensure_dir(case_dir)
+    os.makedirs(case_dir,exist_ok=False)
     mark_stage('ingest', os.path.basename(case_dir))
     
     # Ingest

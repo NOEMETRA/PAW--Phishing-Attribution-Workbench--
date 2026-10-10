@@ -2,6 +2,8 @@
 import requests, socket, json, tldextract, dns.resolver
 from ipwhois import IPWhois
 from .network_policy import network_allowed
+from .authentication import normalize_domain
+from .rdap_registration import observe_rdap_registration
 
 def ip_rdap(ip: str):
     if not network_allowed():
@@ -30,24 +32,46 @@ def ip_rdap(ip: str):
     except Exception as e:
         return {"error": str(e)}
 
+def _domain_registration(domain, lookup_url):
+    """Shared HTTP collector; explicit URL supports local protocol contracts."""
+    out={'registrar':None,'created':None}
+    observation=observe_rdap_registration(domain,None)
+    observation.update(source='rdap_http_lookup',request_url=lookup_url,
+                       response_url=None,http_status=None)
+    out['rdap_registration']=observation
+    if not network_allowed():
+        observation.update(status='skipped',reason_code='no_egress')
+        return out
+    if not observation['requested_domain']:
+        return out
+    try:
+        r = requests.get(lookup_url, timeout=10)
+        observation.update(response_url=r.url,http_status=r.status_code)
+        if r.status_code == 200:
+            data = r.json()
+            observation=observe_rdap_registration(domain,data)
+            observation.update(source='rdap_http_response',request_url=lookup_url,
+                               response_url=r.url,http_status=r.status_code)
+            out['rdap_registration']=observation
+            out['created']=observation['created']
+            if observation['domain_match'] is True:
+                registrar=data.get('registrar')
+                if isinstance(registrar,dict): out['registrar']=registrar.get('name')
+        else:
+            observation['reason_code']='http_status_unavailable'
+    except (ValueError, requests.exceptions.RequestException):
+        observation['reason_code']='request_or_json_failed'
+    return out
+
+
 def domain_rdap(domain: str):
     out = {"domain": domain, "registrar": None, "created": None, "ns": [], "mx": []}
     if not network_allowed():
         return dict(out, status='skipped', reason='no-egress')
-    try:
-        # RDAP aggregator
-        r = requests.get(f"https://rdap.org/domain/{domain}", timeout=10)
-        if r.status_code == 200:
-            data = r.json()
-            out["registrar"] = (data.get("registrar") or {}).get("name")
-            events = data.get("events") or []
-            created = None
-            for ev in events:
-                if ev.get("eventAction") == "registration":
-                    created = ev.get("eventDate")
-            out["created"] = created
-    except Exception:
-        pass
+    normalized=normalize_domain(domain) if isinstance(domain,str) else None
+    if not normalized:
+        return dict(out,status='unavailable',reason='invalid-domain')
+    out.update(_domain_registration(domain,f'https://rdap.org/domain/{normalized}'))
     # NS/MX via DNS authoritative resolvers
     try:
         answers = dns.resolver.resolve(domain, "NS")

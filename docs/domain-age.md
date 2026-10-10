@@ -47,8 +47,10 @@ calculation is usable.
 Under `--no-egress`, RDAP remains skipped and no registration date is invented.
 Actual offline cases report unavailable age, zero age contribution and null
 indexed age. This change does not enable registry requests or alter network policy.
-RDAP response parsing, redirects, subdomain lookup/binding and other reputation
-rules remain separate validation work. UI and the Linux analysis lab remain deferred.
+The collector now checks exact requested-name binding and unambiguous event
+selection as described in [RDAP registration binding](rdap-registration.md).
+Provider authority/redirect validation, registrable-parent lookup and other
+reputation rules remain separate validation work. UI and the Linux lab are deferred.
 
 ## Scalar ages supplied to legacy callers
 
