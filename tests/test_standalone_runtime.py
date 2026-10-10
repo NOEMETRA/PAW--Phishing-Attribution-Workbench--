@@ -8,11 +8,37 @@ import sys
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import Mock, patch
 
 from paw.core.runtime import atomic_json, RunLimits, supervise
-from paw.standalone import run_deobfuscation, StandaloneFailure, restrict_control_access
+from paw.standalone import analyze_supervised, run_deobfuscation, StandaloneFailure, restrict_control_access
+from paw.deobfuscate.input import validate_input_source, MAX_INPUT_BYTES
 
 REPO = Path(__file__).resolve().parents[1]
+
+
+class StandaloneAdmissionContracts(unittest.TestCase):
+    def test_literal_byte_and_encoding_rejection_precedes_asyncio_bootstrap(self):
+        for kind in ('text', 'url'):
+            for value, error in (('é'*(MAX_INPUT_BYTES//2+1), '1 MiB'),
+                                 ('€'*(MAX_INPUT_BYTES//3+1), '1 MiB'),
+                                 ('😀'*(MAX_INPUT_BYTES//4+1), '1 MiB'),
+                                 ('\ud800', 'valid UTF-8')):
+                with self.subTest(kind=kind, error=error), \
+                     patch('paw.standalone.run_deobfuscation', new=Mock(side_effect=AssertionError('Worker bootstrap attempted'))) as worker, \
+                     patch('paw.standalone.asyncio.run', side_effect=AssertionError('Asyncio bootstrap attempted')) as loop:
+                    with self.assertRaisesRegex(ValueError, error):
+                        analyze_supervised(**{kind:value})
+                    worker.assert_not_called()
+                    loop.assert_not_called()
+
+    def test_multibyte_literal_boundary_is_admitted_losslessly(self):
+        for kind in ('text', 'url'):
+            for value in ('é'*(MAX_INPUT_BYTES//2), '€'*(MAX_INPUT_BYTES//3)+'a',
+                          '😀'*(MAX_INPUT_BYTES//4)):
+                with self.subTest(kind=kind):
+                    self.assertEqual(len(value.encode('utf-8')), MAX_INPUT_BYTES)
+                    self.assertEqual(validate_input_source(**{kind:value}), (kind,value))
 
 
 class StandaloneRuntimeContracts(unittest.IsolatedAsyncioTestCase):
@@ -44,6 +70,42 @@ class StandaloneRuntimeContracts(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(execution['containment'],'windows_job' if os.name=='nt' else 'posix_process_group')
         self.assertIsNone(result['suspicion_score'])
         self.assertEqual({path.name for path in self.root.iterdir()},{'text.txt'})
+
+    async def test_real_worker_ignores_cwd_package_and_dependency_shadows(self):
+        # Benign import-boundary fixtures only write a marker and fail; they
+        # never perform network/process activity or supply analysis results.
+        for shadow in ('paw', 'psutil'):
+            directory = self.root/shadow; directory.mkdir()
+            marker = directory/'shadow-imported.txt'
+            if shadow == 'paw':
+                package = directory/'paw'; package.mkdir()
+                module = package/'__init__.py'
+            else:
+                module = directory/'psutil.py'
+            module.write_text("from pathlib import Path\nPath("+repr(str(marker))+
+                ").write_text('Unexpected cwd import')\nraise RuntimeError('Cwd shadow imported')\n", encoding='utf-8')
+            os.chdir(directory)
+            try:
+                try:
+                    result = await run_deobfuscation(text='Original é\r\n',deadline=15)
+                except StandaloneFailure:
+                    self.assertFalse(marker.exists(), 'Worker imported code from analysis cwd')
+                    raise
+                self.assertFalse(marker.exists())
+                self.assertEqual(result['deobfuscated_artifacts']['text']['original_text'], 'Original é\r\n')
+                self.assertEqual(result['input_observation']['sha256'],hashlib.sha256('Original é\r\n'.encode()).hexdigest())
+                self.assertTrue(result['standalone_execution']['tree_stopped'])
+            finally:
+                os.chdir(self.root)
+
+    async def test_invalid_literals_precede_transport_creation_in_async_adapter(self):
+        for options in ({'text':'é'*(MAX_INPUT_BYTES//2+1)},
+                        {'url':'😀'*(MAX_INPUT_BYTES//4+1)}, {'text':'\ud800'}):
+            with patch('paw.standalone.tempfile.mkdtemp',
+                       side_effect=AssertionError('Transport creation attempted')) as transport:
+                with self.assertRaises(ValueError):
+                    await run_deobfuscation(**options)
+                transport.assert_not_called()
 
     async def test_transport_permissions_protect_directory_and_inherited_files(self):
         directory = self.root/'protected'; directory.mkdir()

@@ -71,7 +71,9 @@ async def run_deobfuscation(*, text=None, file=None, url=None, deadline=60, memo
         request = control/'request.json'
         atomic_json(request, {kind:value})
         try:
-            outcome = await supervise([sys.executable,'-X','utf8','-m','paw.standalone_worker',str(request)],
+            # Python >=3.11 -P excludes cwd from module/dependency lookup;
+            # PYTHONPATH below contains only this trusted installation root.
+            outcome = await supervise([sys.executable,'-P','-X','utf8','-m','paw.standalone_worker',str(request)],
                 cwd=Path.cwd(), control=control, limits=limits,
                 env={'PYTHONPATH':str(Path(__file__).resolve().parents[1])})
         except (OSError, RuntimeError) as exc:

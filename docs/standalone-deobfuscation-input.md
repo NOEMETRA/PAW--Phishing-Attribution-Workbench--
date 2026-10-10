@@ -21,7 +21,9 @@ Files must be regular files with valid UTF-8, at most 1 MiB. Reading is bounded
 to the limit plus one byte using one file descriptor; a growing file cannot
 cause an unbounded read. Invalid encoding is rejected before analysis, without
 repair, dropped bytes or charset guessing. BOMs, CR/LF and Unicode spelling are
-preserved. Literal text/URL values have the same UTF-8 byte limit. Missing,
+preserved. Literal text/URL values have the same UTF-8 byte limit. Invalid
+surrogates or oversized multibyte literals are rejected during admission,
+before asyncio bootstrap, temporary transport creation or worker launch. Missing,
 conflicting, oversized or unreadable inputs fail nonzero; JSON stdout is empty
 on input rejection. A file's extension does not determine its encoding.
 
@@ -41,6 +43,10 @@ process supervisor. Defaults are a 60-second worker execution deadline and a
 reading, analysis and result writing. Parent argument admission, result parsing
 and stdout rendering are outside that worker deadline/memory limit.
 
+The worker starts with Python's safe import path (`-P`) and only the trusted PAW
+installation root in `PYTHONPATH`; packages or dependencies in the analysis
+working directory cannot shadow worker imports. This does not establish trust
+in the installed environment or provide an OS sandbox.
 The worker waits for containment before analysis imports/input access and always
 uses the offline application guard. Results are returned only after confirmed
 process-tree shutdown. JSON adds `standalone_execution` with elapsed time,

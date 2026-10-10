@@ -25,6 +25,15 @@ def validate_input_source(*, text=None, file=None, url=None):
         raise ValueError('Input must be text')
     elif len(value) > MAX_INPUT_BYTES:
         raise ValueError('Input exceeds the 1 MiB UTF-8 byte limit')
+    else:
+        # The character precheck bounds encoding allocation, but admission must
+        # also reject invalid UTF-8 and multibyte overflow before worker startup.
+        try:
+            raw = value.encode('utf-8')
+        except UnicodeError as exc:
+            raise ValueError('Input cannot be encoded as valid UTF-8') from exc
+        if len(raw) > MAX_INPUT_BYTES:
+            raise ValueError('Input exceeds the 1 MiB UTF-8 byte limit')
     return kind, value
 
 

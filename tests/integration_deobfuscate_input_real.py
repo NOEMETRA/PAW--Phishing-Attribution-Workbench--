@@ -22,9 +22,9 @@ def main():
         env = dict(os.environ,PYTHONPATH=str(REPO),PYTHONDONTWRITEBYTECODE='1',PYTHONUTF8='1')
         control_root = Path(tempfile.gettempdir())
         controls_before = set(control_root.glob('paw-standalone-*'))
-        def run(args, expected=0, wrapper=None):
+        def run(args, expected=0, wrapper=None, cwd=None):
             command = [sys.executable,'-X','utf8'] + ([str(wrapper),'deobfuscate'] if wrapper else ['-m','paw','deobfuscate'])
-            result = subprocess.run(command+args, cwd=root, env=env, capture_output=True, timeout=20)
+            result = subprocess.run(command+args, cwd=cwd or root, env=env, capture_output=True, timeout=20)
             assert result.returncode == expected, (args,result.returncode,result.stderr.decode(errors='replace'))
             if expected: assert result.stdout == b'', (args,result.stdout)
             return result
@@ -111,6 +111,51 @@ raise AssertionError('CLI accepted UNC input')
                      r'\\?\UNC\invalid-host\share\input.txt', '//?/UNC/invalid-host/share/input.txt'):
             rejected = run(['--file',path,'--json'],expected=2,wrapper=unc_wrapper)
             assert 'UNC paths are not accepted' in rejected.stderr.decode('utf-8')
+        # Build long literals inside a real CLI wrapper to avoid the OS argument
+        # size limit. An audit stop prevents any bootstrap socket/process or
+        # temporary transport operation if admission regresses.
+        literal_wrapper = root/'observe_literal_rejection.py'
+        literal_wrapper.write_text('''import sys
+from paw.__main__ import main
+kind=sys.argv[2]; variant=sys.argv[3]
+values={'two':'é'*524289, 'three':'€'*349526, 'four':'😀'*262145, 'surrogate':chr(0xd800)}
+sys.argv=['paw','deobfuscate',kind,values[variant],'--json']
+attempts=[]
+def observe(event,args):
+    if event=='tempfile.mkdtemp' or (event.startswith('socket.') and event!='socket.gethostname') or event in {'subprocess.Popen','os.system','os.posix_spawn','os.spawn','os.fork','os.exec','os.startfile','os.startfile/2','_winapi.CreateProcess'}:
+        attempts.append(event)
+        raise AssertionError('Test blocked bootstrap/transport operation')
+sys.addaudithook(observe)
+try:
+    main()
+except SystemExit as exc:
+    assert exc.code==2, exc.code
+    assert not attempts, attempts
+    raise
+raise AssertionError('CLI accepted invalid literal')
+''',encoding='utf-8')
+        for kind in ('--text','--url'):
+            for variant in ('two','three','four','surrogate'):
+                rejected = run([kind,variant],expected=2,wrapper=literal_wrapper)
+                assert ('valid UTF-8' if variant=='surrogate' else '1 MiB') in rejected.stderr.decode('utf-8')
+        # Trusted console-entry-point equivalent outside the analysis directory;
+        # only its actual child worker could import these benign cwd shadows.
+        entrypoint = root/'trusted_entrypoint.py'
+        entrypoint.write_text('from paw.__main__ import main\nmain()\n',encoding='utf-8')
+        for shadow in ('paw','psutil'):
+            directory = root/('shadow-'+shadow); directory.mkdir()
+            marker = directory/'imported.txt'
+            if shadow=='paw':
+                package = directory/'paw'; package.mkdir(); module = package/'__init__.py'
+            else:
+                module = directory/'psutil.py'
+            module.write_text('from pathlib import Path\nPath('+repr(str(marker))+
+                ").write_text('Unexpected cwd import')\nraise RuntimeError('Cwd shadow imported')\n",encoding='utf-8')
+            result = json.loads(run(['--file',str(source),'--json'],wrapper=entrypoint,cwd=directory).stdout)
+            assert not marker.exists()
+            assert result['input_observation']['sha256']==hashlib.sha256(raw).hexdigest()
+            assert result['deobfuscated_artifacts']['text']['original_text'].encode('utf-8')==raw
+            assert result['standalone_execution']['tree_stopped'] is True
         after = {path.name:hashlib.sha256(path.read_bytes()).hexdigest() for path in inputs.iterdir()}
         assert after==before
         assert set(control_root.glob('paw-standalone-*'))==controls_before
@@ -129,7 +174,7 @@ raise AssertionError('CLI accepted UNC input')
         assert len(cases)==1 and (cases[0]/'input.eml').read_bytes()==original and verify_case(str(cases[0]))
         assert json.loads((cases[0]/'execution.json').read_text())['no_egress'] is True
         assert email.read_bytes()==original
-        print('PASS: 25 actual standalone CLI invocations plus one real input-helper audit; BOM/CRLF/Unicode/empty/literal-URL inputs preserved with byte count/SHA-256; invalid UTF-8, ambiguous, oversized, missing and nonregular inputs fail before output; human/help/JSON consistent. Actual deadline stops the worker with exit 1 and empty stdout; invalid deadline/memory reject with exit 2. Six UNC backslash/forward/mixed/extended spellings rejected with exit 2, empty stdout and zero attempted input opens/network/process calls after CLI bootstrap; audit safety stops prevent OS access on regression. Instrumented real input helper reads under the application guard with zero socket/process attempts after module bootstrap; source files unchanged, confirmed-stop temporary controls cleaned, no standalone cases/jobs created. One subsequent actual supervised full --no-egress on an original public EML preserves MIME/seal and verifies common-parser compatibility. Constructed text contracts, not phishing accuracy or OS isolation.')
+        print('PASS: 35 actual standalone CLI invocations plus one real input-helper audit; BOM/CRLF/Unicode/empty/literal-URL inputs preserved with byte count/SHA-256; invalid UTF-8, ambiguous, oversized, missing and nonregular inputs fail before output; human/help/JSON consistent. Actual deadline stops the worker with exit 1 and empty stdout; invalid deadline/memory reject with exit 2. Six UNC backslash/forward/mixed/extended spellings rejected with exit 2, empty stdout and zero attempted input opens/network/process calls after CLI bootstrap; audit safety stops prevent OS access on regression. Eight multibyte/surrogate literals reject before bootstrap/transport operations; two real CLI workers ignore cwd package/dependency shadows. Instrumented real input helper reads under the application guard with zero socket/process attempts after module bootstrap; source files unchanged, confirmed-stop temporary controls cleaned, no standalone cases/jobs created. One subsequent actual supervised full --no-egress on an original public EML preserves MIME/seal and verifies common-parser compatibility. Constructed text contracts, not phishing accuracy or OS isolation.')
 
 
 if __name__ == '__main__': main()
