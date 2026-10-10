@@ -61,13 +61,39 @@ Windows-specific resource/locking checks require the Windows host.
   header handling, URL extraction/deobfuscation and score interpretation.
 - Reproduce the historical long-running analysis with its original configuration.
 - Validate POSIX supervision, installation on other platforms and legacy standalone scripts.
-- Build the separate Linux isolation/enrichment/detonation lab later. Current
-  no-egress is a Python guard, not a native-code or OS sandbox.
+- Verify controlled-egress isolation/enrichment/detonation after engine
+  stabilization, using the proposed Windows solution or separate Linux host.
+  Current no-egress is a Python guard, not a native-code or OS sandbox.
 - STIX and campaign correlation remain unavailable until validated. ARF/X-ARF
   compatibility outputs are local review drafts without asserted standards
   compliance. Offline CLI DKIM key ingestion is handled separately. Header
   SimHash now has a versioned algorithm contract; similarity thresholds and
   cross-case correlation remain unvalidated.
+
+## Analysis worker import boundary
+
+Supervised CLI presets and HTTP analysis launch `paw.web.worker` with Python's
+safe import path (`-P`, Python >=3.11) and the existing absolute installation root
+in a replacement `PYTHONPATH`. Evidence in the working/data directory cannot
+shadow the worker's PAW package or dependency imports. The working directory,
+relative output paths, supervisor, start gate, worker policy and decoder are
+unchanged. This requires a trusted parent and installed environment; it is not
+an OS sandbox or a guarantee about arbitrary independent Python entry points.
+
+`tests/integration_worker_imports_real.py` exercises all five actual CLI presets,
+a dependency shadow and two actual loopback HTTP worker/export flows, using the
+repository's original public EML. Benign `paw`/`psutil` fixtures only write a
+local marker and fail if unexpectedly imported; no analysis output is substituted.
+Before correction, all eight runs imported the fixture instead of reaching the
+real worker. After correction, they preserve original MIME, validate evidence
+seals and offline execution, export actual API ZIPs and confirm process shutdown.
+The test isolates parent bootstrap deliberately; Uvicorn's app directory is set
+to the trusted source root so its own path insertion cannot load the fixture.
+
+The full analysis with controlled egress remains a project objective. The user
+has identified a Windows solution to assess after engine stabilization; the
+separate Linux host is also available. Active enrichment/detonation and historical
+online latency measurements follow isolation verification and are deferred here.
 
 The hardcoded legacy email script now delegates to supervised offline `full`
 analysis, with real import/CLI/batch/timeout checks documented in

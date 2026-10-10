@@ -30,7 +30,8 @@ def trace_sources(src, lang, stix, abuse, anchor, no_egress, profile='default', 
         **({'dkim_key_evidence':dkim_key_evidence} if dkim_key_evidence is not None else {})})
     env = {'PYTHONPATH':str(Path(__file__).resolve().parents[1]),'PAW_ANALYSIS_ID':identifier}
     try:
-        outcome = asyncio.run(supervise([sys.executable,'-X','utf8','-m','paw.web.worker',str(request),str(result)],
+        # Keep analysis-directory packages/dependencies out of worker imports.
+        outcome = asyncio.run(supervise([sys.executable,'-P','-X','utf8','-m','paw.web.worker',str(request),str(result)],
             cwd=Path.cwd(), control=control, limits=_analysis_limits, env=env))
         job['supervisor'] = outcome
         with (control/'worker.log').open('rb') as log:

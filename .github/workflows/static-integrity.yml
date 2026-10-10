@@ -169,3 +169,6 @@ jobs:
 
       - name: Verify actual standalone worker containment and deadlines
         run: python -m unittest discover -s tests -p 'test_standalone_runtime.py' -v
+
+      - name: Verify actual CLI HTTP workers ignore analysis-directory Python shadows
+        run: python tests/integration_worker_imports_real.py

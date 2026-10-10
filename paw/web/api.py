@@ -270,7 +270,8 @@ async def run_analysis(analysis_id, path, profile, options, limits):
             env = dict(os.environ, PYTHONIOENCODING='utf-8')
             env['PYTHONPATH'] = str(Path(__file__).resolve().parents[2])
             env['PAW_ANALYSIS_ID'] = analysis_id
-            outcome = await supervise([sys.executable, '-X', 'utf8', '-m', 'paw.web.worker', str(request), str(result_path)],
+            # DATA_DIR holds evidence, not trusted Python modules/dependencies.
+            outcome = await supervise([sys.executable, '-P', '-X', 'utf8', '-m', 'paw.web.worker', str(request), str(result_path)],
                 cwd=DATA_DIR, control=control, env=env,
                 limits=RunLimits(**dict(limits.model_dump(),wall_seconds=max(.001,limits.wall_seconds-(time.monotonic()-job['queued_monotonic'])))),
                 cancel=_cancel_events[analysis_id])
