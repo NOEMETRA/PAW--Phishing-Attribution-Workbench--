@@ -1,5 +1,6 @@
 """Bounded offline MIME extraction; original email bytes remain the evidence."""
 from dataclasses import dataclass
+from copy import copy
 import hashlib
 from html.parser import HTMLParser
 import re
@@ -36,6 +37,70 @@ def iter_parts(message, limits=MimeLimits()):
                          for index, child in reversed(list(enumerate(payload))))
 
 
+def uuencode_has_end(encoded):
+    """Check the terminator of the first begin block selected by the stdlib.
+
+    A terminator in the preamble or an ignored invalid-mode block cannot
+    establish completion of the decoded block. This does not decode data.
+    """
+    lines = iter(encoded.splitlines())
+    for line in lines:
+        if line.startswith(b'begin '):
+            mode = line[6:].partition(b' ')[0]
+            try:
+                int(mode, base=8)
+            except ValueError:
+                continue
+            break
+    else:
+        return False
+    return any(line.strip(b' \t\r\n\f') == b'end' for line in lines)
+
+
+def quoted_printable_is_complete(encoded):
+    """Check RFC 2045 syntax that the stdlib decodes without recovery.
+
+    Preserve its output even for malformed/noncanonical input. Transport
+    padding is legal to receive, but the stdlib retains it (and fails to
+    remove padded soft breaks), so that interpretation remains partial too.
+    This validates bytes; it neither repairs nor decodes them.
+    """
+    hex_digits = b'0123456789ABCDEF'
+    for line in encoded.splitlines(keepends=True):
+        newline = line.endswith(b'\r\n')
+        if newline:
+            line = line[:-2]
+        elif line.endswith((b'\r', b'\n')):
+            return False
+        if len(line) > 76 or line.endswith((b' ', b'\t')) or re.search(rb'[^\t\x20-\x7e]', line):
+            return False
+        position = 0
+        while (position := line.find(b'=', position)) != -1:
+            if position + 2 < len(line) and line[position+1] in hex_digits and line[position+2] in hex_digits:
+                position += 3
+            elif position == len(line) - 1 and newline:
+                break
+            else:
+                return False
+    return True
+
+
+def identity_transfer_is_valid(payload, cte):
+    """Validate RFC 2045 sections 2.7-2.9 without transforming bytes.
+
+    An absent declaration defaults to 7bit (section 6.1). Both line-oriented
+    domains exclude NUL, bare CR/LF and lines over 998 octets; 7bit also excludes
+    high octets. Binary has no octet or line constraints.
+    """
+    if cte == 'binary':
+        return True
+    if b'\x00' in payload or re.search(rb'\r(?!\n)|(?<!\r)\n', payload):
+        return False
+    if cte == '7bit' and re.search(rb'[\x80-\xff]', payload):
+        return False
+    return all(len(line) <= 998 for line in payload.split(b'\r\n'))
+
+
 def decoded_payload(part):
     if part.get_content_maintype() == 'message':
         payload = part.get_payload()
@@ -47,7 +112,47 @@ def decoded_payload(part):
         raw = part.get_payload()
         if isinstance(raw, str): return raw.encode('utf-8', errors='surrogateescape'), 'fallback_utf8_serialization'
         return b'', 'empty'
+    declarations = part.get_all('Content-Transfer-Encoding', [])
+    header = part.get('Content-Transfer-Encoding', '')
+    cte = getattr(header, 'cte', str(header).strip().lower()) if str(header).strip() else ''
+    # The stdlib selects the first occurrence. Retain its representation, but
+    # don't claim an unambiguous successful transfer decoding for duplicates.
+    if len(declarations) > 1:
+        return payload, 'derived_first_transfer_encoding'
+    identity = {'7bit', '8bit', 'binary'}
+    uuencodings = {'x-uuencode', 'uuencode', 'uue', 'x-uue'}
+    if declarations and cte not in identity | uuencodings | {'base64', 'quoted-printable'}:
+        return payload, 'undecoded_unsupported_transfer_encoding'
+    if not declarations or cte in identity:
+        if not identity_transfer_is_valid(payload, cte if declarations else '7bit'):
+            return payload, 'identity_bytes_invalid_transfer_domain'
+    if cte == 'base64' and any(type(d).__name__ == 'InvalidBase64LengthDefect' for d in part.defects):
+        return payload, 'undecoded_failed_transfer_encoding'
+    if cte in uuencodings | {'quoted-printable'}:
+        # Inspect transfer syntax/fallback using the same parser byte conversion
+        # without charset replacement. Don't guess an alternative encoding.
+        identity_part = copy(part)
+        del identity_part['Content-Transfer-Encoding']
+        encoded = identity_part.get_payload(decode=True)
+        if cte == 'quoted-printable':
+            if not quoted_printable_is_complete(encoded):
+                return payload, 'transfer_decoded_partial_syntax'
+        elif payload == encoded:
+            return payload, 'undecoded_failed_transfer_encoding'
+        elif not uuencode_has_end(encoded):
+            return payload, 'transfer_decoded_incomplete_framing'
     return payload, 'transfer_decoded_bytes'
+
+
+TRANSFER_PARTIAL_REASONS = {
+    'identity_bytes_invalid_transfer_domain': 'Payload violates declared 7bit/8bit transfer domain (absent declaration defaults to 7bit); unchanged parser bytes retained',
+    'undecoded_unsupported_transfer_encoding': 'Unsupported or empty declared transfer encoding; parser payload retained undecoded',
+    'undecoded_failed_transfer_encoding': 'Transfer decoder returned undecoded parser payload',
+    'transfer_decoded_incomplete_framing': 'Uuencode stream missing end terminator; recovered decoded bytes retained',
+    'transfer_decoded_partial_syntax': 'Quoted-printable syntax is malformed/noncanonical or has unsupported transport padding; parser-decoded bytes retained',
+    'derived_first_transfer_encoding': 'Duplicate transfer encoding declarations; parser used the first occurrence',
+    'fallback_utf8_serialization': 'Parser payload serialized as UTF-8; transfer decoding unavailable',
+}
 
 
 def part_defects(part):
@@ -103,6 +208,7 @@ def analyze_mime(message, limits=MimeLimits()):
         payload = part.get_payload()
         if isinstance(payload, list): stack.extend((child, depth + 1) for child in payload)
     parts, text, html, javascript, urls, attachments, issues = [], [], [], [], [], [], []
+    body_parts = []
     decoded_total, text_total = 0, 0
     for part, path, attached in iter_parts(message, limits):
         content_type = part.get_content_type()
@@ -121,6 +227,11 @@ def analyze_mime(message, limits=MimeLimits()):
         if decoded_total > limits.max_decoded_bytes:
             raise MimeLimitExceeded('Total decoded MIME byte limit exceeded')
         item.update(size=len(payload), sha256=hashlib.sha256(payload).hexdigest(), byte_source=byte_source)
+        if byte_source in TRANSFER_PARTIAL_REASONS:
+            item['transfer_decoding'] = {'status':'partial',
+                'declared_encodings':[str(value) for value in part.get_all('Content-Transfer-Encoding', [])],
+                'reason':TRANSFER_PARTIAL_REASONS[byte_source]}
+            issues.append({'part_id':path, 'transfer_decoding':dict(item['transfer_decoding'])})
         # Transfer decoding can add base64 defects, so inspect after decoding.
         item['defects'] = part_defects(part)
         if item['defects']: issues.append({'part_id':path, 'defects':item['defects']})
@@ -131,6 +242,8 @@ def analyze_mime(message, limits=MimeLimits()):
             attachments.append({'part':part, 'part_id':path, 'payload':payload, 'byte_source':byte_source,
                 'defects':item['defects'], 'declared_mime':content_type,
                 'filename':part.get_filename(), 'disposition':part.get_content_disposition()})
+            if 'transfer_decoding' in item:
+                attachments[-1]['transfer_decoding'] = dict(item['transfer_decoding'])
             if not attached:
                 item['content_analysis'] = 'not_evaluated'
                 issues.append({'part_id':path, 'reason':'Non-body MIME content preserved; content analysis not evaluated'})
@@ -139,6 +252,10 @@ def analyze_mime(message, limits=MimeLimits()):
             if text_total > limits.max_text_bytes: raise MimeLimitExceeded('Text analysis byte limit exceeded')
             value, decoding = decode_text(part, payload)
             item['decoding'] = decoding
+            # Retain the per-part bytes before charset replacement and before
+            # independent text/HTML/JS representations are joined for analysis.
+            body_parts.append({'metadata':dict(item), 'payload':payload, 'text':value,
+                               'part_id':path})
             if decoding['status'] != 'completed': issues.append({'part_id':path, 'decoding':decoding})
             if content_type == 'text/html':
                 parser = HtmlEvidenceParser()
@@ -155,7 +272,8 @@ def analyze_mime(message, limits=MimeLimits()):
                 text.append(value)
                 urls.extend(extract_urls(value))
         parts.append(item)
-    return {'body_text':'\n'.join(text), 'html':'\n'.join(html), 'html_parts':html,
+    return {'body_text':'\n'.join(text), 'body_parts':body_parts,
+            'html':'\n'.join(html), 'html_parts':html,
             'javascript':'\n'.join(javascript),
             'urls':list(dict.fromkeys(urls)), 'attachments':attachments,
             'metadata':{'status':'partial' if issues else 'completed', 'parts':parts, 'issues':issues,
