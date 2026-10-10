@@ -2,6 +2,11 @@
 
 ## 📅 Date: November 5, 2025
 
+This is a historical GUI feature description, not a current availability or setup
+guide. Canary collection and public tunnels are retired; the sections below mark
+those workflows unavailable. See [canary status](docs/canary-status.md) for the
+current boundary. The remaining historical GUI claims have not been revalidated.
+
 ---
 
 ## 🆕 What's New
@@ -122,14 +127,14 @@ Live statistics monitoring with auto-refresh capability.
 | **Geographic Analysis** | ✅ NEW | Geographic | IP geolocation & attacker ID |
 | **Geographic Reports** | ✅ NEW | Geographic | HTML/JSON report generation |
 | **Attacker Classification** | ✅ NEW | Geographic | AI-powered threat detection |
-| **Canary Server** | ✅ | Monitoring | Victim click tracking |
-| **Auto Tunnel** | ✅ NEW | Monitoring | One-click public URL |
-| **Public URL Copy** | ✅ NEW | Monitoring | Clipboard integration |
+| **Canary Server** | Unavailable | Monitoring | Retired; collection requires separate observation storage |
+| **Auto Tunnel** | Unavailable | Monitoring | Retired public exposure workflow |
+| **Public URL Copy** | Unavailable | Monitoring | No public canary URL is provided |
 | **Sentinel Monitor** | ✅ | Monitoring | Continuous site monitoring |
 | **Campaign Management** | ✅ | Monitoring | Add/Remove/List campaigns |
 | **Real-Time Dashboard** | ✅ NEW | Monitoring | Live statistics |
 | **Auto-Refresh Stats** | ✅ NEW | Monitoring | 30s interval updates |
-| **Live Hit Monitoring** | ✅ | Monitoring | Real-time victim tracking |
+| **Live Hit Monitoring** | Unavailable | Monitoring | Retired canary collection; existing records are historical |
 
 ---
 
@@ -189,19 +194,11 @@ def identify_attackers(self):
     # Output: Attacker list with risk scores
 ```
 
-### **Auto Tunnel Service:**
-```python
-# Location: paw/gui/tk_gui.py
+### **Auto Tunnel Service — unavailable**
 
-def auto_start_tunnel(self):
-    """
-    Automatic tunnel startup with URL extraction
-    - Supports: ngrok, cloudflared, localtunnel
-    - Regex-based URL detection
-    - Real-time URL display
-    - Background process management
-    """
-```
+The former GUI tunnel service is retired. Its historical implementation is not
+a supported way to publish a canary endpoint. See
+[canary status](docs/canary-status.md).
 
 ### **Dashboard Stats:**
 ```python
@@ -228,16 +225,17 @@ def refresh_dashboard_stats(self):
 - tkinter (GUI framework)
 - PAW core modules
 
-### **Optional (for Tunneling):**
-- **ngrok**: Download from https://ngrok.com/download
-- **cloudflared**: `brew install cloudflared` or https://developers.cloudflare.com/
-- **localtunnel**: `npm install -g localtunnel`
+### **Tunneling dependencies — unavailable**
+
+The retired canary workflow has no supported tunnel setup. Installing ngrok,
+cloudflared or localtunnel does not enable collection; installation instructions
+have been removed. See [canary status](docs/canary-status.md).
 
 ---
 
 ## 🐛 Known Issues
 
-1. **Tunnel URL Extraction**: Some tunnel services may have slight delays in URL display (5-10 seconds)
+1. **Canary/Tunnel Availability**: Collection and public URL exposure are retired, not delayed startup. See [canary status](docs/canary-status.md).
 2. **Auto-Refresh Performance**: With 1000+ victims, auto-refresh may slow down (disable if needed)
 3. **Windows Path Issues**: Some Windows versions may have issues with `os.startfile()` for opening folders
 
@@ -266,4 +264,4 @@ For issues or feature requests:
 
 **Version**: 1.0.0  
 **Last Updated**: November 5, 2025  
-**Status**: ✅ Production Ready
+**Status**: Historical description; canary and tunnel workflows unavailable
