@@ -103,6 +103,7 @@ def analyze_mime(message, limits=MimeLimits()):
         payload = part.get_payload()
         if isinstance(payload, list): stack.extend((child, depth + 1) for child in payload)
     parts, text, html, javascript, urls, attachments, issues = [], [], [], [], [], [], []
+    body_parts = []
     decoded_total, text_total = 0, 0
     for part, path, attached in iter_parts(message, limits):
         content_type = part.get_content_type()
@@ -139,6 +140,10 @@ def analyze_mime(message, limits=MimeLimits()):
             if text_total > limits.max_text_bytes: raise MimeLimitExceeded('Text analysis byte limit exceeded')
             value, decoding = decode_text(part, payload)
             item['decoding'] = decoding
+            # Retain the per-part bytes before charset replacement and before
+            # independent text/HTML/JS representations are joined for analysis.
+            body_parts.append({'metadata':dict(item), 'payload':payload, 'text':value,
+                               'part_id':path})
             if decoding['status'] != 'completed': issues.append({'part_id':path, 'decoding':decoding})
             if content_type == 'text/html':
                 parser = HtmlEvidenceParser()
@@ -155,7 +160,8 @@ def analyze_mime(message, limits=MimeLimits()):
                 text.append(value)
                 urls.extend(extract_urls(value))
         parts.append(item)
-    return {'body_text':'\n'.join(text), 'html':'\n'.join(html), 'html_parts':html,
+    return {'body_text':'\n'.join(text), 'body_parts':body_parts,
+            'html':'\n'.join(html), 'html_parts':html,
             'javascript':'\n'.join(javascript),
             'urls':list(dict.fromkeys(urls)), 'attachments':attachments,
             'metadata':{'status':'partial' if issues else 'completed', 'parts':parts, 'issues':issues,
