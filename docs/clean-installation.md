@@ -22,11 +22,26 @@ the wheel's archived sources.
 Validation used 20 protected original EMLs with `full --no-egress`. The installed
 worker completed all 20, stopped its process tree and preserved original bytes
 and valid evidence seals. Numeric scores and attribution decisions matched the
-prior CLI replay; all 20 remained Inconclusive. Descriptive metadata differed in
-the recorded `tldextract` version on 14 cases, reflecting the fresh dependency
-installation. This difference was checked against the installed distribution
-version, rather than treated as a scoring change. The 180 compared evidence JSONs
-matched apart from the separately reproduced per-run domain-age reference.
+prior CLI replay; all 20 remained Inconclusive.
+
+The 180-JSON comparison covers nine files per case: `headers.json`, `auth.json`,
+`url_evidence.json`, `mime_analysis.json`, `deobfuscation_results.json`,
+`received_path.json`, `origin.json`, `transmitting_server.json` and `domains.json`.
+The first eight matched directly. In `domains.json`, the per-run `domain_age`
+observation was independently reproduced from its recorded creation/reference
+values and excluded from the in-memory comparison; all remaining fields matched.
+
+The 20 `report/score.json` files were compared separately. On 14 cases,
+`tldextract` provenance changed from 5.3.0 to 5.4.0 in two fields:
+`sender_domain_observations.domain_brand_comparison.suffix_package_version` and
+`coverage.stages.domain_brand_comparison.suffix_package_version`. The installed
+version was checked against distribution metadata. These two fields and
+`coverage.stages.domain_age` were excluded from the in-memory score comparison;
+that age observation matched the independently reproduced `domains.json`
+observation. All other score fields matched, including numeric contributions and
+decisions. The score files are outside the 180-JSON subset, and their complete
+JSON objects differ in the recorded provenance. No sealed artifact was rewritten
+by these comparisons.
 
 A real loopback HTTP API check uploaded one original EML, completed its offline
 worker, read the completed case and exported the original bytes in a ZIP. Evidence
