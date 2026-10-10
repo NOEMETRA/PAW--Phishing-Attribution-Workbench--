@@ -257,3 +257,14 @@ UUID collision produces a partial batch, one intact first case and one explicit
 failed input. Only identity generation is controlled; analysis, network guard,
 indexing, process supervision and evidence output are real. These inputs test
 ingestion integrity, not classification accuracy.
+
+## Legacy canary evidence boundary
+
+Canary deployment is explicitly unavailable until the isolated lab has separate
+observation storage. The legacy token handler could append an unindexed file to
+a completed case and invalidate its seal. The CLI, module, function and standalone
+launcher now reject deployment before accessing evidence, starting a listener or
+sending automatic mail. The launcher no longer changes directory at import time
+or uses a default example case. See [canary status](canary-status.md) for the
+measured reproduction and rejection tests. Existing observations remain readable;
+the offline analysis engine and deferred detonation/Sentinel paths are unchanged.

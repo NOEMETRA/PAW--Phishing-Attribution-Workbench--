@@ -462,7 +462,14 @@ For serious use, this layer should be replaced by evidence-based cluster identif
 
 ## Canary module
 
-The canary server records requests made to generated tracking paths and can preserve values such as:
+Canary deployment is currently **unavailable**. The legacy collector appended
+requests directly to analysis cases, invalidating their sealed inventories.
+`paw canary`, `start_canary.py` and `run_canary` now reject deployment before case
+access, socket creation or automatic email delivery. Existing observations remain
+readable as part of their original evidence; cases are not rewritten or resealed.
+
+Future collection in the isolated lab requires separate, owned observation
+storage. It could preserve values such as:
 
 - timestamp;
 - source IP as seen by the server;

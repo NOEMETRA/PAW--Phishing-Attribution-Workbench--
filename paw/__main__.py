@@ -228,7 +228,8 @@ For help: paw help <command>
         p_det.add_argument("--observe", action="store_true", default=True, help="Block POST/PUT/PATCH/DELETE")
 
         # CANARY
-        p_can = sub.add_parser("canary", help="Run passive canary server for attribution")
+        p_can = sub.add_parser("canary", help="Unavailable: canary collection awaits isolated lab storage",
+                               description="Canary deployment is unavailable until separate observation storage and the isolated lab are ready.")
         p_can.add_argument("--case", required=True)
         p_can.add_argument("--port", type=int, default=8787)
 
@@ -563,7 +564,7 @@ Commands:
   full        Complete analysis with detonation
   forensic    Strict profile + exports + optional anchoring
   detonate    Safely detonate URLs from analyzed case
-  canary      Start passive tracking server
+  canary      Unavailable: collection awaits isolated lab storage
   geographic  Generate geographic intelligence reports
   query       Search case database
   export      Export case in various formats
@@ -670,18 +671,19 @@ EXAMPLES:
   paw detonate --url https://suspicious-site.com --pcap
 """,
         "canary": """
-🐾 PAW CANARY - Passive Tracking
+🐾 PAW CANARY - Deployment Unavailable
 
-Deploy passive tracking server to monitor attacker interactions.
+The legacy collector is disabled because writes would invalidate sealed cases.
+Collection requires separate observation storage in the isolated lab.
 
 USAGE:
   paw canary --case <case_id> [options]
 
 OPTIONS:
-  --port PORT          Server port (default: 8787)
+  --port PORT          Reserved legacy option (default: 8787)
 
-The canary server captures IP addresses and metadata from attackers
-who interact with the phishing infrastructure.
+Invoking this command fails before case access, server startup or email delivery.
+An observed request would not independently identify a phishing operator.
 """,
         "export": """
 🐾 PAW EXPORT - Export Cases
