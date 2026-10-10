@@ -60,7 +60,7 @@ Windows-specific resource/locking checks require the Windows host.
 - Validate original labeled legitimate/phishing EMLs and audit false positives,
   header handling, URL extraction/deobfuscation and score interpretation.
 - Reproduce the historical long-running analysis with its original configuration.
-- Validate POSIX supervision, clean installation and legacy standalone scripts.
+- Validate POSIX supervision, installation on other platforms and legacy standalone scripts.
 - Build the separate Linux isolation/enrichment/detonation lab later. Current
   no-egress is a Python guard, not a native-code or OS sandbox.
 - STIX and campaign correlation remain unavailable until validated. ARF/X-ARF
@@ -70,7 +70,12 @@ Windows-specific resource/locking checks require the Windows host.
 The hardcoded legacy email script now delegates to supervised offline `full`
 analysis, with real import/CLI/batch/timeout checks documented in
 [Legacy inbox launcher](legacy-inbox-launcher.md). This closes that one bypass;
-the remaining standalone operational commands and clean installation are still open.
+the remaining standalone operational commands are still open.
+
+A subsequent [clean Windows installation](clean-installation.md) installed all
+runtime dependencies in an isolated Python 3.13 environment, exercised the
+installed offline CLI/API and corrected the Python requirement in actual wheel
+metadata. Other platforms, optional components and legacy scripts remain open.
 
 URL identity and derived-candidate handling have a subsequent focused audit and
 regression set documented in [URL evidence](url-evidence.md). A private original
