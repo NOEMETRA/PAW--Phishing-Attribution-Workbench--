@@ -67,6 +67,11 @@ Windows-specific resource/locking checks require the Windows host.
   compatibility outputs are local review drafts without asserted standards
   compliance. Offline CLI DKIM key ingestion and genuine SimHash are still open.
 
+The hardcoded legacy email script now delegates to supervised offline `full`
+analysis, with real import/CLI/batch/timeout checks documented in
+[Legacy inbox launcher](legacy-inbox-launcher.md). This closes that one bypass;
+the remaining standalone operational commands and clean installation are still open.
+
 URL identity and derived-candidate handling have a subsequent focused audit and
 regression set documented in [URL evidence](url-evidence.md). A private original
 EML pilot exposes real URL rewriting defects; it does not yet establish classifier
