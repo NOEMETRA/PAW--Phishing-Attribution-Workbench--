@@ -309,4 +309,15 @@ The [standalone deobfuscation input audit](standalone-deobfuscation-input.md)
 rejects conflicting sources and invalid UTF-8 instead of silently altering
 reported original text. It preserves BOM/newlines, bounds file/string input and
 applies the offline application guard during reading and decoder dispatch. This
-does not add standalone process supervision, MIME parsing or risk calibration.
+does not add MIME parsing or risk calibration. The CLI now reuses the shared
+process supervisor for a gated, always-offline standalone worker, with configurable
+execution deadline and memory limits. Results require confirmed tree shutdown;
+timeout/failure produces no successful partial result. Temporary transport files
+are cleaned only after shutdown proof; they are not cases or sealed evidence.
+Worker startup/read/analysis/result writing are bounded, while parent admission
+and result rendering remain outside worker limits. Actual CLI timeouts and gated
+worker/helper audits verify this scope; direct Python helper calls remain synchronous.
+Worker startup excludes the analysis working directory from Python imports (`-P`),
+and literal admission validates UTF-8 encoding and byte length before bootstrap or
+transport creation. Real worker/CLI tests cover package/dependency shadowing and
+multibyte/surrogate rejection without replacing analysis results.

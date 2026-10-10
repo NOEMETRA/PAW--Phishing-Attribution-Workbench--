@@ -243,6 +243,8 @@ For help: paw help <command>
         deob_source.add_argument("--file", help="Local regular UTF-8 text file (maximum 1 MiB); invalid encoding rejected")
         deob_source.add_argument("--url", help="Literal URL string to interpret offline; never fetched")
         p_deob.add_argument("--json", action="store_true", help="Output results as JSON")
+        p_deob.add_argument('--deadline', type=float, default=60, help='Worker execution deadline in seconds (default: 60)')
+        p_deob.add_argument('--memory-mib', type=int, default=256, help='Worker memory budget in MiB (64-4096, default: 256)')
 
         # HELP command
         p_help = sub.add_parser("help", help="Show help for commands")
@@ -351,11 +353,14 @@ For help: paw help <command>
             run_canary(case_id=args.case, port=args.port)
 
         elif args.cmd == "deobfuscate":
-            from .deobfuscate.input import analyze_input
+            from .standalone import analyze_supervised, StandaloneFailure
             try:
-                results = analyze_input(text=args.text, file=args.file, url=args.url)
+                results = analyze_supervised(text=args.text, file=args.file, url=args.url,
+                    deadline=args.deadline, memory_mib=args.memory_mib)
             except (OSError, ValueError, TypeError) as exc:
                 p_deob.error(str(exc))
+            except StandaloneFailure as exc:
+                p_deob.exit(1, 'paw deobfuscate: '+str(exc)+'\n')
             
             if args.json:
                 print(json.dumps(results, indent=2))
@@ -364,6 +369,7 @@ For help: paw help <command>
                 observation = results['input_observation']
                 print(f"Input: {observation['source_kind']}, {observation['byte_count']} UTF-8 bytes, SHA-256 {observation['sha256']}")
                 print("Offline observations; no sealed case created")
+                print(f"Execution: completed; worker shutdown confirmed ({results['standalone_execution']['elapsed_seconds']:.2f} s)")
                 print(f"Assessment: {results['assessment_status']}")
                 print(f"Text observations: {results['coverage']['text']['status']}")
                 print(f"Text risk detection: {results['coverage']['text']['risk_detection']}")

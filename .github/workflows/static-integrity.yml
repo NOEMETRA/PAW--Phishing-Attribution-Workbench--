@@ -166,3 +166,6 @@ jobs:
 
       - name: Verify read-only CLI queries and case shutdown admission
         run: python -m unittest discover -s tests -p 'test_query_read_contracts.py' -v
+
+      - name: Verify actual standalone worker containment and deadlines
+        run: python -m unittest discover -s tests -p 'test_standalone_runtime.py' -v
