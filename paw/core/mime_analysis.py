@@ -1,5 +1,6 @@
 """Bounded offline MIME extraction; original email bytes remain the evidence."""
 from dataclasses import dataclass
+from copy import copy
 import hashlib
 from html.parser import HTMLParser
 import re
@@ -47,7 +48,36 @@ def decoded_payload(part):
         raw = part.get_payload()
         if isinstance(raw, str): return raw.encode('utf-8', errors='surrogateescape'), 'fallback_utf8_serialization'
         return b'', 'empty'
+    declarations = part.get_all('Content-Transfer-Encoding', [])
+    header = part.get('Content-Transfer-Encoding', '')
+    cte = getattr(header, 'cte', str(header).strip().lower()) if str(header).strip() else ''
+    # The stdlib selects the first occurrence. Retain its representation, but
+    # don't claim an unambiguous successful transfer decoding for duplicates.
+    if len(declarations) > 1:
+        return payload, 'derived_first_transfer_encoding'
+    identity = {'7bit', '8bit', 'binary'}
+    uuencodings = {'x-uuencode', 'uuencode', 'uue', 'x-uue'}
+    if declarations and cte not in identity | uuencodings | {'base64', 'quoted-printable'}:
+        return payload, 'undecoded_unsupported_transfer_encoding'
+    if cte == 'base64' and any(type(d).__name__ == 'InvalidBase64LengthDefect' for d in part.defects):
+        return payload, 'undecoded_failed_transfer_encoding'
+    if cte in uuencodings:
+        # Failed uuencode decoding silently returns the identity payload. Use
+        # the same parser byte conversion without charset replacement; don't
+        # guess a different transfer encoding from the payload's appearance.
+        identity_part = copy(part)
+        del identity_part['Content-Transfer-Encoding']
+        if payload == identity_part.get_payload(decode=True):
+            return payload, 'undecoded_failed_transfer_encoding'
     return payload, 'transfer_decoded_bytes'
+
+
+TRANSFER_PARTIAL_REASONS = {
+    'undecoded_unsupported_transfer_encoding': 'Unsupported or empty declared transfer encoding; parser payload retained undecoded',
+    'undecoded_failed_transfer_encoding': 'Transfer decoder returned undecoded parser payload',
+    'derived_first_transfer_encoding': 'Duplicate transfer encoding declarations; parser used the first occurrence',
+    'fallback_utf8_serialization': 'Parser payload serialized as UTF-8; transfer decoding unavailable',
+}
 
 
 def part_defects(part):
@@ -122,6 +152,11 @@ def analyze_mime(message, limits=MimeLimits()):
         if decoded_total > limits.max_decoded_bytes:
             raise MimeLimitExceeded('Total decoded MIME byte limit exceeded')
         item.update(size=len(payload), sha256=hashlib.sha256(payload).hexdigest(), byte_source=byte_source)
+        if byte_source in TRANSFER_PARTIAL_REASONS:
+            item['transfer_decoding'] = {'status':'partial',
+                'declared_encodings':[str(value) for value in part.get_all('Content-Transfer-Encoding', [])],
+                'reason':TRANSFER_PARTIAL_REASONS[byte_source]}
+            issues.append({'part_id':path, 'transfer_decoding':dict(item['transfer_decoding'])})
         # Transfer decoding can add base64 defects, so inspect after decoding.
         item['defects'] = part_defects(part)
         if item['defects']: issues.append({'part_id':path, 'defects':item['defects']})
@@ -132,6 +167,8 @@ def analyze_mime(message, limits=MimeLimits()):
             attachments.append({'part':part, 'part_id':path, 'payload':payload, 'byte_source':byte_source,
                 'defects':item['defects'], 'declared_mime':content_type,
                 'filename':part.get_filename(), 'disposition':part.get_content_disposition()})
+            if 'transfer_decoding' in item:
+                attachments[-1]['transfer_decoding'] = dict(item['transfer_decoding'])
             if not attached:
                 item['content_analysis'] = 'not_evaluated'
                 issues.append({'part_id':path, 'reason':'Non-body MIME content preserved; content analysis not evaluated'})

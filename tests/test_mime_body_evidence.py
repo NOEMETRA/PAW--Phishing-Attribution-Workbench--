@@ -7,6 +7,7 @@ import tempfile
 import unittest
 
 from paw.core.mime_analysis import analyze_mime
+from paw.core.attach import scan_attachments
 from paw.core.mime_body_evidence import preserve_body_parts
 from paw.core.parser_mail import parse_message_bytes
 
@@ -68,6 +69,78 @@ class MimeBodyEvidenceTests(unittest.TestCase):
             self.assertIn('InvalidBase64PaddingDefect', field['defects'])
             self.assertEqual(field['byte_source'], 'transfer_decoded_bytes')
             self.assertEqual(inventory['status'], 'partial')
+
+    def test_unsupported_transfer_encoding_is_preserved_and_partial(self):
+        for cte in (b'x-foo', b''):
+            raw = b'Content-Type: text/plain\r\nContent-Transfer-Encoding: '+cte+b'\r\n\r\nhello=3Dworld'
+            with self.subTest(cte=cte), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                result, inventory = self.preserve(raw, root/'mime_body')
+                field, = inventory['parts']
+                self.assertEqual((root/field['payload_path']).read_bytes(), b'hello=3Dworld')
+                self.assertEqual((root/field['text_path']).read_bytes(), b'hello=3Dworld')
+                self.assertEqual(field['byte_source'], 'undecoded_unsupported_transfer_encoding')
+                self.assertEqual(field['transfer_decoding']['status'], 'partial')
+                self.assertEqual(field['decoding']['status'], 'completed')
+                self.assertEqual(field['status'], 'partial')
+                self.assertEqual(result['metadata']['status'], 'partial')
+                self.assertEqual(inventory['status'], 'partial')
+
+    def test_failed_transfer_decoders_do_not_claim_decoded_bytes(self):
+        for cte, payload in ((b'base64', b'A'), (b'x-uue', b'hello=3Dworld')):
+            raw = b'Content-Type: text/plain\r\nContent-Transfer-Encoding: '+cte+b'\r\n\r\n'+payload
+            with self.subTest(cte=cte), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                result, inventory = self.preserve(raw, root/'mime_body')
+                field, = inventory['parts']
+                self.assertEqual((root/field['payload_path']).read_bytes(), payload)
+                self.assertEqual(field['byte_source'], 'undecoded_failed_transfer_encoding')
+                self.assertEqual(field['status'], 'partial')
+                self.assertEqual(result['metadata']['status'], 'partial')
+
+    def test_duplicate_transfer_headers_report_first_header_interpretation(self):
+        raw = (b'Content-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\n'
+               b'Content-Transfer-Encoding: quoted-printable\r\n\r\nSGVsbG8=')
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            result, inventory = self.preserve(raw, root/'mime_body')
+            field, = inventory['parts']
+            self.assertEqual((root/field['payload_path']).read_bytes(), b'Hello')
+            self.assertEqual(field['byte_source'], 'derived_first_transfer_encoding')
+            self.assertEqual(field['transfer_decoding']['declared_encodings'], ['base64','quoted-printable'])
+            self.assertEqual(field['status'], 'partial')
+            self.assertEqual(result['metadata']['status'], 'partial')
+
+    def test_known_transfer_encodings_keep_successful_behavior(self):
+        import binascii
+        fixtures = [(b'7bit',b'hello=3Dworld',b'hello=3Dworld'),
+            (b'8bit',b'hello',b'hello'), (b'binary',b'hello',b'hello'),
+            (b'BASE64',b'SGVsbG8=',b'Hello'),
+            (b'quoted-printable',b'hello=3Dworld',b'hello=world')]
+        for cte in (b'uuencode',b'x-uuencode',b'uue',b'x-uue'):
+            fixtures.append((cte,b'begin 644 fixture\r\n'+binascii.b2a_uu(b'Hello')+b' \r\nend\r\n',b'Hello'))
+        for cte, payload, expected in fixtures:
+            raw = b'Content-Type: text/plain\r\nContent-Transfer-Encoding: '+cte+b'\r\n\r\n'+payload
+            with self.subTest(cte=cte), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                _, inventory = self.preserve(raw, root/'mime_body')
+                field, = inventory['parts']
+                self.assertEqual((root/field['payload_path']).read_bytes(), expected)
+                self.assertEqual(field['byte_source'], 'transfer_decoded_bytes')
+                self.assertEqual(field['status'], 'completed')
+                self.assertNotIn('transfer_decoding', field)
+
+    def test_transfer_partial_provenance_reaches_attachment_metadata(self):
+        raw = (b'Content-Type: application/octet-stream\r\nContent-Disposition: attachment; filename="a.bin"\r\n'
+               b'Content-Transfer-Encoding: x-foo\r\n\r\nhello=3Dworld')
+        result = analyze_mime(parse_message_bytes(raw))
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            field, = scan_attachments(None, result, root/'attachments')
+            self.assertEqual((root/field['evidence_path']).read_bytes(), b'hello=3Dworld')
+            self.assertEqual(field['byte_source'], 'undecoded_unsupported_transfer_encoding')
+            self.assertEqual(field['transfer_decoding']['status'], 'partial')
+            self.assertEqual(field['status'], 'partial')
 
     def test_attached_email_and_calendar_do_not_become_outer_body(self):
         message = EmailMessage(policy=policy.SMTP)

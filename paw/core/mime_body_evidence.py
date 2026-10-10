@@ -52,7 +52,10 @@ def preserve_body_parts(mime_result, original, evidence_dir):
             field.update(text_path=(Path(root.name)/text_path.name).as_posix(),
                 text_sha256=hashlib.sha256(text_bytes).hexdigest(), text_size=len(text_bytes),
                 text_status='captured')
+        if 'transfer_decoding' in metadata:
+            field['transfer_decoding'] = dict(metadata['transfer_decoding'])
         field['status'] = 'partial' if (field['defects'] or field['decoding']['status'] != 'completed'
+                                        or field.get('transfer_decoding', {}).get('status') == 'partial'
                                         or field['text_status'] != 'captured') else 'completed'
         parts.append(field)
     return {'schema_version':1, 'scope':'supported_outer_body_parts', 'verified':False,

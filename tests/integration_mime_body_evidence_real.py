@@ -62,6 +62,8 @@ def check(case, raw, expected_status):
         assert field['sha256'] == metadata[field['part_id']]['sha256']
         assert field['decoding'] == metadata[field['part_id']]['decoding']
         assert field['defects'] == metadata[field['part_id']]['defects']
+        assert field['byte_source'] == metadata[field['part_id']]['byte_source']
+        assert field.get('transfer_decoding') == metadata[field['part_id']].get('transfer_decoding')
         assert field['payload_status'] == field['text_status'] == 'captured'
         for key in ('payload_path','text_path'):
             assert (case/field[key]).resolve().is_relative_to((case/'mime_body').resolve())
@@ -97,12 +99,35 @@ def main():
         'unknown-charset.eml':prefix+b'Content-Type: text/html; charset=unknown-charset\r\n\r\n<b>a\xffb</b>',
         'default-charset.eml':prefix+b'Content-Type: text/plain\r\n\r\na\xffb',
         'bad-base64.eml':prefix+b'Content-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\n\r\nSGVsbG8',
+        'unknown-transfer.eml':prefix+b'Content-Type: text/plain\r\nContent-Transfer-Encoding: x-foo\r\n\r\nhello=3Dworld',
+        'failed-base64.eml':prefix+b'Content-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\n\r\nA',
+        'failed-uuencode.eml':prefix+b'Content-Type: text/plain\r\nContent-Transfer-Encoding: x-uue\r\n\r\nhello=3Dworld',
+        'duplicate-transfer.eml':prefix+b'Content-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nSGVsbG8=',
+        'unknown-attachment-transfer.eml':prefix+b'Content-Type: application/octet-stream\r\nContent-Disposition: attachment; filename="a.bin"\r\nContent-Transfer-Encoding: x-foo\r\n\r\nhello=3Dworld',
         'broken-multipart.eml':prefix+b'Content-Type: multipart/mixed; boundary=missing\r\n\r\nundelimited',
         'only-attachment.eml':prefix+b'Content-Type: application/octet-stream\r\nContent-Transfer-Encoding: base64\r\n\r\nAQID',
         'javascript.eml':prefix+b'Content-Type: text/javascript\r\n\r\nrequire("fs").writeFileSync("unexpected-js-execution", "ran");',
         'empty.eml':prefix+b'Content-Type: text/plain\r\n\r\n'}
-    partial = {'unknown-charset.eml','default-charset.eml','bad-base64.eml'}
+    partial = {'unknown-charset.eml','default-charset.eml','bad-base64.eml',
+        'unknown-transfer.eml','failed-base64.eml','failed-uuencode.eml','duplicate-transfer.eml'}
+    transfer_sources = {'unknown-transfer.eml':'undecoded_unsupported_transfer_encoding',
+        'failed-base64.eml':'undecoded_failed_transfer_encoding',
+        'failed-uuencode.eml':'undecoded_failed_transfer_encoding',
+        'duplicate-transfer.eml':'derived_first_transfer_encoding'}
     environment = dict(os.environ,PYTHONPATH=str(REPO),PYTHONDONTWRITEBYTECODE='1',PYTHONUTF8='1')
+    def check_transfer(case, name, inventory):
+        if name in transfer_sources:
+            field, = inventory['parts']
+            assert field['byte_source'] == transfer_sources[name]
+            assert field['status'] == field['transfer_decoding']['status'] == 'partial'
+            assert read(case/'mime_analysis.json')['status'] == 'partial'
+        if name == 'unknown-attachment-transfer.eml':
+            field, = read(case/'attachments.json')
+            assert field['byte_source'] == 'undecoded_unsupported_transfer_encoding'
+            assert field['status'] == field['transfer_decoding']['status'] == 'partial'
+            assert (case/field['evidence_path']).read_bytes() == b'hello=3Dworld'
+            assert read(case/'mime_analysis.json')['status'] == 'partial'
+            assert read(case/'analysis_coverage.json')['stages']['attachment_metadata']['status'] == 'partial'
     with tempfile.TemporaryDirectory(prefix='paw-mime-body-',dir=REPO.parent) as temporary:
         base = Path(temporary).resolve(); inputs = base/'inputs'; inputs.mkdir()
         for name,raw in samples.items(): (inputs/name).write_bytes(raw)
@@ -115,6 +140,7 @@ def main():
         for case in cases:
             name = read(case/'manifest.json')['source_name']
             inventories[name] = check(case,samples[name],'partial' if name in partial else 'completed')
+            check_transfer(case, name, inventories[name])
             if name == 'nested.eml':
                 attachments = read(case/'attachments.json')
                 assert len(attachments) == 3
@@ -146,7 +172,7 @@ def main():
                     try: request('/health'); break
                     except (urllib.error.URLError,TimeoutError): time.sleep(.1)
                 else: raise TimeoutError('API startup')
-                for name in ('alternatives.eml','unknown-charset.eml'):
+                for name in ('alternatives.eml','unknown-charset.eml','unknown-transfer.eml','failed-uuencode.eml','unknown-attachment-transfer.eml'):
                     raw = samples[name]; boundary = 'paw_mime_body_fixture'
                     upload = (f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{name}"\r\nContent-Type: message/rfc822\r\n\r\n'.encode()+raw+f'\r\n--{boundary}--\r\n'.encode())
                     uploaded = json.loads(request('/api/upload','POST',upload,'multipart/form-data; boundary='+boundary))
@@ -162,6 +188,7 @@ def main():
                     assert state['status'] == 'completed' and state['supervisor']['tree_stopped'],state
                     case = root/'cases'/state['case_ids'][0]
                     inventory = check(case,raw,'partial' if name in partial else 'completed')
+                    check_transfer(case, name, inventory)
                     assert json.loads(request('/api/cases/'+case.name))['mime_body_evidence'] == inventory
                     with zipfile.ZipFile(io.BytesIO(request('/api/export/'+case.name))) as archive:
                         assert archive.read('input.eml') == raw
@@ -169,11 +196,13 @@ def main():
                         for field in inventory['parts']:
                             assert archive.read(field['payload_path']) == (case/field['payload_path']).read_bytes()
                             assert archive.read(field['text_path']) == (case/field['text_path']).read_bytes()
+                        for field in read(case/'attachments.json'):
+                            assert archive.read(field['evidence_path']) == (case/field['evidence_path']).read_bytes()
             finally:
                 server.terminate()
                 try: server.wait(timeout=15)
                 except subprocess.TimeoutExpired: server.kill(); server.wait(timeout=15)
-    print('PASS: nine actual full CLI cases and two loopback HTTP workers; per-part bytes/charset text/provenance, alternatives, explicit partial decoding, body versus attachments/nested/unsupported scope, empty and unexecuted JS sources, original MIME/seals/API ZIP. No-egress; not accuracy labels.')
+    print('PASS: fourteen actual full CLI cases and five loopback HTTP workers; per-part bytes/charset text/provenance, alternatives, explicit partial transfer/charset decoding, unknown/failed/duplicate transfer declarations in bodies and attachments, nested/unsupported scope, empty and unexecuted JS sources, original MIME/seals/API ZIP. No-egress; not accuracy labels.')
 
 
 if __name__ == '__main__': main()

@@ -16,6 +16,17 @@ HTML source and JavaScript source remain text; they are not rendered or executed
 These representations are not exact MIME byte spans or independent authenticity.
 Raw transfer encoding, boundaries and original headers remain in `input.eml`.
 
+Unsupported or empty transfer encoding declarations retain the parser's undecoded
+payload with `byte_source: undecoded_unsupported_transfer_encoding`. Failed
+base64-length or uuencode decoding uses `undecoded_failed_transfer_encoding`.
+Duplicate transfer declarations retain the stdlib's first-header interpretation
+as `derived_first_transfer_encoding`. These cases record a separate, partial
+`transfer_decoding` observation with declarations and reason in MIME metadata,
+body evidence or attachment metadata, and make the relevant coverage partial.
+Successful charset conversion cannot imply successful transfer decoding. No
+alternative encoding is guessed; the exact original remains in `input.eml`.
+Known successful transfer decoders and identity encodings keep their behavior.
+
 Unknown/invalid charset fallback remains explicit in `decoding`. Defects or
 partial decoding make that part and inventory partial without losing captured
 payload bytes. UTF-8 transport cannot silently rewrite a derived unencodable
@@ -42,8 +53,9 @@ the new artifact. Stable-case API detail exposes its metadata; normal seals and
 ZIP exports include all new files. Historical cases without it remain readable.
 
 Contract tests cover original octets versus derived text, alternatives, attached
-scope, malformed base64, empty/JavaScript payloads and safe exclusive writes.
-The real integration runs nine actual supervised `full --no-egress` CLI cases
-and two loopback HTTP workers, independently checking payload bytes, charset text,
+scope, malformed base64, unsupported/failed/duplicate transfer declarations,
+empty/JavaScript payloads and safe exclusive writes.
+The real integration runs fourteen actual supervised `full --no-egress` CLI cases
+and five loopback HTTP workers, independently checking payload bytes, charset text,
 part mappings, original MIME, seals and API/ZIP exports. Constructed messages are
 regression inputs, not a classifier accuracy corpus.
