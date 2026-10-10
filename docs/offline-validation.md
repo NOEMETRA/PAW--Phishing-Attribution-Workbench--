@@ -65,12 +65,19 @@ Windows-specific resource/locking checks require the Windows host.
   no-egress is a Python guard, not a native-code or OS sandbox.
 - STIX and campaign correlation remain unavailable until validated. ARF/X-ARF
   compatibility outputs are local review drafts without asserted standards
-  compliance. Offline CLI DKIM key ingestion and genuine SimHash are still open.
+  compliance. Offline CLI DKIM key ingestion is handled separately. Header
+  SimHash now has a versioned algorithm contract; similarity thresholds and
+  cross-case correlation remain unvalidated.
 
 The hardcoded legacy email script now delegates to supervised offline `full`
 analysis, with real import/CLI/batch/timeout checks documented in
 [Legacy inbox launcher](legacy-inbox-launcher.md). This closes that one bypass;
 the remaining standalone operational commands are still open.
+
+The [selected-header SimHash audit](header-simhash.md) replaces the mislabeled MD5
+prefix for new index rows and marks historical digests explicitly in CLI/API
+queries. Original cases are not rewritten; this does not enable deduplication,
+change scoring or validate campaign correlation.
 
 A subsequent [clean Windows installation](clean-installation.md) installed all
 runtime dependencies in an isolated Python 3.13 environment, exercised the

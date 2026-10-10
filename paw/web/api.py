@@ -23,6 +23,7 @@ from ..core.runtime import RunLimits, supervise, preserve_interrupted, read_prog
 from ..core.process_recovery import recover_worker, identity_alive
 from ..core.job_registry import control_path, case_owner, job_state, controls
 from ..core.dkim_keys import snapshot_key_bundle
+from ..core.index import describe_fingerprint
 
 @asynccontextmanager
 async def lifespan(application):
@@ -439,7 +440,7 @@ async def query_cases(query: CaseQuery):
     if database.exists():
         with closing(sqlite3.connect(f'{database.as_uri()}?mode=ro', uri=True)) as connection:
             connection.row_factory = sqlite3.Row
-            matches = [dict(row) for row in connection.execute(
+            matches = [describe_fingerprint(dict(row)) for row in connection.execute(
                 'SELECT c.* FROM cases c JOIN indicators i ON c.id=i.case_id WHERE i.type=? AND i.value=?',
                 (query.query_type,query.value))]
     stable_matches = []
