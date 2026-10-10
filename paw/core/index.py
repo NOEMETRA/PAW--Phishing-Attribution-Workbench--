@@ -4,7 +4,11 @@ import hashlib
 import re
 import unicodedata
 from collections import Counter
+from contextlib import closing
+from pathlib import Path
 from .domain_age import usable_age_days
+from .job_registry import require_stopped_case
+from .runtime import read_progress
 
 SIMHASH_METHOD = 'simhash64_sha256_unicode_word_frequency_v1_ucd' + unicodedata.unidata_version
 SIMHASH_SCOPE = 'selected_subject_from_received_headers'
@@ -110,18 +114,33 @@ def upsert_case(case_dir: str, origin: dict, headers: dict, dominfo: dict, score
     conn.commit()
 
 def query_recent(by: str, value: str, days: int = 30) -> list:
-    """Query recent cases by indicator."""
-    conn = db()
-    query = f"""
+    """Read existing index rows only after their owner confirms shutdown."""
+    database = Path.cwd() / 'cases' / 'index.db'
+    if not database.exists(): return []
+    query = """
         SELECT c.* FROM cases c
         JOIN indicators i ON c.id = i.case_id
         WHERE i.type = ? AND i.value = ? 
-        AND c.created_utc >= datetime('now', '-{days} days')
+        AND c.created_utc >= datetime('now', ?)
         ORDER BY c.created_utc DESC
     """
-    cursor = conn.execute(query, (by, value))
-    columns = [desc[0] for desc in cursor.description]
-    return [describe_fingerprint(dict(zip(columns, row))) for row in cursor.fetchall()]
+    # Reader admission must not create/migrate the index or acquire a write lock.
+    with closing(sqlite3.connect(f'{database.as_uri()}?mode=ro', uri=True)) as conn:
+        conn.row_factory = sqlite3.Row
+        matches = [dict(row) for row in conn.execute(query, (by, value, f'-{days} days'))]
+    stable = []
+    for row in matches:
+        identifier = 'case-' + row['id']
+        if Path(identifier).name != identifier: continue
+        directory = database.parent / identifier
+        try:
+            require_stopped_case(directory)
+        except (RuntimeError, FileNotFoundError, ValueError):
+            continue  # Unknown/missing owner acknowledgment also fails closed.
+        if read_progress(directory/'execution.json').get('status') in {'queued','running','recovery_blocked'}:
+            continue
+        stable.append(describe_fingerprint(row))
+    return stable
 
 def simhash(text: str) -> str | None:
     """64-bit weighted word-feature SimHash; no features means unavailable.

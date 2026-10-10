@@ -240,6 +240,24 @@ original-EML CLI/HTTP integration additionally pauses a batch after its first ca
 has entered the actual index, checks list redaction and empty query results, then
 resumes and checks completed collection/query results and verified original bytes.
 
+The CLI `query` reader now also omits indexed cases whose shared CLI/API owner
+has not confirmed worker shutdown, including missing/unknown acknowledgment and
+legacy progress ownership. Explicit unowned queued/running/recovery-blocked
+execution records are also omitted. It does not recover, kill or update jobs.
+An index row with no recorded owner remains a historical observation; returning
+it does not establish completed execution, integrity or authentication.
+
+Queries open an existing SQLite database in read-only mode and close their
+connection. They do not initialize/migrate the schema, acquire a write transaction,
+or create empty storage when the index is absent. Legacy SimHash observations
+are annotated in memory. Writer initialization and case indexing are unchanged.
+Real SQLite contract tests cover a held writer transaction, unstable/current and
+legacy ownership, missing controls, legacy schema/bytes and closed reader handles.
+The actual CLI/HTTP integration reproduces the previous CLI exposure during an
+active original-EML batch, then checks both readers hide the rows until shutdown
+and return them after completion, with unchanged database bytes during queries.
+The SimHash integration also checks actual CLI reads leave the old schema intact.
+
 ## Case identity and exclusive ingestion
 
 A CI batch reported success with 21 case directories for 22 selected messages.
