@@ -135,23 +135,12 @@ cat cases/*/report/stix.json | jq .
 ```
 
 ### "Canary server won't start"
-**Symptoms**: Passive monitoring fails to start
-**Causes**:
-- Port already in use
-- Firewall blocking connections
-- Insufficient permissions
-
-**Solutions**:
-```bash
-# Use different port
-paw canary --case <case_id> --port 8888
-
-# Check port availability
-netstat -an | grep 8787
-
-# Run with elevated permissions
-sudo paw canary --case <case_id>
-```
+Canary deployment is intentionally unavailable. A nonzero exit with
+`Canary deployment unavailable` is the expected result, not a port, firewall or
+permissions problem. Changing ports or elevating privileges will not enable it.
+The old collector appended files to sealed cases and invalidated their inventory.
+See [canary status](docs/canary-status.md) for the deferred isolated-lab collector
+and separate observation storage requirements.
 
 ## Performance Issues
 

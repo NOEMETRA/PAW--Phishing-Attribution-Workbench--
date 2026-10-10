@@ -2,6 +2,11 @@
 
 ## 📅 Date: November 5, 2025
 
+This is a historical GUI feature description, not a current availability or setup
+guide. Canary collection and public tunnels are retired; the sections below mark
+those workflows unavailable. See [canary status](docs/canary-status.md) for the
+current boundary. The remaining historical GUI claims have not been revalidated.
+
 ---
 
 ## 🆕 What's New
@@ -51,51 +56,12 @@ Complete geographic analysis interface for victim IP investigation.
 
 ---
 
-### **2. 🌐 Auto Tunnel Integration**
+### **2. Canary and tunnel deployment — unavailable**
 
-One-click public URL exposure with ngrok/cloudflared/localtunnel.
-
-**Features:**
-- **🚀 Auto Start Tunnel**: Automatic tunnel setup (no manual commands)
-- **🔗 Public URL Display**: Real-time URL extraction and display
-- **📋 Copy URL**: One-click clipboard copy
-- **🔍 Test URL**: Open in browser for testing
-- **🔌 Smart Port Detection**: Automatically uses Canary port
-
-**Supported Tunnels:**
-1. **ngrok** (Recommended)
-   - Fast, reliable
-   - Free tier available
-   - Install: https://ngrok.com/download
-
-2. **cloudflared** (Cloudflare Tunnel)
-   - Free, no account required
-   - Excellent performance
-   - Install: https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation/
-
-3. **localtunnel** (NPM)
-   - Quick setup
-   - Install: `npm install -g localtunnel`
-
-**Workflow:**
-```
-1. Start Canary Server (port 8787)
-   ↓
-2. Click "🚀 Auto Start Tunnel"
-   ↓
-3. Wait for public URL extraction (automatic)
-   ↓
-4. Click "📋 Copy" to get URL
-   ↓
-5. Share URL with test victims: https://abc123.ngrok.io
-```
-
-**Example Output:**
-```
-[12:34:56] 🚀 Starting ngrok tunnel for port 8787...
-[12:34:58] ✅ ngrok tunnel started successfully
-[12:34:59] ✅ Public URL ready: https://abc123.ngrok.io
-```
+The retired GUI workflow for starting a canary and exposing it through a public
+tunnel is unavailable. It must not be used as setup instructions for the current
+workbench. See [canary status](docs/canary-status.md): collection requires separate
+observation storage in the deferred isolated lab.
 
 ---
 
@@ -161,14 +127,14 @@ Live statistics monitoring with auto-refresh capability.
 | **Geographic Analysis** | ✅ NEW | Geographic | IP geolocation & attacker ID |
 | **Geographic Reports** | ✅ NEW | Geographic | HTML/JSON report generation |
 | **Attacker Classification** | ✅ NEW | Geographic | AI-powered threat detection |
-| **Canary Server** | ✅ | Monitoring | Victim click tracking |
-| **Auto Tunnel** | ✅ NEW | Monitoring | One-click public URL |
-| **Public URL Copy** | ✅ NEW | Monitoring | Clipboard integration |
+| **Canary Server** | Unavailable | Monitoring | Retired; collection requires separate observation storage |
+| **Auto Tunnel** | Unavailable | Monitoring | Retired public exposure workflow |
+| **Public URL Copy** | Unavailable | Monitoring | No public canary URL is provided |
 | **Sentinel Monitor** | ✅ | Monitoring | Continuous site monitoring |
 | **Campaign Management** | ✅ | Monitoring | Add/Remove/List campaigns |
 | **Real-Time Dashboard** | ✅ NEW | Monitoring | Live statistics |
 | **Auto-Refresh Stats** | ✅ NEW | Monitoring | 30s interval updates |
-| **Live Hit Monitoring** | ✅ | Monitoring | Real-time victim tracking |
+| **Live Hit Monitoring** | Unavailable | Monitoring | Retired canary collection; existing records are historical |
 
 ---
 
@@ -188,19 +154,11 @@ Live statistics monitoring with auto-refresh capability.
 10. View generated report in browser
 ```
 
-### **Public Tunnel Workflow:**
-```bash
-1. Open PAW GUI
-2. Go to "📊 Monitoring" tab
-3. Set Canary port (default: 8787)
-4. Click "▶️ Start Canary"
-5. Select tunnel type (ngrok/cloudflared/localtunnel)
-6. Click "🚀 Auto Start Tunnel"
-7. Wait for public URL (automatic)
-8. Click "📋 Copy" to get URL
-9. Share with test victims
-10. Watch live hits in monitoring panel
-```
+### **Public Tunnel Workflow — unavailable**
+
+Canary collection and its old public-tunnel workflow are retired. Changing the
+port, installing tunnel tools or sharing a URL does not enable collection. See
+[canary status](docs/canary-status.md).
 
 ### **Dashboard Monitoring:**
 ```bash
@@ -236,19 +194,11 @@ def identify_attackers(self):
     # Output: Attacker list with risk scores
 ```
 
-### **Auto Tunnel Service:**
-```python
-# Location: paw/gui/tk_gui.py
+### **Auto Tunnel Service — unavailable**
 
-def auto_start_tunnel(self):
-    """
-    Automatic tunnel startup with URL extraction
-    - Supports: ngrok, cloudflared, localtunnel
-    - Regex-based URL detection
-    - Real-time URL display
-    - Background process management
-    """
-```
+The former GUI tunnel service is retired. Its historical implementation is not
+a supported way to publish a canary endpoint. See
+[canary status](docs/canary-status.md).
 
 ### **Dashboard Stats:**
 ```python
@@ -275,16 +225,17 @@ def refresh_dashboard_stats(self):
 - tkinter (GUI framework)
 - PAW core modules
 
-### **Optional (for Tunneling):**
-- **ngrok**: Download from https://ngrok.com/download
-- **cloudflared**: `brew install cloudflared` or https://developers.cloudflare.com/
-- **localtunnel**: `npm install -g localtunnel`
+### **Tunneling dependencies — unavailable**
+
+The retired canary workflow has no supported tunnel setup. Installing ngrok,
+cloudflared or localtunnel does not enable collection; installation instructions
+have been removed. See [canary status](docs/canary-status.md).
 
 ---
 
 ## 🐛 Known Issues
 
-1. **Tunnel URL Extraction**: Some tunnel services may have slight delays in URL display (5-10 seconds)
+1. **Canary/Tunnel Availability**: Collection and public URL exposure are retired, not delayed startup. See [canary status](docs/canary-status.md).
 2. **Auto-Refresh Performance**: With 1000+ victims, auto-refresh may slow down (disable if needed)
 3. **Windows Path Issues**: Some Windows versions may have issues with `os.startfile()` for opening folders
 
@@ -313,4 +264,4 @@ For issues or feature requests:
 
 **Version**: 1.0.0  
 **Last Updated**: November 5, 2025  
-**Status**: ✅ Production Ready
+**Status**: Historical description; canary and tunnel workflows unavailable
