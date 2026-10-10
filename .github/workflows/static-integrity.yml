@@ -147,3 +147,9 @@ jobs:
 
       - name: Verify actual loopback HTTP registration collector and no-egress skip
         run: python tests/integration_rdap_registration_real.py
+
+      - name: Verify header SimHash vectors and legacy SQLite compatibility
+        run: python -m unittest discover -s tests -p 'test_simhash_contracts.py' -v
+
+      - name: Verify actual offline header fingerprints and CLI HTTP queries
+        run: python tests/integration_simhash_real.py
