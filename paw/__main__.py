@@ -238,9 +238,10 @@ For help: paw help <command>
 
         # DEOBFUSCATE
         p_deob = sub.add_parser("deobfuscate", help="Analyze content for obfuscation techniques")
-        p_deob.add_argument("--text", help="Text content to analyze")
-        p_deob.add_argument("--file", help="File containing content to analyze")
-        p_deob.add_argument("--url", help="URL to deobfuscate")
+        deob_source = p_deob.add_mutually_exclusive_group(required=True)
+        deob_source.add_argument("--text", help="Literal UTF-8 text to observe (maximum 1 MiB)")
+        deob_source.add_argument("--file", help="Local regular UTF-8 text file (maximum 1 MiB); invalid encoding rejected")
+        deob_source.add_argument("--url", help="Literal URL string to interpret offline; never fetched")
         p_deob.add_argument("--json", action="store_true", help="Output results as JSON")
 
         # HELP command
@@ -350,36 +351,19 @@ For help: paw help <command>
             run_canary(case_id=args.case, port=args.port)
 
         elif args.cmd == "deobfuscate":
-            from .deobfuscate.core import DeobfuscationEngine
-            engine = DeobfuscationEngine()
-            
-            content = ""
-            if args.text:
-                content = args.text
-            elif args.file:
-                if not os.path.exists(args.file):
-                    handle_error("file_not_found", args.file)
-                with open(args.file, 'r', encoding='utf-8', errors='ignore') as f:
-                    content = f.read()
-            elif args.url:
-                content = args.url
-            else:
-                print("Error: Must provide --text, --file, or --url")
-                sys.exit(1)
-            
-            artifacts = {
-                "text": content,
-                "urls": [content] if args.url else [],
-                "html": "",
-                "javascript": "",
-                "attachments": []
-            }
-            results = engine.analyze_artifacts(artifacts)
+            from .deobfuscate.input import analyze_input
+            try:
+                results = analyze_input(text=args.text, file=args.file, url=args.url)
+            except (OSError, ValueError, TypeError) as exc:
+                p_deob.error(str(exc))
             
             if args.json:
                 print(json.dumps(results, indent=2))
             else:
                 print(f"Deobfuscation Results:")
+                observation = results['input_observation']
+                print(f"Input: {observation['source_kind']}, {observation['byte_count']} UTF-8 bytes, SHA-256 {observation['sha256']}")
+                print("Offline observations; no sealed case created")
                 print(f"Assessment: {results['assessment_status']}")
                 print(f"Text observations: {results['coverage']['text']['status']}")
                 print(f"Text risk detection: {results['coverage']['text']['risk_detection']}")

@@ -105,8 +105,8 @@ python3 -m paw analyze email.eml
 
 **Solutions**:
 ```bash
-# Check if URLs are obfuscated
-paw deobfuscate --file email.eml
+# Observe separately extracted UTF-8 text; preserve the original MIME email
+paw deobfuscate --file extracted-utf8.txt
 
 # Manual URL extraction
 grep -i "http" email.eml

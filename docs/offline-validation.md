@@ -286,3 +286,9 @@ evidence the previous unavailable-check behavior remains. See
 [local DKIM keys](local-dkim-keys.md) for the input contract, provenance boundary
 and real RSA CLI/HTTP regression. No authentic key set for the private corpus has
 been established by these constructed cryptographic tests.
+
+The [standalone deobfuscation input audit](standalone-deobfuscation-input.md)
+rejects conflicting sources and invalid UTF-8 instead of silently altering
+reported original text. It preserves BOM/newlines, bounds file/string input and
+applies the offline application guard during reading and decoder dispatch. This
+does not add standalone process supervision, MIME parsing or risk calibration.

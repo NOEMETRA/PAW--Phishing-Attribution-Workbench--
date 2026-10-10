@@ -157,3 +157,9 @@ jobs:
 
       - name: Verify actual offline header fingerprints and CLI HTTP queries
         run: python tests/integration_simhash_real.py
+
+      - name: Verify lossless bounded standalone deobfuscation input contracts
+        run: python -m unittest discover -s tests -p 'test_deobfuscate_input.py' -v
+
+      - name: Verify actual standalone input rejection and offline observations
+        run: python tests/integration_deobfuscate_input_real.py
