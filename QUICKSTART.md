@@ -88,9 +88,12 @@ paw forensic evidence.eml
 # Detonate URLs safely
 paw detonate --case case-20251029-abc123
 
-# Start passive monitoring
-paw canary --case case-20251029-abc123
 ```
+
+Canary deployment is currently unavailable. The legacy collector invalidated
+sealed cases by appending new observations. Its CLI and launcher reject startup;
+see [canary status](docs/canary-status.md). Collection awaits separate observation
+storage in the isolated lab.
 
 ## Understanding Results
 
