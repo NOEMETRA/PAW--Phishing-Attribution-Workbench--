@@ -1,6 +1,7 @@
 import sqlite3
 import os
 import hashlib
+from .domain_age import usable_age_days
 
 _db = None
 
@@ -51,7 +52,7 @@ def upsert_case(case_dir: str, origin: dict, headers: dict, dominfo: dict, score
     org = origin.get("org", "")
     cc = origin.get("cc", "")
     from_domain = dominfo.get("domain", "")
-    nrd_days = dominfo.get("nrd_days", 0)
+    nrd_days = usable_age_days(dominfo.get("nrd_days"))
     case_score = score.get("score", 0.0)
     
     # Generate simhash from subject + from + received content

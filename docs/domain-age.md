@@ -47,15 +47,32 @@ calculation is usable.
 Under `--no-egress`, RDAP remains skipped and no registration date is invented.
 Actual offline cases report unavailable age, zero age contribution and null
 indexed age. This change does not enable registry requests or alter network policy.
-RDAP response parsing, redirects, subdomain lookup/binding, other reputation rules,
-and arbitrary numeric `nrd_days` supplied directly to legacy scorers/index callers
-remain separate validation work. UI and the Linux analysis lab remain deferred.
+RDAP response parsing, redirects, subdomain lookup/binding and other reputation
+rules remain separate validation work. UI and the Linux analysis lab remain deferred.
+
+## Scalar ages supplied to legacy callers
+
+The scorer and index share `usable_age_days`: `nrd_days` must be a nonnegative
+integer, or a finite float representing an exact whole day, within SQLite's
+signed 64-bit integer range. Zero is valid. Negative, fractional, boolean, string,
+container, nonfinite and oversized values are unavailable; they add no age points
+and are stored as SQL NULL. An omitted key also stays NULL rather than becoming
+zero. Values are not coerced from strings, clamped or rounded. Valid 7/30-day
+thresholds and weights are unchanged; whole floats are stored as integers.
+
+The bound describes storage compatibility, not a plausible registration age.
+This scalar check neither verifies a registry source nor binds the age to From,
+an RDAP object or the timestamp observation. Supplied metadata is not modified;
+the index does not migrate historical rows. Detailed timestamp reasons remain
+in the pipeline's temporal observation. Legacy scalar callers retain responsibility
+for recording their input provenance; numeric validity alone is not evidence.
 
 ## Verification
 
 ```powershell
 $env:PYTHONDONTWRITEBYTECODE = '1'
 python -m unittest discover -s tests -p 'test_domain_age_contracts.py' -v
+python -m unittest discover -s tests -p 'test_domain_age_inputs.py' -v
 python tests/integration_domain_age_real.py
 ```
 
@@ -69,6 +86,11 @@ Future registration values are exercised in the component contracts; the offline
 CLI has no live/local registry-date input, so these CLI cases do not exercise a
 future RDAP response. Constructed inputs are regression contracts, not phishing
 ground truth or simulated analysis results.
+
+Seven scalar-input contracts call the actual scorer and write/query a temporary
+SQLite index: invalid ages cannot add points or become SQL zero, valid threshold
+boundaries and the exact maximum storage integer survive, and input dictionaries
+are preserved. No registry response is mocked or fetched.
 
 Private original replay and source hashes are checked separately; age coverage
 metadata can change without changing scores or establishing detection accuracy.
