@@ -110,6 +110,13 @@ def main():
         'bad-qp-escape.eml':prefix+b'Content-Type: text/plain\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nHello=G1',
         'bad-qp-softbreak.eml':prefix+b'Content-Type: text/plain\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nHello=\rX',
         'bad-attachment-qp.eml':prefix+b'Content-Type: application/octet-stream\r\nContent-Disposition: attachment; filename="a.bin"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nHello=',
+        'invalid-7bit.eml':prefix+b'Content-Type: text/plain; charset=iso-8859-1\r\nContent-Transfer-Encoding: 7bit\r\n\r\nCaf\xe9',
+        'invalid-default-7bit.eml':prefix+b'Content-Type: text/plain; charset=iso-8859-1\r\n\r\nCaf\xe9',
+        'invalid-8bit-line.eml':prefix+b'Content-Type: text/plain\r\nContent-Transfer-Encoding: 8bit\r\n\r\n'+b'a'*999,
+        'invalid-7bit-attachment.eml':prefix+b'Content-Type: application/octet-stream\r\nContent-Disposition: attachment; filename="a.bin"\r\nContent-Transfer-Encoding: 7bit\r\n\r\n\xff',
+        'valid-8bit.eml':prefix+b'Content-Type: text/plain; charset=iso-8859-1\r\nContent-Transfer-Encoding: 8bit\r\n\r\nCaf\xe9\r\n',
+        'valid-binary-body.eml':prefix+b'Content-Type: text/plain; charset=iso-8859-1\r\nContent-Transfer-Encoding: binary\r\n\r\n'+bytes(range(256)),
+        'valid-binary-attachment.eml':prefix+b'Content-Type: application/octet-stream\r\nContent-Disposition: attachment; filename="a.bin"\r\nContent-Transfer-Encoding: binary\r\n\r\n'+bytes(range(256)),
         'duplicate-transfer.eml':prefix+b'Content-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nSGVsbG8=',
         'unknown-attachment-transfer.eml':prefix+b'Content-Type: application/octet-stream\r\nContent-Disposition: attachment; filename="a.bin"\r\nContent-Transfer-Encoding: x-foo\r\n\r\nhello=3Dworld',
         'broken-multipart.eml':prefix+b'Content-Type: multipart/mixed; boundary=missing\r\n\r\nundelimited',
@@ -118,7 +125,8 @@ def main():
         'empty.eml':prefix+b'Content-Type: text/plain\r\n\r\n'}
     partial = {'unknown-charset.eml','default-charset.eml','bad-base64.eml',
         'unknown-transfer.eml','failed-base64.eml','failed-uuencode.eml','duplicate-transfer.eml','truncated-uuencode.eml',
-        'bad-qp-eof.eml','bad-qp-escape.eml','bad-qp-softbreak.eml'}
+        'bad-qp-eof.eml','bad-qp-escape.eml','bad-qp-softbreak.eml',
+        'invalid-7bit.eml','invalid-default-7bit.eml','invalid-8bit-line.eml'}
     transfer_sources = {'unknown-transfer.eml':'undecoded_unsupported_transfer_encoding',
         'failed-base64.eml':'undecoded_failed_transfer_encoding',
         'failed-uuencode.eml':'undecoded_failed_transfer_encoding',
@@ -126,11 +134,15 @@ def main():
         'bad-qp-eof.eml':'transfer_decoded_partial_syntax',
         'bad-qp-escape.eml':'transfer_decoded_partial_syntax',
         'bad-qp-softbreak.eml':'transfer_decoded_partial_syntax',
-        'duplicate-transfer.eml':'derived_first_transfer_encoding'}
+        'duplicate-transfer.eml':'derived_first_transfer_encoding',
+        'invalid-7bit.eml':'identity_bytes_invalid_transfer_domain',
+        'invalid-default-7bit.eml':'identity_bytes_invalid_transfer_domain',
+        'invalid-8bit-line.eml':'identity_bytes_invalid_transfer_domain'}
     attachment_transfer = {
         'unknown-attachment-transfer.eml':('undecoded_unsupported_transfer_encoding',b'hello=3Dworld'),
         'truncated-attachment-uuencode.eml':('transfer_decoded_incomplete_framing',b'Hello'),
-        'bad-attachment-qp.eml':('transfer_decoded_partial_syntax',b'Hello')}
+        'bad-attachment-qp.eml':('transfer_decoded_partial_syntax',b'Hello'),
+        'invalid-7bit-attachment.eml':('identity_bytes_invalid_transfer_domain',b'\xff')}
     environment = dict(os.environ,PYTHONPATH=str(REPO),PYTHONDONTWRITEBYTECODE='1',PYTHONUTF8='1')
     def check_transfer(case, name, inventory):
         if name in transfer_sources:
@@ -149,6 +161,12 @@ def main():
             assert (case/field['evidence_path']).read_bytes() == expected_payload
             assert read(case/'mime_analysis.json')['status'] == 'partial'
             assert read(case/'analysis_coverage.json')['stages']['attachment_metadata']['status'] == 'partial'
+        if name == 'valid-binary-attachment.eml':
+            field, = read(case/'attachments.json')
+            assert field['byte_source'] == 'transfer_decoded_bytes' and field['status'] == 'metadata_only'
+            assert 'transfer_decoding' not in field
+            assert (case/field['evidence_path']).read_bytes() == bytes(range(256))
+            assert read(case/'mime_analysis.json')['status'] == 'completed'
     with tempfile.TemporaryDirectory(prefix='paw-mime-body-',dir=REPO.parent) as temporary:
         base = Path(temporary).resolve(); inputs = base/'inputs'; inputs.mkdir()
         for name,raw in samples.items(): (inputs/name).write_bytes(raw)
@@ -195,7 +213,8 @@ def main():
                 else: raise TimeoutError('API startup')
                 for name in ('alternatives.eml','unknown-charset.eml','unknown-transfer.eml','failed-uuencode.eml',
                              'unknown-attachment-transfer.eml','truncated-uuencode.eml','truncated-attachment-uuencode.eml',
-                             'bad-qp-eof.eml','bad-attachment-qp.eml'):
+                             'bad-qp-eof.eml','bad-attachment-qp.eml',
+                             'invalid-7bit.eml','invalid-8bit-line.eml','invalid-7bit-attachment.eml'):
                     raw = samples[name]; boundary = 'paw_mime_body_fixture'
                     upload = (f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{name}"\r\nContent-Type: message/rfc822\r\n\r\n'.encode()+raw+f'\r\n--{boundary}--\r\n'.encode())
                     uploaded = json.loads(request('/api/upload','POST',upload,'multipart/form-data; boundary='+boundary))
@@ -225,7 +244,7 @@ def main():
                 server.terminate()
                 try: server.wait(timeout=15)
                 except subprocess.TimeoutExpired: server.kill(); server.wait(timeout=15)
-    print('PASS: twenty actual full CLI cases and nine loopback HTTP workers; per-part bytes/charset text/provenance, alternatives, explicit partial transfer/charset decoding, unknown/failed/duplicate transfer declarations, truncated uuencode and malformed quoted-printable in bodies and attachments, nested/unsupported scope, empty and unexecuted JS sources, original MIME/seals/API ZIP. No-egress; not accuracy labels.')
+    print('PASS: twenty-seven actual full CLI cases and twelve loopback HTTP workers; per-part bytes/charset text/provenance, alternatives, explicit partial transfer/charset decoding, unknown/failed/duplicate transfer declarations, truncated uuencode, malformed quoted-printable and identity transfer domains in bodies and attachments, valid 8bit/binary, nested/unsupported scope, empty and unexecuted JS sources, original MIME/seals/API ZIP. No-egress; not accuracy labels.')
 
 
 if __name__ == '__main__': main()

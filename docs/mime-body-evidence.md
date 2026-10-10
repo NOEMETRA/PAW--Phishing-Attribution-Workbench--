@@ -33,6 +33,32 @@ Successful charset conversion cannot imply successful transfer decoding. No
 alternative encoding is guessed; the exact original remains in `input.eml`.
 Known successful transfer decoders and identity encodings keep their behavior.
 
+Identity domains follow [RFC 2045 sections 2.7-2.9 and 6.1](https://www.rfc-editor.org/rfc/rfc2045#section-2.7).
+An absent declaration defaults to `7bit`; it is not an unspecified binary stream.
+Both `7bit` and `8bit` reject NUL, bare CR/LF and lines over 998 octets. `7bit`
+also excludes octets above 127. `binary` permits arbitrary octets and line lengths.
+Violations retain unchanged bytes as `identity_bytes_invalid_transfer_domain`,
+with partial transfer provenance in both body and attachment inventories. A
+compatible charset can still produce complete text while transfer coverage is
+partial. No output bytes are repaired and no risk points are added.
+
+The transfer contract is tested as a family, rather than only the latest review
+example:
+
+| Transfer declaration | Checks and retained representation |
+| --- | --- |
+| Absent, `7bit`, `8bit`, `binary` | Identity domains above, case-insensitive declarations, 998/999 boundary, CRLF versus bare breaks, NUL/high octets, unchanged body and attachment bytes. |
+| `base64` | Parser-decoded bytes and decoding defects; impossible-length fallback remains explicitly undecoded. |
+| `quoted-printable` | Escape/line/literal checks below; recovery and unsupported padding remain partial. |
+| Four uuencode aliases | Parser decoding/fallback and selected-block terminator; recovered truncated streams remain partial. This is a framing check, not a complete uuencode grammar validator. |
+| Unknown, empty, duplicate | Undecoded unsupported declaration or explicit first-header interpretation, always partial. |
+| Embedded message | Derived serialization, kept in attachment scope rather than outer body. |
+
+Completion describes the implemented extraction/checks and their recorded
+defects; it does not establish complete transfer-format conformance for every
+decoder, message authenticity, or malware analysis. The original wire bytes
+remain available even when a tolerant decoder recovers a representation.
+
 Quoted-printable syntax is checked against
 [RFC 2045 section 6.7](https://www.rfc-editor.org/rfc/rfc2045#section-6.7):
 uppercase two-digit hexadecimal escapes, CRLF hard/soft breaks, permitted literal
@@ -74,7 +100,7 @@ ZIP exports include all new files. Historical cases without it remain readable.
 Contract tests cover original octets versus derived text, alternatives, attached
 scope, malformed base64, unsupported/failed/duplicate transfer declarations,
 empty/JavaScript payloads and safe exclusive writes.
-The real integration runs twenty actual supervised `full --no-egress` CLI cases
-and nine loopback HTTP workers, independently checking payload bytes, charset text,
+The real integration runs twenty-seven actual supervised `full --no-egress` CLI cases
+and twelve loopback HTTP workers, independently checking payload bytes, charset text,
 part mappings, original MIME, seals and API/ZIP exports. Constructed messages are
 regression inputs, not a classifier accuracy corpus.

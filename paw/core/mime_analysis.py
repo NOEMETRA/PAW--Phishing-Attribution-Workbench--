@@ -85,6 +85,22 @@ def quoted_printable_is_complete(encoded):
     return True
 
 
+def identity_transfer_is_valid(payload, cte):
+    """Validate RFC 2045 sections 2.7-2.9 without transforming bytes.
+
+    An absent declaration defaults to 7bit (section 6.1). Both line-oriented
+    domains exclude NUL, bare CR/LF and lines over 998 octets; 7bit also excludes
+    high octets. Binary has no octet or line constraints.
+    """
+    if cte == 'binary':
+        return True
+    if b'\x00' in payload or re.search(rb'\r(?!\n)|(?<!\r)\n', payload):
+        return False
+    if cte == '7bit' and re.search(rb'[\x80-\xff]', payload):
+        return False
+    return all(len(line) <= 998 for line in payload.split(b'\r\n'))
+
+
 def decoded_payload(part):
     if part.get_content_maintype() == 'message':
         payload = part.get_payload()
@@ -107,6 +123,9 @@ def decoded_payload(part):
     uuencodings = {'x-uuencode', 'uuencode', 'uue', 'x-uue'}
     if declarations and cte not in identity | uuencodings | {'base64', 'quoted-printable'}:
         return payload, 'undecoded_unsupported_transfer_encoding'
+    if not declarations or cte in identity:
+        if not identity_transfer_is_valid(payload, cte if declarations else '7bit'):
+            return payload, 'identity_bytes_invalid_transfer_domain'
     if cte == 'base64' and any(type(d).__name__ == 'InvalidBase64LengthDefect' for d in part.defects):
         return payload, 'undecoded_failed_transfer_encoding'
     if cte in uuencodings | {'quoted-printable'}:
@@ -126,6 +145,7 @@ def decoded_payload(part):
 
 
 TRANSFER_PARTIAL_REASONS = {
+    'identity_bytes_invalid_transfer_domain': 'Payload violates declared 7bit/8bit transfer domain (absent declaration defaults to 7bit); unchanged parser bytes retained',
     'undecoded_unsupported_transfer_encoding': 'Unsupported or empty declared transfer encoding; parser payload retained undecoded',
     'undecoded_failed_transfer_encoding': 'Transfer decoder returned undecoded parser payload',
     'transfer_decoded_incomplete_framing': 'Uuencode stream missing end terminator; recovered decoded bytes retained',

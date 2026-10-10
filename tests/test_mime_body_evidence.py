@@ -14,12 +14,71 @@ from paw.core.parser_mail import parse_message_bytes
 
 
 class MimeBodyEvidenceTests(unittest.TestCase):
+    @staticmethod
+    def identity_fixtures():
+        # RFC 2045 domains, including the absent-header 7bit default. Expected
+        # status is specified from the wire bytes, not PAW's validator.
+        fixtures = []
+        for cte in (None, b'7bit', b'7BIT', b'8bit', b'8BIT'):
+            seven_bit = cte in (None, b'7bit', b'7BIT')
+            fixtures.extend((cte, payload, valid) for payload, valid in (
+                (b'', True), (b'hello=3Dworld', True),
+                (b'a'*998+b'\r\n'+b'b'*998, True),
+                (b'\t\v\f\x01\x7f \r\n', True),
+                (b'Caf\xe9\r\n', not seven_bit),
+                (b'a\x00b', False), (b'a'*999, False),
+                (b'a\nb', False), (b'a\rb', False),
+                (b'a\r\n\nb', False), (b'a\r\r\nb', False)))
+        for payload in (b'', bytes(range(256)), b'a'*999+b'\n\x00\xff\r'):
+            fixtures.append((b'BiNaRy', payload, True))
+        return fixtures
+
+    def test_identity_transfer_domains_preserve_body_bytes_and_charset_view(self):
+        for cte, payload, valid in self.identity_fixtures():
+            declaration = b'' if cte is None else b'Content-Transfer-Encoding: '+cte+b'\r\n'
+            raw = b'Content-Type: text/plain; charset=iso-8859-1\r\n'+declaration+b'\r\n'+payload
+            with self.subTest(cte=cte, payload=payload[:20], size=len(payload)), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                result, inventory = self.preserve(raw, root/'mime_body')
+                field, = inventory['parts']
+                self.assertEqual((root/field['payload_path']).read_bytes(), payload)
+                self.assertEqual((root/field['text_path']).read_bytes(), payload.decode('iso-8859-1').encode('utf-8'))
+                self.assertEqual(field['decoding']['status'], 'completed')
+                status = 'completed' if valid else 'partial'
+                self.assertEqual(field['status'], status)
+                self.assertEqual(inventory['status'], status)
+                self.assertEqual(result['metadata']['status'], status)
+                self.assertEqual(field['byte_source'], 'transfer_decoded_bytes' if valid else 'identity_bytes_invalid_transfer_domain')
+                if valid:
+                    self.assertNotIn('transfer_decoding', field)
+                else:
+                    self.assertEqual(field['transfer_decoding']['status'], 'partial')
+                    self.assertEqual(field['transfer_decoding']['declared_encodings'], [] if cte is None else [cte.decode()])
+
+    def test_identity_transfer_domains_reach_attachment_inventory(self):
+        for cte, payload, valid in self.identity_fixtures():
+            declaration = b'' if cte is None else b'Content-Transfer-Encoding: '+cte+b'\r\n'
+            raw = (b'Content-Type: application/octet-stream\r\n'
+                   b'Content-Disposition: attachment; filename="a.bin"\r\n'+declaration+b'\r\n'+payload)
+            with self.subTest(cte=cte, payload=payload[:20], size=len(payload)), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                result = analyze_mime(parse_message_bytes(raw))
+                field, = scan_attachments(None, result, root/'attachments')
+                self.assertEqual((root/field['evidence_path']).read_bytes(), payload)
+                self.assertEqual(field['status'], 'metadata_only' if valid else 'partial')
+                self.assertEqual(result['metadata']['status'], 'completed' if valid else 'partial')
+                if valid:
+                    self.assertNotIn('transfer_decoding', field)
+                else:
+                    self.assertEqual(field['byte_source'], 'identity_bytes_invalid_transfer_domain')
+                    self.assertEqual(field['transfer_decoding']['status'], 'partial')
+
     def preserve(self, raw, directory):
         result = analyze_mime(parse_message_bytes(raw))
         return result, preserve_body_parts(result, raw, directory)
 
     def test_charset_preserves_octets_and_separate_utf8_text(self):
-        raw = b'Content-Type: text/plain; charset=iso-8859-1\r\n\r\nCaf\xe9\r\n'
+        raw = b'Content-Type: text/plain; charset=iso-8859-1\r\nContent-Transfer-Encoding: 8bit\r\n\r\nCaf\xe9\r\n'
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
             result, inventory = self.preserve(raw, root/'mime_body')
