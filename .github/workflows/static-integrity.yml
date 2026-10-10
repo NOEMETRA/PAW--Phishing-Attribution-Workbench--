@@ -35,6 +35,9 @@ jobs:
       - name: Verify mailbox display-name parsing and structured field defects
         run: python -m unittest discover -s tests -p 'test_header_identity_contracts.py' -v
 
+      - name: Verify bounded ordered top-level header inventory contracts
+        run: python -m unittest discover -s tests -p 'test_header_inventory.py' -v
+
       - name: Verify structured Reply-To domains and comparison uncertainty
         run: python -m unittest discover -s tests -p 'test_reply_domain_contracts.py' -v
 
@@ -172,3 +175,6 @@ jobs:
 
       - name: Verify actual CLI HTTP workers ignore analysis-directory Python shadows
         run: python tests/integration_worker_imports_real.py
+
+      - name: Verify actual offline header inventory and sealed HTTP exports
+        run: python tests/integration_header_inventory_real.py

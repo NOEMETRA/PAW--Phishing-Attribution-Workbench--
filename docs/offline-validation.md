@@ -320,6 +320,13 @@ or uses a default example case. See [canary status](canary-status.md) for the
 measured reproduction and rejection tests. Existing observations remain readable;
 the offline analysis engine and deferred detonation/Sentinel paths are unchanged.
 
+## Top-level header inventory
+
+New cases also expose a separate [top-level header inventory](header-inventory.md)
+with ordered duplicate occurrences, raw parser-value octets, derived text and
+explicit limits. It preserves the existing selected-header, scoring and
+authentication contracts; arbitrary header claims remain unverified.
+
 ## Local DKIM public key evidence
 
 Analysis presets accept `--dkim-keys` and HTTP analysis accepts `options.dkim_keys`.
