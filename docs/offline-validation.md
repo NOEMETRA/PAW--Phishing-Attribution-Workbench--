@@ -222,3 +222,28 @@ fixtures are contract tests, not analysis outputs or an accuracy corpus. The rea
 original-EML CLI/HTTP integration additionally pauses a batch after its first case
 has entered the actual index, checks list redaction and empty query results, then
 resumes and checks completed collection/query results and verified original bytes.
+
+## Case identity and exclusive ingestion
+
+A CI batch reported success with 21 case directories for 22 selected messages.
+The ingestion path used second-resolution time and only four UUID characters,
+then reused an existing directory. A controlled same-second/shared-prefix run
+reproduced silent overwrite: both inputs were marked completed with the same ID,
+and both success records referenced the second message. The failed CI log does
+not retain the case IDs, so the exact historical collision cannot be confirmed;
+the reproduced loss mechanism matches the missing-case symptom.
+
+New cases use the full UUID hex suffix. Directory creation is exclusive before
+writing input or manifest and before publishing the case as an ingest destination.
+An exact ID collision raises `FileExistsError`; batch accounting reports that input
+as failed while retaining the first completed case and its seal. Existing cases
+are never reused as destinations. Historical IDs remain readable; no migration or
+scoring/network-policy change is made.
+
+`tests/integration_case_identity_real.py` runs actual supervised offline workers
+with controlled timestamp/UUID generation. Distinct UUIDs sharing the old four
+characters preserve both originals in separate sealed/indexed cases. An exact
+UUID collision produces a partial batch, one intact first case and one explicit
+failed input. Only identity generation is controlled; analysis, network guard,
+indexing, process supervision and evidence output are real. These inputs test
+ingestion integrity, not classification accuracy.

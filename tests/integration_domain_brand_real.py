@@ -76,7 +76,9 @@ def main():
                 assert hinted_record['status']=='not_evaluated' and hinted_record['comparisons']==[]
                 assert hinted['bk_score'] is None and hinted['score_components']['sender_domain_heuristics']==0
             observed[name]=record
-        assert set(observed)=={Path(name).stem for name in samples}
+        expected_names={Path(name).stem for name in samples}
+        assert set(observed)==expected_names,{'missing':sorted(expected_names-set(observed)),
+                                             'unexpected':sorted(set(observed)-expected_names)}
         assert observed['service']==observed['uppercase']
         print('PASS: 22 actual full --no-egress domain-label cases; registrable/private labels, single contribution, retained first-label rules, unknown suffixes, identity gates and unavailable-From provenance, original bytes, JSON/coverage parity and seals')
 
