@@ -84,6 +84,8 @@ jobs:
         run: python tests/integration_case_identity_real.py
       - name: Verify legacy inbox launcher uses actual supervised offline full analysis
         run: python tests/integration_legacy_inbox_real.py
+      - name: Verify legacy canary rejection preserves actual offline case evidence
+        run: python tests/integration_canary_boundary_real.py
       - name: Verify real offline CLI URL evidence and coverage
         run: python tests/integration_url_evidence_real.py
       - name: Verify real offline full CLI content observations and actions
