@@ -109,20 +109,23 @@ class TextDeobfuscationContracts(unittest.TestCase):
             source.write_text(sample, encoding='utf-8')
             for option, value in (('--text',sample), ('--file',str(source))):
                 output = io.StringIO()
-                with offline_policy(True), patch('sys.argv',['paw','deobfuscate',option,value]), contextlib.redirect_stdout(output):
+                # The CLI supervisor must launch its contained worker; the worker
+                # establishes the offline guard. An outer process-denying guard
+                # would block the supervisor itself, before analysis starts.
+                with patch('sys.argv',['paw','deobfuscate',option,value]), contextlib.redirect_stdout(output):
                     main()
                 self.assertIn('descriptive_only', output.getvalue())
                 self.assertIn('not_evaluated', output.getvalue())
                 self.assertNotIn('Suspicion Score:', output.getvalue())
                 self.assertNotIn('Complexity: none', output.getvalue())
             output = io.StringIO()
-            with offline_policy(True), patch('sys.argv',['paw','deobfuscate','--text',sample,'--json']), contextlib.redirect_stdout(output):
+            with patch('sys.argv',['paw','deobfuscate','--text',sample,'--json']), contextlib.redirect_stdout(output):
                 main()
             data = json.loads(output.getvalue())
             self.assertIsNone(data['suspicion_score'])
             self.assertEqual(data['assessment_status'], 'descriptive_only')
             output = io.StringIO()
-            with offline_policy(True), patch('sys.argv',['paw','deobfuscate','--url','hxxps://example[.]invalid']), contextlib.redirect_stdout(output):
+            with patch('sys.argv',['paw','deobfuscate','--url','hxxps://example[.]invalid']), contextlib.redirect_stdout(output):
                 main()
             self.assertIn('nontext_transformations_only', output.getvalue())
             self.assertIn('Text risk detection: not_evaluated', output.getvalue())

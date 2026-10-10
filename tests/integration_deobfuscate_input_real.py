@@ -20,6 +20,8 @@ def main():
         large = inputs/'large.txt'; large.write_bytes(b'a'*(1024*1024+1))
         before = {path.name:hashlib.sha256(path.read_bytes()).hexdigest() for path in inputs.iterdir()}
         env = dict(os.environ,PYTHONPATH=str(REPO),PYTHONDONTWRITEBYTECODE='1',PYTHONUTF8='1')
+        control_root = Path(tempfile.gettempdir())
+        controls_before = set(control_root.glob('paw-standalone-*'))
         def run(args, expected=0, wrapper=None):
             command = [sys.executable,'-X','utf8'] + ([str(wrapper),'deobfuscate'] if wrapper else ['-m','paw','deobfuscate'])
             result = subprocess.run(command+args, cwd=root, env=env, capture_output=True, timeout=20)
@@ -37,6 +39,9 @@ def main():
             assert data['input_observation']['byte_count'] == len(expected_raw)
             assert data['input_observation']['no_egress'] is True
             assert data['input_observation']['case_storage']=='not_created'
+            assert data['standalone_execution']['status']=='completed'
+            assert data['standalone_execution']['tree_stopped'] is True
+            assert data['standalone_execution']['limits']['wall_seconds']==60
             assert data['suspicion_score'] is None and data['deobfuscated_artifacts']['urls']==[]
             results.append(data)
         literal = 'hxxps://example[.]invalid/a%2Fb?x=a%26b'
@@ -53,12 +58,18 @@ def main():
         assert 'not_evaluated' in human
         help_text = ' '.join(run(['--help']).stdout.decode('utf-8').split())
         assert 'never fetched' in help_text and 'invalid encoding rejected' in help_text
-        # Instrument actual main after normal CLI bootstrap: no fake decoder or
-        # substituted result. Observe active policy on the input open and any
-        # dispatch-time socket/process attempt. Import-time isolation is outside scope.
+        assert '--deadline' in help_text and '--memory-mib' in help_text
+        for options in (['--deadline','0'],['--deadline','nan'],['--memory-mib','63']):
+            run(['--file',str(source),'--json']+options,expected=2)
+        timed_out = run(['--file',str(source),'--json','--deadline','0.001'],expected=1)
+        assert 'timed_out' in timed_out.stderr.decode('utf-8')
+        assert 'no results returned' in timed_out.stderr.decode('utf-8')
+        # Instrument the same real input helper used inside the CLI worker; no
+        # substituted decoder/result. CLI workers run in a separate process, so
+        # this audit observes the helper directly after normal module bootstrap.
         wrapper = root/'observe_dispatch.py'
         wrapper.write_text('''import json,sys
-from paw.__main__ import main
+from paw.deobfuscate.input import analyze_input
 from paw.core.network_policy import network_allowed
 source=sys.argv[sys.argv.index('--file')+1]
 opens=[]; attempts=[]
@@ -66,12 +77,12 @@ def observe(event,args):
     if event=='open' and args[0]==source: opens.append(not network_allowed())
     if (event.startswith('socket.') and event!='socket.gethostname') or event in {'subprocess.Popen','os.system','os.posix_spawn','os.spawn','os.fork','os.exec','os.startfile','os.startfile/2','_winapi.CreateProcess'}: attempts.append(event)
 sys.addaudithook(observe)
-main()
+print(json.dumps(analyze_input(file=source)))
 assert opens==[True], opens
 assert not attempts, attempts
 ''',encoding='utf-8')
         observed = json.loads(run(['--file',str(source),'--json'],wrapper=wrapper).stdout)
-        assert observed==results[0]
+        assert observed=={key:value for key,value in results[0].items() if key!='standalone_execution'}
         # Actual CLI rejection, with a test-only audit stop BEFORE any attempted
         # filesystem open or network/process call can reach the OS. Never probe SMB.
         unc_wrapper = root/'observe_unc_rejection.py'
@@ -102,6 +113,7 @@ raise AssertionError('CLI accepted UNC input')
             assert 'UNC paths are not accepted' in rejected.stderr.decode('utf-8')
         after = {path.name:hashlib.sha256(path.read_bytes()).hexdigest() for path in inputs.iterdir()}
         assert after==before
+        assert set(control_root.glob('paw-standalone-*'))==controls_before
         assert not any((root/name).exists() for name in ('cases','jobs','reports','exports'))
         # The common parser still accepts actual supervised email analysis;
         # required standalone-source arguments must not leak into full.
@@ -117,7 +129,7 @@ raise AssertionError('CLI accepted UNC input')
         assert len(cases)==1 and (cases[0]/'input.eml').read_bytes()==original and verify_case(str(cases[0]))
         assert json.loads((cases[0]/'execution.json').read_text())['no_egress'] is True
         assert email.read_bytes()==original
-        print('PASS: 22 actual standalone CLI invocations; BOM/CRLF/Unicode/empty/literal-URL inputs preserved with byte count/SHA-256; invalid UTF-8, ambiguous, oversized, missing and nonregular inputs fail before output; human/help/JSON consistent. Six UNC backslash/forward/mixed/extended spellings rejected with exit 2, empty stdout and zero attempted input opens/network/process calls after CLI bootstrap; audit safety stops prevent OS access on regression. Instrumented local dispatch reads under the application guard with zero socket/process attempts after CLI bootstrap; source files unchanged, no standalone cases/jobs created. One subsequent actual supervised full --no-egress on an original public EML preserves MIME/seal and verifies common-parser compatibility. Constructed text contracts, not phishing accuracy or OS isolation.')
+        print('PASS: 25 actual standalone CLI invocations plus one real input-helper audit; BOM/CRLF/Unicode/empty/literal-URL inputs preserved with byte count/SHA-256; invalid UTF-8, ambiguous, oversized, missing and nonregular inputs fail before output; human/help/JSON consistent. Actual deadline stops the worker with exit 1 and empty stdout; invalid deadline/memory reject with exit 2. Six UNC backslash/forward/mixed/extended spellings rejected with exit 2, empty stdout and zero attempted input opens/network/process calls after CLI bootstrap; audit safety stops prevent OS access on regression. Instrumented real input helper reads under the application guard with zero socket/process attempts after module bootstrap; source files unchanged, confirmed-stop temporary controls cleaned, no standalone cases/jobs created. One subsequent actual supervised full --no-egress on an original public EML preserves MIME/seal and verifies common-parser compatibility. Constructed text contracts, not phishing accuracy or OS isolation.')
 
 
 if __name__ == '__main__': main()
