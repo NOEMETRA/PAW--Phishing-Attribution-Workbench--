@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from paw.deobfuscate.input import analyze_input, MAX_INPUT_BYTES
 from paw.core.network_policy import violations, network_allowed
@@ -77,7 +78,16 @@ class DeobfuscateInputContracts(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             with self.assertRaises((ValueError, OSError)): analyze_input(file=temporary)
             with self.assertRaises(FileNotFoundError): analyze_input(file=Path(temporary)/'missing')
-        with self.assertRaisesRegex(ValueError, 'UNC'): analyze_input(file=r'\\invalid-host\share\input.txt')
+
+    def test_unc_separator_variants_rejected_before_any_open(self):
+        for path in (r'\\invalid-host\share\input.txt', '//invalid-host/share/input.txt',
+                     r'/\invalid-host/share/input.txt', r'\/invalid-host\share\input.txt',
+                     r'\\?\UNC\invalid-host\share\input.txt', '//?/UNC/invalid-host/share/input.txt'):
+            with self.subTest(path=path), patch('paw.deobfuscate.input.os.open',
+                    side_effect=AssertionError('Test blocked filesystem access')) as opener:
+                with self.assertRaisesRegex(ValueError, 'UNC'):
+                    analyze_input(file=path)
+                opener.assert_not_called()
 
     @unittest.skipUnless(os.name=='posix', 'POSIX FIFO contract')
     def test_fifo_is_rejected_without_waiting_for_writer(self):

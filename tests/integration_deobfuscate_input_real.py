@@ -72,6 +72,34 @@ assert not attempts, attempts
 ''',encoding='utf-8')
         observed = json.loads(run(['--file',str(source),'--json'],wrapper=wrapper).stdout)
         assert observed==results[0]
+        # Actual CLI rejection, with a test-only audit stop BEFORE any attempted
+        # filesystem open or network/process call can reach the OS. Never probe SMB.
+        unc_wrapper = root/'observe_unc_rejection.py'
+        unc_wrapper.write_text('''import sys
+from paw.__main__ import main
+source=sys.argv[sys.argv.index('--file')+1]
+attempts=[]
+def observe(event,args):
+    if event=='open' and args[0]==source:
+        attempts.append(event)
+        raise AssertionError('Test blocked UNC filesystem access before OS open')
+    if (event.startswith('socket.') and event!='socket.gethostname') or event in {'subprocess.Popen','os.system','os.posix_spawn','os.spawn','os.fork','os.exec','os.startfile','os.startfile/2','_winapi.CreateProcess'}:
+        attempts.append(event)
+        raise AssertionError('Test blocked network/process attempt')
+sys.addaudithook(observe)
+try:
+    main()
+except SystemExit as exc:
+    assert exc.code==2, exc.code
+    assert not attempts, attempts
+    raise
+raise AssertionError('CLI accepted UNC input')
+''',encoding='utf-8')
+        for path in (r'\\invalid-host\share\input.txt', '//invalid-host/share/input.txt',
+                     r'/\invalid-host/share/input.txt', r'\/invalid-host\share\input.txt',
+                     r'\\?\UNC\invalid-host\share\input.txt', '//?/UNC/invalid-host/share/input.txt'):
+            rejected = run(['--file',path,'--json'],expected=2,wrapper=unc_wrapper)
+            assert 'UNC paths are not accepted' in rejected.stderr.decode('utf-8')
         after = {path.name:hashlib.sha256(path.read_bytes()).hexdigest() for path in inputs.iterdir()}
         assert after==before
         assert not any((root/name).exists() for name in ('cases','jobs','reports','exports'))
@@ -89,7 +117,7 @@ assert not attempts, attempts
         assert len(cases)==1 and (cases[0]/'input.eml').read_bytes()==original and verify_case(str(cases[0]))
         assert json.loads((cases[0]/'execution.json').read_text())['no_egress'] is True
         assert email.read_bytes()==original
-        print('PASS: 16 actual standalone CLI invocations; BOM/CRLF/Unicode/empty/literal-URL inputs preserved with byte count/SHA-256; invalid UTF-8, ambiguous, oversized, missing and nonregular inputs fail before output; human/help/JSON consistent. Instrumented actual dispatch reads under the application guard with zero socket/process attempts after CLI bootstrap; source files unchanged, no standalone cases/jobs created. One subsequent actual supervised full --no-egress on an original public EML preserves MIME/seal and verifies common-parser compatibility. Constructed text contracts, not phishing accuracy or OS isolation.')
+        print('PASS: 22 actual standalone CLI invocations; BOM/CRLF/Unicode/empty/literal-URL inputs preserved with byte count/SHA-256; invalid UTF-8, ambiguous, oversized, missing and nonregular inputs fail before output; human/help/JSON consistent. Six UNC backslash/forward/mixed/extended spellings rejected with exit 2, empty stdout and zero attempted input opens/network/process calls after CLI bootstrap; audit safety stops prevent OS access on regression. Instrumented local dispatch reads under the application guard with zero socket/process attempts after CLI bootstrap; source files unchanged, no standalone cases/jobs created. One subsequent actual supervised full --no-egress on an original public EML preserves MIME/seal and verifies common-parser compatibility. Constructed text contracts, not phishing accuracy or OS isolation.')
 
 
 if __name__ == '__main__': main()

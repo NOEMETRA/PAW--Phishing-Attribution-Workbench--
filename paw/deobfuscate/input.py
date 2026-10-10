@@ -18,7 +18,9 @@ def analyze_input(*, text=None, file=None, url=None):
     with offline_policy(True):
         if kind == 'file':
             path = os.fspath(value)
-            if not isinstance(path, str) or path.startswith('\\\\'):
+            # Windows accepts slash and mixed-separator UNC spellings too.
+            # Normalize only for admission; open the original local path.
+            if not isinstance(path, str) or path.replace('/', '\\').startswith('\\\\'):
                 raise ValueError('Input must be a local regular file; UNC paths are not accepted')
             fd = os.open(path, os.O_RDONLY | getattr(os, 'O_BINARY', 0) | getattr(os, 'O_NONBLOCK', 0))
             try:

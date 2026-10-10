@@ -45,8 +45,11 @@ or transcoded text needs a separate labeled copy; preserve the original email.
 Reading and decoder dispatch run under the Python no-egress application guard.
 `--url` is a literal candidate, never a download or navigation request. The guard
 does not cover CLI bootstrap, native code or OS filesystem/network isolation.
-UNC paths are rejected, but that check does not establish the isolation of other
-mounted or mapped filesystems. The standalone command has a bounded input, not
+UNC paths are rejected before opening, including forward-slash, backslash,
+mixed-separator and extended UNC spellings. Only the admission check normalizes
+separators; accepted local paths are opened as supplied. That check does not
+establish the isolation of other mounted or mapped filesystems.
+The standalone command has a bounded input, not
 the shared CLI/API analysis process supervisor or a total execution deadline.
 
 Text risk remains unevaluated. Existing descriptive observations, URL candidate
@@ -56,7 +59,9 @@ phishing verdict or attribution is added by a valid input/hash.
 Validation includes real CLI invocations, exact BOM/CRLF/Unicode/empty inputs,
 invalid UTF-8 and conflicting-source rejection, byte-limit/nonregular-input
 contracts, human/help/JSON output and unchanged source files. An instrumented
-actual CLI observes the input open under the guard and no socket/process attempts
+actual CLI also rejects six UNC spellings with no attempted input opens; a
+test-only audit stop prevents filesystem/network access if rejection regresses.
+An instrumented actual CLI observes the local input open under the guard and no socket/process attempts
 during dispatch after bootstrap. These constructed regression inputs do not
 measure phishing accuracy or demonstrate OS isolation.
 One subsequent actual supervised `full --no-egress` on an original public EML
