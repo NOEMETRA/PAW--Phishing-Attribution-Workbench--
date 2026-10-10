@@ -2,6 +2,7 @@
 from email import policy
 from email.message import EmailMessage
 from email.parser import BytesParser
+import binascii
 import hashlib
 import io
 import json
@@ -94,6 +95,7 @@ def main():
     nested.add_attachment(inner,filename='forward.eml')
     nested.add_attachment('Text attachment',filename='../../letter.txt')
     nested.add_attachment(b'PNG fixture',maintype='image',subtype='png',disposition='inline')
+    truncated_uu = b'begin 644 fixture\r\n'+binascii.b2a_uu(b'Hello')
     samples = {
         'alternatives.eml':alternative.as_bytes(), 'nested.eml':nested.as_bytes(),
         'unknown-charset.eml':prefix+b'Content-Type: text/html; charset=unknown-charset\r\n\r\n<b>a\xffb</b>',
@@ -102,6 +104,8 @@ def main():
         'unknown-transfer.eml':prefix+b'Content-Type: text/plain\r\nContent-Transfer-Encoding: x-foo\r\n\r\nhello=3Dworld',
         'failed-base64.eml':prefix+b'Content-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\n\r\nA',
         'failed-uuencode.eml':prefix+b'Content-Type: text/plain\r\nContent-Transfer-Encoding: x-uue\r\n\r\nhello=3Dworld',
+        'truncated-uuencode.eml':prefix+b'Content-Type: text/plain\r\nContent-Transfer-Encoding: x-uue\r\n\r\n'+truncated_uu,
+        'truncated-attachment-uuencode.eml':prefix+b'Content-Type: application/octet-stream\r\nContent-Disposition: attachment; filename="a.bin"\r\nContent-Transfer-Encoding: x-uue\r\n\r\n'+truncated_uu,
         'duplicate-transfer.eml':prefix+b'Content-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nSGVsbG8=',
         'unknown-attachment-transfer.eml':prefix+b'Content-Type: application/octet-stream\r\nContent-Disposition: attachment; filename="a.bin"\r\nContent-Transfer-Encoding: x-foo\r\n\r\nhello=3Dworld',
         'broken-multipart.eml':prefix+b'Content-Type: multipart/mixed; boundary=missing\r\n\r\nundelimited',
@@ -109,10 +113,11 @@ def main():
         'javascript.eml':prefix+b'Content-Type: text/javascript\r\n\r\nrequire("fs").writeFileSync("unexpected-js-execution", "ran");',
         'empty.eml':prefix+b'Content-Type: text/plain\r\n\r\n'}
     partial = {'unknown-charset.eml','default-charset.eml','bad-base64.eml',
-        'unknown-transfer.eml','failed-base64.eml','failed-uuencode.eml','duplicate-transfer.eml'}
+        'unknown-transfer.eml','failed-base64.eml','failed-uuencode.eml','duplicate-transfer.eml','truncated-uuencode.eml'}
     transfer_sources = {'unknown-transfer.eml':'undecoded_unsupported_transfer_encoding',
         'failed-base64.eml':'undecoded_failed_transfer_encoding',
         'failed-uuencode.eml':'undecoded_failed_transfer_encoding',
+        'truncated-uuencode.eml':'transfer_decoded_incomplete_framing',
         'duplicate-transfer.eml':'derived_first_transfer_encoding'}
     environment = dict(os.environ,PYTHONPATH=str(REPO),PYTHONDONTWRITEBYTECODE='1',PYTHONUTF8='1')
     def check_transfer(case, name, inventory):
@@ -121,11 +126,15 @@ def main():
             assert field['byte_source'] == transfer_sources[name]
             assert field['status'] == field['transfer_decoding']['status'] == 'partial'
             assert read(case/'mime_analysis.json')['status'] == 'partial'
-        if name == 'unknown-attachment-transfer.eml':
+        if name == 'truncated-uuencode.eml':
+            field, = inventory['parts']
+            assert (case/field['payload_path']).read_bytes() == b'Hello'
+        if name in {'unknown-attachment-transfer.eml','truncated-attachment-uuencode.eml'}:
             field, = read(case/'attachments.json')
-            assert field['byte_source'] == 'undecoded_unsupported_transfer_encoding'
+            truncated = name == 'truncated-attachment-uuencode.eml'
+            assert field['byte_source'] == ('transfer_decoded_incomplete_framing' if truncated else 'undecoded_unsupported_transfer_encoding')
             assert field['status'] == field['transfer_decoding']['status'] == 'partial'
-            assert (case/field['evidence_path']).read_bytes() == b'hello=3Dworld'
+            assert (case/field['evidence_path']).read_bytes() == (b'Hello' if truncated else b'hello=3Dworld')
             assert read(case/'mime_analysis.json')['status'] == 'partial'
             assert read(case/'analysis_coverage.json')['stages']['attachment_metadata']['status'] == 'partial'
     with tempfile.TemporaryDirectory(prefix='paw-mime-body-',dir=REPO.parent) as temporary:
@@ -172,7 +181,8 @@ def main():
                     try: request('/health'); break
                     except (urllib.error.URLError,TimeoutError): time.sleep(.1)
                 else: raise TimeoutError('API startup')
-                for name in ('alternatives.eml','unknown-charset.eml','unknown-transfer.eml','failed-uuencode.eml','unknown-attachment-transfer.eml'):
+                for name in ('alternatives.eml','unknown-charset.eml','unknown-transfer.eml','failed-uuencode.eml',
+                             'unknown-attachment-transfer.eml','truncated-uuencode.eml','truncated-attachment-uuencode.eml'):
                     raw = samples[name]; boundary = 'paw_mime_body_fixture'
                     upload = (f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{name}"\r\nContent-Type: message/rfc822\r\n\r\n'.encode()+raw+f'\r\n--{boundary}--\r\n'.encode())
                     uploaded = json.loads(request('/api/upload','POST',upload,'multipart/form-data; boundary='+boundary))
@@ -202,7 +212,7 @@ def main():
                 server.terminate()
                 try: server.wait(timeout=15)
                 except subprocess.TimeoutExpired: server.kill(); server.wait(timeout=15)
-    print('PASS: fourteen actual full CLI cases and five loopback HTTP workers; per-part bytes/charset text/provenance, alternatives, explicit partial transfer/charset decoding, unknown/failed/duplicate transfer declarations in bodies and attachments, nested/unsupported scope, empty and unexecuted JS sources, original MIME/seals/API ZIP. No-egress; not accuracy labels.')
+    print('PASS: sixteen actual full CLI cases and seven loopback HTTP workers; per-part bytes/charset text/provenance, alternatives, explicit partial transfer/charset decoding, unknown/failed/duplicate transfer declarations and truncated uuencode in bodies and attachments, nested/unsupported scope, empty and unexecuted JS sources, original MIME/seals/API ZIP. No-egress; not accuracy labels.')
 
 
 if __name__ == '__main__': main()

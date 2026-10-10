@@ -37,6 +37,26 @@ def iter_parts(message, limits=MimeLimits()):
                          for index, child in reversed(list(enumerate(payload))))
 
 
+def uuencode_has_end(encoded):
+    """Check the terminator of the first begin block selected by the stdlib.
+
+    A terminator in the preamble or an ignored invalid-mode block cannot
+    establish completion of the decoded block. This does not decode data.
+    """
+    lines = iter(encoded.splitlines())
+    for line in lines:
+        if line.startswith(b'begin '):
+            mode = line[6:].partition(b' ')[0]
+            try:
+                int(mode, base=8)
+            except ValueError:
+                continue
+            break
+    else:
+        return False
+    return any(line.strip(b' \t\r\n\f') == b'end' for line in lines)
+
+
 def decoded_payload(part):
     if part.get_content_maintype() == 'message':
         payload = part.get_payload()
@@ -67,14 +87,18 @@ def decoded_payload(part):
         # guess a different transfer encoding from the payload's appearance.
         identity_part = copy(part)
         del identity_part['Content-Transfer-Encoding']
-        if payload == identity_part.get_payload(decode=True):
+        encoded = identity_part.get_payload(decode=True)
+        if payload == encoded:
             return payload, 'undecoded_failed_transfer_encoding'
+        if not uuencode_has_end(encoded):
+            return payload, 'transfer_decoded_incomplete_framing'
     return payload, 'transfer_decoded_bytes'
 
 
 TRANSFER_PARTIAL_REASONS = {
     'undecoded_unsupported_transfer_encoding': 'Unsupported or empty declared transfer encoding; parser payload retained undecoded',
     'undecoded_failed_transfer_encoding': 'Transfer decoder returned undecoded parser payload',
+    'transfer_decoded_incomplete_framing': 'Uuencode stream missing end terminator; recovered decoded bytes retained',
     'derived_first_transfer_encoding': 'Duplicate transfer encoding declarations; parser used the first occurrence',
     'fallback_utf8_serialization': 'Parser payload serialized as UTF-8; transfer decoding unavailable',
 }

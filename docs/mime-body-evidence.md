@@ -19,6 +19,12 @@ Raw transfer encoding, boundaries and original headers remain in `input.eml`.
 Unsupported or empty transfer encoding declarations retain the parser's undecoded
 payload with `byte_source: undecoded_unsupported_transfer_encoding`. Failed
 base64-length or uuencode decoding uses `undecoded_failed_transfer_encoding`.
+An uuencode decoder may return recovered bytes even when its `end` terminator is
+missing. Such bytes are retained as `transfer_decoded_incomplete_framing`, with
+partial transfer decoding and coverage. The terminator must follow the first
+valid-mode `begin` block selected by the parser; an `end` in the preamble or an
+ignored invalid-mode block does not complete that stream. This checks framing
+without changing the recovered bytes or executing the decoded content.
 Duplicate transfer declarations retain the stdlib's first-header interpretation
 as `derived_first_transfer_encoding`. These cases record a separate, partial
 `transfer_decoding` observation with declarations and reason in MIME metadata,
@@ -55,7 +61,7 @@ ZIP exports include all new files. Historical cases without it remain readable.
 Contract tests cover original octets versus derived text, alternatives, attached
 scope, malformed base64, unsupported/failed/duplicate transfer declarations,
 empty/JavaScript payloads and safe exclusive writes.
-The real integration runs fourteen actual supervised `full --no-egress` CLI cases
-and five loopback HTTP workers, independently checking payload bytes, charset text,
+The real integration runs sixteen actual supervised `full --no-egress` CLI cases
+and seven loopback HTTP workers, independently checking payload bytes, charset text,
 part mappings, original MIME, seals and API/ZIP exports. Constructed messages are
 regression inputs, not a classifier accuracy corpus.

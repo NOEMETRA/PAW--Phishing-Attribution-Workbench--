@@ -1,6 +1,7 @@
 """MIME body-byte provenance; constructed inputs are not accuracy labels."""
 from email import policy
 from email.message import EmailMessage
+import binascii
 import hashlib
 from pathlib import Path
 import tempfile
@@ -112,7 +113,6 @@ class MimeBodyEvidenceTests(unittest.TestCase):
             self.assertEqual(result['metadata']['status'], 'partial')
 
     def test_known_transfer_encodings_keep_successful_behavior(self):
-        import binascii
         fixtures = [(b'7bit',b'hello=3Dworld',b'hello=3Dworld'),
             (b'8bit',b'hello',b'hello'), (b'binary',b'hello',b'hello'),
             (b'BASE64',b'SGVsbG8=',b'Hello'),
@@ -129,6 +129,52 @@ class MimeBodyEvidenceTests(unittest.TestCase):
                 self.assertEqual(field['byte_source'], 'transfer_decoded_bytes')
                 self.assertEqual(field['status'], 'completed')
                 self.assertNotIn('transfer_decoding', field)
+
+    def test_truncated_uuencode_preserves_recovered_body_bytes_as_partial(self):
+        data_line = binascii.b2a_uu(b'Hello')
+        payloads = [b'begin 644 fixture\n'+data_line,
+            b'begin 644 fixture\r\n'+data_line+b' \r\n',
+            b'begin 644 fixture\r\n',
+            b'end\r\nbegin 644 fixture\r\n'+data_line,
+            b'begin invalid ignored\r\nend\r\nbegin 644 fixture\r\n'+data_line]
+        for cte in (b'uuencode', b'x-uuencode', b'uue', b'x-uue'):
+            for index, payload in enumerate(payloads):
+                raw = b'Content-Type: text/plain\r\nContent-Transfer-Encoding: '+cte+b'\r\n\r\n'+payload
+                with self.subTest(cte=cte, fixture=index), tempfile.TemporaryDirectory() as temporary:
+                    root = Path(temporary)
+                    result, inventory = self.preserve(raw, root/'mime_body')
+                    field, = inventory['parts']
+                    expected = b'' if index == 2 else b'Hello'
+                    self.assertEqual((root/field['payload_path']).read_bytes(), expected)
+                    self.assertEqual((root/field['text_path']).read_bytes(), expected)
+                    self.assertEqual(field['byte_source'], 'transfer_decoded_incomplete_framing')
+                    self.assertEqual(field['transfer_decoding']['status'], 'partial')
+                    self.assertEqual(field['decoding']['status'], 'completed')
+                    self.assertEqual(field['defects'], [])
+                    self.assertEqual(field['status'], 'partial')
+                    self.assertEqual(inventory['status'], 'partial')
+                    self.assertEqual(result['metadata']['status'], 'partial')
+
+    def test_truncated_uuencode_attachment_and_complete_terminators(self):
+        payload = b'begin 644 fixture\r\n'+binascii.b2a_uu(b'Hello')
+        for tail in (b'', b'end', b' \r\nend\r\n', b'\tend \t\r\n'):
+            raw = (b'Content-Type: application/octet-stream\r\nContent-Disposition: attachment; filename="a.bin"\r\n'
+                   b'Content-Transfer-Encoding: x-uue\r\n\r\n'+payload+tail)
+            with self.subTest(tail=tail), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                result = analyze_mime(parse_message_bytes(raw))
+                field, = scan_attachments(None, result, root/'attachments')
+                self.assertEqual((root/field['evidence_path']).read_bytes(), b'Hello')
+                if tail:
+                    self.assertEqual(field['byte_source'], 'transfer_decoded_bytes')
+                    self.assertEqual(field['status'], 'metadata_only')
+                    self.assertEqual(result['metadata']['status'], 'completed')
+                    self.assertNotIn('transfer_decoding', field)
+                else:
+                    self.assertEqual(field['byte_source'], 'transfer_decoded_incomplete_framing')
+                    self.assertEqual(field['transfer_decoding']['status'], 'partial')
+                    self.assertEqual(field['status'], 'partial')
+                    self.assertEqual(result['metadata']['status'], 'partial')
 
     def test_transfer_partial_provenance_reaches_attachment_metadata(self):
         raw = (b'Content-Type: application/octet-stream\r\nContent-Disposition: attachment; filename="a.bin"\r\n'
