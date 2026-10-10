@@ -33,6 +33,19 @@ Successful charset conversion cannot imply successful transfer decoding. No
 alternative encoding is guessed; the exact original remains in `input.eml`.
 Known successful transfer decoders and identity encodings keep their behavior.
 
+Quoted-printable syntax is checked against
+[RFC 2045 section 6.7](https://www.rfc-editor.org/rfc/rfc2045#section-6.7):
+uppercase two-digit hexadecimal escapes, CRLF hard/soft breaks, permitted literal
+octets and encoded lines of at most 76 bytes. Malformed escapes (including `=`
+at EOF), lowercase hexadecimal recovery, noncanonical line breaks, illegal raw
+octets and overlong lines use `transfer_decoded_partial_syntax` and partial
+transfer coverage. Transport padding is valid to receive, but Python retains it
+and fails to remove padded soft breaks; that unsupported interpretation is also
+partial. Existing parser-decoded bytes are retained without repair or guessing.
+No new authentication or risk contribution is introduced. `input.eml` retains
+the exact original transfer representation, including any bytes the tolerant
+decoder omits from its derived result.
+
 Unknown/invalid charset fallback remains explicit in `decoding`. Defects or
 partial decoding make that part and inventory partial without losing captured
 payload bytes. UTF-8 transport cannot silently rewrite a derived unencodable
@@ -61,7 +74,7 @@ ZIP exports include all new files. Historical cases without it remain readable.
 Contract tests cover original octets versus derived text, alternatives, attached
 scope, malformed base64, unsupported/failed/duplicate transfer declarations,
 empty/JavaScript payloads and safe exclusive writes.
-The real integration runs sixteen actual supervised `full --no-egress` CLI cases
-and seven loopback HTTP workers, independently checking payload bytes, charset text,
+The real integration runs twenty actual supervised `full --no-egress` CLI cases
+and nine loopback HTTP workers, independently checking payload bytes, charset text,
 part mappings, original MIME, seals and API/ZIP exports. Constructed messages are
 regression inputs, not a classifier accuracy corpus.

@@ -106,6 +106,10 @@ def main():
         'failed-uuencode.eml':prefix+b'Content-Type: text/plain\r\nContent-Transfer-Encoding: x-uue\r\n\r\nhello=3Dworld',
         'truncated-uuencode.eml':prefix+b'Content-Type: text/plain\r\nContent-Transfer-Encoding: x-uue\r\n\r\n'+truncated_uu,
         'truncated-attachment-uuencode.eml':prefix+b'Content-Type: application/octet-stream\r\nContent-Disposition: attachment; filename="a.bin"\r\nContent-Transfer-Encoding: x-uue\r\n\r\n'+truncated_uu,
+        'bad-qp-eof.eml':prefix+b'Content-Type: text/plain\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nHello=',
+        'bad-qp-escape.eml':prefix+b'Content-Type: text/plain\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nHello=G1',
+        'bad-qp-softbreak.eml':prefix+b'Content-Type: text/plain\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nHello=\rX',
+        'bad-attachment-qp.eml':prefix+b'Content-Type: application/octet-stream\r\nContent-Disposition: attachment; filename="a.bin"\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nHello=',
         'duplicate-transfer.eml':prefix+b'Content-Type: text/plain\r\nContent-Transfer-Encoding: base64\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\nSGVsbG8=',
         'unknown-attachment-transfer.eml':prefix+b'Content-Type: application/octet-stream\r\nContent-Disposition: attachment; filename="a.bin"\r\nContent-Transfer-Encoding: x-foo\r\n\r\nhello=3Dworld',
         'broken-multipart.eml':prefix+b'Content-Type: multipart/mixed; boundary=missing\r\n\r\nundelimited',
@@ -113,12 +117,20 @@ def main():
         'javascript.eml':prefix+b'Content-Type: text/javascript\r\n\r\nrequire("fs").writeFileSync("unexpected-js-execution", "ran");',
         'empty.eml':prefix+b'Content-Type: text/plain\r\n\r\n'}
     partial = {'unknown-charset.eml','default-charset.eml','bad-base64.eml',
-        'unknown-transfer.eml','failed-base64.eml','failed-uuencode.eml','duplicate-transfer.eml','truncated-uuencode.eml'}
+        'unknown-transfer.eml','failed-base64.eml','failed-uuencode.eml','duplicate-transfer.eml','truncated-uuencode.eml',
+        'bad-qp-eof.eml','bad-qp-escape.eml','bad-qp-softbreak.eml'}
     transfer_sources = {'unknown-transfer.eml':'undecoded_unsupported_transfer_encoding',
         'failed-base64.eml':'undecoded_failed_transfer_encoding',
         'failed-uuencode.eml':'undecoded_failed_transfer_encoding',
         'truncated-uuencode.eml':'transfer_decoded_incomplete_framing',
+        'bad-qp-eof.eml':'transfer_decoded_partial_syntax',
+        'bad-qp-escape.eml':'transfer_decoded_partial_syntax',
+        'bad-qp-softbreak.eml':'transfer_decoded_partial_syntax',
         'duplicate-transfer.eml':'derived_first_transfer_encoding'}
+    attachment_transfer = {
+        'unknown-attachment-transfer.eml':('undecoded_unsupported_transfer_encoding',b'hello=3Dworld'),
+        'truncated-attachment-uuencode.eml':('transfer_decoded_incomplete_framing',b'Hello'),
+        'bad-attachment-qp.eml':('transfer_decoded_partial_syntax',b'Hello')}
     environment = dict(os.environ,PYTHONPATH=str(REPO),PYTHONDONTWRITEBYTECODE='1',PYTHONUTF8='1')
     def check_transfer(case, name, inventory):
         if name in transfer_sources:
@@ -126,15 +138,15 @@ def main():
             assert field['byte_source'] == transfer_sources[name]
             assert field['status'] == field['transfer_decoding']['status'] == 'partial'
             assert read(case/'mime_analysis.json')['status'] == 'partial'
-        if name == 'truncated-uuencode.eml':
+        if name in {'truncated-uuencode.eml','bad-qp-eof.eml','bad-qp-softbreak.eml'}:
             field, = inventory['parts']
             assert (case/field['payload_path']).read_bytes() == b'Hello'
-        if name in {'unknown-attachment-transfer.eml','truncated-attachment-uuencode.eml'}:
+        if name in attachment_transfer:
             field, = read(case/'attachments.json')
-            truncated = name == 'truncated-attachment-uuencode.eml'
-            assert field['byte_source'] == ('transfer_decoded_incomplete_framing' if truncated else 'undecoded_unsupported_transfer_encoding')
+            source, expected_payload = attachment_transfer[name]
+            assert field['byte_source'] == source
             assert field['status'] == field['transfer_decoding']['status'] == 'partial'
-            assert (case/field['evidence_path']).read_bytes() == (b'Hello' if truncated else b'hello=3Dworld')
+            assert (case/field['evidence_path']).read_bytes() == expected_payload
             assert read(case/'mime_analysis.json')['status'] == 'partial'
             assert read(case/'analysis_coverage.json')['stages']['attachment_metadata']['status'] == 'partial'
     with tempfile.TemporaryDirectory(prefix='paw-mime-body-',dir=REPO.parent) as temporary:
@@ -182,7 +194,8 @@ def main():
                     except (urllib.error.URLError,TimeoutError): time.sleep(.1)
                 else: raise TimeoutError('API startup')
                 for name in ('alternatives.eml','unknown-charset.eml','unknown-transfer.eml','failed-uuencode.eml',
-                             'unknown-attachment-transfer.eml','truncated-uuencode.eml','truncated-attachment-uuencode.eml'):
+                             'unknown-attachment-transfer.eml','truncated-uuencode.eml','truncated-attachment-uuencode.eml',
+                             'bad-qp-eof.eml','bad-attachment-qp.eml'):
                     raw = samples[name]; boundary = 'paw_mime_body_fixture'
                     upload = (f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{name}"\r\nContent-Type: message/rfc822\r\n\r\n'.encode()+raw+f'\r\n--{boundary}--\r\n'.encode())
                     uploaded = json.loads(request('/api/upload','POST',upload,'multipart/form-data; boundary='+boundary))
@@ -212,7 +225,7 @@ def main():
                 server.terminate()
                 try: server.wait(timeout=15)
                 except subprocess.TimeoutExpired: server.kill(); server.wait(timeout=15)
-    print('PASS: sixteen actual full CLI cases and seven loopback HTTP workers; per-part bytes/charset text/provenance, alternatives, explicit partial transfer/charset decoding, unknown/failed/duplicate transfer declarations and truncated uuencode in bodies and attachments, nested/unsupported scope, empty and unexecuted JS sources, original MIME/seals/API ZIP. No-egress; not accuracy labels.')
+    print('PASS: twenty actual full CLI cases and nine loopback HTTP workers; per-part bytes/charset text/provenance, alternatives, explicit partial transfer/charset decoding, unknown/failed/duplicate transfer declarations, truncated uuencode and malformed quoted-printable in bodies and attachments, nested/unsupported scope, empty and unexecuted JS sources, original MIME/seals/API ZIP. No-egress; not accuracy labels.')
 
 
 if __name__ == '__main__': main()

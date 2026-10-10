@@ -57,6 +57,34 @@ def uuencode_has_end(encoded):
     return any(line.strip(b' \t\r\n\f') == b'end' for line in lines)
 
 
+def quoted_printable_is_complete(encoded):
+    """Check RFC 2045 syntax that the stdlib decodes without recovery.
+
+    Preserve its output even for malformed/noncanonical input. Transport
+    padding is legal to receive, but the stdlib retains it (and fails to
+    remove padded soft breaks), so that interpretation remains partial too.
+    This validates bytes; it neither repairs nor decodes them.
+    """
+    hex_digits = b'0123456789ABCDEF'
+    for line in encoded.splitlines(keepends=True):
+        newline = line.endswith(b'\r\n')
+        if newline:
+            line = line[:-2]
+        elif line.endswith((b'\r', b'\n')):
+            return False
+        if len(line) > 76 or line.endswith((b' ', b'\t')) or re.search(rb'[^\t\x20-\x7e]', line):
+            return False
+        position = 0
+        while (position := line.find(b'=', position)) != -1:
+            if position + 2 < len(line) and line[position+1] in hex_digits and line[position+2] in hex_digits:
+                position += 3
+            elif position == len(line) - 1 and newline:
+                break
+            else:
+                return False
+    return True
+
+
 def decoded_payload(part):
     if part.get_content_maintype() == 'message':
         payload = part.get_payload()
@@ -81,16 +109,18 @@ def decoded_payload(part):
         return payload, 'undecoded_unsupported_transfer_encoding'
     if cte == 'base64' and any(type(d).__name__ == 'InvalidBase64LengthDefect' for d in part.defects):
         return payload, 'undecoded_failed_transfer_encoding'
-    if cte in uuencodings:
-        # Failed uuencode decoding silently returns the identity payload. Use
-        # the same parser byte conversion without charset replacement; don't
-        # guess a different transfer encoding from the payload's appearance.
+    if cte in uuencodings | {'quoted-printable'}:
+        # Inspect transfer syntax/fallback using the same parser byte conversion
+        # without charset replacement. Don't guess an alternative encoding.
         identity_part = copy(part)
         del identity_part['Content-Transfer-Encoding']
         encoded = identity_part.get_payload(decode=True)
-        if payload == encoded:
+        if cte == 'quoted-printable':
+            if not quoted_printable_is_complete(encoded):
+                return payload, 'transfer_decoded_partial_syntax'
+        elif payload == encoded:
             return payload, 'undecoded_failed_transfer_encoding'
-        if not uuencode_has_end(encoded):
+        elif not uuencode_has_end(encoded):
             return payload, 'transfer_decoded_incomplete_framing'
     return payload, 'transfer_decoded_bytes'
 
@@ -99,6 +129,7 @@ TRANSFER_PARTIAL_REASONS = {
     'undecoded_unsupported_transfer_encoding': 'Unsupported or empty declared transfer encoding; parser payload retained undecoded',
     'undecoded_failed_transfer_encoding': 'Transfer decoder returned undecoded parser payload',
     'transfer_decoded_incomplete_framing': 'Uuencode stream missing end terminator; recovered decoded bytes retained',
+    'transfer_decoded_partial_syntax': 'Quoted-printable syntax is malformed/noncanonical or has unsupported transport padding; parser-decoded bytes retained',
     'derived_first_transfer_encoding': 'Duplicate transfer encoding declarations; parser used the first occurrence',
     'fallback_utf8_serialization': 'Parser payload serialized as UTF-8; transfer decoding unavailable',
 }

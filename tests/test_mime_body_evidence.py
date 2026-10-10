@@ -176,6 +176,61 @@ class MimeBodyEvidenceTests(unittest.TestCase):
                     self.assertEqual(field['status'], 'partial')
                     self.assertEqual(result['metadata']['status'], 'partial')
 
+    def test_quoted_printable_recovery_is_explicitly_partial(self):
+        fixtures = [(b'hello=',b'hello'), (b'hello=A',b'hello=A'),
+            (b'hello=G1',b'hello=G1'), (b'hello=\r',b'hello'),
+            (b'hello=\rX',b'hello'), (b'hello=\nworld',b'helloworld'),
+            (b'hello=3dworld',b'hello=world'),
+            (b'hello= \r\nworld',b'hello= \r\nworld'),
+            (b'hello \r\n',b'hello \r\n'), (b'hello\t',b'hello\t'),
+            (b'a'*77,b'a'*77), (b'a\x01b',b'a\x01b'), (b'a\xffb',b'a\xffb')]
+        for encoded, expected in fixtures:
+            raw = (b'Content-Type: text/plain; charset=iso-8859-1\r\n'
+                b'Content-Transfer-Encoding: quoted-printable\r\n\r\n'+encoded)
+            with self.subTest(encoded=encoded), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                result, inventory = self.preserve(raw, root/'mime_body')
+                field, = inventory['parts']
+                self.assertEqual((root/field['payload_path']).read_bytes(), expected)
+                self.assertEqual((root/field['text_path']).read_bytes(), expected.decode('iso-8859-1').encode('utf-8'))
+                self.assertEqual(field['byte_source'], 'transfer_decoded_partial_syntax')
+                self.assertEqual(field['transfer_decoding']['status'], 'partial')
+                self.assertEqual(field['decoding']['status'], 'completed')
+                self.assertEqual(field['defects'], [])
+                self.assertEqual(field['status'], 'partial')
+                self.assertEqual(inventory['status'], 'partial')
+                self.assertEqual(result['metadata']['status'], 'partial')
+
+    def test_valid_quoted_printable_escapes_and_soft_breaks_keep_bytes(self):
+        fixtures = [(b'',b''), (b'a'*76,b'a'*76),
+            (b'Caf=E9=3D',b'Caf\xe9='), (b'hello=\r\nworld',b'helloworld'),
+            (b'a'*75+b'=\r\nworld',b'a'*75+b'world'), (b'hello=\r\n',b'hello'),
+            (b'hello\t world\r\nnext',b'hello\t world\r\nnext'),
+            (b'=00=09=20=7F=FF',b'\x00\t \x7f\xff')]
+        for encoded, expected in fixtures:
+            raw = (b'Content-Type: text/plain; charset=iso-8859-1\r\n'
+                b'Content-Transfer-Encoding: QUOTED-PRINTABLE\r\n\r\n'+encoded)
+            with self.subTest(encoded=encoded), tempfile.TemporaryDirectory() as temporary:
+                root = Path(temporary)
+                _, inventory = self.preserve(raw, root/'mime_body')
+                field, = inventory['parts']
+                self.assertEqual((root/field['payload_path']).read_bytes(), expected)
+                self.assertEqual(field['byte_source'], 'transfer_decoded_bytes')
+                self.assertEqual(field['status'], 'completed')
+                self.assertNotIn('transfer_decoding', field)
+
+    def test_partial_quoted_printable_provenance_reaches_attachments(self):
+        raw = (b'Content-Type: application/octet-stream\r\nContent-Disposition: attachment; filename="a.bin"\r\n'
+               b'Content-Transfer-Encoding: quoted-printable\r\n\r\nhello=')
+        result = analyze_mime(parse_message_bytes(raw))
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            field, = scan_attachments(None, result, root/'attachments')
+            self.assertEqual((root/field['evidence_path']).read_bytes(), b'hello')
+            self.assertEqual(field['byte_source'], 'transfer_decoded_partial_syntax')
+            self.assertEqual(field['transfer_decoding']['status'], 'partial')
+            self.assertEqual(field['status'], 'partial')
+
     def test_transfer_partial_provenance_reaches_attachment_metadata(self):
         raw = (b'Content-Type: application/octet-stream\r\nContent-Disposition: attachment; filename="a.bin"\r\n'
                b'Content-Transfer-Encoding: x-foo\r\n\r\nhello=3Dworld')
