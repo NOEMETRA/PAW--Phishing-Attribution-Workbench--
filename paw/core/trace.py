@@ -5,6 +5,7 @@ from ..util.hashutil import blake3_hex, file_blake3_hex
 from ..util.fsutil import ensure_dir, write_json, write_text, sanitize_case_id, read_json
 from .parser_mail import parse_mail, load_mail
 from .mime_analysis import analyze_mime
+from .header_inventory import inventory_headers, inventory_coverage
 from .evidence import seal_case
 from .runtime import mark_stage, read_progress
 from .received import normalize_received
@@ -381,6 +382,7 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
     started = time.perf_counter()
     violations_before = len(violations())
     headers, msg, b = load_mail(eml_path)
+    header_inventory = inventory_headers(msg, b)
     mime_result = analyze_mime(msg)
     case_id = sanitize_case_id(utc_now_iso().replace(":","").replace("Z","Z-") + uuid.uuid4().hex)
     case_dir = os.path.join(os.getcwd(), "cases", "case-" + case_id)
@@ -391,6 +393,7 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
     eml_hash = blake3_hex(b)
     with open(os.path.join(case_dir,"input.eml"), "wb") as original:
         original.write(b)
+    write_json(os.path.join(case_dir, 'header_inventory.json'), header_inventory)
     manifest = {"case_id": case_id, "created_utc": utc_now_iso(), "inputs":[{"path":"input.eml","blake3": eml_hash, "size": len(b)}], "policy":{"no_egress": bool(no_egress)}, "deobfuscation_weight": float(deob_weight)}
     manifest['source_name'] = os.path.basename(eml_path)
     if key_data is not None:
@@ -502,6 +505,7 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
     stage_status = {'detonation': {'status': 'skipped', 'reason': 'no-egress' if no_egress else 'No URLs'},
                     'network_enrichment': {'status': 'skipped' if no_egress else 'not_evaluated', 'reason': 'no-egress' if no_egress else 'Individual lookup outcomes apply'},
                     'attachment_metadata': {'status': 'not_evaluated'}}
+    stage_status['header_inventory'] = inventory_coverage(header_inventory)
     url_results = deobfuscated.get('urls', [])
     stage_status['url_interpretation'] = {
         'status':'partial' if any(r.get('status') != 'completed' or r.get('analysis_status') == 'partial'
@@ -1123,7 +1127,15 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
     
     exec_md += "\n" + detonation_box(det) + "\n\n" + canary_box(can_ips, canary_visitors)
     write_text(os.path.join(rep_dir,"executive.md"), exec_md)
-    tech_md = "# Technical Details\n\n## Received Path\n"
+    tech_md = ("# Technical Details\n\n## Top-level Header Inventory\n"
+        f"- Artifact: header_inventory.json; exact original: input.eml\n"
+        f"- Parser-recognized fields: {header_inventory['total_field_count']}; "
+        f"inventoried: {header_inventory['inventoried_field_count']}; "
+        f"omitted: {header_inventory['omitted_field_count']}; "
+        f"limited: {header_inventory['limited_field_count']}\n"
+        f"- Extraction status: {header_inventory['status']}. "
+        "Ordered raw parser values and derived text; unverified header claims.\n"
+        "\n## Received Path\n")
     for i,h in enumerate(hops, start=1):
         tech_md += f"- Hop {i}: by={h.get('by')} from={h.get('from')} ip={h.get('ip')} date={h.get('date')} helo={h.get('helo')} ptr={h.get('ptr')} skew_s={h.get('skew_s')} fqdn_ok={h.get('fqdn_ok')} helo_ptr_match={h.get('helo_ptr_match')} role={h.get('role')}\n"
     tech_md += "\n## Auth Alignment\n"
