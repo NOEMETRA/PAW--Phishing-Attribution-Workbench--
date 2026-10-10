@@ -1,5 +1,6 @@
 """Original EML -> real CLI + HTTP API in one directory, including CLI crash."""
 import io
+import hashlib
 from contextlib import closing
 import json
 import os
@@ -36,6 +37,11 @@ def main():
             listener.bind(('127.0.0.1',0)); port = listener.getsockname()[1]
         environment = dict(os.environ,PYTHONPATH=str(REPO),PAW_DATA_DIR=str(root),
             PYTHONDONTWRITEBYTECODE='1',PYTHONIOENCODING='utf-8')
+        empty_query = subprocess.run([sys.executable,'-X','utf8','-m','paw','query',
+            '--by','domain','--value','fixture.invalid'],cwd=root,env=environment,
+            capture_output=True,timeout=15)
+        assert empty_query.returncode==0 and json.loads(empty_query.stdout)==[], empty_query.stderr
+        assert not (root/'cases').exists(), 'Query created an empty index/storage'
         api_process = cli = None
         worker = None
         checks = []
@@ -112,6 +118,17 @@ def main():
                 assert indicator is not None,'Original EML did not produce an indexed indicator'
                 query_body = json.dumps({'query_type':indicator[0],'value':indicator[1]}).encode()
                 assert json.loads(request('/api/query','POST',query_body))['matches']==[]
+                def cli_query():
+                    database = root/'cases/index.db'
+                    before = hashlib.sha256(database.read_bytes()).hexdigest()
+                    result = subprocess.run([sys.executable,'-X','utf8','-m','paw','query',
+                        '--by',indicator[0],'--value',indicator[1]],cwd=root,env=environment,
+                        capture_output=True,timeout=15)
+                    assert result.returncode==0, result.stderr.decode(errors='replace')
+                    assert hashlib.sha256(database.read_bytes()).hexdigest()==before, 'CLI query rewrote the index'
+                    return json.loads(result.stdout)
+                active_matches = cli_query()
+                assert active_matches==[], ('CLI exposed indexed cases of an active worker',active_matches)
                 for path,method in [(f'/api/cases/{case.name}','GET'),
                         (f'/api/cases/{case.name}/verify','POST'),(f'/api/export/{case.name}','GET')]:
                     blocked(path,method)
@@ -138,9 +155,11 @@ def main():
                     assert archive.read('input.eml')==source
                 matches = json.loads(request('/api/query','POST',query_body))['matches']
                 assert len(matches)==8 and all(item['execution_status']=='completed' for item in matches),matches
+                completed_matches = cli_query()
+                assert {item['id'] for item in completed_matches}=={item['id'] for item in matches}
                 listing = json.loads(request('/api/cases?limit=100'))['cases']
                 assert len(listing)==8 and all(item['status']=='completed' and 'subject' in item for item in listing),listing
-                checks.append({'flow':'active original-EML CLI + API startup; collections redacted and indexed matches hidden; HTTP and CLI readers blocked; completed collection/query/verify/export','status':'passed'})
+                checks.append({'flow':'missing-index CLI query creates no storage; active original-EML CLI + API startup; collections redacted and indexed matches hidden by both HTTP and CLI; query leaves SQLite bytes unchanged; HTTP and CLI evidence readers blocked; completed collection/query/verify/export','status':'passed'})
 
                 cli,control,case,worker=start_cli('crash')
                 cli.kill(); cli.wait(timeout=10)

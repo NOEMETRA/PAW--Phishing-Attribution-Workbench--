@@ -105,6 +105,16 @@ def main():
                     connection.execute('ALTER TABLE cases DROP COLUMN simhash_status')
                     connection.commit()
                     legacy_before = connection.execute('SELECT * FROM cases ORDER BY id').fetchall()
+                legacy_digest = hashlib.sha256((root/'cases/index.db').read_bytes()).hexdigest()
+                historical_cli = subprocess.run([sys.executable,'-X','utf8','-m','paw','query',
+                    '--by','domain','--value','example.com'],cwd=root,env=env,
+                    capture_output=True,timeout=20)
+                assert historical_cli.returncode==0, historical_cli.stderr.decode(errors='replace')
+                historical_cli_matches = json.loads(historical_cli.stdout)
+                assert {row['id'] for row in historical_cli_matches}==expected_ids
+                assert all(row['simhash_method']=='legacy_md5_prefix_64' and
+                    row['simhash']==legacy_values[row['id']] for row in historical_cli_matches)
+                assert hashlib.sha256((root/'cases/index.db').read_bytes()).hexdigest()==legacy_digest
                 with urllib.request.urlopen(request, timeout=15) as response:
                     historical = json.load(response)['matches']
                 assert {row['id'] for row in historical} == expected_ids
@@ -122,7 +132,7 @@ def main():
         after = {str(path.relative_to(root/'cases')):hashlib.sha256(path.read_bytes()).hexdigest()
                  for case in cases.values() for path in case.rglob('*') if path.is_file()}
         assert after == snapshot and all(verify_case(str(case)) for case in cases.values())
-        print('PASS: 5 actual supervised full --no-egress cases (4 constructed header contracts, 1 original public EML); header-only scope, unavailable empty features, versioned SQLite and real CLI/loopback HTTP query metadata; controlled legacy-index fixture is read-only over HTTP; original MIME/seals unchanged. No similarity threshold, deduplication or campaign/actor conclusion validated.')
+        print('PASS: 5 actual supervised full --no-egress cases (4 constructed header contracts, 1 original public EML); header-only scope, unavailable empty features, versioned SQLite and real CLI/loopback HTTP query metadata; controlled legacy-index fixture is read-only over CLI and HTTP, including unchanged SQLite bytes on CLI read; original MIME/seals unchanged. No similarity threshold, deduplication or campaign/actor conclusion validated.')
 
 
 if __name__ == '__main__': main()

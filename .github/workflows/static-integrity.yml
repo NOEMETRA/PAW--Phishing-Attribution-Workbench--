@@ -163,3 +163,6 @@ jobs:
 
       - name: Verify actual standalone input rejection and offline observations
         run: python tests/integration_deobfuscate_input_real.py
+
+      - name: Verify read-only CLI queries and case shutdown admission
+        run: python -m unittest discover -s tests -p 'test_query_read_contracts.py' -v
