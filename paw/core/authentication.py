@@ -207,7 +207,10 @@ def authentication_report(auth):
     value = lambda item: 'not evaluable' if item is None else str(item)
     def verification(name):
         check = auth.get(name, {}).get('verification') or {}
-        return f"{check.get('status', 'not_evaluated')} ({value(check.get('result'))})"
+        text = f"{check.get('status', 'not_evaluated')} ({value(check.get('result'))})"
+        if name == 'dkim' and (auth.get('dkim', {}).get('key_evidence') or check.get('source') == 'independent_DKIM_with_local_keys'):
+            text += '; signature checked only against supplied local keys; key provenance unverified'
+        return text
     return ('## Authentication and coverage\n\n'
         'Authentication-Results and ARC are unverified header claims; no receiver trust is assumed.\n\n'
         f"- SPF reported: {value(auth.get('spf', {}).get('result'))}; independent verification: {verification('spf')}.\n"

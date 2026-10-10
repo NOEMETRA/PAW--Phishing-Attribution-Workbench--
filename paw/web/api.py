@@ -22,6 +22,7 @@ from pydantic import BaseModel, Field
 from ..core.runtime import RunLimits, supervise, preserve_interrupted, read_progress
 from ..core.process_recovery import recover_worker, identity_alive
 from ..core.job_registry import control_path, case_owner, job_state, controls
+from ..core.dkim_keys import snapshot_key_bundle
 from ..core.index import describe_fingerprint
 
 @asynccontextmanager
@@ -230,18 +231,23 @@ async def analyze_email(request: AnalysisRequest, background_tasks: BackgroundTa
     path = contained(UPLOAD_DIR, path if path.is_absolute() else DATA_DIR / path)
     if not path.is_file(): raise HTTPException(404, 'Uploaded email not found')
     if path.suffix.lower() not in {'.eml','.msg'}: raise HTTPException(400,'Unsupported email format')
-    if set(request.options) - {'no_egress','stix','abuse','anchor','lang'}:
+    if set(request.options) - {'no_egress','stix','abuse','anchor','lang','dkim_keys'}:
         raise HTTPException(400, 'Unsupported options')
     for name in {'no_egress','stix','abuse','anchor'} & request.options.keys():
         if type(request.options[name]) is not bool:
             raise HTTPException(400, f'{name} must be boolean')
+    options = dict(request.options)
+    if 'dkim_keys' in options:
+        try: options['dkim_key_evidence'] = snapshot_key_bundle(options.pop('dkim_keys'))
+        except (ValueError, TypeError, UnicodeError) as exc:
+            raise HTTPException(400, 'Invalid local DKIM key evidence') from exc
     analysis_id = 'analysis_' + uuid.uuid4().hex
     job = {'status':'queued', 'file':str(path), 'filename':read_progress(path.with_suffix(path.suffix+'.json')).get('filename',path.name), 'no_egress':request.options.get('no_egress',True), 'queued_at':now(), 'queued_monotonic':time.monotonic(), 'progress':None}
     analysis_queue[analysis_id] = job
     _cancel_events[analysis_id] = asyncio.Event()
     job['limits'] = request.limits.model_dump()
     save(JOBS_DIR / (analysis_id + '.json'), job)
-    background_tasks.add_task(run_analysis, analysis_id, path, request.profile, request.options, request.limits)
+    background_tasks.add_task(run_analysis, analysis_id, path, request.profile, options, request.limits)
     return {'status':'queued', 'analysis_id':analysis_id}
 
 async def run_analysis(analysis_id, path, profile, options, limits):

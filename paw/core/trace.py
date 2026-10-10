@@ -10,6 +10,7 @@ from .runtime import mark_stage, read_progress
 from .received import normalize_received
 from .auth import infer_alignment, authentication_report
 from .dkim_offline import verify_dkim_offline
+from .dkim_keys import parse_key_evidence
 from .profiler import ip_rdap, domain_rdap, nrd_days, observe_domain_age
 from .scoring import score_case, finalize_score, validate_deobfuscation_weight
 from .network_policy import enforce_trace_policy, network_allowed, violations
@@ -353,16 +354,17 @@ from ..intelligence.enrich_last_hunt import safe_getcert, grab_banner, reverse_d
 from ..intelligence.threat_intel import ThreatIntelligence
 
 @enforce_trace_policy
-def trace_sources(src, lang, stix, abuse, anchor, no_egress, profile="default", deob_weight: float = 0.30):
+def trace_sources(src, lang, stix, abuse, anchor, no_egress, profile="default", deob_weight: float = 0.30, dkim_key_evidence=None):
     deob_weight = validate_deobfuscation_weight(deob_weight)
+    if dkim_key_evidence is not None: parse_key_evidence(dkim_key_evidence)
     inputs = select_inputs(src)
     if os.path.isfile(src):
-        return [trace_one(str(inputs[0]), lang, stix, abuse, anchor, no_egress, profile, deob_weight)]
+        return [trace_one(str(inputs[0]), lang, stix, abuse, anchor, no_egress, profile, deob_weight, dkim_key_evidence)]
     cases, failures = [], []
     for path in inputs:
         mark_stage('batch_input')
         try:
-            cases.append(trace_one(str(path), lang, stix, abuse, anchor, no_egress, profile, deob_weight))
+            cases.append(trace_one(str(path), lang, stix, abuse, anchor, no_egress, profile, deob_weight, dkim_key_evidence))
         except Exception as exc:
             failures.append({'input':path.name, 'error':f'{type(exc).__name__}: {exc}'})
             print(f'[batch] failed {path.name}: {type(exc).__name__}: {exc}')
@@ -371,8 +373,9 @@ def trace_sources(src, lang, stix, abuse, anchor, no_egress, profile="default", 
     return cases
 
 @enforce_trace_policy
-def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default", deob_weight: float = 0.30):
+def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default", deob_weight: float = 0.30, dkim_key_evidence=None):
     deob_weight = validate_deobfuscation_weight(deob_weight)
+    key_data = parse_key_evidence(dkim_key_evidence) if dkim_key_evidence is not None else None
     import re
     mark_stage('mime_parsing')
     started = time.perf_counter()
@@ -390,6 +393,14 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
         original.write(b)
     manifest = {"case_id": case_id, "created_utc": utc_now_iso(), "inputs":[{"path":"input.eml","blake3": eml_hash, "size": len(b)}], "policy":{"no_egress": bool(no_egress)}, "deobfuscation_weight": float(deob_weight)}
     manifest['source_name'] = os.path.basename(eml_path)
+    if key_data is not None:
+        key_raw, key_bundle, key_records = key_data
+        import hashlib
+        with open(os.path.join(case_dir, 'dkim_keys.json'), 'wb') as stream:
+            stream.write(key_raw)
+        manifest['dkim_key_evidence'] = {'path':'dkim_keys.json',
+            'sha256':hashlib.sha256(key_raw).hexdigest(), 'provenance_status':'unverified',
+            'source_claim':key_bundle['source']}
     if os.environ.get('PAW_ANALYSIS_ID'):
         manifest['analysis_job'] = os.environ['PAW_ANALYSIS_ID']
     write_json(os.path.join(case_dir, 'manifest.json'), manifest)
@@ -571,7 +582,9 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
         origin = hops[0]
     # Auth alignment (from Authentication-Results)
     auth = infer_alignment(headers, headers.get("from",""), headers.get("return_path",""))
-    auth["dkim"]["verification"] = verify_dkim_offline(b)
+    auth["dkim"]["verification"] = verify_dkim_offline(b, key_records if key_data is not None else None)
+    if key_data is not None:
+        auth['dkim']['key_evidence'] = manifest['dkim_key_evidence']
     write_json(os.path.join(case_dir,"auth.json"), auth)
     # Analyze received path for campaign origin
     campaign_origin = trace_campaign_origin(headers, hops)
