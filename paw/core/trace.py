@@ -1194,7 +1194,7 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
         generate_arf_package(case_dir)
         generate_xarf_package(case_dir)
         # create subject file as helper
-        subj = f"[Abuse][Phishing] Case {case_id} – Origin {ip}/AS{ip_res.get('asn')} – Domain {from_domain}"
+        subj = f"PAW local review draft - {os.path.basename(case_dir)}"
         write_text(os.path.join(case_dir, "package", "subject.txt"), subj)
     print(f"[correlation] {correlations['status']}: {correlations['reason']}")
 

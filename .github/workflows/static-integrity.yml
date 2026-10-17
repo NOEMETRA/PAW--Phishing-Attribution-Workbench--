@@ -88,6 +88,11 @@ jobs:
       - name: Verify real CLI/API shared ownership, concurrent readers and CLI crash
         run: python tests/integration_cli_api_real.py
 
+      - name: Verify actual HTTP analysis and neutral review-subject ZIP export
+        env:
+          PAW_VERIFICATION_DIR: ${{ runner.temp }}/paw-review-subject-api
+        run: python tests/integration_api_real.py
+
       - name: Verify case identity collisions cannot overwrite real offline evidence
         run: python tests/integration_case_identity_real.py
       - name: Verify legacy inbox launcher uses actual supervised offline full analysis
