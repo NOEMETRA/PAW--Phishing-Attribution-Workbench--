@@ -6,6 +6,8 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+from email import policy
+from email.parser import BytesParser
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(REPO))
@@ -98,6 +100,9 @@ def main():
                      'it':('BOZZA LOCALE PER REVISIONE - NON INVIATA','Questa bozza non accerta account compromessi')}
             assert all(marker in draft for marker in markers[language]),language
             assert 'line 1 shows the first HTTP GET to' not in draft and 'riga 1: primo GET a' not in draft
+            subject=(case/'package'/'subject.txt').read_text(encoding='utf-8')
+            mime=BytesParser(policy=policy.default).parsebytes((case/'package'/'arf_report.eml').read_bytes())
+            assert subject==str(mime['Subject'])==f'PAW local review draft - {case.name}'
             local=json.loads((case/'package'/'xarf_report.json').read_text(encoding='utf-8'))
             assert local['status']=='draft' and local['recipient'] is None,local
             assert local['format_compliance']=={'arf':'not_validated','xarf':'not_validated'}
@@ -148,6 +153,7 @@ def main():
         assert all((case/'input.eml').read_bytes()==raw for case in completed)
     print(json.dumps({'status':'passed','original_eml_sha256':hashlib.sha256(raw).hexdigest(),
         'actual_supervised_full_analyses':2,'canonical_review_draft_languages':['en','it'],
+        'subject_file_matches_neutral_mime_subject':True,
         'guarded_legacy_processes':len(checks),'direct_legacy_processes':2,'checks':checks,
         'scope':'Actual completed original-EML analyses retain local unsent review drafts. Legacy publisher rejects without guarded source I/O or blocked operations; sources/notes/seals preserved. Ownership-state and sealed-filesystem fixtures are not live processes or analyzed messages. Direct stdlib invocations separate from guarded claims. No OS isolation, attribution, accuracy or external reporting/conformance claim.'},indent=2))
 

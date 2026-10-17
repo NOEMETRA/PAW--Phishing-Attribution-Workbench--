@@ -10,6 +10,8 @@ import urllib.request
 import urllib.error
 import zipfile
 import io
+from email import policy
+from email.parser import BytesParser
 
 repo = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(repo))
@@ -83,6 +85,10 @@ with (data/'api_server.log').open('wb') as log:
         assert matches['matches']
         archive = request('/api/export/'+case_id)
         with zipfile.ZipFile(io.BytesIO(archive)) as z:
+            subject=z.read('package/subject.txt').decode('utf-8')
+            draft=BytesParser(policy=policy.default).parsebytes(z.read('package/arf_report.eml'))
+            assert subject==str(draft['Subject'])==f'PAW local review draft - {case_id}'
+            assert z.read('input.eml')==sample.read_bytes()
             assert {'manifest.json','input.eml','report/score.json','evidence/merkle_index.json','analysis_coverage.json'} <= set(z.namelist())
         checks.append({'flow':'case list, detail, SQLite indicator query, actual ZIP export','status':'passed'})
         try:
