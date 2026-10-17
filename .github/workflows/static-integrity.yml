@@ -296,6 +296,9 @@ jobs:
       - name: Verify legacy origin updater rejects without touching actual offline evidence
         run: python tests/integration_legacy_origin_update_real.py
 
+      - name: Verify legacy abuse publisher rejection preserves supervised local review drafts
+        run: python tests/integration_legacy_abuse_draft_real.py
+
   archive-runtime-compatibility:
     runs-on: ubuntu-latest
     timeout-minutes: 5
