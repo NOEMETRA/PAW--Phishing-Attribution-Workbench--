@@ -1,21 +1,21 @@
 # Stato dell'audit PAW
 
-Riferimento integrato: PR70, commit
-`03e893c3bbe10b7159caeb87c52c8ff7ed73b305`, 18 ottobre 2026.
-Review Codex senza rilievi e tre controlli CI verdi sull'head PR70;
-il merge ha lo stesso contenuto. Il precedente riferimento del pacchetto PR64/65
-è stato verificato con 19 analisi CLI/HTTP, 715 test
-(707 passati e 8 esclusioni di piattaforma) e wheel reale. Queste sono evidenze
+Riferimento integrato: PR71, commit
+`143788a308f4977ad88a544491b4096dc6908074`, 18 ottobre 2026.
+Review Codex senza rilievi e tre controlli CI verdi sull'head PR71;
+il merge ha lo stesso contenuto. Il pacchetto PR71 è stato verificato con
+720 test (712 superati, 8 esclusioni di piattaforma), analisi EML/recupero errori
+e ZIP effettivi, 18 scenari CLI locali e wheel reale. Queste sono evidenze
 circoscritte, senza attestare ogni funzione dei 90 file Python del pacchetto.
 
-La correzione corrente degli [errori di lettura hash](sentinel-file-hash-failures.md)
-tocca soltanto il monitor dei file nel pacchetto e preserva le baseline dopo errori;
-le prove precedenti non sostituiscono la verifica di questa versione.
-Su questa versione passano 720 test (712 superati, 8 esclusioni di piattaforma),
-una nuova analisi completa EML offline con errori/recupero API e CLI, ZIP,
-18 scenari CLI locali esistenti e il confronto della wheel con i 90 sorgenti
-Python del pacchetto. Non è una nuova installazione isolata o la chiusura
-dell'accettazione finale su tutte le piattaforme.
+La correzione corrente delle [letture di directory](sentinel-directory-read-failures.md)
+tocca soltanto il callback di scansione del monitor locale, per evitare inventari
+parziali dopo un errore. Le prove precedenti non sostituiscono la verifica di
+questa versione o l'accettazione finale su tutte le piattaforme.
+Su questa versione passano 726 test (718 superati, 8 esclusioni di piattaforma),
+l'analisi EML offline con 19 processi di verifica errori/recupero API e CLI,
+lo ZIP, 18 scenari CLI locali esistenti e il confronto della wheel con tutti
+i 90 sorgenti Python del pacchetto. Non è una nuova installazione isolata.
 Il lavoro corrente stabilizza il motore offline e la profondità delle evidenze.
 Il [registro per famiglia](engine-stabilization-checkpoint.md) distingue contratti
 verificati, audit aperti, capacità indisponibili e fasi successive.
