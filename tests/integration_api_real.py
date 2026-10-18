@@ -94,6 +94,9 @@ with (data/'api_server.log').open('wb') as log:
             assert graph_bytes==(data/'cases'/case_id/'graphs/attribution.mmd').read_bytes()
             assert 'unverified Received header observations' in graph and '<<ORIGIN>>' not in graph
             assert graph.count('UNVERIFIED TRANSMITTING CANDIDATE')==int(detail['origin']['status']=='candidate')
+            domain_bytes=z.read('graphs/domain.mmd')
+            assert domain_bytes==(data/'cases'/case_id/'graphs/domain.mmd').read_bytes()
+            assert domain_bytes.decode('utf-8').splitlines()[1].startswith('  D["')
             assert {'manifest.json','input.eml','report/score.json','evidence/merkle_index.json','analysis_coverage.json'} <= set(z.namelist())
         checks.append({'flow':'case list, detail, SQLite indicator query, actual ZIP export','status':'passed'})
         try:

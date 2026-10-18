@@ -38,8 +38,9 @@ actual CLI ZIP bytes and unchanged seals. Constructed fixtures are not phishing
 ground truth. `integration_api_real.py` checks the actual HTTP worker and ZIP
 contain the same qualified graph bytes.
 
-This is a bounded repair of one S08 artifact. The separate domain diagram,
-Markdown reports, other publishers, malformed-source readability and global
-resource limits remain open audits. Local parser checks do not validate all
+This is a bounded repair of one S08 artifact. The shared worker test also has
+[domain-diagram checks](domain-diagram-evidence.md), including two additional
+domain fixtures. Markdown reports, other publishers, malformed-source readability
+and global resource limits remain open audits. Local parser checks do not validate all
 renderers or complete the UI, classification, provenance authenticity or OS
 isolation work. Existing cases are not rewritten.

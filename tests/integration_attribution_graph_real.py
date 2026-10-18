@@ -34,6 +34,8 @@ def main():
         'no-received.eml': message([]),
         'ipv6-receiver.eml': message([
             'from relay.example ([IPv6:2001:4860:4860::8888]) by [IPv6:2001:db8::1]']),
+        'single-label-domain.eml': b'From: sender@end\r\nSubject: Constructed diagram contract\r\n\r\nLiteral fixture.',
+        'missing-from.eml': b'Subject: Constructed missing From contract\r\n\r\nLiteral fixture.',
     }
     with tempfile.TemporaryDirectory(prefix='paw-graph-') as temporary:
         # An optional private root retains actual sealed artifacts for external
@@ -86,6 +88,18 @@ def main():
             if name == 'ipv6-receiver.eml':
                 assert '[IPv6:2001:db8::1]' in graph
             assert 'graphs/attribution.mmd' in read('evidence/merkle_index.json')
+            domain_bytes = (case/'graphs'/'domain.mmd').read_bytes()
+            domain_graph = domain_bytes.decode('utf-8')
+            assert domain_graph.splitlines()[1].startswith('  D["')
+            assert 'graphs/domain.mmd' in read('evidence/merkle_index.json')
+            if name == 'single-label-domain.eml':
+                assert read('auth.json')['from_domain'] == 'end'
+                assert read('domains.json')['from_domain']['domain'] == 'end'
+                assert 'D["end"]' in domain_graph
+            if name == 'missing-from.eml':
+                assert not read('auth.json')['from_domain']
+                assert read('domains.json')['from_domain']['domain'] == ''
+                assert 'D["Domain unavailable"]' in domain_graph
             # Exercise the actual supported CLI export, then inspect its bytes.
             exported = subprocess.run([sys.executable, '-X', 'utf8', '-m', 'paw', 'export',
                 '--case', str(case), '--format', 'zip'], cwd=root, env=env,
@@ -93,11 +107,12 @@ def main():
             assert exported.returncode == 0, exported.stdout+exported.stderr
             with zipfile.ZipFile(str(case)+'.zip') as archive:
                 assert archive.read(case.name+'/graphs/attribution.mmd') == graph_bytes
+                assert archive.read(case.name+'/graphs/domain.mmd') == domain_bytes
                 assert archive.read(case.name+'/input.eml') == samples[name]
             assert verify_case(str(case))
         assert seen == set(samples), seen
-    print('PASS: original EML plus four constructed graph contracts through actual full --no-egress, '
-          'stopped owners, candidate/header binding, absent candidates, IPv6 labels, CLI ZIP bytes and seals. '
+    print('PASS: original EML plus six constructed diagram contracts through actual full --no-egress, '
+          'stopped owners, candidate/header binding, absent candidates, IPv6/missing/single-label domains, CLI ZIP bytes and seals. '
           'Fixtures are not classifier ground truth; no attribution or rendering claim.')
 
 
