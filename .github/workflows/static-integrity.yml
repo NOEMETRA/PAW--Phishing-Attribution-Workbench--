@@ -318,6 +318,9 @@ jobs:
       - name: Verify legacy abuse publisher rejection preserves supervised local review drafts
         run: python tests/integration_legacy_abuse_draft_real.py
 
+      - name: Verify legacy request-flow rejection preserves actual graphs, logs and seals
+        run: python tests/integration_legacy_flow_real.py
+
   archive-runtime-compatibility:
     runs-on: ubuntu-latest
     timeout-minutes: 5
