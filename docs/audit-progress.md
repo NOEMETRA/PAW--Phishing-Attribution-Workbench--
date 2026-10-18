@@ -1,13 +1,21 @@
 # Stato dell'audit PAW
 
-Riferimento integrato: PR69, commit
-`f81c3e200aa5b485d33b96c70906902d3a33ec5d`, 18 ottobre 2026.
-Review Codex senza rilievi e tre controlli CI verdi sull'head corretto PR69;
-il merge ha lo stesso contenuto. I sorgenti del pacchetto sono invariati rispetto
-all'integrato PR64/65, verificato con 19 analisi CLI/HTTP, 715 test
+Riferimento integrato: PR70, commit
+`03e893c3bbe10b7159caeb87c52c8ff7ed73b305`, 18 ottobre 2026.
+Review Codex senza rilievi e tre controlli CI verdi sull'head PR70;
+il merge ha lo stesso contenuto. Il precedente riferimento del pacchetto PR64/65
+è stato verificato con 19 analisi CLI/HTTP, 715 test
 (707 passati e 8 esclusioni di piattaforma) e wheel reale. Queste sono evidenze
 circoscritte, senza attestare ogni funzione dei 90 file Python del pacchetto.
 
+La correzione corrente degli [errori di lettura hash](sentinel-file-hash-failures.md)
+tocca soltanto il monitor dei file nel pacchetto e preserva le baseline dopo errori;
+le prove precedenti non sostituiscono la verifica di questa versione.
+Su questa versione passano 720 test (712 superati, 8 esclusioni di piattaforma),
+una nuova analisi completa EML offline con errori/recupero API e CLI, ZIP,
+18 scenari CLI locali esistenti e il confronto della wheel con i 90 sorgenti
+Python del pacchetto. Non è una nuova installazione isolata o la chiusura
+dell'accettazione finale su tutte le piattaforme.
 Il lavoro corrente stabilizza il motore offline e la profondità delle evidenze.
 Il [registro per famiglia](engine-stabilization-checkpoint.md) distingue contratti
 verificati, audit aperti, capacità indisponibili e fasi successive.

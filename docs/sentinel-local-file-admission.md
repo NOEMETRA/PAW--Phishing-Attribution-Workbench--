@@ -34,10 +34,11 @@ verification outcomes, not authenticated email claims or a proven intrusion.
 Missing seals remain unknown. No report is persisted to a campaign database.
 
 This is a focused admission correction, not a replacement file-inventory engine.
-Existing listing exclusions (hidden names, `.pyc` and symbolic-link files) and
-hash helpers remain unchanged; returned file counts are not a full forensic
-inventory. General special-file/link/resource admission, hash-read failure
-interpretation and concurrent-writer snapshots remain open audit work. Seal
+Existing listing exclusions (hidden names, `.pyc` and symbolic-link files) remain
+unchanged; returned file counts are not a full forensic inventory. The later
+[hash-read failure correction](sentinel-file-hash-failures.md) propagates read
+errors and preserves scan baselines. General special-file/link/resource
+admission, walk errors and concurrent-writer snapshots remain open audit work. Seal
 verification retains its separate S08 limitations, including unsupported proof
 authenticity claims.
 

@@ -59,15 +59,12 @@ class FileMonitor:
 
         return sorted(files)
 
-    def calculate_file_hash(self, file_path: str) -> Optional[str]:
-        """Calculate SHA256 hash of a file."""
-        try:
-            with open(file_path, 'rb') as f:
-                digest = hashlib.sha256()
-                while chunk := f.read(1024 * 1024): digest.update(chunk)
-                return digest.hexdigest()
-        except (IOError, OSError):
-            return None
+    def calculate_file_hash(self, file_path: str) -> str:
+        """Calculate a complete SHA256 digest; propagate open/read failures."""
+        with open(file_path, 'rb') as f:
+            digest = hashlib.sha256()
+            while chunk := f.read(1024 * 1024): digest.update(chunk)
+            return digest.hexdigest()
 
     def verify_merkle_integrity(self, case_id: str) -> Tuple[Optional[bool], str]:
         """Verify file integrity using Merkle root if available."""
@@ -150,12 +147,19 @@ class FileMonitor:
         for case_id in case_ids:
             require_stopped_case(self.cases_dir / case_id)
         results = []
+        baseline = dict(self._baseline_hashes)
+        try:
+            for case_id in case_ids:
+                changes = self.check_file_changes(case_id)
+                if changes['new_files'] or changes['modified_files'] or changes['deleted_files'] or changes['integrity_status'] != 'ok':
+                    results.append(changes)
+        except Exception:
+            self._baseline_hashes.clear()
+            self._baseline_hashes.update(baseline)
+            raise
 
-        for case_id in case_ids:
-            changes = self.check_file_changes(case_id)
-            if changes['new_files'] or changes['modified_files'] or changes['deleted_files'] or changes['integrity_status'] != 'ok':
-                results.append(changes)
-                self._record_file_check(case_id, changes)
+        for changes in results:
+            self._record_file_check(changes['case_id'], changes)
 
         return results
 
