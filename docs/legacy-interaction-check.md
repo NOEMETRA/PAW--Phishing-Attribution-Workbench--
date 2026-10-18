@@ -40,9 +40,20 @@ to stored rows, not people or authenticated visits; identity, calibrated risk an
 recent-event interpretation are unavailable. Stored timestamps remain unverified
 source strings, user agents are retained completely and absent values remain NULL.
 
-`tests/integration_legacy_interaction_check_real.py` executes 22 actual processes:
-21 cold diagnostic/argument/import paths under the Python no-egress guard and one
-direct script execution outside the checkout without host `PYTHONPATH`. Actual
+`check_db_fields.py` is a checkout alias for the same diagnostic. Its former
+hardcoded database/case and latest-50 field projection are removed. Its output
+intentionally changes from an array of selected fields to the existing complete
+report object, with stored fields in `source_records` and their JSON provenance.
+It inherits the same configuration, read-only admission, arguments and errors;
+no reader, schema, collector or option is added. Baseline guarded runs showed
+50 of 210 matching stored rows, selection of an unrelated one-row default over
+the configured 210-row source, and database creation even with `--help`.
+
+`tests/integration_legacy_interaction_check_real.py` runs the same matrix against
+both actual scripts: 44 processes in total, comprising 42 cold guarded
+diagnostic/argument/import paths and two direct saved-source executions outside
+the checkout without host `PYTHONPATH`. The alias fails the shared source-parity
+regression before the repair and passes after it. Actual
 saved/default/configured/empty/legacy and error sources remain byte for byte
 unchanged. Two 210-row fixtures verify complete source ordering beyond the old
 100-row cap, actual IP/UA/time fields, NULLs, duplicate-key JSON and invalid UTF-8
@@ -55,7 +66,7 @@ valid unrelated default database alongside the failing selection. A separate
 explicit read-denial injection checks error propagation with real SQLite and
 unchanged source bytes; it is not a Windows/POSIX ACL enforcement proof.
 
-This dispositions one S12 script. Package readers/writers and the report schema
+This dispositions two S12 scripts. Package readers/writers and the report schema
 are unchanged. Existing complete-reader resource limits, concurrent-writer
 snapshot guarantees and broader configuration/link admission remain open; the
 Python guard is not OS isolation. No classifier accuracy, identity, authenticity
