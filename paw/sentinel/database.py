@@ -391,7 +391,9 @@ class CampaignDatabase:
         checks = []
         with self._json_read_connection() as conn:
             rows = conn.execute("""
-                SELECT * FROM checks WHERE campaign_id = ?
+                SELECT id, campaign_id, check_time, status, response_time, http_status,
+                       content_hash, screenshot_path, error_message, metadata
+                FROM checks WHERE campaign_id = ?
                 ORDER BY check_time DESC LIMIT ?
             """, (campaign_id, limit)).fetchall()
 
@@ -415,7 +417,9 @@ class CampaignDatabase:
         alerts = []
         with self._json_read_connection() as conn:
             rows = conn.execute("""
-                SELECT * FROM alerts WHERE acknowledged = 0
+                SELECT id, campaign_id, alert_time, alert_type, severity, message,
+                       metadata, acknowledged
+                FROM alerts WHERE acknowledged = 0
                 ORDER BY alert_time DESC
             """).fetchall()
 

@@ -8,6 +8,9 @@ returned the wrong ID, case, URL, status and metadata source while the CLI still
 reported success. The same source bytes read correctly in the fresh layout.
 These fixtures establish a reader defect, not prevalence in the private corpus.
 
+The later [check/alert projection repair](sentinel-history-columns.md) addresses
+the same physical-offset problem in the two remaining history record readers.
+
 The production change is limited to those two SELECT projections. Query filters,
 JSON decoding/provenance, returned keys, schema, migrations, writer
 initialization and mutations are unchanged. Unknown extension columns remain
