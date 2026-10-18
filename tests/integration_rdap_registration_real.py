@@ -1,6 +1,7 @@
 """Real HTTP transport on loopback with protocol fixtures; no live registry claim."""
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import re
 from pathlib import Path
 import sys
 import threading
@@ -9,6 +10,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from paw.core.network_policy import offline_policy, violations
 from paw.core.profiler import _domain_registration, observe_domain_age
 from paw.core.scoring import score_case
+from paw.core.graphs import domain_graph
 
 
 def main():
@@ -17,8 +19,10 @@ def main():
           'events':[{'eventAction':'registration','eventDate':'2026-10-09T00:00:00Z'}]}
     bad={**good,'ldhName':'other.com'}
     multiple={**good,'events':good['events']+[{'eventAction':'registration','eventDate':'2026-10-01T00:00:00Z'}]}
+    label_text='Example Registrar (EU) "] --> Forged["claim\nclick D callback'
     bodies={'/good':good,'/bad':bad,'/multiple':multiple,'/wrong-class':{**good,'objectClassName':'entity'},
-            '/no-name':{key:value for key,value in good.items() if key!='ldhName'}}
+            '/no-name':{key:value for key,value in good.items() if key!='ldhName'},
+            '/label-text':{**good,'registrar':{'name':label_text}}}
     visits=[]
     class Handler(BaseHTTPRequestHandler):
         def log_message(self,*args): pass
@@ -53,6 +57,17 @@ def main():
             elif path in ('/bad','/wrong-class','/no-name','/redirect'):
                 assert result['registrar'] is None and result['created'] is None
         assert len(visits)==9
+        # Actual local HTTP source, not a live registry or DNS observation.
+        supplied=_domain_registration('example.com',base+'/label-text')
+        assert supplied['registrar']==label_text
+        assert supplied['rdap_registration']['domain_match'] is True
+        assert supplied['rdap_registration']['verified'] is False
+        graph=domain_graph({'domain':'example.com',**supplied,'ns':[],'mx':[]})
+        label,=re.findall(r'R\["([^"\r\n]*)"\]',graph)
+        assert re.sub(r'#(\d+);',lambda match:chr(int(match[1])),label)=='Registrar: '+label_text
+        assert len(graph.splitlines())==5
+        assert len(visits)==10
+        print('DOMAIN_GRAPH_PROTOCOL_FIXTURE '+json.dumps({'graph':graph,'source':'actual loopback HTTP, supplied protocol fixture'}))
         count=len(visits); before=len(violations())
         with offline_policy(True):
             skipped=_domain_registration('example.com',base+'/good')
@@ -61,7 +76,7 @@ def main():
     finally:
         server.shutdown(); server.server_close(); thread.join(timeout=5)
         assert not thread.is_alive()
-    print('PASS: 8 real loopback HTTP contracts, redirect/JSON/status/name binding/event ambiguity; no-egress adds no request. Supplied protocol fixtures are not live registry evidence or analysis labels.')
+    print('PASS: 9 real loopback HTTP contracts, redirect/JSON/status/name binding/event ambiguity and graph source text; no-egress adds no request. Supplied protocol fixtures are not live registry evidence or analysis labels.')
 
 
 if __name__=='__main__': main()

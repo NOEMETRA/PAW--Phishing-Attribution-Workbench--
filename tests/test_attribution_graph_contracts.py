@@ -3,7 +3,7 @@ import copy
 import re
 import unittest
 
-from paw.core.graphs import attribution_graph
+from paw.core.graphs import attribution_graph, domain_graph
 
 
 LABEL_TEXTS = [
@@ -15,8 +15,8 @@ LABEL_TEXTS = [
 
 
 def labels(graph):
-    """Read only the emitted quoted declarations, independently of the writer."""
-    return re.findall(r'^  (?:\w+ --> )?(\w+)\["([^"\r\n]*)"\]$', graph, re.M)
+    """Read quoted declarations, including two declarations on the same edge."""
+    return re.findall(r'\b(\w+)\["([^"\r\n]*)"\]', graph)
 
 
 def decode(text):
@@ -61,6 +61,35 @@ class AttributionGraphContracts(unittest.TestCase):
                     graph = attribution_graph(hops, index, None)
                     self.assertNotIn('TRANSMITTING CANDIDATE', graph)
                     self.assertIn('unverified Received header observations', graph)
+
+
+class DomainGraphContracts(unittest.TestCase):
+    def test_source_fields_stay_text_in_the_existing_five_nodes(self):
+        for text in LABEL_TEXTS + ['Example Registrar (EU)', 'end']:
+            with self.subTest(text=text):
+                domain = {'domain': text, 'registrar': text, 'created': text,
+                          'ns': [text, 'ns.example'], 'mx': [text, 'mx.example']}
+                original = copy.deepcopy(domain)
+                graph = domain_graph(domain)
+                declared = dict(labels(graph))
+                self.assertEqual(set(declared), {'D', 'R', 'C', 'NS', 'MX'})
+                self.assertEqual(len(graph.splitlines()), 5)
+                self.assertEqual(decode(declared['D']), text)
+                self.assertEqual(decode(declared['R']), f'Registrar: {text}')
+                self.assertEqual(decode(declared['C']), f'Created: {text}')
+                self.assertEqual(decode(declared['NS']), f'NS: {text}, ns.example')
+                self.assertEqual(decode(declared['MX']), f'MX: {text}, mx.example')
+                self.assertEqual(domain, original)
+
+    def test_unavailable_domain_has_a_nonempty_display_label_without_changing_source(self):
+        for domain in ({}, {'domain': ''}, {'domain': None}):
+            with self.subTest(domain=domain):
+                original = copy.deepcopy(domain)
+                declared = dict(labels(domain_graph(domain)))
+                self.assertEqual(declared['D'], 'Domain unavailable')
+                self.assertEqual(declared['NS'], 'NS: -')
+                self.assertEqual(declared['MX'], 'MX: -')
+                self.assertEqual(domain, original)
 
 
 if __name__ == '__main__':
