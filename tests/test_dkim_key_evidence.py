@@ -8,7 +8,9 @@ import unittest
 from paw.core.dkim_keys import load_key_file, snapshot_key_bundle, parse_key_evidence, MAX_BYTES
 from paw.core.network_policy import offline_policy, violations
 from paw.core.scoring import score_case
-from paw.core.authentication import authentication_report
+from paw.core.authentication import authentication_report, infer_alignment
+from paw.core.dkim_offline import verify_dkim_offline
+from paw.core.parser_mail import parse_eml_bytes
 
 
 class KeyEvidenceContracts(unittest.TestCase):
@@ -82,6 +84,25 @@ class KeyEvidenceContracts(unittest.TestCase):
         self.assertEqual(score['score'],baseline['score'])
         self.assertIn('dkim_key_provenance',score['coverage']['not_evaluated'])
         self.assertIn('key provenance unverified',authentication_report(auth))
+
+    def test_supplied_keys_do_not_imply_an_unsigned_message_was_checked(self):
+        raw=b'From: sender@example.com\r\nTo: recipient@example.net\r\n\r\nUnsigned body\r\n'
+        records=parse_key_evidence(snapshot_key_bundle(self.bundle()))[2]
+        before=len(violations())
+        with offline_policy():
+            headers=parse_eml_bytes(raw)
+            auth=infer_alignment(headers,headers['from'],'')
+            auth['dkim']['verification']=verify_dkim_offline(raw,records)
+            auth['dkim']['key_evidence']={'path':'dkim_keys.json','provenance_status':'unverified'}
+            saved=json.dumps(auth,sort_keys=True)
+            report=authentication_report(auth)
+        self.assertFalse(auth['dkim']['present'])
+        self.assertEqual(auth['dkim']['verification']['reason'],'No DKIM signature present')
+        self.assertIn('DKIM signature present: False; independent verification: not_evaluated (not evaluable)',report)
+        self.assertIn('local key snapshot supplied; key provenance unverified',report)
+        self.assertNotIn('signature checked',report)
+        self.assertEqual(json.dumps(auth,sort_keys=True),saved)
+        self.assertEqual(len(violations()),before)
 
 
 if __name__=='__main__': unittest.main()
