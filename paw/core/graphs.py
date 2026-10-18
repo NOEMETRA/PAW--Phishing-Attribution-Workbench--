@@ -31,12 +31,12 @@ def domain_graph(dominfo):
     mx = ", ".join(dominfo.get("mx", [])) or "-"
     created = dominfo.get("created","?")
     reg = dominfo.get("registrar","?")
-    d = dominfo.get("domain","?")
+    d = dominfo.get("domain") or "Domain unavailable"
     lines = ["graph LR"]
-    lines.append(f"  D[{d}] --> R[Registrar: {reg}]")
-    lines.append(f"  D --> C[Created: {created}]")
-    lines.append(f"  D --> NS[NS: {ns}]")
-    lines.append(f"  D --> MX[MX: {mx}]")
+    lines.append(f'  D["{_mermaid_label(d)}"] --> R["Registrar: {_mermaid_label(reg)}"]')
+    lines.append(f'  D --> C["Created: {_mermaid_label(created)}"]')
+    lines.append(f'  D --> NS["NS: {_mermaid_label(ns)}"]')
+    lines.append(f'  D --> MX["MX: {_mermaid_label(mx)}"]')
     return "\n".join(lines)
 
 def detonation_box(det_sum: dict) -> str:
