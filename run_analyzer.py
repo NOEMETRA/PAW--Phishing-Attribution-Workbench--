@@ -1,9 +1,19 @@
-from paw.sentinel.intelligence_analyzer import IntelligenceAnalyzer
-import json
+"""Legacy standalone IP analysis is unavailable; saved Sentinel data are preserved."""
+import argparse
 
-CASE_ID = "case-2025-11-05T212057Z-88b5"
+UNAVAILABLE = ('Legacy standalone IP analysis unavailable: saved Sentinel data '
+               'are preserved')
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(
+        description=__doc__,
+        epilog='Use check_victims.py for passive saved-row inspection. '
+               'Active IP collection and updates require separately validated '
+               'isolation, supervision and source/result semantics.')
+    parser.parse_args(argv)
+    parser.exit(1, UNAVAILABLE + '\n')
+
 
 if __name__ == '__main__':
-	ia = IntelligenceAnalyzer(db_path="sentinel.db", use_proxy=False)
-	result = ia.analyze_unanalyzed_victims(max_workers=3, case_id=CASE_ID)
-	print(json.dumps(result, indent=2))
+    main()
