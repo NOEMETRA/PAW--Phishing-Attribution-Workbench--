@@ -272,7 +272,9 @@ class CampaignDatabase:
         """Get campaign details by ID."""
         with self._json_read_connection() as conn:
             row = conn.execute("""
-                SELECT * FROM campaigns WHERE id = ?
+                SELECT id, case_id, created_at, last_check, status, url,
+                       domain, title, description, risk_level, metadata
+                FROM campaigns WHERE id = ?
             """, (campaign_id,)).fetchone()
 
             if row:
@@ -296,7 +298,9 @@ class CampaignDatabase:
         campaigns = []
         with self._json_read_connection() as conn:
             rows = conn.execute("""
-                SELECT * FROM campaigns WHERE status = 'active'
+                SELECT id, case_id, created_at, last_check, status, url,
+                       domain, title, description, risk_level, metadata
+                FROM campaigns WHERE status = 'active'
             """).fetchall()
 
             for row in rows:

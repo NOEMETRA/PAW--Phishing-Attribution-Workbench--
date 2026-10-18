@@ -318,6 +318,12 @@ jobs:
       - name: Verify offline campaign argument admission and actual stored mutations
         run: python tests/integration_sentinel_campaign_real.py
 
+      - name: Verify stored campaign named-column correspondence
+        run: python -m unittest discover -s tests -p 'test_sentinel_campaign_columns.py' -v
+
+      - name: Verify actual saved campaign layouts through API and CLI consumers
+        run: python tests/integration_sentinel_campaign_columns_real.py
+
       - name: Verify legacy campaign listing matches passive CLI without source mutation
         run: python tests/integration_legacy_campaign_list_real.py
 
