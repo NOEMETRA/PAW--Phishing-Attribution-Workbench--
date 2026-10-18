@@ -14,7 +14,7 @@ from test_sentinel_database_rows import LEGACY_FIELDS
 SCRIPT = REPO / 'check_victims.py'
 
 
-def invoke(root, arguments=(), *, import_only=False, deny_config_read=False):
+def invoke(root, arguments=(), *, import_only=False, deny_config_read=False, script=SCRIPT):
     # This diagnostic does not bootstrap the CLI or optional network libraries.
     code = """import builtins,io,os,runpy,sys,threading
 sys.path.insert(0,%r)
@@ -47,7 +47,7 @@ finally:
         assert sys.argv==before,'Import changed arguments'
         assert 'paw.sentinel' not in sys.modules,'Argument/import path accessed Sentinel'
     print('LEGACY_INTERACTIONS_PASSIVE_OK',file=sys.stderr)
-""" % (str(REPO), str(SCRIPT), list(arguments), deny_config_read, str(SCRIPT),
+""" % (str(REPO), str(script), list(arguments), deny_config_read, str(script),
            'legacy_import' if import_only else '__main__', import_only or bool(arguments))
     env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1',PYTHONUTF8='1')
     env.pop('PYTHONPATH',None)
@@ -57,7 +57,7 @@ finally:
     return result.returncode,result.stdout.decode('utf-8'),result.stderr.decode('utf-8')
 
 
-def main():
+def main(script=SCRIPT):
     checks=[]
     with tempfile.TemporaryDirectory(prefix='paw-legacy-interactions-') as temporary:
         root=Path(temporary)
@@ -117,7 +117,7 @@ def main():
             if mode in ('saved-default','saved-configured','empty','legacy'):
                 expected=CampaignDatabase(str(database),read_only=True).get_victim_statistics()
             before=snapshot(work)
-            exit_code,output,error=invoke(work)
+            exit_code,output,error=invoke(work,script=script)
             assert snapshot(work)==before,mode
             if expected is None:
                 assert exit_code==1 and output=='' and 'error:' in error,(mode,exit_code,output,error)
@@ -145,7 +145,7 @@ def main():
             if mode=='saved-configured':
                 env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1',PYTHONUTF8='1')
                 env.pop('PYTHONPATH',None)
-                direct=subprocess.run([sys.executable,'-X','utf8',str(SCRIPT)],cwd=work,env=env,
+                direct=subprocess.run([sys.executable,'-X','utf8',str(script)],cwd=work,env=env,
                     stdout=subprocess.PIPE,stderr=subprocess.PIPE,timeout=30)
                 assert direct.returncode==0 and json.loads(direct.stdout)==report,direct.stderr
                 assert snapshot(work)==before
@@ -160,7 +160,7 @@ def main():
             fallback.add_victim_intelligence('192.0.2.2','Unrelated fallback row',
                                             'https://example.invalid/fallback')
             before=snapshot(work)
-            exit_code,output,error=invoke(work,deny_config_read=mode=='denied-read')
+            exit_code,output,error=invoke(work,deny_config_read=mode=='denied-read',script=script)
             assert exit_code==1 and output=='' and 'error:' in error,(mode,exit_code,output,error)
             if mode=='denied-read':
                 assert 'read-denial regression fixture' in error,error
@@ -172,14 +172,15 @@ def main():
         (work/'sentinel_config.json').write_bytes(b'{must not access')
         before=snapshot(work)
         for arguments,expected_code in ((['--help'],0),(['--unsupported'],2)):
-            exit_code,output,error=invoke(work,arguments)
+            exit_code,output,error=invoke(work,arguments,script=script)
             assert exit_code==expected_code,(arguments,error)
             assert snapshot(work)==before
-        exit_code,output,error=invoke(work,import_only=True)
+        exit_code,output,error=invoke(work,import_only=True,script=script)
         assert exit_code==0 and output=='' and snapshot(work)==before,error
-    print(json.dumps({'status':'passed','processes':22,'checks':checks,
+    print(json.dumps({'status':'passed','script':script.name,'processes':22,'checks':checks,
         'scope':'21 actual cold guarded diagnostic/import/argument processes, plus one direct saved-source execution outside checkout without PYTHONPATH. Configuration read denial is explicitly injected, not an OS ACL proof. No collector/CLI bootstrap, new thread, blocked operation or source mutation in guarded processes. Not OS containment, live-writer snapshot, authentication or identity/accuracy evidence.'},indent=2))
 
 
 if __name__=='__main__':
-    main()
+    for script in (SCRIPT, REPO/'check_db_fields.py'):
+        main(script)
