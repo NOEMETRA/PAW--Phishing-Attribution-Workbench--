@@ -84,7 +84,7 @@ class FileMonitor:
             return ok, "Case evidence verification passed" if ok else "Case evidence verification failed; inspect paw verify output"
 
         except Exception as e:
-            return False, f"Error verifying Merkle integrity: {e}"
+            return None, f"Error verifying Merkle integrity: {e}"
 
     def check_file_changes(self, case_id: str) -> Dict[str, Any]:
         """Check for file changes in a case directory."""

@@ -1,21 +1,22 @@
 # Stato dell'audit PAW
 
-Riferimento integrato: PR71, commit
-`143788a308f4977ad88a544491b4096dc6908074`, 18 ottobre 2026.
-Review Codex senza rilievi e tre controlli CI verdi sull'head PR71;
-il merge ha lo stesso contenuto. Il pacchetto PR71 è stato verificato con
-720 test (712 superati, 8 esclusioni di piattaforma), analisi EML/recupero errori
+Riferimento integrato: PR72, commit
+`ada770633a0fa3170c5a6e7f67a5c1ab68151112`, 18 ottobre 2026.
+Review Codex senza rilievi e tre controlli CI verdi sull'head PR72;
+il merge ha lo stesso contenuto. Il pacchetto PR72 è stato verificato con
+726 test (718 superati, 8 esclusioni di piattaforma), analisi EML/recupero errori
 e ZIP effettivi, 18 scenari CLI locali e wheel reale. Queste sono evidenze
 circoscritte, senza attestare ogni funzione dei 90 file Python del pacchetto.
 
-La correzione corrente delle [letture di directory](sentinel-directory-read-failures.md)
-tocca soltanto il callback di scansione del monitor locale, per evitare inventari
-parziali dopo un errore. Le prove precedenti non sostituiscono la verifica di
-questa versione o l'accettazione finale su tutte le piattaforme.
-Su questa versione passano 726 test (718 superati, 8 esclusioni di piattaforma),
-l'analisi EML offline con 19 processi di verifica errori/recupero API e CLI,
-lo ZIP, 18 scenari CLI locali esistenti e il confronto della wheel con tutti
-i 90 sorgenti Python del pacchetto. Non è una nuova installazione isolata.
+La correzione corrente dell'[esito di verifica indisponibile](sentinel-verification-availability.md)
+tocca soltanto il valore restituito dal monitor quando il verificatore solleva
+un'eccezione: resta sconosciuto, con la diagnosi, anziché essere un falso esito
+negativo. Su questa versione passano 732 test (724 superati, 8 esclusioni),
+due analisi full su EML originale con errori di lettura iniettati e recupero,
+10 processi per la nuova verifica e 19 per le regressioni precedenti, 18 scenari
+CLI locali e una wheel reale confrontata con tutti i 90 sorgenti del pacchetto.
+Le prove restano circoscritte e non sostituiscono l'accettazione finale su tutte
+le piattaforme. Anche i tre controlli CI del merge PR72 sono verdi.
 Il lavoro corrente stabilizza il motore offline e la profondità delle evidenze.
 Il [registro per famiglia](engine-stabilization-checkpoint.md) distingue contratti
 verificati, audit aperti, capacità indisponibili e fasi successive.

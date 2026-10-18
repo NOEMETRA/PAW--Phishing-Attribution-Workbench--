@@ -20,10 +20,10 @@ These are error/baseline contracts for one synchronous monitor instance, not a
 filesystem transaction, concurrency lock or persisted historical monitor. Owner
 admission remains unchanged. First scan still establishes an instance baseline.
 Inventory exclusions, links/special files, broader metadata failures, resource admission,
-concurrent writers and integrity-only verification error interpretation remain
-open. `verify_merkle_integrity`/`generate_integrity_report` and their compatibility
-statuses are unchanged; a hash-scan exception does not certify those separate
-verification outcomes. No database, collector, hash algorithm or output schema
+concurrent writers and broader shared-verifier interpretations remain open.
+The later [verification-availability repair](sentinel-verification-availability.md)
+keeps verifier exceptions unknown with diagnostics. A hash-scan exception does
+not certify those separate verification outcomes. No database, collector, hash algorithm or output schema
 is added. Passive file checks still avoid campaign configuration and storage.
 The later [directory-read repair](sentinel-directory-read-failures.md) propagates
 errors delivered by the walk callback, without changing seal verification.
