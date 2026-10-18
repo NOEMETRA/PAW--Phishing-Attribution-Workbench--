@@ -15,6 +15,7 @@ from email.parser import BytesParser
 
 repo = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(repo))
+from paw.core.auth import authentication_report
 root = Path(os.environ.get('PAW_VERIFICATION_DIR', str(repo.parent / 'paw-validation'))).resolve()
 root.mkdir(parents=True, exist_ok=True)
 sample = next((repo/'inbox').glob('*.eml'))
@@ -75,6 +76,11 @@ with (data/'api_server.log').open('wb') as log:
         assert not (data/'cases'/case_id/'detonation').exists()
         assert '\\n' not in detail['executive_report']
         assert 'LOW RISK' not in (data/'jobs'/job['analysis_id']/'worker.log').read_text(encoding='utf-8')
+        terminal=' '.join((data/'jobs'/job['analysis_id']/'worker.log').read_text(encoding='utf-8').split())
+        assert ' '.join(authentication_report(detail['authentication']).split()) in terminal
+        assert 'DMARC policy: none' not in terminal and '📍 Origin' not in terminal
+        title='Transmitting candidate (unverified)' if detail['origin']['ip'] else 'Transmitting candidate unavailable'
+        assert title in terminal
         checks.append({'flow':'real API -> real worker -> original repository EML -> evidence verification',
             'status':'passed','elapsed_seconds':round(time.perf_counter()-started,3),
             'execution':execution,'case_id':case_id})

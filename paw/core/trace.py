@@ -1360,10 +1360,6 @@ def print_beautiful_summary(case_dir: str, case_id: str, score: dict, ip: str, i
     if (anomalies.get('timing_observations') or {}).get('repeated_ip_claims'):
         findings.append('Repeated Received IP claims; relay behavior unverified')
     
-    # Check auth failures
-    if auth.get("dmarc", {}).get("inferred_result") == "none":
-        findings.append("🟡 DMARC policy: none")
-    
     # Determine verdict emoji and color
     score_val = score.get("decision_score", score.get("score", 0))
     verdict = f"{score.get('decision', 'Inconclusive')} (heuristic score: {score_val})"
@@ -1387,19 +1383,23 @@ def print_beautiful_summary(case_dir: str, case_id: str, score: dict, ip: str, i
     table.add_column("Property", style="dim", width=12)
     table.add_column("Value", style="bold")
     table.add_row("Coverage", score.get("assessment_status", "partial"))
-    table.add_row("Auth checks", "not independently verified")
+    table.add_row("Auth claims", "unverified; see checks below")
     
     table.add_row("Case ID", f"[cyan]{case_id}[/cyan]")
     table.add_row("Verdict", f"[{verdict_color}]{verdict}[/{verdict_color}]")
     
     console.print(table)
+    # Share the evidence-qualified report used by executive.md, including actual
+    # local-key checks and their separate unverified key provenance.
+    console.print(Text(authentication_report(auth)))
     
-    # Origin section
+    # Received observations do not independently establish a sender or actor.
     origin_panel = Panel(
-        f"IP:  [bold]{ip}[/bold]\n"
+        Text(f"IP:  {ip or 'unavailable'}\n"
         f"ASN: AS{ip_res.get('asn', 'N/A')} ({ip_res.get('asn_org', 'N/A')})\n"
-        f"CC:  {flag} {cc}",
-        title="📍 Origin",
+        f"CC:  {flag} {cc}\n"
+        "Received observations are unverified; no sender or attacker attribution."),
+        title="Transmitting candidate (unverified)" if ip else "Transmitting candidate unavailable",
         border_style="blue"
     )
     console.print(origin_panel)

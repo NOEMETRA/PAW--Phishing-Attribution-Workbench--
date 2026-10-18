@@ -17,6 +17,7 @@ import zipfile
 REPO=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(REPO))
 from paw.core.verify import verify_case
+from paw.core.auth import authentication_report
 
 
 def read(path): return json.loads(path.read_text(encoding='utf-8'))
@@ -60,13 +61,18 @@ def main():
     signed=sign(b'test')
     samples={'pass.eml':signed,'fail.eml':signed.replace(b'Original body',b'Changed body'),
         'missing.eml':sign(b'missing').replace(b'Original body',b'Changed body'),
-        'unsigned.eml':raw,'multi.eml':sign(b'missing',signed)}
-    results={'pass.eml':'pass','fail.eml':'fail','missing.eml':None,'unsigned.eml':None,'multi.eml':'pass'}
+        'unsigned.eml':raw,'multi.eml':sign(b'missing',signed),
+        'original.eml':next((REPO/'inbox').glob('*.eml')).read_bytes(),
+        'reported-none.eml':b'Authentication-Results: fixture.example; dmarc=none header.from=example.com\r\n'+raw}
+    results={'pass.eml':'pass','fail.eml':'fail','missing.eml':None,'unsigned.eml':None,'multi.eml':'pass',
+        'original.eml':None,'reported-none.eml':None}
     bundle={'schema_version':1,'source':'Generated RSA regression fixture; no independent DNS provenance',
             'records':{'TEST._domainkey.Example.com.':'v=DKIM1; k=rsa; p='+base64.b64encode(public).decode('ascii')}}
     key_raw=(json.dumps(bundle,indent=2)+'\r\n').encode('utf-8')
     with tempfile.TemporaryDirectory(prefix='paw-dkim-keys-',dir=REPO.parent) as temporary:
-        base=Path(temporary); inputs=base/'inputs'; inputs.mkdir()
+        base=Path(os.environ.get('PAW_VERIFICATION_DIR',temporary)).resolve()
+        base.mkdir(parents=True,exist_ok=True)
+        inputs=base/'inputs'; inputs.mkdir()
         for name,value in samples.items(): (inputs/name).write_bytes(value)
         keys=base/'keys.json'; keys.write_bytes(key_raw)
         env=dict(os.environ,PYTHONPATH=str(REPO),PYTHONDONTWRITEBYTECODE='1',PYTHONUTF8='1')
@@ -80,6 +86,17 @@ def main():
             control,=(p for p in (root/'jobs').iterdir() if p.is_dir())
             assert read(control/'supervisor.json')['tree_stopped']
             request=read(control/'request.json')
+            rendered=' '.join(result.stdout.decode('utf-8').split())
+            assert 'DMARC policy: none' not in rendered
+            assert 'Auth checks not independently verified' not in rendered
+            assert '📍 Origin' not in rendered
+            for case in (root/'cases').glob('case-*'):
+                if not case.is_dir(): continue
+                auth=read(case/'auth.json')
+                assert ' '.join(authentication_report(auth).split()) in rendered
+                candidate=read(case/'origin.json')
+                title='Transmitting candidate (unverified)' if candidate['ip'] else 'Transmitting candidate unavailable'
+                assert title in rendered
             if '--dkim-keys' in args:
                 admitted=Path(args[args.index('--dkim-keys')+1]).read_bytes()
                 assert request['dkim_key_evidence']['text'].encode('utf-8')==admitted
@@ -161,10 +178,11 @@ def main():
                 server.terminate()
                 try: server.wait(timeout=15)
                 except subprocess.TimeoutExpired: server.kill(); server.wait(timeout=15)
-    print('PASS: actual RSA pass/body-fail/missing-key/unsigned/multiple-signature offline batch; '
+    print('PASS: original EML, reported-DMARC-none and actual RSA pass/body-fail/missing-key/unsigned/multiple-signature offline batch; '
           'all five CLI presets, absent-key compatibility, pre-job rejection; actual loopback HTTP '
           'API workers and exports preserve MIME/key snapshots/seals with unverified provenance '
-          'and zero local-key authentication risk; no DNS retrieval or simulated analysis.')
+          'and zero local-key authentication risk; terminal reuses canonical per-check authentication and candidate limits. '
+          'No DNS retrieval or simulated analysis; constructed signature/header fixtures are not classifier ground truth.')
 
 
 if __name__=='__main__': main()
