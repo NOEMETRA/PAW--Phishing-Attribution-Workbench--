@@ -1172,11 +1172,16 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
         tech_md += "\n"
     # Add attachments section
     if atts:
+        def literal_cell(value):
+            text = json.dumps(value, ensure_ascii=False)
+            fence = '`' * (max(map(len, re.findall(r'`+', text)), default=0) + 1)
+            return fence + text.replace('|', '\\|') + fence
         tech_md += "\n## Attachments (metadata-only)\n"
+        tech_md += "Filename and MIME cells are literal JSON strings; exact metadata: attachments.json.\n\n"
         tech_md += "| Filename | Size | MIME | Macro | SHA256 |\n"
         tech_md += "|----------|------|------|-------|--------|\n"
         for att in atts:
-            tech_md += f"| {att['filename']} | {att['size']} | {att['mime']} | {'not evaluated' if att.get('ole_macro') is None else 'Yes' if att['ole_macro'] else 'No'} | {att['sha256'][:16]}... |\n"
+            tech_md += f"| {literal_cell(att['filename'])} | {att['size']} | {literal_cell(att['mime'])} | {'not evaluated' if att.get('ole_macro') is None else 'Yes' if att['ole_macro'] else 'No'} | {att['sha256'][:16]}... |\n"
         tech_md += "\n"
     write_text(os.path.join(rep_dir,"technical.md"), tech_md)
     # STIX

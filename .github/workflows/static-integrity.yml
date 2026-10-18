@@ -210,6 +210,9 @@ jobs:
       - name: Verify actual offline attachment ZIP inventories and exports
         run: python tests/integration_archive_inventory_real.py
 
+      - name: Verify literal attachment table cells through actual CLI and HTTP exports
+        run: python tests/integration_attachment_report_real.py
+
       - name: Verify original embedded MIME spans and separate derived evidence
         run: python -m unittest discover -s tests -p 'test_embedded_wire_evidence.py' -v
 
