@@ -41,7 +41,12 @@ def check_case(case, raw, expected, key_raw=None):
         assert evidence['sha256']==hashlib.sha256(key_raw).hexdigest()
         assert evidence['provenance_status']=='unverified'
         assert 'dkim_key_provenance' in score['coverage']['not_evaluated']
-        assert 'key provenance unverified' in (case/'report'/'executive.md').read_text(encoding='utf-8')
+        report=(case/'report'/'executive.md').read_text(encoding='utf-8')
+        assert 'local key snapshot supplied; key provenance unverified' in report
+        if not auth['present']:
+            assert check=={'status':'not_evaluated','result':None,'reason':'No DKIM signature present'},check
+            assert 'DKIM signature present: False; independent verification: not_evaluated (not evaluable)' in report
+            assert 'signature checked' not in report
         if check.get('source'):
             assert check['key_provenance_status']=='unverified'
             assert check['message_sha256']==hashlib.sha256(raw).hexdigest()

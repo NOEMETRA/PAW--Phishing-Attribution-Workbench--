@@ -7,6 +7,11 @@ supplied local keys are displayed with their explicitly unverified key
 provenance; a cryptographic match is not independently authenticated DNS or
 sender identity.
 
+A supplied key snapshot is described as supplied, independently of whether a
+signature was present or a check completed. In particular, unsigned messages
+retain `not_evaluated` without a statement that a signature was checked. This
+shared wording applies to the terminal and executive report.
+
 The previous summary promoted the reported `dmarc=none` result to `DMARC policy:
 none` even when actual policy lookup was skipped. Its blanket authentication
 statement also omitted completed local-key checks. A supervised full no-egress
@@ -20,8 +25,9 @@ as unverified and the canonical per-check text supplies their details. The
 Received panel labels a selected address as an unverified transmission candidate,
 or says that a candidate is unavailable. Its source text is literal Rich `Text`,
 so provider strings do not become Rich markup or unmatched closing tags.
-Source records, selection, authentication algorithms, scores and sealed reports
-are unchanged by this presentation repair.
+Source records, selection, authentication algorithms and scores are unchanged
+by this presentation repair. New executive reports use the qualified snapshot
+wording; previously sealed cases are not rewritten.
 
 `test_terminal_summary_contracts.py` renders actual Rich output from declared
 presentation fixtures under the application offline guard, checking unavailable
