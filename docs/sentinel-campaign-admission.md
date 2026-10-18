@@ -5,6 +5,10 @@ nonblank `--case`. These checks precede Sentinel imports and configuration/stora
 access. Values are retained literally; this is not URL validation or authorization
 to visit the stored URL.
 
+The [campaign column correspondence repair](sentinel-campaign-columns.md) binds
+lookup/list fields to explicitly selected columns, so a changed physical schema
+order cannot substitute another stored value during removal preflight.
+
 Removal first opens existing saved storage through passive admission and selects
 active campaigns with the exact case ID. Missing storage, unsupported WAL/journal
 state, source errors, no match or multiple matches fail with a nonzero exit before

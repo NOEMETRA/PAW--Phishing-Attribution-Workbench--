@@ -61,7 +61,9 @@ must not be described as read-only opening of an existing evidence database.
 The subsequent [passive-opening contract](sentinel-passive-opening.md) supplies
 an explicit read-only mode and the `monitor list` consumer. Campaign/check/alert readers and statistical,
 intelligence, geographic-report and lifecycle behavior are not comprehensively
-validated by the interaction-row correction.
+validated by the interaction-row correction. The later
+[campaign reader correction](sentinel-campaign-columns.md) checks the two
+campaign projections and their passive list/removal consumers separately.
 
 Stored `victim_*`, `attacker_correlation`, risk scores and interaction labels
 remain legacy names/claims. Correct decoding does not establish victim/attacker
