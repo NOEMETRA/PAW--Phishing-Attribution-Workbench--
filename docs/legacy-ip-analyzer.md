@@ -2,7 +2,9 @@
 
 `python run_analyzer.py` explicitly reports unavailability and exits 1 before
 importing Sentinel or accessing saved sources. Help exits 0, unsupported arguments
-exit 2 and import is inert. Direct invocation requires only the standard library.
+exit 2 and import is inert. Help requires `-h` or `--help`; long-option prefixes
+such as `--h`, `--he` and `--hel` are rejected. Direct invocation requires only
+the standard library.
 No replacement collection command, case selector or worker option is added.
 
 The former launcher ignored arguments, selected a hardcoded historical case and
@@ -29,10 +31,11 @@ Any future active launcher requires verified isolation/egress, source selection,
 supervision, bounded execution, observation/error accounting and honest update
 semantics. Do not infer that these issues are fixed inside the package.
 
-`integration_legacy_analyzer_real.py` checks 25 fresh guarded legacy paths,
+`integration_legacy_analyzer_real.py` checks 33 fresh guarded legacy paths,
 including nine actual missing/saved/configured/corrupt/incomplete/journal/WAL/
 configuration-error source trees, help/import/arguments and explicit `main`
-calls. Two direct standard-library invocations run outside the checkout without
+calls, including accepted help flags and rejected prefixes. Six direct
+standard-library invocations run outside the checkout without
 `PYTHONPATH`. File/SQLite audit hooks reject observed access; source snapshots,
 no blocked network attempts, no Sentinel/requests imports and unchanged threads
 and process arguments are checked. The hooks do not cover every metadata syscall

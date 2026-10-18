@@ -7,7 +7,7 @@ UNAVAILABLE = ('Legacy standalone IP analysis unavailable: saved Sentinel data '
 
 def main(argv=None):
     parser = argparse.ArgumentParser(
-        description=__doc__,
+        description=__doc__, allow_abbrev=False,
         epilog='Use check_victims.py for passive saved-row inspection. '
                'Active IP collection and updates require separately validated '
                'isolation, supervision and source/result semantics.')

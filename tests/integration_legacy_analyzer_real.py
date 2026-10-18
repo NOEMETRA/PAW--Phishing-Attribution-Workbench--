@@ -60,7 +60,7 @@ finally:
     assert 'LEGACY_ANALYZER_NO_SOURCE_OR_NETWORK_ACCESS' in output,output
     assert result.returncode==expected,output
     if expected==1: assert REASON in output and result.stdout==b'',output
-    if arguments==['--help']: assert 'unavailable' in output and 'check_victims.py' in output,output
+    if arguments in (['-h'],['--help']): assert 'unavailable' in output and 'check_victims.py' in output,output
     if entry=='import': assert result.stdout==b'',output
 
 
@@ -121,12 +121,19 @@ def main():
                 (['--case',str(outside)],'execute',2),(['--no-egress'],'execute',2)):
             invoke(root,outside,arguments,entry,expected)
             assert (snapshot(root),snapshot(outside))==before
+        for entry in ('execute','main'):
+            for flag,expected in (('-h',0),('--h',2),('--he',2),('--hel',2)):
+                invoke(root,outside,[flag],entry,expected)
+                assert (snapshot(root),snapshot(outside))==before
         env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1',PYTHONUTF8='1')
         env.pop('PYTHONPATH',None)
-        for arguments,expected in (([],1),(['--help'],0)):
+        for arguments,expected in (([],1),(['--help'],0),(['-h'],0),
+                                   (['--h'],2),(['--he'],2),(['--hel'],2)):
             direct=subprocess.run([sys.executable,'-X','utf8',str(SCRIPT),*arguments],cwd=root,
                 env=env,capture_output=True,timeout=30)
-            assert direct.returncode==expected and b'unavailable' in direct.stdout+direct.stderr
+            assert direct.returncode==expected,direct.stdout+direct.stderr
+            if expected==2: assert direct.stdout==b'' and b'unrecognized arguments:' in direct.stderr
+            else: assert b'unavailable' in direct.stdout+direct.stderr
             assert (snapshot(root),snapshot(outside))==before
         for root,database,source in passive_sources:
             before=snapshot(root)
@@ -141,8 +148,8 @@ def main():
             assert report['attacker_infrastructure']==[] and report['recommendations']==[]
             assert report['summary']['high_risk_victims'] is None
             assert snapshot(root)==before
-    print(json.dumps({'status':'passed','checks':checks,'cold_guarded_legacy_processes':25,
-        'direct_stdlib_processes':2,'actual_cold_passive_reports':2,
+    print(json.dumps({'status':'passed','checks':checks,'cold_guarded_legacy_processes':33,
+        'direct_stdlib_processes':6,'actual_cold_passive_reports':2,
         'scope':'Actual saved SQLite/configuration/source preservation. Active launcher unavailable before Sentinel imports or observed file/SQLite operations. Existing passive reports retain original rows and typed JSON. Source-file hook is not an OS sandbox; no active collection, accuracy or underlying IP-analyzer validation claim.'},indent=2))
 
 
