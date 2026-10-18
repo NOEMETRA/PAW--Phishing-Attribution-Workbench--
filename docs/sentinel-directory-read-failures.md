@@ -25,8 +25,9 @@ or replacement inventory engine.
 This closes only the errors exposed through the `os.walk` callback. It does not
 establish complete inventory admission: metadata errors that traversal helpers
 may suppress, stat/existence checks, links/special files, resource budgets,
-concurrent writers and integrity-only verification error interpretation remain
-open. Returned file counts retain their existing exclusions. These scans are
+concurrent writers and broader shared-verifier interpretations remain open.
+The later [verification-availability repair](sentinel-verification-availability.md)
+keeps verifier exceptions unknown. Returned file counts retain their existing exclusions. These scans are
 not atomic filesystem snapshots or persisted historical detection.
 
 Six unit contracts use actual root/nested files and directories with denied-open

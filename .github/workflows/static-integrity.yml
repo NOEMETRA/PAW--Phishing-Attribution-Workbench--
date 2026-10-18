@@ -309,6 +309,12 @@ jobs:
       - name: Verify actual original-EML file and directory read failure recovery
         run: python tests/integration_sentinel_hash_failures_real.py
 
+      - name: Verify verification exceptions stay distinct from evidence mismatches
+        run: python -m unittest discover -s tests -p 'test_sentinel_verification_errors.py' -v
+
+      - name: Verify actual original-EML unavailable verification and recovered report outcomes
+        run: python tests/integration_sentinel_verification_errors_real.py
+
       - name: Verify offline campaign argument admission and actual stored mutations
         run: python tests/integration_sentinel_campaign_real.py
 

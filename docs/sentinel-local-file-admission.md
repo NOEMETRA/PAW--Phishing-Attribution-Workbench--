@@ -40,7 +40,8 @@ unchanged; returned file counts are not a full forensic inventory. The later
 errors and preserves scan baselines. The [directory-read repair](sentinel-directory-read-failures.md)
 propagates errors exposed by the walk callback. General metadata/special-file/link/resource
 admission and concurrent-writer snapshots remain open audit work. Seal
-verification retains its separate S08 limitations, including unsupported proof
+verification [exceptions now remain unknown](sentinel-verification-availability.md);
+shared verifier semantics retain separate S08 limitations, including unsupported proof
 authenticity claims.
 
 `test_sentinel_local_files.py` exercises actual files and stored ownership-state
