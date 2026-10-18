@@ -324,6 +324,9 @@ jobs:
       - name: Verify legacy IP launcher rejects before accessing saved Sentinel sources
         run: python tests/integration_legacy_analyzer_real.py
 
+      - name: Verify forensic prototypes reject while actual case verification and ZIP remain intact
+        run: python tests/integration_legacy_quantum_real.py
+
   archive-runtime-compatibility:
     runs-on: ubuntu-latest
     timeout-minutes: 5

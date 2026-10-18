@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-"""
-Wrapper to run the advanced Quantum-Resistant Forensics module.
-"""
-from __future__ import annotations
+"""Prototype forensic proof publication is unavailable; saved case evidence is preserved."""
 import argparse
-from pathlib import Path
-import runpy
+
+UNAVAILABLE = ('Prototype forensic proof publication unavailable: saved case '
+               'evidence and prior outputs are preserved')
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument('case_dir', type=Path)
-    args = ap.parse_args()
-    adv = Path(__file__).resolve().parents[1] / 'advanced' / 'quantum_resistant_forensics.py'
-    runpy.run_path(str(adv), run_name='__main__')
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False,
+        epilog='Original case files and prior outputs are preserved. '
+               'Use the existing paw verify/export commands for case integrity; '
+               'they do not establish cryptographic proofs or post-quantum guarantees.')
+    parser.add_argument('case_dir', help='Legacy case path; no case files will be accessed')
+    parser.parse_args(argv)
+    parser.exit(1, UNAVAILABLE + '\n')
 
 
 if __name__ == '__main__':
