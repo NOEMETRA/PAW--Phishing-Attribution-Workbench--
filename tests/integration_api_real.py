@@ -89,6 +89,11 @@ with (data/'api_server.log').open('wb') as log:
             draft=BytesParser(policy=policy.default).parsebytes(z.read('package/arf_report.eml'))
             assert subject==str(draft['Subject'])==f'PAW local review draft - {case_id}'
             assert z.read('input.eml')==sample.read_bytes()
+            graph_bytes=z.read('graphs/attribution.mmd')
+            graph=graph_bytes.decode('utf-8')
+            assert graph_bytes==(data/'cases'/case_id/'graphs/attribution.mmd').read_bytes()
+            assert 'unverified Received header observations' in graph and '<<ORIGIN>>' not in graph
+            assert graph.count('UNVERIFIED TRANSMITTING CANDIDATE')==int(detail['origin']['status']=='candidate')
             assert {'manifest.json','input.eml','report/score.json','evidence/merkle_index.json','analysis_coverage.json'} <= set(z.namelist())
         checks.append({'flow':'case list, detail, SQLite indicator query, actual ZIP export','status':'passed'})
         try:

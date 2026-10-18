@@ -1,21 +1,29 @@
+def _mermaid_label(value):
+    """Keep source text inside one quoted Mermaid label, never graph syntax."""
+    return ''.join(f'#{ord(char)};' if char in '#"&<>`\\' or not char.isprintable()
+                   else char for char in str(value))
+
 
 def attribution_graph(hops, origin_idx, from_domain_info):
-    lines = ["graph TD", "  Email[Email]"]
+    lines = ["graph TD", '  Email["Email / unverified Received header observations"]',
+             '  Scope["Header order, oldest first; roles are hostname heuristics; no verified sender or attacker"]',
+             '  Email -.-> Scope']
     prev = "Email"
     for i,h in enumerate(hops, start=1):
         label = f"{h.get('ip','?')} / {h.get('by','')}"
-        # Add MX-internal marking
+        label += f" / Received header index {h.get('header_index', '?')}"
+        # This role is a hostname heuristic, not a verified receiver boundary.
         if h.get("role") == "recipient_mx_internal":
-            label += " [MX-internal]"
+            label += " [MX-internal heuristic]"
         node = f"Hop{i}"
-        # Add origin badge
+        # The caller passes the selected hop, not another occurrence of its IP.
         if i == origin_idx:
-            node += '["<<ORIGIN>>"]'
-        lines.append(f"  {prev} --> {node}[{label}]")
+            label += " / UNVERIFIED TRANSMITTING CANDIDATE"
+        lines.append(f'  {prev} --> {node}["{_mermaid_label(label)}"]')
         prev = node
     fd = from_domain_info or {}
     dom_label = f"{fd.get('domain','?')} | Reg: {fd.get('registrar','?')} | Created: {fd.get('created','?')}"
-    lines.append(f"  Email --> FromDomain[{dom_label}]")
+    lines.append(f'  Email --> FromDomain["{_mermaid_label(dom_label)}"]')
     return "\n".join(lines)
 
 def domain_graph(dominfo):
