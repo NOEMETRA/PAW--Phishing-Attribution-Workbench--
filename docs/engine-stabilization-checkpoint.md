@@ -55,6 +55,10 @@ checked against both the baseline and the proposed fix before changing code.
 | S15 | Canary deployment rejects before I/O; observation storage within sealed cases is intentionally unavailable. | Only enable with separate bounded observation storage, verified isolation, source integrity and honest behavioral semantics. No fabricated visits, session tracking or attacker attribution. Unavailable state is the supported current contract. |
 | S16 | Local web workbench prototype exists; backend worker/API contracts are tested. Further GUI development is paused. | After engine and egress contracts, build complete option/profile/key/export parity, observable phases, cancellation, partial results and provenance views. Verify actual user flow; backend tests do not establish GUI completeness. Finish release documentation and acceptance on the supported package. |
 
+The S08 [attachment table contract](attachment-report-evidence.md) checks literal
+filename/MIME cells and preserved source/payload/report bytes through actual
+offline CLI and loopback HTTP publication. Other report sections remain open.
+
 ## Command coverage
 
 The 16 primary parsers and `geo` alias are read from `paw/__main__.py`; this
