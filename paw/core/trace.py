@@ -1077,12 +1077,9 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
     # Graphs
     graphs_dir = os.path.join(case_dir,"graphs")
     ensure_dir(graphs_dir)
-    # Find origin hop index (1-based)
-    origin_idx = 1
-    for i, h in enumerate(hops, start=1):
-        if h.get("ip") == origin.get("ip"):
-            origin_idx = i
-            break
+    # Preserve the selected Received observation even when addresses repeat.
+    # A hop without a selected address does not establish a transmission candidate.
+    origin_idx = next((i for i, h in enumerate(hops, start=1) if h is origin), None) if ip else None
     mmd1 = attribution_graph(hops, origin_idx, dominfo.get("from_domain"))
     write_text(os.path.join(graphs_dir,"attribution.mmd"), mmd1)
     mmd2 = domain_graph(dominfo.get("from_domain"))
