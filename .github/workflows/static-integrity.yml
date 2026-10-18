@@ -306,6 +306,9 @@ jobs:
       - name: Verify legacy campaign listing matches passive CLI without source mutation
         run: python tests/integration_legacy_campaign_list_real.py
 
+      - name: Verify legacy geographic launcher uses passive configured reports
+        run: python tests/integration_legacy_geographic_real.py
+
       - name: Verify complete passive legacy interaction diagnostic and source admission
         run: python tests/integration_legacy_interaction_check_real.py
 
