@@ -19,12 +19,14 @@ modifications and actual deletions retain their existing comparison behavior.
 These are error/baseline contracts for one synchronous monitor instance, not a
 filesystem transaction, concurrency lock or persisted historical monitor. Owner
 admission remains unchanged. First scan still establishes an instance baseline.
-Inventory exclusions, links/special files, walk failures, resource admission,
+Inventory exclusions, links/special files, broader metadata failures, resource admission,
 concurrent writers and integrity-only verification error interpretation remain
 open. `verify_merkle_integrity`/`generate_integrity_report` and their compatibility
 statuses are unchanged; a hash-scan exception does not certify those separate
 verification outcomes. No database, collector, hash algorithm or output schema
 is added. Passive file checks still avoid campaign configuration and storage.
+The later [directory-read repair](sentinel-directory-read-failures.md) propagates
+errors delivered by the walk callback, without changing seal verification.
 
 Five unit contracts exercise real files/digests with explicitly injected denied,
 disappeared and mid-read failures, first/established per-case/all-case baselines,
@@ -35,7 +37,7 @@ The all-case rollback is tested independently of direct hash-error propagation.
 
 `integration_sentinel_hash_failures_real.py` creates a full original-EML case
 under no-egress with stopped supervision and a valid seal, plus a sealed local
-neighbor fixture. Three cold API and four CLI dispatch processes check actual
+neighbor fixture. Its hash-specific three cold API and four CLI dispatch processes check actual
 files, failure/recovery, preserved baselines and nonzero CLI failures without
 partial case check records. Existing CLI bootstrap precedes its guard because
 of its local socket capability probe; API module imports are guarded. All source
@@ -44,7 +46,7 @@ original case file. No campaign/configuration/collector imports, new threads or
 blocked network attempts occur during guarded dispatch. This establishes neither
 OS containment, authenticity, historical tampering nor classifier accuracy.
 
-On Windows/Python 3.13, the full serial unit suite passes 720 tests (712 passed,
+On Windows/Python 3.13, PR71's full serial unit suite passes 720 tests (712 passed,
 eight platform exclusions). The existing 18 local-file CLI scenarios also pass.
 An actual offline-built wheel matches all 90 current package Python sources,
 console entry points, Python metadata and both review templates. This is a

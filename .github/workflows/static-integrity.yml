@@ -303,7 +303,10 @@ jobs:
       - name: Verify hash read failures preserve per-case and selected-case baselines
         run: python -m unittest discover -s tests -p 'test_sentinel_hash_failures.py' -v
 
-      - name: Verify actual original-EML hash failure recovery and CLI error outcomes
+      - name: Verify directory walk errors preserve inventories and scan baselines
+        run: python -m unittest discover -s tests -p 'test_sentinel_walk_failures.py' -v
+
+      - name: Verify actual original-EML file and directory read failure recovery
         run: python tests/integration_sentinel_hash_failures_real.py
 
       - name: Verify offline campaign argument admission and actual stored mutations

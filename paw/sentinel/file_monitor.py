@@ -48,8 +48,10 @@ class FileMonitor:
             return []
 
         files = []
+        def scan_failed(error):
+            raise error
         # Walk through all subdirectories
-        for root, dirs, filenames in os.walk(case_path):
+        for root, dirs, filenames in os.walk(case_path, onerror=scan_failed):
             for filename in filenames:
                 # Skip certain file types
                 if filename.endswith(('.pyc', '__pycache__')) or filename.startswith('.'):

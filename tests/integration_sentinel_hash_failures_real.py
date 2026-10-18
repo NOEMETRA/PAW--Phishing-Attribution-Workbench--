@@ -1,4 +1,4 @@
-"""Actual stopped original-EML case; explicit hash failures, recovery and CLI errors."""
+"""Actual stopped original-EML case; file/directory read failures and recovery."""
 import json
 import os
 from pathlib import Path
@@ -10,8 +10,8 @@ import zipfile
 from integration_legacy_origin_update_real import REPO, seal_case, verify_case, snapshot
 
 
-def invoke(root,case,target,kind,cli=False):
-    code="""import builtins,contextlib,io,sys,threading
+def invoke(root,case,target,kind,cli=False,family='hash',action='files'):
+    code="""import builtins,contextlib,io,os,sys,threading
 sys.path.insert(0,%r)
 sys.path.insert(0,%r)
 from paw.core.network_policy import offline_policy,violations
@@ -19,24 +19,29 @@ from unittest.mock import patch
 if %r:
     # Existing CLI bootstrap probes local IPv6 support before guarded dispatch.
     from paw.__main__ import main
-    sys.argv=['paw','monitor','files']
+    sys.argv=['paw','monitor',%r]
 threads=set(threading.enumerate())
 try:
     with offline_policy():
         from test_sentinel_hash_failures import failing_open
+        from test_sentinel_walk_failures import failing_scandir
         kind=%r
         target=%r
-        expected={'denied':PermissionError,'missing':FileNotFoundError,'stream':OSError}
+        family=%r
+        expected={'denied':PermissionError,'missing':FileNotFoundError,'stream':OSError,'iterator':OSError}
+        def injected():
+            if family=='walk': return patch('os.scandir',failing_scandir(os.scandir,target,kind))
+            return patch('builtins.open',failing_open(builtins.open,target,kind))
         if %r:
             if kind:
-                with patch('builtins.open',failing_open(builtins.open,target,kind)): main()
+                with injected(): main()
             else: main()
         else:
             from paw.sentinel.file_monitor import FileMonitor
             monitor=FileMonitor(%r)
             monitor.check_file_changes(%r)
             baseline=dict(monitor._baseline_hashes)
-            with patch('builtins.open',failing_open(builtins.open,target,kind)):
+            with injected():
                 try: monitor.check_file_changes(%r)
                 except expected[kind]: pass
                 else: raise AssertionError('Failed read became a case result')
@@ -46,7 +51,7 @@ try:
             assert not any(recovered[k] for k in ('new_files','modified_files','deleted_files')),recovered
             fresh=FileMonitor(%r)
             printed=io.StringIO()
-            with contextlib.redirect_stdout(printed),patch('builtins.open',failing_open(builtins.open,target,kind)):
+            with contextlib.redirect_stdout(printed),injected():
                 try: fresh.monitor_all_cases()
                 except expected[kind]: pass
                 else: raise AssertionError('Failed all-case scan returned success')
@@ -60,7 +65,7 @@ finally:
     for name in ('config','database','monitor','ip_analyzer','intelligence_analyzer','geographic_reports'):
         assert 'paw.sentinel.'+name not in sys.modules,name
     print('HASH_FAILURE_SOURCE_AND_BASELINE_CHECK_OK',file=sys.stderr)
-""" % (str(REPO),str(REPO/'tests'),cli,kind,str(target),cli,str(root/'cases'),case.name,
+""" % (str(REPO),str(REPO/'tests'),cli,action,kind,str(target),family,cli,str(root/'cases'),case.name,
            case.name,case.name,str(root/'cases'))
     env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1',PYTHONUTF8='1')
     env.pop('PYTHONPATH',None)
@@ -70,8 +75,10 @@ finally:
     assert 'HASH_FAILURE_SOURCE_AND_BASELINE_CHECK_OK' in output,output
     if cli and kind:
         assert result.returncode!=0 and '[file_monitor] Case ' not in output,output
+        assert 'File Integrity Report:' not in output,output
     else: assert result.returncode==0,output
-    return {'entry':'CLI' if cli else 'API','fault':kind,'exit':result.returncode}
+    return {'entry':'CLI' if cli else 'API','family':family,'action':action,'fault':kind,
+            'target':target.relative_to(case).as_posix(),'exit':result.returncode}
 
 
 def main():
@@ -100,6 +107,14 @@ def main():
             for cli in (False,True):
                 checks.append(invoke(root,case,case/'input.eml',kind,cli))
                 assert snapshot(root)==before,(kind,cli)
+        for target in (case,case/'graphs'):
+            assert target.is_dir(),target
+            for kind in ('denied','iterator'):
+                for cli in (False,True):
+                    checks.append(invoke(root,case,target,kind,cli,family='walk'))
+                    assert snapshot(root)==before,(target,kind,cli)
+                checks.append(invoke(root,case,target,kind,True,family='walk',action='integrity'))
+                assert snapshot(root)==before,(target,kind,'integrity')
         checks.append(invoke(root,case,case/'input.eml',None,True))
         assert snapshot(root)==before
         result=subprocess.run([sys.executable,'-X','utf8','-m','paw','export','--case',str(case),
@@ -112,7 +127,7 @@ def main():
         assert verify_case(str(case)) and verify_case(str(neighbor))
     print(json.dumps({'status':'passed','checks':checks,
         'actual_full_original_eml_analyses':1,'actual_cli_zip_export':True,
-        'scope':'Actual files, digests, saved case seals and original ZIP bytes. Open/disappearance/mid-read failures are explicitly injected; this is not an OS ACL or live deletion race. Three cold API and four guarded CLI dispatch processes check failure/recovery and baseline preservation. CLI bootstrap precedes guard; not OS containment, concurrent-writer snapshot, authenticity or classifier accuracy.'},indent=2))
+        'scope':'Actual files, digests, directory inventories, saved seals and original ZIP bytes. File open/disappearance/mid-read and root/nested scandir open/iteration failures are explicitly injected, not OS ACL or live races. Seven cold API and twelve guarded CLI dispatch processes check failure/recovery, baseline preservation and failed integrity-report admission. CLI bootstrap precedes guard; not OS containment, concurrent-writer snapshot, authenticity or classifier accuracy.'},indent=2))
 
 
 if __name__=='__main__':
