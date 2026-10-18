@@ -73,13 +73,37 @@ error; directory creation failures also propagate. Returned `output_files` lists
 only completed requested writes and is added after saving, so it is not part of
 the saved JSON body or a signed publication manifest.
 
-The default writable analyzer constructor, other statistical/lifecycle consumers
-and the external `generate_geo_report.py` launcher remain outside this contract.
+The default writable analyzer constructor and other statistical/lifecycle consumers
+remain outside this contract.
 Complete selected-row size/resource limits and general non-JSON storage support
 remain open S11 work. Passive reads are not an atomic concurrent-writer snapshot.
 The Python no-egress guard is application policy, not OS isolation.
 
 ## Verification
+
+### Legacy checkout launcher
+
+`generate_geo_report.py` forwards arguments to `paw geographic report`, using the
+same configured passive database reader and existing report writer. Its former
+hardcoded database/case and duplicate `PAW/reports/geographic` JSON copy are
+removed. With no options it selects all stored cases; use `--case` for an exact
+case, including an empty literal value. `--output` and `--min-confidence` keep the
+canonical command's existing meanings. Output stays in `reports/geographic`.
+Missing or invalid sources fail explicitly; help and rejected arguments do not
+create storage or reports. Import alone does not load PAW or change arguments.
+
+An actual baseline `--help` invocation under application no-egress created a
+new database and three reports, and imported the IP analyzer. The focused
+`integration_legacy_geographic_real.py` regression fails before the alias repair.
+After it, 17 paired legacy/canonical scenarios check real saved/legacy SQLite,
+complete rows, literal case selection, filters, JSON/HTML, missing/corrupt/config/
+WAL/journal/output failures, source and existing-report byte preservation, inert
+import and direct help. Only invocation timestamps and output names differ.
+Guarded dispatch bootstraps the existing CLI before applying the network policy;
+it does not establish cold-bootstrap or OS isolation. No geographic algorithm,
+schema, collector, renderer or identity/risk capability is added.
+
+### Canonical paths
 
 `test_sentinel_geographic_report.py` exercises actual SQLite storage, complete
 older-case selection, legacy layouts, typed malformed JSON, confidence and country
