@@ -324,6 +324,12 @@ jobs:
       - name: Verify actual saved campaign layouts through API and CLI consumers
         run: python tests/integration_sentinel_campaign_columns_real.py
 
+      - name: Verify named check and alert history columns
+        run: python -m unittest discover -s tests -p 'test_sentinel_history_columns.py' -v
+
+      - name: Verify actual saved history layouts through cold API readers
+        run: python tests/integration_sentinel_history_columns_real.py
+
       - name: Verify legacy campaign listing matches passive CLI without source mutation
         run: python tests/integration_legacy_campaign_list_real.py
 

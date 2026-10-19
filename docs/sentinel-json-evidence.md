@@ -10,6 +10,10 @@ the correction; they are not claims about independently labeled phishing data.
 
 ## Reader contract
 
+JSON provenance relies on the correct source column. Subsequent
+[campaign](sentinel-campaign-columns.md) and [check/alert](sentinel-history-columns.md)
+projection repairs bind those record fields across physical table layouts.
+
 The existing campaign/check/alert metadata and six interaction JSON fields now
 use one decoder. Each returned record adds `json_evidence` with
 `schema_version: 1` and `fields` keyed by the existing JSON column name. Each
