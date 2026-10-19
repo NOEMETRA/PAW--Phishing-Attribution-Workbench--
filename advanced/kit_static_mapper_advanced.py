@@ -1,17 +1,8 @@
 #!/usr/bin/env python3
-"""
-ADVANCED Kit Static Mapper - TTP Extraction & Criminal Infrastructure Analysis (standalone)
+"""Legacy kit case publication is unavailable; saved sources and outputs are preserved.
 
-Offline-only. Scans local artifacts:
-- <case>/detonation/phishing_kit/**/*
-- <case>/deobfuscation_results.json (optional)
-- <case>/input.eml (optional)
-
-Outputs under <case>/derived:
-- ttp_analysis.json: MITRE ATT&CK mapping
-- criminal_fingerprint.json: Dark-web/C2/crypto indicators
-- deobfuscation_cascade.json: Base64/charcode/XOR attempts found
-- threat_actor_profile.json: Lightweight sophistication/scale profile
+Internal prototype scanners/interpretations remain unvalidated. The separately
+tested package kit analyzer provides supplied static observations.
 """
 from __future__ import annotations
 import argparse
@@ -22,6 +13,10 @@ import sys
 from pathlib import Path
 from typing import Dict, List, Any, Set
 from urllib.parse import unquote
+
+
+UNAVAILABLE = ('Legacy kit publication unavailable: saved case '
+               'sources and prior outputs are preserved')
 
 
 # Patterns
@@ -304,25 +299,18 @@ def scan_case(case_dir: Path) -> Dict[str, Any]:
 
 
 def write_outputs(case_dir: Path, res: Dict[str, Any]):
-    out = case_dir / 'derived'
-    out.mkdir(parents=True, exist_ok=True)
-    (out / 'ttp_analysis.json').write_text(json.dumps(res['ttp_analysis'], indent=2), encoding='utf-8')
-    (out / 'criminal_fingerprint.json').write_text(json.dumps(res['criminal_infrastructure'], indent=2), encoding='utf-8')
-    (out / 'deobfuscation_cascade.json').write_text(json.dumps(res['deobfuscation_chains'], indent=2), encoding='utf-8')
-    (out / 'threat_actor_profile.json').write_text(json.dumps(res['threat_actor_profile'], indent=2), encoding='utf-8')
-    print(str(out / 'ttp_analysis.json'))
+    """Reject the former case writer before inspecting any argument."""
+    raise RuntimeError(UNAVAILABLE)
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser()
-    ap.add_argument('case_dir', type=Path)
-    args = ap.parse_args(argv)
-    if not args.case_dir.exists():
-        print(f"[!] Case not found: {args.case_dir}", file=sys.stderr)
-        return 2
-    res = scan_case(args.case_dir)
-    write_outputs(args.case_dir, res)
-    return 0
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False,
+        epilog='Saved kit sources, case files and prior outputs are preserved. '
+               'Legacy kit publication requires source/output admission and '
+               'versioning; no case files are accessed.')
+    parser.add_argument('case_dir', help='Legacy case path; no case files will be accessed')
+    parser.parse_args(argv)
+    parser.exit(1, UNAVAILABLE + '\n')
 
 
 if __name__ == '__main__':

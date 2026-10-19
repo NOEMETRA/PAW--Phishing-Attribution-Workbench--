@@ -6,6 +6,10 @@ losing observations, and produced HTTP/POST attacker-fingerprint defaults even
 with no input. Its duplicate `analyze_kit_patterns` implementations are replaced
 by one explicit unavailable-attribution boundary.
 
+The separate [legacy kit case publishers](legacy-kit-publication.md) are
+explicitly unavailable before source/output access. This package helper does not
+automatically ingest or authenticate their saved graphs, TTPs or actor profiles.
+
 Schema version 2 keeps static observations in `observations`, with a source
 index, literal/parser value, context and position. Source records identify the
 content type and list index. HTML attributes retain duplicate occurrences,
