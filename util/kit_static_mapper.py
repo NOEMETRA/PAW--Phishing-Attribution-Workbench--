@@ -1,21 +1,8 @@
 #!/usr/bin/env python3
-"""
-Offline static mapper for phishing kit artifacts in a PAW case directory.
+"""Legacy kit case publication is unavailable; saved sources and outputs are preserved.
 
-Scans only local files, no network calls.
-
-Sources:
-- <case>/detonation/phishing_kit/**/* (HTML/JS/CSS/images)
-- <case>/deobfuscation_results.json (if present)
-- <case>/input.eml (for URLs/emails)
-
-Outputs (under <case>/derived):
-- indicators_from_kit.csv: type,value,file,context
-- kit_graph.json: minimal graph of file->url/ip/email relationships
-- kit_graph.mmd: Mermaid diagram of relationships (file -> indicator nodes)
-
-Usage:
-  python PAW/util/kit_static_mapper.py cases/<case-id>
+Internal prototype scanners/interpretations remain unvalidated. The separately
+tested package kit analyzer provides supplied static observations.
 """
 from __future__ import annotations
 import argparse
@@ -26,6 +13,10 @@ import re
 import sys
 from pathlib import Path
 from urllib.parse import unquote
+
+
+UNAVAILABLE = ('Legacy kit publication unavailable: saved case '
+               'sources and prior outputs are preserved')
 
 
 URL_RE = re.compile(r"https?://[\w\-._~%:/?#\[\]@!$&'()*+,;=]+", re.IGNORECASE)
@@ -165,53 +156,18 @@ def scan_case(case_dir: Path) -> tuple[list[dict], dict]:
 
 
 def write_outputs(case_dir: Path, indicators: list[dict], graph: dict):
-    out_dir = case_dir / "derived"
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    # CSV
-    csv_path = out_dir / "indicators_from_kit.csv"
-    with csv_path.open("w", newline="", encoding="utf-8") as f:
-        w = csv.DictWriter(f, fieldnames=["type", "value", "file", "context"])
-        w.writeheader()
-        for row in indicators:
-            w.writerow(row)
-
-    # Graph JSON
-    (out_dir / "kit_graph.json").write_text(json.dumps(graph, indent=2), encoding="utf-8")
-
-    # Mermaid
-    mmd_lines = ["graph LR"]
-    # nodes
-    for node_id, meta in graph.get("nodes", {}).items():
-        label = meta.get("label", node_id).replace("\"", "'")
-        # sanitize node id for mermaid
-        nid = re.sub(r"[^a-zA-Z0-9_]", "_", node_id)[:120]
-        mmd_lines.append(f"  {nid}[\"{label}\"]")
-        meta["_nid"] = nid
-    # edges
-    for e in graph.get("edges", []):
-        s = graph["nodes"].get(e["from"], {}).get("_nid")
-        t = graph["nodes"].get(e["to"], {}).get("_nid")
-        if s and t:
-            mmd_lines.append(f"  {s} --> {t}")
-    (out_dir / "kit_graph.mmd").write_text("\n".join(mmd_lines) + "\n", encoding="utf-8")
-
-    print(str(csv_path))
+    """Reject the former case writer before inspecting any argument."""
+    raise RuntimeError(UNAVAILABLE)
 
 
 def main(argv=None):
-    ap = argparse.ArgumentParser()
-    ap.add_argument("case_dir", type=Path)
-    args = ap.parse_args(argv)
-
-    case_dir: Path = args.case_dir
-    if not case_dir.exists():
-        print(f"[!] Case not found: {case_dir}", file=sys.stderr)
-        return 2
-
-    indicators, graph = scan_case(case_dir)
-    write_outputs(case_dir, indicators, graph)
-    return 0
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False,
+        epilog='Saved kit sources, case files and prior outputs are preserved. '
+               'Legacy kit publication requires source/output admission and '
+               'versioning; no case files are accessed.')
+    parser.add_argument('case_dir', help='Legacy case path; no case files will be accessed')
+    parser.parse_args(argv)
+    parser.exit(1, UNAVAILABLE + '\n')
 
 
 if __name__ == "__main__":

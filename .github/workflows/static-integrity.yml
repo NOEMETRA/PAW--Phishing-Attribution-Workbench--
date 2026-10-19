@@ -366,6 +366,12 @@ jobs:
       - name: Verify actual original-EML and explicit output preservation for legacy host writers
         run: python tests/integration_legacy_hosts_real.py
 
+      - name: Verify legacy kit publication rejects before case/argument access
+        run: python -m unittest discover -s tests -p 'test_legacy_kit_publication.py' -v
+
+      - name: Verify actual original-EML preservation across legacy kit writers
+        run: python tests/integration_legacy_kits_real.py
+
   archive-runtime-compatibility:
     runs-on: ubuntu-latest
     timeout-minutes: 5
