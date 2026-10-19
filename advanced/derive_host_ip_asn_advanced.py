@@ -1,12 +1,8 @@
 #!/usr/bin/env python3
-"""
-ADVANCED Host→IP→ASN Enricher (standalone, offline-only)
+"""Legacy host/IP/ASN case publication is unavailable; saved sources and outputs are preserved.
 
-Reads <case>/derived/host_ip_asn.csv (from base util) and derives:
-- threat_intel_enriched.csv: Adds risk_score, risk_level, provider_type, notes
-- threat_assessment_report.json: Roll-up counts, high-risk entries, provider blocks
-
-Heuristics are conservative and offline. No external lookups.
+Internal prototype readers/heuristics remain unvalidated. No lookup or source
+conversion is performed by these unavailable publication entry points.
 """
 from __future__ import annotations
 import argparse
@@ -14,6 +10,10 @@ import csv
 import json
 from pathlib import Path
 from typing import Dict, Any, List
+
+
+UNAVAILABLE = ('Legacy host/IP/ASN publication unavailable: saved case '
+               'sources and prior outputs are preserved')
 
 
 CDN_ASNS = {
@@ -75,64 +75,18 @@ def compute_risk(row: Dict[str, str]) -> Dict[str, Any]:
 
 
 def enrich(case_dir: Path) -> Dict[str, Any]:
-    derived = case_dir / 'derived'
-    src = derived / 'host_ip_asn.csv'
-    out_csv = derived / 'threat_intel_enriched.csv'
-    report_json = derived / 'threat_assessment_report.json'
-
-    rows: List[Dict[str, str]] = []
-    if not src.exists():
-        raise FileNotFoundError(f"Missing input: {src}")
-    with src.open('r', encoding='utf-8', newline='') as f:
-        reader = csv.DictReader(f)
-        for r in reader:
-            rows.append(r)
-
-    enriched: List[Dict[str, Any]] = []
-    summary = {
-        'total': 0,
-        'by_risk': {'HIGH': 0, 'MEDIUM': 0, 'LOW': 0},
-        'provider_blocks': {'waf_403': 0, 'legal_451': 0},
-        'cdn_links': 0,
-        'high_risk_examples': [],
-    }
-
-    for r in rows:
-        meta = compute_risk(r)
-        combined = {**r, **meta}
-        enriched.append(combined)
-        summary['total'] += 1
-        summary['by_risk'][meta['risk_level']] += 1
-        hb = (r.get('http_block') or '').lower()
-        if 'waf_cloudflare_403' in hb or 'waf_cloudfront_403' in hb:
-            summary['provider_blocks']['waf_403'] += 1
-        if 'legal_denied_451' in hb or (r.get('http_status') or '') == '451':
-            summary['provider_blocks']['legal_451'] += 1
-        if meta['provider_type'].startswith('cdn:'):
-            summary['cdn_links'] += 1
-        if meta['risk_level'] == 'HIGH' and len(summary['high_risk_examples']) < 10:
-            summary['high_risk_examples'].append({k: combined.get(k, '') for k in ['host','ip','asn','org','http_status','http_block','risk_score','notes']})
-
-    # Write outputs
-    if enriched:
-        with out_csv.open('w', encoding='utf-8', newline='') as f:
-            fieldnames = list(enriched[0].keys())
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerows(enriched)
-    else:
-        out_csv.write_text('', encoding='utf-8')
-
-    report_json.write_text(json.dumps(summary, indent=2), encoding='utf-8')
-    return {'csv': str(out_csv), 'report': str(report_json)}
+    """Reject the former case writer before inspecting its argument."""
+    raise RuntimeError(UNAVAILABLE)
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument('case_dir', type=Path)
-    args = ap.parse_args()
-    res = enrich(args.case_dir)
-    print(res['csv'])
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False,
+        epilog='Saved case sources and prior outputs are preserved. Legacy host/IP/ASN '
+               'publication requires source/output admission and versioning; '
+               'no case or output file is accessed.')
+    parser.add_argument('case_dir', help='Legacy case path; no case files will be accessed')
+    parser.parse_args(argv)
+    parser.exit(1, UNAVAILABLE + '\n')
 
 
 if __name__ == '__main__':
