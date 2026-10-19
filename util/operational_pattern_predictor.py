@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
-"""
-OPERATIONAL PATTERN PREDICTOR - Predictive Threat Intelligence (REAL)
-Analizza dati reali da: threat_intel_enriched.csv, attribution_matrix.json, host_ip_asn.csv
+"""Legacy operational prediction is unavailable; saved sources and outputs are preserved.
+
+Internal prototype helpers remain unvalidated and are not a predictive model.
+No actor forecast, calibrated confidence or intervention recommendation is supported.
 """
 import json
-import numpy as np
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Any
 import argparse
 import csv
+
+
+UNAVAILABLE = ('Legacy operational prediction unavailable: saved case '
+               'sources and prior outputs are preserved')
 
 
 class ThreatActorBehaviorModel:
@@ -30,27 +34,8 @@ class ThreatActorBehaviorModel:
         }
 
     def predict_infrastructure_evolution(self, case_data: Dict) -> Dict:
-        """Predict criminal infrastructure evolution from REAL data"""
-        current_infra = self.extract_infrastructure_data(case_data)
-        
-        if not current_infra.get('hosts'):
-            return {'error': 'No infrastructure data found', 'confidence': 0.0}
-        
-        actor_type = self.classify_threat_actor(current_infra)
-        pattern = self.actor_patterns.get(actor_type, {})
-        
-        predictions = {
-            'predicted_actor_type': actor_type,
-            'confidence': self.calculate_classification_confidence(current_infra, actor_type),
-            'infrastructure_lifespan_days': pattern.get('infrastructure_lifespan', 60),
-            'next_rotations': self.predict_rotation_schedule(current_infra, pattern),
-            'infrastructure_expansion': self.predict_expansion_patterns(current_infra),
-            'vulnerability_windows': self.identify_vulnerability_windows(current_infra),
-            'recommended_intervention_points': self.suggest_intervention_points(current_infra, pattern)
-        }
-        
-        predictions['timeline_predictions'] = self.generate_prediction_timeline(predictions)
-        return predictions
+        """Unavailable before inspecting case data or generating predictions."""
+        raise RuntimeError(UNAVAILABLE)
 
     def extract_infrastructure_data(self, case_data: Dict) -> Dict:
         """Extract REAL infrastructure data from case files"""
@@ -139,6 +124,7 @@ class ThreatActorBehaviorModel:
 
     def classify_threat_actor(self, infrastructure: Dict) -> str:
         """Classify threat actor based on REAL infrastructure patterns"""
+        import numpy as np
         if not infrastructure.get('hosts'):
             return 'unknown'
         
@@ -183,6 +169,7 @@ class ThreatActorBehaviorModel:
 
     def calculate_rotation_confidence(self, infrastructure: Dict, days: int) -> float:
         """Calculate REAL confidence for rotation predictions"""
+        import numpy as np
         confidence_factors = []
         
         # Factor 1: ASN diversity (more diverse = more likely to rotate)
@@ -278,42 +265,15 @@ class ThreatActorBehaviorModel:
         return [{'time': datetime.now().isoformat(), 'event': 'prediction_generated'}]
 
 
-def main():
-    parser = argparse.ArgumentParser(description='Operational Pattern Predictor - REAL')
-    parser.add_argument('case_dir', type=str, help='Path to case directory')
-    parser.add_argument('--output', '-o', type=str, default=None, help='Output file path')
-    
-    args = parser.parse_args()
-    
-    case_dir = Path(args.case_dir)
-    if not case_dir.exists():
-        print(f"[!] Case directory not found: {case_dir}")
-        return 1
-    
-    # Initialize predictor with REAL data
-    predictor = ThreatActorBehaviorModel()
-    
-    # Generate predictions from REAL data
-    case_data = {'case_dir': str(case_dir)}
-    predictions = predictor.predict_infrastructure_evolution(case_data)
-    
-    # Determine output path
-    output_path = args.output
-    if not output_path:
-        output_dir = case_dir / "derived"
-        output_dir.mkdir(exist_ok=True)
-        output_path = output_dir / "operational_predictions.json"
-    
-    # Save REAL predictions
-    with open(output_path, 'w', encoding='utf-8') as f:
-        json.dump(predictions, f, indent=2, ensure_ascii=False)
-    
-    print(f"[+] REAL Operational predictions saved to: {output_path}")
-    print(f"    - Predicted actor type: {predictions.get('predicted_actor_type')}")
-    print(f"    - Confidence: {predictions.get('confidence', 0):.2f}")
-    print(f"    - Infrastructure hosts analyzed: {predictions.get('infrastructure_expansion', {}).get('current_infrastructure_size', 0)}")
-    
-    return 0
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False,
+        epilog='Saved case sources and prior outputs are preserved. Operational '
+               'prediction needs independently validated evidence/model and '
+               'versioned publication; no case or output file is accessed.')
+    parser.add_argument('case_dir', help='Legacy case path; no case files will be accessed')
+    parser.add_argument('--output', '-o', help='Legacy output path; no file will be created or overwritten')
+    parser.parse_args(argv)
+    parser.exit(1, UNAVAILABLE + '\n')
 
 
 if __name__ == "__main__":
