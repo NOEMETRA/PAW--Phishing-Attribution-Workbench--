@@ -1,15 +1,8 @@
 #!/usr/bin/env python3
-"""
-ADVANCED Tracker Analytics (standalone, offline-only)
+"""Legacy tracker case publication is unavailable; saved sources and outputs are preserved.
 
-Inputs under <case>/derived (from base util):
-- trackers.csv (domain, count, ids?, etc.)
-- tracker_ids.json (optional rich IDs)
-
-Outputs:
-- behavioral_fingerprint.json: which trackers, how often, role hint
-- campaign_intelligence.json: extracted campaign IDs and groupings
-- audience_targeting.json: inferred categories (very conservative)
+Internal prototype readers/interpretations remain unvalidated. The separately
+tested package tracker extractor provides supplied static observations.
 """
 from __future__ import annotations
 import argparse
@@ -17,6 +10,10 @@ import csv
 import json
 from pathlib import Path
 from typing import Dict, Any
+
+
+UNAVAILABLE = ('Standalone tracker publication unavailable: saved case '
+               'sources and prior outputs are preserved')
 
 
 TRACKER_ROLES = {
@@ -103,23 +100,18 @@ def audience_targeting(summary) -> Dict[str, Any]:
 
 
 def write_outputs(case_dir: Path, behav, intel, aud):
-    derived = case_dir / 'derived'
-    derived.mkdir(parents=True, exist_ok=True)
-    (derived / 'behavioral_fingerprint.json').write_text(json.dumps(behav, indent=2), encoding='utf-8')
-    (derived / 'campaign_intelligence.json').write_text(json.dumps(intel, indent=2), encoding='utf-8')
-    (derived / 'audience_targeting.json').write_text(json.dumps(aud, indent=2), encoding='utf-8')
-    print(str(derived / 'behavioral_fingerprint.json'))
+    """Reject the former in-place writer before inspecting its arguments."""
+    raise RuntimeError(UNAVAILABLE)
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument('case_dir', type=Path)
-    args = ap.parse_args()
-    trackers, ids = load_trackers(args.case_dir)
-    behav = behavioral_fingerprint(trackers, ids)
-    intel = campaign_intel(ids)
-    aud = audience_targeting(behav)
-    write_outputs(args.case_dir, behav, intel, aud)
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False,
+        epilog='Saved request logs, case files and prior outputs are preserved. '
+               'Standalone tracker publication requires a separate source/output '
+               'admission and versioning contract; no case files are accessed.')
+    parser.add_argument('case_dir', help='Legacy case path; no case files will be accessed')
+    parser.parse_args(argv)
+    parser.exit(1, UNAVAILABLE + '\n')
 
 
 if __name__ == '__main__':

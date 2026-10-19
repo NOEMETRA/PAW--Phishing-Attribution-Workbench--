@@ -354,6 +354,12 @@ jobs:
       - name: Verify forensic prototypes reject while actual case verification and ZIP remain intact
         run: python tests/integration_legacy_quantum_real.py
 
+      - name: Verify legacy tracker publication rejects before case access
+        run: python -m unittest discover -s tests -p 'test_legacy_tracker_publication.py' -v
+
+      - name: Verify actual original-EML preservation across legacy tracker writers
+        run: python tests/integration_legacy_trackers_real.py
+
   archive-runtime-compatibility:
     runs-on: ubuntu-latest
     timeout-minutes: 5

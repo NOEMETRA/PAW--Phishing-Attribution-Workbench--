@@ -5,6 +5,10 @@ HTML/JavaScript strings and a supplied list of log dictionaries. It never reads
 capture files, fetches URLs, resolves DNS, runs JavaScript or observes a browser.
 The supplied log records themselves are not independently authenticated events.
 
+The separate [legacy case publishers](legacy-tracker-publication.md) are
+explicitly unavailable before case access. Their CSV/ID/behavioral products are
+not inputs automatically validated or migrated by this extractor.
+
 Baseline failures reproduced on merged PR42 (`fb832c0`): the helper returned
 `trackers_found` while its actual matrix consumer read `trackers`, losing all
 matches; filenames/domain references became tracker IDs; substring matching
