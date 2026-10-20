@@ -330,6 +330,12 @@ jobs:
       - name: Verify actual saved history layouts through cold API readers
         run: python tests/integration_sentinel_history_columns_real.py
 
+      - name: Verify local campaign effects, file admission and baseline concurrency
+        run: python -m unittest discover -s tests -p 'test_sentinel_storage_family.py' -v
+
+      - name: Verify actual original-EML Sentinel local storage family
+        run: python tests/integration_sentinel_storage_family_real.py
+
       - name: Verify legacy campaign listing matches passive CLI without source mutation
         run: python tests/integration_legacy_campaign_list_real.py
 

@@ -68,11 +68,7 @@ class SentinelMonitor:
 
     def remove_campaign(self, campaign_id: str) -> bool:
         """Remove a campaign from monitoring."""
-        campaign = self.db.get_campaign(campaign_id)
-        if campaign:
-            self.db.update_campaign_status(campaign_id, "removed")
-            return True
-        return False
+        return self.db.remove_campaign(campaign_id)
 
     def get_campaign_status(self, campaign_id: str) -> Optional[Dict[str, Any]]:
         """Get current status of a campaign."""

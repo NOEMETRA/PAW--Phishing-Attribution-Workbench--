@@ -33,13 +33,16 @@ of tampering. The existing `ok`/`compromised`/`unknown` compatibility labels des
 verification outcomes, not authenticated email claims or a proven intrusion.
 Missing seals remain unknown. No report is persisted to a campaign database.
 
-This is a focused admission correction, not a replacement file-inventory engine.
-Existing listing exclusions (hidden names, `.pyc` and symbolic-link files) remain
-unchanged; returned file counts are not a full forensic inventory. The later
-[hash-read failure correction](sentinel-file-hash-failures.md) propagates read
-errors and preserves scan baselines. The [directory-read repair](sentinel-directory-read-failures.md)
-propagates errors exposed by the walk callback. General metadata/special-file/link/resource
-admission and concurrent-writer snapshots remain open audit work. Seal
+The original admission repair was not a replacement inventory engine. The later
+[local storage family](sentinel-local-storage-family.md) binds relative roots once,
+rejects parent/absolute case IDs and linked/reparse/special-file paths, adds
+selected file/count/byte limits, checks metadata correspondence around reads and
+serializes same-instance baseline scans. Existing hidden-name/pyc exclusions
+remain; counts are scoped observations rather than a complete forensic inventory.
+The [hash-read failure correction](sentinel-file-hash-failures.md) and
+[directory-read repair](sentinel-directory-read-failures.md) still propagate
+ordinary read failures and preserve baselines; final-source regressions retain
+these contracts. Broader resources and cross-process snapshots remain open. Seal
 verification [exceptions now remain unknown](sentinel-verification-availability.md);
 shared verifier semantics retain separate S08 limitations, including unsupported proof
 authenticity claims.
