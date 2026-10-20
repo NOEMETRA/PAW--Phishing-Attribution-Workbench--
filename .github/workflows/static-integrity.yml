@@ -378,6 +378,12 @@ jobs:
       - name: Verify actual original-EML and output preservation for legacy predictors
         run: python tests/integration_legacy_predictions_real.py
 
+      - name: Verify legacy conclusion publishers and principal APIs reject before access
+        run: python -m unittest discover -s tests -p 'test_legacy_conclusion_boundary.py' -v
+
+      - name: Verify actual original-EML preservation across all remaining conclusion publishers
+        run: python tests/integration_legacy_conclusions_real.py
+
   archive-runtime-compatibility:
     runs-on: ubuntu-latest
     timeout-minutes: 5

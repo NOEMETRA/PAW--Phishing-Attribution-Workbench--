@@ -1,7 +1,8 @@
-"""
-PAW Input Validation Framework
-Provides comprehensive validation for all user inputs to prevent injection attacks,
-path traversal, and malformed data.
+"""Unused legacy validation helpers; no supported operational entry point.
+
+These algorithms are unvalidated and are not PAW admission or containment.
+No tracked production consumer was identified. Retained for inspection only;
+see docs/legacy-conclusion-publication.md.
 """
 
 import os

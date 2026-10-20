@@ -1,17 +1,9 @@
 #!/usr/bin/env python3
-"""
-ATTRIBUTION CONFIRMATION ENGINE - Scientific Attribution Validation (offline)
+"""Legacy conclusion prototype: publication and principal APIs are unavailable.
 
-Outputs:
-- scientific_attribution.json
-- attribution_confidence_matrix.json
-- evidence_chain.json
-
-Inputs (optional):
-- <case>/detonation/phishing_kit/**/*
-- <case>/derived/ttp_analysis.json
-- <case>/derived/criminal_fingerprint.json
-- <case>/derived/deobfuscation_cascade.json
+Saved sources and prior outputs are preserved. Remaining helper algorithms are
+unvalidated research code, not supported attribution, deployment or provenance
+verification. See docs/legacy-conclusion-publication.md for the exact boundary.
 """
 from __future__ import annotations
 import argparse
@@ -20,6 +12,8 @@ import re
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import List, Dict, Any
+
+UNAVAILABLE = 'Legacy conclusion publication unavailable: saved case sources and prior outputs are preserved'
 
 
 @dataclass
@@ -113,23 +107,8 @@ def analyze_infrastructure_dna(derived_dir: Path) -> List[AttributionEvidence]:
 
 
 def confidence_matrix(evidences: List[AttributionEvidence]) -> Dict[str, Any]:
-    if not evidences:
-        return {
-            'overall_confidence': 0.3,
-            'evidence_strength_breakdown': {},
-            'scientific_validation_score': 0.5,
-            'forensic_integrity_score': 0.95,
-            'reproducibility_metrics': {'n': 0, 'avg': 0}
-        }
-    avg_conf = sum(e.confidence for e in evidences) / len(evidences)
-    avg_repr = sum(e.reproducibility_score for e in evidences) / len(evidences)
-    return {
-        'overall_confidence': round(min(avg_conf * 0.9, 0.95), 2),
-        'evidence_strength_breakdown': {e.evidence_type: e.confidence for e in evidences},
-        'scientific_validation_score': round(min(avg_repr, 0.95), 2),
-        'forensic_integrity_score': 0.98,
-        'reproducibility_metrics': {'n': len(evidences), 'avg': round(avg_repr, 2)}
-    }
+    """Unavailable pending sourced, validated capability and publication contracts."""
+    raise RuntimeError(UNAVAILABLE)
 
 
 def evidence_chain(case_dir: Path) -> Dict[str, Any]:
@@ -148,24 +127,14 @@ def evidence_chain(case_dir: Path) -> Dict[str, Any]:
     return {'chain': blocks, 'note': 'Logical chain for human-verifiable provenance (no external trust)'}
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument('case_dir', type=Path)
-    args = ap.parse_args()
-    kit_dir = args.case_dir / 'detonation' / 'phishing_kit'
-    derived = args.case_dir / 'derived'
-    evs: List[AttributionEvidence] = []
-    evs += analyze_linguistic_fingerprint(kit_dir)
-    evs += analyze_code_style(kit_dir)
-    evs += analyze_infrastructure_dna(derived)
-    evidences_json = [asdict(e) for e in evs]
-    cm = confidence_matrix(evs)
-    chain = evidence_chain(args.case_dir)
-    derived.mkdir(parents=True, exist_ok=True)
-    (derived / 'scientific_attribution.json').write_text(json.dumps(evidences_json, indent=2), encoding='utf-8')
-    (derived / 'attribution_confidence_matrix.json').write_text(json.dumps(cm, indent=2), encoding='utf-8')
-    (derived / 'evidence_chain.json').write_text(json.dumps(chain, indent=2), encoding='utf-8')
-    print(str(derived / 'scientific_attribution.json'))
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False,
+        epilog='Saved case sources and prior outputs are preserved. Attribution, '
+               'countermeasures and dossier publication need validated source '
+               'and publication contracts; no case or output file is accessed.')
+    parser.add_argument('case_dir', help='Legacy case path; no case files will be accessed')
+    parser.parse_args(argv)
+    parser.exit(1, UNAVAILABLE + '\n')
 
 
 if __name__ == '__main__':
