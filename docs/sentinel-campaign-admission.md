@@ -18,7 +18,12 @@ legacy table cannot silently select the first row.
 Accepted add/remove commands use the existing default database writer, including
 its initialization/migration behavior. Removal updates only the selected ID with
 the same case and active status; a zero-row update fails instead of claiming
-success after the selected campaign disappears or changes status. No network
+success after the selected campaign disappears or changes status. The later
+[local storage family](sentinel-local-storage-family.md) shares the transactional
+transition with the direct API, rechecks ambiguity inside the write transaction
+and confirms final status before acknowledgment. Adds validate nonblank strings
+and finite object metadata and enforce case uniqueness even on legacy tables
+without the constraint; initial active status is explicit without a schema default. No network
 monitor is constructed, collector invoked or service started by these commands.
 `check` remains the separate active path deferred to S14.
 
@@ -34,7 +39,8 @@ live concurrent-writer containment.
 The Python network guard covers dispatch after ordinary CLI bootstrap; it is not
 an OS sandbox or cold-import network attestation. Writer admission still uses the
 default schema initializer, and selection plus writer opening is not an atomic
-source snapshot. Broader writer/concurrency/resource/link admission, API mutation
-consumers, campaign identity/reenrollment policy and active monitoring remain
-open. Stored URLs and successful mutations establish no phishing attribution or
+source snapshot. The local storage family also exercises API effects and concurrent SQLite
+connections. General writer initialization/resource/link admission, cross-process
+source snapshots, other intelligence writers and active monitoring remain open.
+Existing removed-case reenrollment is rejected; stored case IDs remain literal. Stored URLs and successful mutations establish no phishing attribution or
 accuracy claim.

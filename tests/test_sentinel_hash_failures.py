@@ -28,6 +28,7 @@ def failing_open(original, target, kind):
                 self.read_once=False
                 return self
             def __exit__(self,*error): return handle.__exit__(*error)
+            def __getattr__(self,name): return getattr(handle,name)
             def read(self,*args,**kwargs):
                 if self.read_once: raise OSError('Explicit mid-read interruption fixture')
                 self.read_once=True

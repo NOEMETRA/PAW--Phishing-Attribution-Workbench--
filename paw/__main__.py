@@ -434,6 +434,7 @@ For help: paw help <command>
                 file_monitor = FileMonitor()
                 print("File observations use this process baseline; first scan is not historical change detection.")
                 changes = file_monitor.monitor_all_cases()
+                print("Scope: regular non-link files; hidden/pyc exclusions; non-atomic observations with source limits.")
                 if changes:
                     print("🔍 File Changes Detected:")
                     for change in changes:
@@ -454,6 +455,7 @@ For help: paw help <command>
                 from .sentinel import FileMonitor
                 file_monitor = FileMonitor()
                 report = file_monitor.generate_integrity_report()
+                print("Scope: regular non-link files; hidden/pyc exclusions; non-atomic observations with source limits.")
                 print("🔐 File Integrity Report:")
                 print(f"   Total cases: {report['total_cases']}")
                 print(f"   ✅ Integrity OK: {report['integrity_summary']['ok']}")
@@ -481,12 +483,8 @@ For help: paw help <command>
                     raise ValueError(f"Multiple active campaigns for case: {args.case}")
                 campaign = campaigns[0]
                 database = CampaignDatabase(path)
-                with database.connection() as connection:
-                    changed = connection.execute(
-                        "UPDATE campaigns SET status='removed' WHERE id=? AND case_id=? AND status='active'",
-                        (campaign['id'], args.case)).rowcount
-                    if changed != 1:
-                        raise RuntimeError("Campaign changed before removal; no active campaign removed")
+                if not database.remove_campaign(campaign['id'], case_id=args.case):
+                    raise RuntimeError("Campaign changed before removal; no active campaign removed")
                 print(f"✅ Campaign removed: {campaign['id']}")
             elif args.action == "check":
                 from .sentinel import SentinelMonitor

@@ -249,24 +249,62 @@ class CampaignDatabase:
         return default, evidence
 
     def add_campaign(self, case_id: str, url: str, metadata: Dict[str, Any] = None) -> str:
-        """Add a new campaign to monitor."""
+        """Store one literal campaign per case, without authorizing collection."""
+        if not isinstance(case_id, str) or not case_id.strip() or not isinstance(url, str) or not url.strip():
+            raise ValueError("case_id and url must be nonblank strings")
+        if metadata is not None and not isinstance(metadata, dict):
+            raise ValueError("Campaign metadata must be an object or None")
+        encoded_metadata = json.dumps({} if metadata is None else metadata, allow_nan=False)
+        domain = self._extract_domain(url)
         campaign_id = f"sentinel_{case_id}_{int(datetime.now().timestamp())}"
 
         with self.connection() as conn:
+            # Also protect legacy tables without today's UNIQUE(case_id).
+            conn.execute("BEGIN IMMEDIATE")
+            if conn.execute("SELECT 1 FROM campaigns WHERE case_id=? LIMIT 1", (case_id,)).fetchone():
+                raise ValueError(f"Campaign already exists for case: {case_id}")
             conn.execute("""
-                INSERT INTO campaigns (id, case_id, created_at, url, domain, metadata)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO campaigns (id, case_id, created_at, url, domain, metadata, status)
+                VALUES (?, ?, ?, ?, ?, ?, 'active')
             """, (
                 campaign_id,
                 case_id,
                 utc_now_iso(),
                 url,
-                self._extract_domain(url),
-                json.dumps(metadata or {})
+                domain,
+                encoded_metadata
             ))
             conn.commit()
 
         return campaign_id
+
+    def remove_campaign(self, campaign_id: str, *, case_id: str = None) -> bool:
+        """Acknowledge exactly one active-to-removed transition in one transaction."""
+        with self.connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            if case_id is None:
+                rows = conn.execute("SELECT id FROM campaigns WHERE id=? AND status='active'",
+                                    (campaign_id,)).fetchall()
+            else:
+                rows = conn.execute("SELECT id FROM campaigns WHERE case_id=? AND status='active'",
+                                    (case_id,)).fetchall()
+            if len(rows) > 1:
+                raise ValueError("Multiple active campaigns; no campaign removed")
+            if not rows or rows[0][0] != campaign_id:
+                return False
+            query = "UPDATE campaigns SET status='removed' WHERE id=? AND status='active'"
+            values = (campaign_id,)
+            if case_id is not None:
+                query += " AND case_id=?"
+                values += (case_id,)
+            if conn.execute(query, values).rowcount != 1:
+                raise RuntimeError("Campaign changed before removal; no active campaign removed")
+            final_query = "SELECT status FROM campaigns WHERE id=?"
+            if case_id is not None:
+                final_query += " AND case_id=?"
+            if conn.execute(final_query, values).fetchall() != [('removed',)]:
+                raise RuntimeError("Campaign removal did not persist; transaction rolled back")
+            return True
 
     def get_campaign(self, campaign_id: str) -> Optional[Dict[str, Any]]:
         """Get campaign details by ID."""
