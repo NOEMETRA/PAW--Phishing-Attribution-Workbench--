@@ -336,6 +336,12 @@ jobs:
       - name: Verify actual original-EML Sentinel local storage family
         run: python tests/integration_sentinel_storage_family_real.py
 
+      - name: Verify configured storage admission and atomic initialization
+        run: python -m unittest discover -s tests -p 'test_sentinel_storage_admission.py' -v
+
+      - name: Verify cold configured Sentinel storage consumers
+        run: python tests/integration_sentinel_admission_real.py
+
       - name: Verify legacy campaign listing matches passive CLI without source mutation
         run: python tests/integration_legacy_campaign_list_real.py
 
