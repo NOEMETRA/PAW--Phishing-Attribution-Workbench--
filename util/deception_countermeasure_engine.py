@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""
-DECEPTION COUNTERMEASURE ENGINE - Active Defense Planning (REAL)
-Genera piani REALI basati su dati reali del caso
+"""Legacy conclusion prototype: publication and principal APIs are unavailable.
+
+Saved sources and prior outputs are preserved. Remaining helper algorithms are
+unvalidated research code, not supported attribution, deployment or provenance
+verification. See docs/legacy-conclusion-publication.md for the exact boundary.
 """
 import json
 import hashlib
@@ -11,6 +13,8 @@ from pathlib import Path
 from typing import Dict, List, Any
 import argparse
 import csv
+
+UNAVAILABLE = 'Legacy conclusion publication unavailable: saved case sources and prior outputs are preserved'
 
 
 class RealDeceptionEngine:
@@ -37,27 +41,8 @@ class RealDeceptionEngine:
         }
 
     def create_real_honeytokens(self, adversary_profile: Dict, case_data: Dict) -> List[Dict]:
-        """Create REAL honeytokens based on actual case data"""
-        honeytokens = []
-        
-        # Extract REAL data from case
-        case_dir = Path(case_data['case_dir'])
-        infrastructure_data = self.extract_real_infrastructure_data(case_dir)
-        
-        campaign_id = adversary_profile.get('campaign_id', 'default')
-        target_industry = adversary_profile.get('target_industry', 'general')
-        
-        # Create tokens based on REAL infrastructure
-        honeytokens.extend(self.generate_infrastructure_based_tokens(infrastructure_data, campaign_id))
-        honeytokens.extend(self.generate_credential_tokens(campaign_id, target_industry))
-        honeytokens.extend(self.generate_api_tokens(campaign_id))
-        
-        # Add REAL deployment strategies
-        for token in honeytokens:
-            token['deployment_strategy'] = self.generate_real_deployment_strategy(token, infrastructure_data)
-            token['monitoring_setup'] = self.setup_real_monitoring(token, case_dir)
-        
-        return honeytokens
+        """Unavailable pending sourced, validated capability and publication contracts."""
+        raise RuntimeError(UNAVAILABLE)
 
     def extract_real_infrastructure_data(self, case_dir: Path) -> Dict:
         """Extract REAL infrastructure data from case files"""
@@ -192,51 +177,12 @@ class RealDeceptionEngine:
             return 'targeted_placement'
 
     def setup_real_monitoring(self, token: Dict, case_dir: Path) -> Dict:
-        """Setup REAL monitoring based on token type"""
-        monitoring = {
-            'alert_triggers': [],
-            'monitoring_endpoints': [],
-            'response_protocols': ['immediate_alert', 'source_tracking']
-        }
-        
-        token_type = token.get('type')
-        
-        if token_type == 'domain_token':
-            monitoring['alert_triggers'] = ['dns_query', 'http_request']
-            monitoring['monitoring_endpoints'] = [
-                f"https://dns.monitor.example.com/domain/{token['token_id']}",
-                f"https://web.monitor.example.com/domain/{token['token_id']}"
-            ]
-        
-        elif token_type == 'credential':
-            monitoring['alert_triggers'] = ['login_attempt', 'credential_usage']
-            monitoring['monitoring_endpoints'] = [
-                f"https://auth.monitor.example.com/token/{token['token_id']}",
-                f"https://logs.monitor.example.com/credential/{token['token_id']}"
-            ]
-        
-        elif token_type == 'api_token':
-            monitoring['alert_triggers'] = ['api_call', 'key_usage']
-            monitoring['monitoring_endpoints'] = [
-                f"https://api.monitor.example.com/token/{token['token_id']}",
-                f"https://cloud.monitor.example.com/key/{token['token_id']}"
-            ]
-        
-        return monitoring
+        """Unavailable pending sourced, validated capability and publication contracts."""
+        raise RuntimeError(UNAVAILABLE)
 
     def design_real_deception_network(self, case_data: Dict) -> Dict:
-        """Design REAL deception network based on actual infrastructure"""
-        case_dir = Path(case_data['case_dir'])
-        real_infrastructure = self.extract_real_infrastructure_data(case_dir)
-        
-        deception_net = {
-            'mirror_domains': self.generate_mirror_domains_batch(real_infrastructure),
-            'fake_services': self.create_real_fake_services(real_infrastructure),
-            'traffic_redirectors': self.create_real_traffic_redirectors(),
-            'honeypot_servers': self.deploy_real_honeypots()
-        }
-        
-        return deception_net
+        """Unavailable pending sourced, validated capability and publication contracts."""
+        raise RuntimeError(UNAVAILABLE)
 
     def generate_mirror_domains_batch(self, infrastructure: Dict) -> List[Dict]:
         """Generate REAL mirror domains in batch"""
@@ -255,50 +201,16 @@ class RealDeceptionEngine:
         return mirror_domains
 
     def create_real_fake_services(self, infrastructure: Dict) -> List[Dict]:
-        """Create REAL fake services based on actual infrastructure"""
-        fake_services = []
-        
-        service_templates = [
-            {'type': 'web_server', 'banner': 'Apache/2.4.41 (Ubuntu)', 'ports': [80, 443]},
-            {'type': 'api_server', 'banner': 'nginx/1.18.0', 'ports': [8080, 8443]},
-            {'type': 'database', 'banner': 'MySQL/8.0', 'ports': [3306]}
-        ]
-        
-        for i, template in enumerate(service_templates):
-            service = {
-                'service_id': f"fake_service_{i}",
-                'type': template['type'],
-                'banner': template['banner'],
-                'ports': template['ports'],
-                'deception_level': 'high',
-                'monitoring_enabled': True
-            }
-            fake_services.append(service)
-        
-        return fake_services
+        """Unavailable pending sourced, validated capability and publication contracts."""
+        raise RuntimeError(UNAVAILABLE)
 
     def create_real_traffic_redirectors(self) -> List[Dict]:
-        """Create REAL traffic redirectors"""
-        return [
-            {
-                'redirector_id': "redirector_1",
-                'type': 'reverse_proxy',
-                'technique': 'domain_fronting',
-                'upstream_targets': ['fake_service_1', 'fake_service_2'],
-                'monitoring_capabilities': ['full_traffic_logging', 'session_analysis']
-            }
-        ]
+        """Unavailable pending sourced, validated capability and publication contracts."""
+        raise RuntimeError(UNAVAILABLE)
 
     def deploy_real_honeypots(self) -> List[Dict]:
-        """Deploy REAL honeypots"""
-        return [
-            {
-                'honeypot_id': "honeypot_1",
-                'type': 'high_interaction',
-                'emulated_services': ['SSH', 'HTTP', 'FTP'],
-                'data_capture': ['keystrokes', 'files_uploaded', 'commands_executed'],
-            }
-        ]
+        """Unavailable pending sourced, validated capability and publication contracts."""
+        raise RuntimeError(UNAVAILABLE)
 
     def random_string(self, length: int, case: str = 'mixed') -> str:
         """Generate random string for token values"""
@@ -339,80 +251,16 @@ class RealDeceptionEngine:
             return 'standard_operational_exposure'
 
 
-def main():
-    parser = argparse.ArgumentParser(description='Real Deception Countermeasure Engine')
-    parser.add_argument('case_dir', type=str, help='Path to case directory')
-    parser.add_argument('--profile', '-p', type=str, required=True, help='Adversary profile JSON file')
-    parser.add_argument('--output', '-o', type=str, default=None, help='Output file path')
-    
-    args = parser.parse_args()
-    
-    case_dir = Path(args.case_dir)
-    profile_file = Path(args.profile)
-    
-    if not case_dir.exists():
-        print(f"[!] Case directory not found: {case_dir}")
-        return 1
-    
-    if not profile_file.exists():
-        print(f"[!] Profile file not found: {profile_file}")
-        return 1
-    
-    # Load REAL adversary profile
-    with open(profile_file, 'r', encoding='utf-8') as f:
-        adversary_profile = json.load(f)
-    
-    # Initialize REAL deception engine
-    engine = RealDeceptionEngine()
-    
-    # Generate REAL deception plan
-    case_data = {'case_dir': str(case_dir)}
-    honeytokens = engine.create_real_honeytokens(adversary_profile, case_data)
-    deception_network = engine.design_real_deception_network(case_data)
-    
-    # Create comprehensive REAL deception plan
-    deception_plan = {
-        'adversary_profile': adversary_profile,
-        'honeytokens': honeytokens,
-        'deception_network': deception_network,
-        'execution_timeline': [
-            {
-                'time_offset_hours': 0,
-                'action': 'Deploy critical honeytokens and mirror domains',
-                'tokens': [t['token_id'] for t in honeytokens if t.get('type') == 'domain_token']
-            },
-            {
-                'time_offset_hours': 2,
-                'action': 'Activate fake services and monitoring',
-                'tokens': []
-            }
-        ],
-        'success_metrics': {
-            'primary_metrics': {
-                'adversary_detection_time': 'Time from deployment to first interaction',
-                'intelligence_gathered': 'Technical and behavioral data collected'
-            }
-        },
-        'generated_at': datetime.now().isoformat()
-    }
-    
-    # Determine output path
-    output_path = args.output
-    if not output_path:
-        output_dir = case_dir / "derived"
-        output_dir.mkdir(exist_ok=True)
-        output_path = output_dir / "real_deception_plan.json"
-    
-    # Save REAL deception plan
-    with open(output_path, 'w', encoding='utf-8') as f:
-        json.dump(deception_plan, f, indent=2, ensure_ascii=False)
-    
-    print(f"[+] REAL Deception plan saved to: {output_path}")
-    print(f"    - Honeytokens created: {len(honeytokens)}")
-    print(f"    - Mirror domains: {len(deception_network.get('mirror_domains', []))}")
-    print(f"    - Fake services: {len(deception_network.get('fake_services', []))}")
-    
-    return 0
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False,
+        epilog='Saved case sources and prior outputs are preserved. Attribution, '
+               'countermeasures and dossier publication need validated source '
+               'and publication contracts; no case or output file is accessed.')
+    parser.add_argument('case_dir', help='Legacy case path; no case files will be accessed')
+    parser.add_argument('--profile', '-p', required=True, help='Legacy profile path; no file will be accessed')
+    parser.add_argument('--output', '-o', help='Legacy output path; no file will be created or overwritten')
+    parser.parse_args(argv)
+    parser.exit(1, UNAVAILABLE + '\n')
 
 
 if __name__ == "__main__":

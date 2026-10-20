@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-"""
-ATTRIBUTION CONFIRMATION ENGINE - Scientific Attribution Validation (REAL)
-Analizza dati REALI da: threat_intel_enriched.csv, attribution_matrix.json, kit analysis
+"""Legacy conclusion prototype: publication and principal APIs are unavailable.
+
+Saved sources and prior outputs are preserved. Remaining helper algorithms are
+unvalidated research code, not supported attribution, deployment or provenance
+verification. See docs/legacy-conclusion-publication.md for the exact boundary.
 """
 import json
 import hashlib
@@ -12,6 +14,8 @@ from typing import Dict, List, Any
 from dataclasses import dataclass
 import argparse
 import csv
+
+UNAVAILABLE = 'Legacy conclusion publication unavailable: saved case sources and prior outputs are preserved'
 
 
 @dataclass
@@ -37,24 +41,8 @@ class RealScientificAttributionEngine:
         return {}
     
     def analyze_real_attribution_evidence(self, case_data: Dict) -> List[RealAttributionEvidence]:
-        """Comprehensive analysis of REAL attribution evidence"""
-        evidences = []
-        
-        case_dir = Path(case_data['case_dir'])
-        
-        # Analyze REAL infrastructure evidence
-        infrastructure_evidence = self.analyze_real_infrastructure_dna(case_dir)
-        evidences.extend(infrastructure_evidence)
-        
-        # Analyze REAL behavioral evidence  
-        behavioral_evidence = self.analyze_real_behavioral_patterns(case_dir)
-        evidences.extend(behavioral_evidence)
-        
-        # Analyze REAL technical evidence
-        technical_evidence = self.analyze_real_technical_artifacts(case_dir)
-        evidences.extend(technical_evidence)
-        
-        return evidences
+        """Unavailable pending sourced, validated capability and publication contracts."""
+        raise RuntimeError(UNAVAILABLE)
 
     def analyze_real_infrastructure_dna(self, case_dir: Path) -> List[RealAttributionEvidence]:
         """Analyze REAL infrastructure DNA from actual data"""
@@ -399,24 +387,8 @@ class RealScientificAttributionEngine:
         )
 
     def generate_real_confidence_matrix(self, evidences: List[RealAttributionEvidence]) -> Dict:
-        """Generate REAL confidence matrix from actual evidence"""
-        if not evidences:
-            return {'overall_confidence': 0.0, 'validation_status': 'insufficient_evidence'}
-        
-        confidence_matrix = {
-            'overall_confidence': self.calculate_real_overall_confidence(evidences),
-            'evidence_strength_breakdown': self.breakdown_real_evidence_strength(evidences),
-            'scientific_validation_score': self.calculate_real_scientific_validation(evidences),
-            'forensic_integrity_score': self.assess_real_forensic_integrity(evidences),
-            'reproducibility_metrics': self.calculate_real_reproducibility(evidences),
-            'data_sources_used': list(set(ev.data_source for ev in evidences))
-        }
-        
-        confidence_matrix['attribution_confidence_level'] = self.determine_real_confidence_level(
-            confidence_matrix['overall_confidence']
-        )
-        
-        return confidence_matrix
+        """Unavailable pending sourced, validated capability and publication contracts."""
+        raise RuntimeError(UNAVAILABLE)
 
     def calculate_real_overall_confidence(self, evidences: List[RealAttributionEvidence]) -> float:
         """Calculate REAL overall confidence from actual evidence"""
@@ -529,70 +501,15 @@ class RealScientificAttributionEngine:
             return "VERY_LOW"
 
 
-def main():
-    parser = argparse.ArgumentParser(description='Real Attribution Confirmation Engine')
-    parser.add_argument('case_dir', type=str, help='Path to case directory')
-    parser.add_argument('--output', '-o', type=str, default=None, help='Output file path')
-    
-    args = parser.parse_args()
-    
-    case_dir = Path(args.case_dir)
-    if not case_dir.exists():
-        print(f"[!] Case directory not found: {case_dir}")
-        return 1
-    
-    # Initialize REAL attribution engine
-    engine = RealScientificAttributionEngine()
-    
-    # Load REAL case data
-    case_data = {'case_dir': str(case_dir)}
-    
-    # Analyze REAL attribution evidence
-    print("[*] Analyzing REAL attribution evidence...")
-    evidences = engine.analyze_real_attribution_evidence(case_data)
-    
-    # Generate REAL confidence matrix
-    print("[*] Generating REAL attribution confidence matrix...")
-    confidence_matrix = engine.generate_real_confidence_matrix(evidences)
-    
-    # Create comprehensive REAL attribution report
-    attribution_report = {
-        'analysis_timestamp': datetime.now().isoformat(),
-        'evidence_analysis': [{
-            'type': evidence.evidence_type,
-            'confidence': evidence.confidence,
-            'scientific_basis': evidence.scientific_basis,
-            'reproducibility': evidence.reproducibility_score,
-            'forensic_integrity': evidence.forensic_integrity,
-            'data_source': evidence.data_source
-        } for evidence in evidences],
-        'confidence_matrix': confidence_matrix,
-        'attribution_summary': {
-            'overall_confidence': confidence_matrix.get('overall_confidence', 0),
-            'confidence_level': confidence_matrix.get('attribution_confidence_level', 'VERY_LOW'),
-            'evidence_count': len(evidences),
-            'data_sources_used': confidence_matrix.get('data_sources_used', [])
-        }
-    }
-    
-    # Determine output path
-    output_path = args.output
-    if not output_path:
-        output_dir = case_dir / "derived"
-        output_dir.mkdir(exist_ok=True)
-        output_path = output_dir / "real_attribution_confirmation.json"
-    
-    # Save REAL attribution report
-    with open(output_path, 'w', encoding='utf-8') as f:
-        json.dump(attribution_report, f, indent=2, ensure_ascii=False)
-    
-    print(f"[+] REAL Attribution confirmation report saved to: {output_path}")
-    print(f"    - Overall confidence: {attribution_report['attribution_summary']['overall_confidence']:.2f}")
-    print(f"    - Confidence level: {attribution_report['attribution_summary']['confidence_level']}")
-    print(f"    - Evidence pieces analyzed: {len(evidences)}")
-    print(f"    - Data sources: {', '.join(attribution_report['attribution_summary']['data_sources_used'])}")
-    
-    return 0
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False,
+        epilog='Saved case sources and prior outputs are preserved. Attribution, '
+               'countermeasures and dossier publication need validated source '
+               'and publication contracts; no case or output file is accessed.')
+    parser.add_argument('case_dir', help='Legacy case path; no case files will be accessed')
+    parser.add_argument('--output', '-o', help='Legacy output path; no file will be created or overwritten')
+    parser.parse_args(argv)
+    parser.exit(1, UNAVAILABLE + '\n')
 
 
 if __name__ == "__main__":

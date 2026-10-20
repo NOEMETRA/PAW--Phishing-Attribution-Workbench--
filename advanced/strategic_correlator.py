@@ -1,15 +1,9 @@
 #!/usr/bin/env python3
-"""
-Strategic Correlator (standalone, offline)
+"""Legacy conclusion prototype: publication and principal APIs are unavailable.
 
-Unifies base + advanced outputs into a single dossier answering:
-- da dove è partito tutto (where it started)
- - come siamo arrivati alla segnalazione geografica (path to location signal)
-- blocco provider (provider-level blocks)
-
-Outputs under <case>/derived:
-- dossier.json
-- dossier.md
+Saved sources and prior outputs are preserved. Remaining helper algorithms are
+unvalidated research code, not supported attribution, deployment or provenance
+verification. See docs/legacy-conclusion-publication.md for the exact boundary.
 """
 from __future__ import annotations
 import argparse
@@ -17,6 +11,8 @@ import json
 import re
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Union
+
+UNAVAILABLE = 'Legacy conclusion publication unavailable: saved case sources and prior outputs are preserved'
 
 
 def read_json(p: Path, default):
@@ -183,110 +179,25 @@ def provider_blocks(summary_json: Path, enriched_csv: Path) -> Dict[str, Any]:
 
 
 def build_dossier(case_dir: Path, enable_country_detection: bool = True, place_tokens_file: Optional[Path] = None) -> Dict[str, Any]:
-    derived = case_dir / 'derived'
-    dossier: Dict[str, Any] = {}
-
-    # Base + Advanced artifacts
-    dossier['ttp_analysis'] = read_json(derived / 'ttp_analysis.json', [])
-    dossier['criminal_fingerprint'] = read_json(derived / 'criminal_fingerprint.json', {})
-    dossier['deobfuscation_cascade'] = read_json(derived / 'deobfuscation_cascade.json', [])
-    dossier['threat_actor_profile'] = read_json(derived / 'threat_actor_profile.json', {})
-    dossier['behavioral_fingerprint'] = read_json(derived / 'behavioral_fingerprint.json', {})
-    dossier['campaign_intelligence'] = read_json(derived / 'campaign_intelligence.json', {})
-    dossier['audience_targeting'] = read_json(derived / 'audience_targeting.json', {})
-    dossier['threat_assessment'] = provider_blocks(derived / 'threat_assessment_report.json', derived / 'threat_intel_enriched.csv')
-
-    # Narrative answers
-    start = earliest_request(case_dir)
-    # By default we do not perform automatic country attribution. If an analyst
-    # enables country detection and provides a tokens file, we will extract
-    # mentions and return them as evidence suggestions (manual review required).
-    country_attr_note = {'note': 'automatic country attribution is disabled; any country suggestion requires manual validation'}
-    evidence_mentions: List[Dict[str, Any]] = []
-    if enable_country_detection:
-        if place_tokens_file:
-            tokens = load_place_tokens(place_tokens_file)
-            evidence_mentions = find_place_mentions(case_dir, tokens)
-        else:
-            # Country-detection is enabled, but no tokens file was provided.
-            # We deliberately avoid using a built-in hard-coded token list to
-            # prevent implicit country attribution. Analysts should provide a
-            # tokens file (list or token->country map) when they want extraction.
-            country_attr_note['note'] += ' (enabled, but no tokens file provided; no mentions extracted)'
-
-    dossier['forensic_narrative'] = {
-        'da_dove_e_partito_tutto': start,
-        'country_attribution': country_attr_note,
-        'evidence_mentions': evidence_mentions,
-        'blocco_provider': dossier['threat_assessment']
-    }
-    return dossier
+    """Unavailable pending sourced, validated capability and publication contracts."""
+    raise RuntimeError(UNAVAILABLE)
 
 
 def write_markdown(case_dir: Path, dossier: Dict[str, Any]):
-    md = [
-        f"# Strategic Dossier for case: {case_dir.name}",
-        "",
-        "## Forensic narrative",
-        "- Da dove è partito tutto: " + (json.dumps(dossier.get('forensic_narrative', {}).get('da_dove_e_partito_tutto'))),
-        "- Country attribution: automatic country attribution is disabled; any country suggestion requires manual validation",
-        "- Blocco provider: " + json.dumps(dossier.get('forensic_narrative', {}).get('blocco_provider')),
-        "",
-        "### Location / country signals",
-        "(country-level attribution disabled; mentions extracted are suggestions only and require manual review)",
-    ]
-    # include extracted mentions if present
-    mentions = dossier.get('forensic_narrative', {}).get('evidence_mentions', [])
-    if mentions:
-        md.append("")
-        md.append("## Extracted place mentions (suggestions)")
-        md.append("Note: these are textual mentions extracted from artifacts; they do NOT constitute proven attribution.")
-        for m in mentions:
-            md.append(f"- token: {m.get('token')}  file: {m.get('file')}")
-            # show confidence and provenance when available
-            if m.get('confidence') is not None:
-                md.append(f"  confidence: {m.get('confidence')}")
-            if m.get('provenance'):
-                md.append(f"  provenance: {', '.join(m.get('provenance'))}")
-            if m.get('suggested_country'):
-                md.append(f"  suggested_country: {m.get('suggested_country')} ({m.get('suggestion_note')})")
-            snip = m.get('snippet') or ''
-            if snip:
-                md.append(f"  snippet: {snip[:200]}")
-    else:
-        # keep placeholder compatibility; there will be no entries listed here
-        md += ["", "(no place mentions extracted)"]
-    md += [
-        "",
-        "## Threat actor profile",
-        json.dumps(dossier.get('threat_actor_profile', {}), indent=2),
-        "",
-        "## MITRE ATT&CK (selected)",
-        json.dumps(dossier.get('ttp_analysis', []), indent=2),
-        "",
-        "## Criminal infrastructure",
-        json.dumps(dossier.get('criminal_fingerprint', {}), indent=2),
-        "",
-        "## Behavioral fingerprint",
-        json.dumps(dossier.get('behavioral_fingerprint', {}), indent=2),
-    ]
-    out = case_dir / 'derived' / 'dossier.md'
-    out.write_text('\n'.join(md), encoding='utf-8')
+    """Unavailable pending sourced, validated capability and publication contracts."""
+    raise RuntimeError(UNAVAILABLE)
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument('case_dir', type=Path)
-    ap.add_argument('--disable-country-detection', action='store_true', default=False, help='Disable extraction of place tokens from artifacts (enabled by default).')
-    ap.add_argument('--place-tokens-file', type=Path, default=None, help='JSON file with place tokens (list or token->country map)')
-    args = ap.parse_args()
-    enable_country = not bool(args.disable_country_detection)
-    dossier = build_dossier(args.case_dir, enable_country_detection=enable_country, place_tokens_file=args.place_tokens_file)
-    derived = args.case_dir / 'derived'
-    derived.mkdir(parents=True, exist_ok=True)
-    (derived / 'dossier.json').write_text(json.dumps(dossier, indent=2), encoding='utf-8')
-    write_markdown(args.case_dir, dossier)
-    print(str(derived / 'dossier.json'))
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False,
+        epilog='Saved case sources and prior outputs are preserved. Attribution, '
+               'countermeasures and dossier publication need validated source '
+               'and publication contracts; no case or output file is accessed.')
+    parser.add_argument('case_dir', help='Legacy case path; no case files will be accessed')
+    parser.add_argument('--disable-country-detection', action='store_true', help='Legacy flag; no extraction will run')
+    parser.add_argument('--place-tokens-file', help='Legacy token path; no file will be accessed')
+    parser.parse_args(argv)
+    parser.exit(1, UNAVAILABLE + '\n')
 
 
 if __name__ == '__main__':
