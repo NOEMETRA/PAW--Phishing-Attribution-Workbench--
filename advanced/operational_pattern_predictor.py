@@ -1,18 +1,8 @@
 #!/usr/bin/env python3
-"""
-OPERATIONAL PATTERN PREDICTOR - Predictive Threat Intelligence (offline)
+"""Legacy operational prediction is unavailable; saved sources and outputs are preserved.
 
-Reads derived artifacts from a case and predicts next operational moves:
-- threat_actor_timeline.json
-- infrastructure_evolution.json
-- next_targets_prediction.json
-- countermeasure_effectiveness.json
-
-Inputs (optional, best-effort):
-- <case>/derived/threat_intel_enriched.csv
-- <case>/derived/threat_actor_profile.json
-- <case>/derived/behavioral_fingerprint.json
-- <case>/derived/ttp_analysis.json
+Internal prototype helpers remain unvalidated and are not a predictive model.
+No actor forecast, calibrated confidence or intervention recommendation is supported.
 """
 from __future__ import annotations
 import argparse
@@ -22,6 +12,10 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, UTC
 from pathlib import Path
 from typing import Dict, List, Any, Tuple
+
+
+UNAVAILABLE = ('Legacy operational prediction unavailable: saved case '
+               'sources and prior outputs are preserved')
 
 
 def load_json(p: Path, default):
@@ -140,91 +134,38 @@ def takedown_resistance(rows: List[Dict[str, Any]]) -> str:
 
 
 def build_evolution(case_dir: Path) -> Dict[str, Any]:
-    rows = load_enriched_hosts(case_dir)
-    actor = classify_actor(rows)
-    evolution = {
-        'predicted_actor_type': actor,
-        'infrastructure_lifespan_days': 45 if actor == 'bulletproof_rotation' else 180 if actor == 'apt_stealth' else 60,
-        'next_asn_rotation': rotation_schedule(actor, rows),
-        'likely_new_providers': likely_new_providers(rows),
-        'infrastructure_expansion_probability': expansion_probability(rows),
-        'predicted_takedown_resistance': takedown_resistance(rows),
-    }
-    # Evolution timeline (milestones)
-    start = datetime.now(UTC)
-    evolution['evolution_timeline'] = [
-        {'date': (start + timedelta(days=0)).isoformat(), 'event': 'Stabilize current kit and trackers'},
-        {'date': (start + timedelta(days=7)).isoformat(), 'event': 'Rotate CDN/WAF edges to bypass blocks'},
-        {'date': (start + timedelta(days=14)).isoformat(), 'event': 'Register new domains with similar branding'},
-        {'date': (start + timedelta(days=30)).isoformat(), 'event': 'Shift assets to alternate provider'},
-    ]
-    return evolution
+    """Unavailable before inspecting prediction/publication inputs."""
+    raise RuntimeError(UNAVAILABLE)
 
 
 def build_actor_timeline(case_dir: Path) -> List[Dict[str, Any]]:
-    # Predict operational steps from now
-    now = datetime.now(UTC)
-    return [
-        {'t': (now + timedelta(days=0)).isoformat(), 'op': 'Refine kit and testing'},
-        {'t': (now + timedelta(days=3)).isoformat(), 'op': 'Campaign pulse to new audience segments'},
-        {'t': (now + timedelta(days=7)).isoformat(), 'op': 'Rotate ASN/CDN; refresh trackers'},
-        {'t': (now + timedelta(days=14)).isoformat(), 'op': 'Pivot infrastructure; spin up mirrors'},
-        {'t': (now + timedelta(days=30)).isoformat(), 'op': 'Broaden targeting; add new brands'},
-    ]
+    """Unavailable before inspecting prediction/publication inputs."""
+    raise RuntimeError(UNAVAILABLE)
 
 
 def predict_targets(case_dir: Path) -> Dict[str, Any]:
-    behav = load_json(case_dir / 'derived' / 'behavioral_fingerprint.json', {})
-    top = [d for d, _ in behav.get('top_domains', [])]
-    hints = []
-    if any('linkedin' in d for d in top) or any('pardot' in d for d in top) or any('demandbase' in d for d in top):
-        hints.append('B2B (finance/enterprise)')
-    if any('londonstockexchange' in d for d in top):
-        hints.append('Finance (equities/market)')
-    if any('onetrust' in d for d in top):
-        hints.append('Consent/Privacy tooling (enterprise-grade)')
-    likely_regions = ['EU', 'UK'] if any('onetrust' in d for d in top) else ['Global']
-    return {
-        'likely_verticals': sorted(set(hints)) or ['Unknown'],
-        'likely_regions': likely_regions,
-        'supporting_domains': top[:10]
-    }
+    """Unavailable before inspecting prediction/publication inputs."""
+    raise RuntimeError(UNAVAILABLE)
 
 
 def countermeasure_effectiveness(case_dir: Path) -> Dict[str, Any]:
-    rows = load_enriched_hosts(case_dir)
-    waf = sum(1 for r in rows if 'waf_' in (r.get('http_block') or '').lower())
-    cdn = sum(1 for r in rows if (r.get('provider_type') or '').startswith('cdn:'))
-    # Score 0..1
-    scores = {
-        'provider_abuse_and_waf_escalation': min((waf / max(len(rows), 1)) + 0.2, 1.0),
-        'registrar_takedown': 0.7,
-        'kit_signature_blocking': 0.6,
-        'tracker-based disruption': 0.5 if cdn else 0.6,
-        'sinkholing_redirects': 0.4,
-    }
-    return {'measures': scores, 'notes': 'Heuristic effectiveness based on WAF/CDN presence and known kit patterns'}
+    """Unavailable before inspecting prediction/publication inputs."""
+    raise RuntimeError(UNAVAILABLE)
 
 
 def write_outputs(case_dir: Path, evolution: Dict[str, Any], timeline: List[Dict[str, Any]], targets: Dict[str, Any], cm: Dict[str, Any]):
-    d = case_dir / 'derived'
-    d.mkdir(parents=True, exist_ok=True)
-    (d / 'infrastructure_evolution.json').write_text(json.dumps(evolution, indent=2), encoding='utf-8')
-    (d / 'threat_actor_timeline.json').write_text(json.dumps(timeline, indent=2), encoding='utf-8')
-    (d / 'next_targets_prediction.json').write_text(json.dumps(targets, indent=2), encoding='utf-8')
-    (d / 'countermeasure_effectiveness.json').write_text(json.dumps(cm, indent=2), encoding='utf-8')
-    print(str(d / 'infrastructure_evolution.json'))
+    """Unavailable before inspecting prediction/publication inputs."""
+    raise RuntimeError(UNAVAILABLE)
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument('case_dir', type=Path)
-    args = ap.parse_args()
-    evolution = build_evolution(args.case_dir)
-    timeline = build_actor_timeline(args.case_dir)
-    targets = predict_targets(args.case_dir)
-    cm = countermeasure_effectiveness(args.case_dir)
-    write_outputs(args.case_dir, evolution, timeline, targets, cm)
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False,
+        epilog='Saved case sources and prior outputs are preserved. Operational '
+               'prediction needs independently validated evidence/model and '
+               'versioned publication; no case or output file is accessed.')
+    parser.add_argument('case_dir', help='Legacy case path; no case files will be accessed')
+    parser.parse_args(argv)
+    parser.exit(1, UNAVAILABLE + '\n')
 
 
 if __name__ == '__main__':
