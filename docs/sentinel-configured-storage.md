@@ -107,6 +107,15 @@ processes after a real stopped full worker, preserving every original case/input
 byte through CLI verification and ZIP export. Earlier campaign/passive/geographic
 consumer regressions also pass during this block.
 
+The first PR CI exposed an outdated cold-reader integration assertion: importing
+the shared path helpers from `config` was rejected as if it constructed a
+configuration. The campaign-layout and history-layout probes now forbid
+`SentinelConfig` construction while permitting the helper import. Their existing
+network, thread, active-module and source-byte checks remain. Both corrected
+integrations pass locally: five API/23 CLI campaign processes and six API/six
+status CLI history processes. This correction changes tests and their evidence
+record only; package sources remain identical to the full/wheel-tested version.
+
 Broader stored JSON/report rendering and resource limits, other intelligence
 writers, cross-process snapshots and final engine/platform/installation gates
 remain open. This source-admission contract is not authenticity, attribution,

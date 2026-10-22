@@ -14,9 +14,13 @@ def api(root, missing):
     code = """import sys,threading,json,sqlite3
 sys.path.insert(0,%r)
 from paw.core.network_policy import offline_policy,violations
+from unittest.mock import patch
 threads=set(threading.enumerate())
 try:
-    with offline_policy():
+    # Path admission helpers may import config; a database reader must never
+    # construct/load a configuration or select its default storage.
+    with offline_policy(), patch('paw.sentinel.config.SentinelConfig.__init__',
+            side_effect=AssertionError('Configuration constructed by database reader')):
         from paw.sentinel.database import CampaignDatabase
         reader=CampaignDatabase('saved # Ω %%.db',read_only=True)
         columns=%r
@@ -54,7 +58,7 @@ try:
 finally:
     assert not violations(),violations()
     assert set(threading.enumerate())==threads,'New thread'
-    for name in ('config','monitor','ip_analyzer','intelligence_analyzer','geographic_reports'):
+    for name in ('monitor','ip_analyzer','intelligence_analyzer','geographic_reports'):
         assert 'paw.sentinel.'+name not in sys.modules,name
     print('HISTORY_COLUMNS_API_CHECK_OK',file=sys.stderr)
 """ % (str(REPO), COLUMNS, missing)

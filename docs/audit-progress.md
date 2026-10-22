@@ -23,6 +23,14 @@ geografici. La wheel reale corrisponde ai 90 sorgenti correnti, metadata,
 entrypoint e due template. Due sorgenti package cambiano; gli altri 88 non
 cambiano nel contenuto Git. Le prove non chiudono l'accettazione globale del motore.
 
+Il primo giro CI ha rilevato un'aspettativa superata nei test dei lettori a freddo:
+l'import degli helper da `config` era trattato come costruzione della configurazione.
+Le due integrazioni ora vietano direttamente la costruzione di `SentinelConfig`,
+mantenendo i controlli rete/thread/moduli attivi e byte delle sorgenti. Passano
+localmente 5 API/23 CLI campagne e 6 API/6 CLI cronologie. Nessun sorgente package
+cambia rispetto alla versione delle prove full/wheel; CI e review sul nuovo head
+restano i criteri per il merge.
+
 Il lavoro corrente stabilizza il motore offline e la profondità delle evidenze.
 Il [registro per famiglia](engine-stabilization-checkpoint.md) distingue contratti
 verificati, audit aperti, capacità indisponibili e fasi successive.
