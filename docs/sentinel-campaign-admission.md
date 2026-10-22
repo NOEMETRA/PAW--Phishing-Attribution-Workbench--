@@ -40,7 +40,9 @@ The Python network guard covers dispatch after ordinary CLI bootstrap; it is not
 an OS sandbox or cold-import network attestation. Writer admission still uses the
 default schema initializer, and selection plus writer opening is not an atomic
 source snapshot. The local storage family also exercises API effects and concurrent SQLite
-connections. General writer initialization/resource/link admission, cross-process
-source snapshots, other intelligence writers and active monitoring remain open.
+connections. The [configured storage contract](sentinel-configured-storage.md) now checks
+initializer/path admission and configuration publication. Broader resource limits,
+cross-process source snapshots, other intelligence writers and active monitoring
+remain open.
 Existing removed-case reenrollment is rejected; stored case IDs remain literal. Stored URLs and successful mutations establish no phishing attribution or
 accuracy claim.

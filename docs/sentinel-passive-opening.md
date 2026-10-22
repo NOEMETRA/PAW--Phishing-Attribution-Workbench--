@@ -10,7 +10,7 @@ but not passive examination of saved storage.
 
 `CampaignDatabase(path, read_only=True)` now admits an existing local file with
 SQLite `mode=ro` and `PRAGMA query_only=ON`. It skips directory creation, table
-initialization and migration. The resolved file path is encoded as a file URI,
+initialization and migration. The bound absolute file path is encoded as a file URI,
 so filename characters are not interpreted as SQLite connection options.
 Connections are closed after use and recheck admission on each open. A missing
 file/parent, directory or corrupt file is an error, not a new empty database.
@@ -27,8 +27,11 @@ consistent snapshot from a live/WAL database needs a separate supported workflow
 The admission check does not prove that external writers are stopped or freeze
 another process: no atomic forensic snapshot/concurrent-writer claim is made.
 
-The default writable constructor is unchanged and still initializes/migrates
-storage for existing writer consumers. SQL writes by the existing mutators fail
+The default writable constructor still initializes/migrates accepted storage;
+the later [configured storage contract](sentinel-configured-storage.md) makes
+that schema work transactional and rejects unrecognized nonempty namespaces,
+aliases, replaced/missing targets and ambiguous configuration. Source binding
+checks do not establish an atomic cross-process snapshot. SQL writes by the existing mutators fail
 on read-only connections. This mode protects the main database from writes; it
 is not a general sandbox for arbitrary caller-supplied SQL or filesystem access.
 

@@ -85,7 +85,7 @@ same-instance serialization. Baseline modules fail 28 assertions and 29 errors
 including subtests; two platform exclusions apply on the recorded Windows host
 (unprivileged directory symlink and POSIX FIFO). Linked-directory/FIFO tests run
 where supported; Windows reparse behavior is not an OS isolation attestation.
-The final general suite passes 790 tests (780 passed, ten platform skips) in
+The PR81 general suite passes 790 tests (780 passed, ten platform skips) in
 93.884 seconds. An actual offline wheel matches all 90 current package sources,
 metadata, entrypoint and both review templates. Four package sources change;
 the remaining 86 are unchanged.
@@ -102,7 +102,8 @@ flow rejects a real live worker, reads eight completed original-EML cases and
 checks cancellation/supervisor-crash recovery before verify/export. No source URL/domain is visited or resolved.
 
 This closes the named storage-effect/selected-file contracts only. Remaining
-S11 work includes initializer/path/link policy, broader stored JSON and publisher
+S11 configuration/initializer/path admission now has its own
+[bounded contract](sentinel-configured-storage.md). Broader stored JSON/publisher
 resources, cross-process/concurrent-source snapshots and other intelligence
-writers; S08 shared verification/authenticity and final S01-S08/S13 platform
+writers remain open; S08 shared verification/authenticity and final S01-S08/S13 platform
 acceptance remain open.

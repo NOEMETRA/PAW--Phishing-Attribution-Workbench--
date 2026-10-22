@@ -11,8 +11,8 @@ import os
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional
-from ..util.fsutil import ensure_dir
 from ..util.timeutil import utc_now_iso
+from .config import _storage_path, _admit_storage_path, _storage_identity, _storage_opener
 
 
 class _StoredJSONError(ValueError):
@@ -27,40 +27,70 @@ class CampaignDatabase:
     """SQLite database for managing monitored phishing campaigns."""
 
     def __init__(self, db_path: str = "sentinel.db", *, read_only: bool = False):
-        self.db_path = str(Path(db_path).resolve()) if read_only else db_path
+        path = _storage_path(db_path)
+        self.db_path = str(path)
         self.read_only = read_only
+        metadata = _admit_storage_path(path, must_exist=read_only, directory_as_missing=read_only)
+        created = metadata is None
+        if created:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            _admit_storage_path(path)
+            descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+            try: created_identity = _storage_identity(os.fstat(descriptor))
+            finally: os.close(descriptor)
+            metadata = _admit_storage_path(path, must_exist=True)
+            if _storage_identity(metadata) != created_identity:
+                raise ValueError('New Sentinel database source replaced before initialization')
+        self._source_identity = _storage_identity(metadata)
         if read_only:
             # Admit existing saved storage without CREATE TABLE or migrations.
             with self.connection() as conn:
                 conn.execute("SELECT name FROM sqlite_master LIMIT 1").fetchall()
             return
-        db_dir = os.path.dirname(db_path)
-        if db_dir:  # Only create directory if there's a directory path
-            ensure_dir(db_dir)
+        # Construction must not recover or checkpoint a foreign saved source.
+        # Failed creation leaves its target for inspection: another initializer
+        # can acquire the same file after rollback, so unlink is not safe here.
+        self._require_stopped_storage()
         self._init_db()
+
+    def _admit_database(self):
+        metadata = _admit_storage_path(Path(self.db_path), must_exist=True)
+        if _storage_identity(metadata) != self._source_identity:
+            raise ValueError('Sentinel database source replaced; reopen explicitly')
+        return metadata
 
     @contextmanager
     def connection(self):
-        target = self._read_only_uri() if self.read_only else self.db_path
-        with closing(sqlite3.connect(target, uri=self.read_only)) as conn:
+        self._admit_database()
+        target = self._read_only_uri() if self.read_only else Path(self.db_path).as_uri() + '?mode=rw'
+        with closing(sqlite3.connect(target, uri=True)) as conn:
+            self._admit_database()
             if self.read_only:
                 conn.execute("PRAGMA query_only = ON")
             with conn:
                 yield conn
 
-    def _read_only_uri(self) -> str:
+    def _require_stopped_storage(self):
         """Admit a saved rollback-journal database, without creating sidecars."""
         database = Path(self.db_path)
-        if not database.is_file():
-            raise FileNotFoundError(f"Sentinel database is not an existing file: {database}")
+        self._admit_database()
         # SQLite read-only WAL opening may create/update shared-memory sidecars.
         # Do not ignore a WAL or recover a pending journal to display stale data.
-        with database.open('rb') as source:
+        with open(database, 'rb', opener=_storage_opener) as source:
+            if _storage_identity(os.fstat(source.fileno())) != self._source_identity:
+                raise ValueError('Sentinel database source changed before admission')
             header = source.read(20)
-        if (header.startswith(b'SQLite format 3\x00') and 2 in header[18:20]) or any(
-                Path(str(database) + suffix).exists() for suffix in ('-wal', '-shm', '-journal')):
+        sidecars = False
+        for suffix in ('-wal', '-shm', '-journal'):
+            try: Path(str(database) + suffix).lstat()
+            except FileNotFoundError: continue
+            sidecars = True
+        if (header.startswith(b'SQLite format 3\x00') and 2 in header[18:20]) or sidecars:
             raise ValueError("Sentinel passive opening requires a stopped database without WAL/journal sidecars")
-        return database.as_uri() + '?mode=ro'
+
+    def _read_only_uri(self) -> str:
+        self._require_stopped_storage()
+        return Path(self.db_path).as_uri() + '?mode=ro'
 
     @contextmanager
     def _json_read_connection(self):
@@ -89,6 +119,14 @@ class CampaignDatabase:
     def _init_db(self) -> None:
         """Initialize database tables."""
         with self.connection() as conn:
+            # Legacy sqlite3 transaction control does not begin on CREATE/ALTER.
+            conn.execute('BEGIN IMMEDIATE')
+            objects = conn.execute("SELECT name, type FROM sqlite_master WHERE name IN "
+                                   "('campaigns','checks','alerts','victim_intelligence')").fetchall()
+            if any(kind != 'table' for name, kind in objects):
+                raise sqlite3.DatabaseError('Sentinel schema requires tables for its named storage objects')
+            if not objects and conn.execute("SELECT 1 FROM sqlite_master WHERE name NOT GLOB 'sqlite_*' LIMIT 1").fetchone():
+                raise sqlite3.DatabaseError('Existing database has no recognized Sentinel storage objects')
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS campaigns (
                     id TEXT PRIMARY KEY,
