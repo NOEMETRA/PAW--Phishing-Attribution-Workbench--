@@ -342,6 +342,12 @@ jobs:
       - name: Verify cold configured Sentinel storage consumers
         run: python tests/integration_sentinel_admission_real.py
 
+      - name: Verify Sentinel JSON writer admission and transactional row effects
+        run: python -m unittest discover -s tests -p 'test_sentinel_record_writers.py' -v
+
+      - name: Verify actual cold Sentinel writers and passive report consumers
+        run: python tests/integration_sentinel_writers_real.py
+
       - name: Verify legacy campaign listing matches passive CLI without source mutation
         run: python tests/integration_legacy_campaign_list_real.py
 

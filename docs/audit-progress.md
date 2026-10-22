@@ -1,35 +1,40 @@
 # Stato dell'audit PAW
 
-Riferimento integrato: PR81, commit
-`4b6f4ef0622dcb3ca0560d5841494d05374e5f1b`; checkpoint del 21 ottobre 2026
+Riferimento integrato: PR82, commit
+`52a70a9328c9e1e78fd5bc0de5043c635ad3669f`; checkpoint del 23 ottobre 2026
 (Europe/Rome). Review Codex senza rilievi e tre controlli CI verdi su head e merge,
-con tree identico al revisionato. La prova PR81 resta versionata: 790 test,
-780 superati e 10 esclusioni, full originale no-egress, CLI/API e conservazione ZIP.
+con tree identico al revisionato. La prova PR82 resta versionata: 811 test,
+799 superati e 12 esclusioni, full originale no-egress, CLI/API e conservazione ZIP.
 Le disposizioni dei 26 file Python esterni restano registrate; due launcher shell
 ed helper non esercitati non sono validati per questa sola presenza.
 
-Il blocco corrente copre l'[ammissione dello storage configurato](sentinel-configured-storage.md):
-configurazioni presenti non valide/illeggibili falliscono senza fallback; percorsi
-ed identità di file restano legati alla sorgente selezionata. Pubblicazione della
-configurazione e inizializzazione/migrazioni SQL hanno contratti di errore espliciti.
-Un database non riconosciuto non riceve automaticamente tabelle Sentinel.
-I target appena creati restano ispezionabili dopo errore, senza unlink del database.
+Il blocco corrente copre i [writer dei record JSON Sentinel](sentinel-record-writers.md):
+metadati e aggiornamenti hanno ammissione condivisa prima di SQL, senza coercizioni
+silenziose o numeri non finiti. Limiti per campo: 1 MiB codificato, profondità 64,
+100.000 nodi. Le scritture verificano i valori persistiti nella transazione;
+un aggiornamento di intelligence assente/ignorato non diventa successo. Controlli
+e avvisi richiedono una campagna letterale esistente; controllo e `last_check`
+condividono il timestamp. Le righe lette restano dichiarazioni non verificate.
 
-Sui sorgenti finali: 811 test, 799 superati e 12 esclusioni di piattaforma;
-46 processi CLI e 4 API di ammissione, più 5 API/6 CLI e un full originale
+Sui sorgenti finali: 835 test in 85,267 secondi, 823 superati e 12 esclusioni
+di piattaforma. I 24 nuovi contratti sul baseline PR82 riproducono 123 asserzioni
+fallite e 8 errori, includendo i sottocasi. Sei nuovi processi API e due CLI
+verificano writer, righe estranee conservate e report/digest JSON passivi;
+si aggiungono 5 API/6 CLI e un full originale
 no-egress della famiglia locale, con supervisore fermato e verify/ZIP byte per
-byte. Nel blocco passano anche le regressioni campagne, letture passive e report
-geografici. La wheel reale corrisponde ai 90 sorgenti correnti, metadata,
-entrypoint e due template. Due sorgenti package cambiano; gli altri 88 non
+byte. Nel blocco passano anche le integrazioni dei layout campagne (5 API/23 CLI)
+e cronologie (6 API/6 CLI); l'ultimo affinamento interessa solo il rollback
+degli aggiornamenti ignorati, coperto di nuovo dalla suite e dai test finali.
+La wheel reale corrisponde ai 90 sorgenti correnti, metadata,
+entrypoint e due template. Un sorgente package cambia; gli altri 89 non
 cambiano nel contenuto Git. Le prove non chiudono l'accettazione globale del motore.
 
-Il primo giro CI ha rilevato un'aspettativa superata nei test dei lettori a freddo:
-l'import degli helper da `config` era trattato come costruzione della configurazione.
-Le due integrazioni ora vietano direttamente la costruzione di `SentinelConfig`,
-mantenendo i controlli rete/thread/moduli attivi e byte delle sorgenti. Passano
-localmente 5 API/23 CLI campagne e 6 API/6 CLI cronologie. Nessun sorgente package
-cambia rispetto alla versione delle prove full/wheel; CI e review sul nuovo head
-restano i criteri per il merge.
+Il baseline PR82 integra l'[ammissione dello storage configurato](sentinel-configured-storage.md):
+config presente non valida senza fallback, sorgenti legate a percorsi/identità,
+pubblicazione della config e schema transazionale. I target nuovi falliti restano
+ispezionabili senza unlink. Dopo la correzione delle aspettative d'import nei
+test, review e CI head/merge sono verdi. Queste prove restano distinte dai nuovi
+contratti dei writer e dall'accettazione integrata finale.
 
 Il lavoro corrente stabilizza il motore offline e la profondità delle evidenze.
 Il [registro per famiglia](engine-stabilization-checkpoint.md) distingue contratti
@@ -54,10 +59,10 @@ Il numero di test o PR non determina una percentuale affidabile di completamento
 
 I prossimi blocchi hanno criteri di chiusura comuni:
 
-1. **Sentinel locale residuo:** il blocco corrente verifica gli effetti delle
-   campagne e le osservazioni dei file. Il blocco di storage configurato verifica
-   ammissione database/config e schema. Restano risorse generali di dati e
-   publisher, altri writer di intelligence e snapshot tra processi, da riconciliare
+1. **Sentinel locale residuo:** i blocchi precedenti verificano campagne, file,
+   ammissione database/config e schema; quello corrente verifica ammissione JSON
+   e postcondizioni dei writer dei record. Restano risorse generali di dati e
+   publisher, altri mutatori (stato/conferme/retention) e snapshot tra processi, da riconciliare
    con il collaudo offline integrato; nessun monitoraggio remoto.
 2. **Motore offline integrato:** riconciliare le capacità pubblicizzate con
    header/MIME/URL/allegati e report; verificare insieme ingressi malformati,
