@@ -791,17 +791,15 @@ class CampaignDatabase:
             return False
 
         updates.append("updated_at = ?")
-        params.append(utc_now_iso())
 
         query = f"""
             UPDATE victim_intelligence
             SET {', '.join(updates)}
             WHERE id = ?
         """
-        params.append(victim_id)
-
         with self.connection() as conn:
             conn.execute('BEGIN IMMEDIATE')
+            params.extend((utc_now_iso(), victim_id))
             cursor = conn.execute(query, params)
             if cursor.rowcount == 0:
                 # An ignored target update may still have run BEFORE triggers.

@@ -62,6 +62,9 @@ timestamp and the inserted check are verified after the parent's update. The
 timestamp is sampled only after `BEGIN IMMEDIATE` acquires the write lock, so an
 earlier queued call cannot overwrite a later commit with a pre-lock timestamp.
 This does not make the system wall clock monotonic under clock corrections.
+Analysis `updated_at` is sampled inside its acquired write lock too. The creation
+and update clocks of all five record-writer APIs are checked under a real active
+transaction; queue regressions cover both check/parent and analysis updates.
 
 Analysis updates return `False` if no row was updated, including an ignored update,
 rolling back intermediate effects before returning. They return `True` only
@@ -94,8 +97,10 @@ The original 24 contracts against the PR82 module reproduce 123 failed assertion
 and eight errors including subtests. The additional queued-writer regression
 fails on PR83's first head and passes with timestamps sampled inside the lock:
 two actual SQLite transactions execute in reversed call order, using a declared
-clock sequence and queue. The final serial general suite runs 836 tests:
-824 pass and twelve platform exclusions, in 89.663 seconds. On the same frozen
+clock sequence and queue. The analysis-queue regression fails on the first
+timestamp correction; a common clock guard also checks all five writer APIs.
+There are 27 writer contracts. The final serial general suite runs 838 tests:
+826 pass and twelve platform exclusions, in 95.147 seconds. On the same frozen
 source, the six cold writer/report APIs and two CLI processes pass; an actual
 original-EML full no-egress worker stops, then five local-storage APIs/six CLI
 processes preserve every original case/input byte through verify and ZIP export.

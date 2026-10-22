@@ -182,6 +182,50 @@ class SentinelRecordWriters(unittest.TestCase):
         with self.assertRaises(ValueError): self.db.record_alert(self.campaign, 'literal', 'message')
         self.assertEqual(self.source(), before)
 
+    def test_queued_analysis_uses_timestamp_of_its_locked_update(self):
+        ready = threading.Event(); resume = threading.Event(); failures = []
+        original = self.db.connection
+        @contextmanager
+        def queued():
+            if threading.current_thread().name == 'queued-analysis':
+                ready.set()
+                if not resume.wait(10): raise TimeoutError('Declared queue did not resume')
+            with original() as conn: yield conn
+        def earlier_call():
+            try: self.db.update_victim_analysis(self.victim, risk_score=1)
+            except BaseException as exc: failures.append(exc)
+        with patch.object(self.db, 'connection', queued), patch('paw.sentinel.database.utc_now_iso',
+                side_effect=['2026-10-23T00:00:01Z', '2026-10-23T00:00:02Z']):
+            thread = threading.Thread(target=earlier_call, name='queued-analysis'); thread.start()
+            try:
+                self.assertTrue(ready.wait(10), 'Declared queue not reached')
+                self.db.update_victim_analysis(self.victim, risk_score=2)
+            finally:
+                resume.set(); thread.join(10)
+            self.assertFalse(thread.is_alive()); self.assertEqual(failures, [])
+        row = self.db.get_victim_intelligence(victim_id=self.victim)[0]
+        self.assertEqual(row['risk_score'], 1)
+        self.assertEqual(row['updated_at'], '2026-10-23T00:00:02Z')
+
+    def test_every_record_writer_samples_its_clock_inside_the_transaction(self):
+        current = []; original = self.db.connection
+        @contextmanager
+        def observed():
+            with original() as conn:
+                current.append(conn)
+                try: yield conn
+                finally: current.pop()
+        def clock():
+            self.assertTrue(current and current[-1].in_transaction, 'Clock sampled outside write transaction')
+            return '2026-10-23T00:00:00Z'
+        operations = [lambda:self.db.add_campaign('clock-check','literal'),
+            lambda:self.db.record_check(self.campaign,'stored'),
+            lambda:self.db.record_alert(self.campaign,'stored','message'),
+            lambda:self.db.add_victim_intelligence('192.0.2.2',None,'literal'),
+            lambda:self.db.update_victim_analysis(self.victim,risk_score=1)]
+        with patch.object(self.db,'connection',observed), patch('paw.sentinel.database.utc_now_iso',clock):
+            for operation in operations: operation()
+
     def test_check_parent_update_failure_rolls_back_insert(self):
         with self.db.connection() as conn:
             conn.execute("CREATE TRIGGER fail_check BEFORE UPDATE OF last_check ON campaigns BEGIN SELECT RAISE(ABORT,'declared failure'); END")
