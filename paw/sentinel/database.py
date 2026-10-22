@@ -286,13 +286,95 @@ class CampaignDatabase:
         evidence.update(status=status, default_applied=True)
         return default, evidence
 
+    @staticmethod
+    def _encode_writer_json(value, field, expected=dict):
+        """Admit native JSON without key/tuple coercion, before any SQL access."""
+        if type(value) is not expected:
+            raise ValueError(f'{field} must be a JSON {expected.__name__}')
+        remaining = 100_000
+        active = set()
+
+        def visit(item, depth):
+            nonlocal remaining
+            remaining -= 1
+            if remaining < 0 or depth > 64:
+                raise ValueError(f'{field} JSON depth/node limit exceeded')
+            kind = type(item)
+            if kind is str:
+                if len(item) > 1024**2:
+                    raise ValueError(f'{field} JSON byte limit exceeded')
+            elif item is None or kind in (bool, int):
+                pass
+            elif kind is float:
+                if not math.isfinite(item): raise ValueError(f'{field} requires finite JSON numbers')
+            elif kind in (dict, list):
+                if id(item) in active: raise ValueError(f'{field} has a JSON cycle')
+                active.add(id(item))
+                try:
+                    if kind is dict:
+                        result = {}
+                        for key, child in item.items():
+                            if type(key) is not str: raise ValueError(f'{field} requires string JSON keys')
+                            visit(key, depth+1); result[key] = visit(child, depth+1)
+                    else:
+                        result = [visit(child, depth+1) for child in item]
+                finally: active.remove(id(item))
+                return result
+            else:
+                raise ValueError(f'{field} requires native JSON values')
+            return item
+
+        value = visit(value, 0)
+        if expected is list and any(type(item) is not str for item in value):
+            raise ValueError(f'{field} must contain only strings')
+        parts = []; size = 0
+        # ASCII encoding preserves the existing JSON spelling and makes the
+        # consumed character count the stored UTF-8 byte count.
+        for part in json.JSONEncoder(allow_nan=False).iterencode(value):
+            size += len(part)
+            if size > 1024**2: raise ValueError(f'{field} JSON byte limit exceeded')
+            parts.append(part)
+        return ''.join(parts)
+
+    @staticmethod
+    def _writer_text(value, field, *, optional=False, nonblank=False):
+        if optional and value is None: return
+        if type(value) is not str or nonblank and not value.strip():
+            raise ValueError(f'{field} must be a literal string')
+
+    @staticmethod
+    def _writer_number(value, field, *, minimum=None, maximum=None, integer=False):
+        if (type(value) not in ((int,) if integer else (int, float)) or
+                type(value) is float and not math.isfinite(value) or
+                type(value) is int and not -(2**63) <= value < 2**63 or
+                minimum is not None and value < minimum or maximum is not None and value > maximum):
+            raise ValueError(f'{field} requires an admitted finite number')
+
+    @staticmethod
+    def _insert_writer_record(conn, table, columns, values):
+        # Names come exclusively from fixed internal call sites, never callers.
+        cursor = conn.execute(f"INSERT INTO {table} ({', '.join(columns)}) VALUES ({', '.join('?' for _ in columns)})", values)
+        if cursor.rowcount != 1:
+            raise RuntimeError('Sentinel record was not inserted; transaction rolled back')
+        CampaignDatabase._assert_writer_record(conn, table, columns, values, cursor.lastrowid)
+        return cursor.lastrowid
+
+    @staticmethod
+    def _assert_writer_record(conn, table, columns, values, rowid):
+        rows = conn.execute(f"SELECT {', '.join(columns)} FROM {table} WHERE rowid=?", (rowid,)).fetchall()
+        if rows != [tuple(values)]:
+            raise RuntimeError('Sentinel record did not persist as supplied; transaction rolled back')
+
+    @staticmethod
+    def _require_writer_campaign(conn, campaign_id):
+        if conn.execute('SELECT id FROM campaigns WHERE id=? COLLATE BINARY', (campaign_id,)).fetchall() != [(campaign_id,)]:
+            raise ValueError('Exactly one existing literal campaign is required')
+
     def add_campaign(self, case_id: str, url: str, metadata: Dict[str, Any] = None) -> str:
         """Store one literal campaign per case, without authorizing collection."""
         if not isinstance(case_id, str) or not case_id.strip() or not isinstance(url, str) or not url.strip():
             raise ValueError("case_id and url must be nonblank strings")
-        if metadata is not None and not isinstance(metadata, dict):
-            raise ValueError("Campaign metadata must be an object or None")
-        encoded_metadata = json.dumps({} if metadata is None else metadata, allow_nan=False)
+        encoded_metadata = self._encode_writer_json({} if metadata is None else metadata, 'metadata')
         domain = self._extract_domain(url)
         campaign_id = f"sentinel_{case_id}_{int(datetime.now().timestamp())}"
 
@@ -301,16 +383,15 @@ class CampaignDatabase:
             conn.execute("BEGIN IMMEDIATE")
             if conn.execute("SELECT 1 FROM campaigns WHERE case_id=? LIMIT 1", (case_id,)).fetchone():
                 raise ValueError(f"Campaign already exists for case: {case_id}")
-            conn.execute("""
-                INSERT INTO campaigns (id, case_id, created_at, url, domain, metadata, status)
-                VALUES (?, ?, ?, ?, ?, ?, 'active')
-            """, (
+            self._insert_writer_record(conn, 'campaigns',
+                ('id', 'case_id', 'created_at', 'url', 'domain', 'metadata', 'status'), (
                 campaign_id,
                 case_id,
                 utc_now_iso(),
                 url,
                 domain,
-                encoded_metadata
+                encoded_metadata,
+                'active'
             ))
             conn.commit()
 
@@ -418,48 +499,55 @@ class CampaignDatabase:
                     http_status: int = None, content_hash: str = None,
                     screenshot_path: str = None, error_message: str = None,
                     metadata: Dict[str, Any] = None) -> None:
-        """Record a monitoring check result."""
+        """Record one admitted result and its parent timestamp together."""
+        self._writer_text(campaign_id, 'campaign_id', nonblank=True)
+        self._writer_text(status, 'status', nonblank=True)
+        for field, value in (('content_hash', content_hash), ('screenshot_path', screenshot_path), ('error_message', error_message)):
+            self._writer_text(value, field, optional=True)
+        if response_time is not None: self._writer_number(response_time, 'response_time', minimum=0)
+        if http_status is not None: self._writer_number(http_status, 'http_status', minimum=100, maximum=599, integer=True)
+        encoded = self._encode_writer_json({} if metadata is None else metadata, 'metadata')
+        columns = ('campaign_id', 'check_time', 'status', 'response_time', 'http_status',
+                   'content_hash', 'screenshot_path', 'error_message', 'metadata')
         with self.connection() as conn:
-            conn.execute("""
-                INSERT INTO checks (campaign_id, check_time, status, response_time,
-                                  http_status, content_hash, screenshot_path,
-                                  error_message, metadata)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                campaign_id,
-                utc_now_iso(),
-                status,
-                response_time,
-                http_status,
-                content_hash,
-                screenshot_path,
-                error_message,
-                json.dumps(metadata or {})
-            ))
+            conn.execute('BEGIN IMMEDIATE')
+            self._require_writer_campaign(conn, campaign_id)
+            timestamp = utc_now_iso()
+            values = (campaign_id, timestamp, status, response_time, http_status,
+                      content_hash, screenshot_path, error_message, encoded)
+            rowid = self._insert_writer_record(conn, 'checks', columns, values)
 
             # Update last_check timestamp
-            conn.execute("""
+            cursor = conn.execute("""
                 UPDATE campaigns SET last_check = ? WHERE id = ?
-            """, (utc_now_iso(), campaign_id))
-
+            """, (timestamp, campaign_id))
+            if (cursor.rowcount != 1 or conn.execute('SELECT last_check FROM campaigns WHERE id=?',
+                    (campaign_id,)).fetchall() != [(timestamp,)]):
+                raise RuntimeError('Sentinel check timestamp did not persist; transaction rolled back')
+            self._assert_writer_record(conn, 'checks', columns, values, rowid)
             conn.commit()
 
     def record_alert(self, campaign_id: str, alert_type: str, message: str,
                     severity: str = "info", metadata: Dict[str, Any] = None) -> None:
         """Record an alert."""
+        self._writer_text(campaign_id, 'campaign_id', nonblank=True)
+        self._writer_text(alert_type, 'alert_type', nonblank=True)
+        self._writer_text(message, 'message')
+        self._writer_text(severity, 'severity', nonblank=True)
+        encoded = self._encode_writer_json({} if metadata is None else metadata, 'metadata')
         with self.connection() as conn:
-            conn.execute("""
-                INSERT INTO alerts (campaign_id, alert_time, alert_type, severity,
-                                  message, metadata)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (
+            conn.execute('BEGIN IMMEDIATE')
+            self._require_writer_campaign(conn, campaign_id)
+            self._insert_writer_record(conn, 'alerts',
+                ('campaign_id', 'alert_time', 'alert_type', 'severity', 'message', 'metadata'), (
                 campaign_id,
                 utc_now_iso(),
                 alert_type,
                 severity,
                 message,
-                json.dumps(metadata or {})
+                encoded
             ))
+            self._require_writer_campaign(conn, campaign_id)
             conn.commit()
 
     def get_recent_checks(self, campaign_id: str, limit: int = 10) -> List[Dict[str, Any]]:
@@ -541,21 +629,23 @@ class CampaignDatabase:
 
     def add_victim_intelligence(self, victim_ip: str, victim_ua: str, phishing_url: str,
                                case_id: str = None, metadata: Dict[str, Any] = None) -> int:
-        """Add victim intelligence data when a phishing click is detected."""
+        """Persist supplied interaction fields, without verifying their claims."""
+        self._writer_text(victim_ip, 'victim_ip', nonblank=True)
+        self._writer_text(victim_ua, 'victim_ua', optional=True)
+        self._writer_text(phishing_url, 'phishing_url', nonblank=True)
+        self._writer_text(case_id, 'case_id', optional=True)
+        encoded = self._encode_writer_json({} if metadata is None else metadata, 'metadata')
         with self.connection() as conn:
-            cursor = conn.execute("""
-                INSERT INTO victim_intelligence
-                (victim_ip, victim_ua, click_time, phishing_url, case_id, metadata)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (
+            conn.execute('BEGIN IMMEDIATE')
+            victim_id = self._insert_writer_record(conn, 'victim_intelligence',
+                ('victim_ip', 'victim_ua', 'click_time', 'phishing_url', 'case_id', 'metadata'), (
                 victim_ip,
                 victim_ua,
                 utc_now_iso(),
                 phishing_url,
                 case_id,
-                json.dumps(metadata or {})
+                encoded
             ))
-            victim_id = cursor.lastrowid
             conn.commit()
             return victim_id
 
@@ -651,20 +741,27 @@ class CampaignDatabase:
                               related_ips: List[str] = None, interaction_type: str = None,
                               interaction_confidence: float = None, interaction_indicators: List[str] = None) -> bool:
         """Update victim intelligence analysis results."""
+        self._writer_number(victim_id, 'victim_id', minimum=1, integer=True)
+        for field, value in (('risk_score', risk_score), ('interaction_confidence', interaction_confidence)):
+            if value is not None:
+                self._writer_number(value, field, minimum=0 if field == 'interaction_confidence' else None,
+                                    maximum=1 if field == 'interaction_confidence' else None)
+        for field, value in (('analyzed_status', analyzed_status), ('interaction_type', interaction_type)):
+            self._writer_text(value, field, optional=True)
         updates = []
         params = []
 
         if geolocation_data is not None:
             updates.append("geolocation_data = ?")
-            params.append(json.dumps(geolocation_data))
+            params.append(self._encode_writer_json(geolocation_data, 'geolocation_data'))
 
         if whois_data is not None:
             updates.append("whois_data = ?")
-            params.append(json.dumps(whois_data))
+            params.append(self._encode_writer_json(whois_data, 'whois_data'))
 
         if attacker_correlation is not None:
             updates.append("attacker_correlation = ?")
-            params.append(json.dumps(attacker_correlation))
+            params.append(self._encode_writer_json(attacker_correlation, 'attacker_correlation'))
 
         if risk_score is not None:
             updates.append("risk_score = ?")
@@ -676,7 +773,7 @@ class CampaignDatabase:
 
         if related_ips is not None:
             updates.append("related_ips = ?")
-            params.append(json.dumps(related_ips))
+            params.append(self._encode_writer_json(related_ips, 'related_ips', list))
 
         if interaction_type is not None:
             updates.append("interaction_type = ?")
@@ -688,23 +785,30 @@ class CampaignDatabase:
 
         if interaction_indicators is not None:
             updates.append("interaction_indicators = ?")
-            params.append(json.dumps(interaction_indicators))
+            params.append(self._encode_writer_json(interaction_indicators, 'interaction_indicators', list))
 
         if not updates:
             return False
 
         updates.append("updated_at = ?")
-        params.append(utc_now_iso())
 
         query = f"""
             UPDATE victim_intelligence
             SET {', '.join(updates)}
             WHERE id = ?
         """
-        params.append(victim_id)
-
         with self.connection() as conn:
-            conn.execute(query, params)
+            conn.execute('BEGIN IMMEDIATE')
+            params.extend((utc_now_iso(), victim_id))
+            cursor = conn.execute(query, params)
+            if cursor.rowcount == 0:
+                # An ignored target update may still have run BEFORE triggers.
+                conn.rollback()
+                return False
+            columns = ', '.join(update.split(' = ')[0] for update in updates)
+            if (cursor.rowcount != 1 or conn.execute(f'SELECT {columns} FROM victim_intelligence WHERE id=?',
+                    (victim_id,)).fetchall() != [tuple(params[:-1])]):
+                raise RuntimeError('Sentinel analysis update did not persist; transaction rolled back')
             conn.commit()
 
         return True
