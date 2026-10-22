@@ -58,7 +58,10 @@ Writes use explicit transactions. Inserts require exactly one inserted row and
 re-read the supplied columns at its returned rowid. Ignored, deleted or changed
 inserts raise and roll back. Checks/alerts require one existing literal parent in
 the same transaction; a check and `last_check` use one timestamp. Both that parent
-timestamp and the inserted check are verified after the parent's update.
+timestamp and the inserted check are verified after the parent's update. The
+timestamp is sampled only after `BEGIN IMMEDIATE` acquires the write lock, so an
+earlier queued call cannot overwrite a later commit with a pre-lock timestamp.
+This does not make the system wall clock monotonic under clock corrections.
 
 Analysis updates return `False` if no row was updated, including an ignored update,
 rolling back intermediate effects before returning. They return `True` only
@@ -87,9 +90,12 @@ actual writes. Network attempts and remaining threads are checked; API consumers
 cannot load collectors or HTTP/plot clients. CLI bootstrap occurs before policy,
 as in the existing integration contract. No sample URL is visited.
 
-The 24 contracts against the PR82 module reproduce 123 failed assertions and
-eight errors including subtests. The final serial general suite runs 835 tests:
-823 pass and twelve platform exclusions, in 85.267 seconds. On the same frozen
+The original 24 contracts against the PR82 module reproduce 123 failed assertions
+and eight errors including subtests. The additional queued-writer regression
+fails on PR83's first head and passes with timestamps sampled inside the lock:
+two actual SQLite transactions execute in reversed call order, using a declared
+clock sequence and queue. The final serial general suite runs 836 tests:
+824 pass and twelve platform exclusions, in 89.663 seconds. On the same frozen
 source, the six cold writer/report APIs and two CLI processes pass; an actual
 original-EML full no-egress worker stops, then five local-storage APIs/six CLI
 processes preserve every original case/input byte through verify and ZIP export.

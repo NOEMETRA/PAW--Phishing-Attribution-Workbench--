@@ -507,14 +507,14 @@ class CampaignDatabase:
         if response_time is not None: self._writer_number(response_time, 'response_time', minimum=0)
         if http_status is not None: self._writer_number(http_status, 'http_status', minimum=100, maximum=599, integer=True)
         encoded = self._encode_writer_json({} if metadata is None else metadata, 'metadata')
-        timestamp = utc_now_iso()
         columns = ('campaign_id', 'check_time', 'status', 'response_time', 'http_status',
                    'content_hash', 'screenshot_path', 'error_message', 'metadata')
-        values = (campaign_id, timestamp, status, response_time, http_status,
-                  content_hash, screenshot_path, error_message, encoded)
         with self.connection() as conn:
             conn.execute('BEGIN IMMEDIATE')
             self._require_writer_campaign(conn, campaign_id)
+            timestamp = utc_now_iso()
+            values = (campaign_id, timestamp, status, response_time, http_status,
+                      content_hash, screenshot_path, error_message, encoded)
             rowid = self._insert_writer_record(conn, 'checks', columns, values)
 
             # Update last_check timestamp

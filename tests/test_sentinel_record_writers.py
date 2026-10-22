@@ -1,9 +1,10 @@
 """Actual SQLite JSON writer admission and acknowledged row effects; no collection."""
-from contextlib import closing
+from contextlib import closing, contextmanager
 import json
 from pathlib import Path
 import sqlite3
 import tempfile
+import threading
 import unittest
 from unittest.mock import patch
 
@@ -144,6 +145,35 @@ class SentinelRecordWriters(unittest.TestCase):
         with closing(sqlite3.connect(self.path)) as conn:
             self.assertEqual(conn.execute('SELECT last_check FROM campaigns WHERE id=?', (self.campaign,)).fetchone(),
                              conn.execute('SELECT check_time FROM checks').fetchone())
+
+    def test_queued_check_cannot_overwrite_newer_parent_with_a_prelock_timestamp(self):
+        ready = threading.Event(); resume = threading.Event(); failures = []
+        original = self.db.connection
+        @contextmanager
+        def queued():
+            if threading.current_thread().name == 'queued-check':
+                ready.set()
+                if not resume.wait(10): raise TimeoutError('Declared queue did not resume')
+            with original() as conn: yield conn
+        def earlier_call():
+            try: self.db.record_check(self.campaign, 'queued')
+            except BaseException as exc: failures.append(exc)
+        with patch.object(self.db, 'connection', queued), patch('paw.sentinel.database.utc_now_iso',
+                side_effect=['2026-10-23T00:00:01Z', '2026-10-23T00:00:02Z']):
+            thread = threading.Thread(target=earlier_call, name='queued-check')
+            thread.start()
+            try:
+                self.assertTrue(ready.wait(10), 'Declared queue not reached')
+                self.db.record_check(self.campaign, 'commits-first')
+            finally:
+                resume.set(); thread.join(10)
+            self.assertFalse(thread.is_alive()); self.assertEqual(failures, [])
+        with closing(sqlite3.connect(self.path)) as conn:
+            last = conn.execute('SELECT last_check FROM campaigns WHERE id=?', (self.campaign,)).fetchone()
+            latest = conn.execute('SELECT check_time FROM checks ORDER BY check_time DESC LIMIT 1').fetchone()
+            committed_last = conn.execute('SELECT check_time FROM checks ORDER BY id DESC LIMIT 1').fetchone()
+            self.assertEqual(last, latest)
+            self.assertEqual(last, committed_last)
 
     def test_alert_insert_cannot_commit_after_its_parent_disappears(self):
         with self.db.connection() as conn:

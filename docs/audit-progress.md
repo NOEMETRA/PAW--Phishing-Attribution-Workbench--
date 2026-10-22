@@ -14,11 +14,13 @@ silenziose o numeri non finiti. Limiti per campo: 1 MiB codificato, profondità 
 100.000 nodi. Le scritture verificano i valori persistiti nella transazione;
 un aggiornamento di intelligence assente/ignorato non diventa successo. Controlli
 e avvisi richiedono una campagna letterale esistente; controllo e `last_check`
-condividono il timestamp. Le righe lette restano dichiarazioni non verificate.
+condividono il timestamp, campionato dopo l'acquisizione del lock di scrittura.
+Le righe lette restano dichiarazioni non verificate.
 
-Sui sorgenti finali: 835 test in 85,267 secondi, 823 superati e 12 esclusioni
+Sui sorgenti finali: 836 test in 89,663 secondi, 824 superati e 12 esclusioni
 di piattaforma. I 24 nuovi contratti sul baseline PR82 riproducono 123 asserzioni
-fallite e 8 errori, includendo i sottocasi. Sei nuovi processi API e due CLI
+fallite e 8 errori, includendo i sottocasi. Il venticinquesimo contratto riproduce
+e corregge l'ordine concorrente dei timestamp rilevato dalla review. Sei nuovi processi API e due CLI
 verificano writer, righe estranee conservate e report/digest JSON passivi;
 si aggiungono 5 API/6 CLI e un full originale
 no-egress della famiglia locale, con supervisore fermato e verify/ZIP byte per
