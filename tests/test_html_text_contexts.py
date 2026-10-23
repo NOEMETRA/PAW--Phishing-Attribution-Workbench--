@@ -197,6 +197,17 @@ assert parser.urls == []
             cwd=Path(__file__).resolve().parents[1],capture_output=True,timeout=10)
         self.assertEqual(result.returncode,0,(result.stdout+result.stderr).decode(errors='replace'))
 
+    def test_native_escapable_keyword_keeps_once_only_text_and_normal_following_data(self):
+        for tag in ('textarea','title','xmp','style'):
+            for flag in (False,True):
+                with self.subTest(tag=tag,escapable=flag):
+                    parser = HtmlEvidenceParser()
+                    parser.set_cdata_mode(tag,escapable=flag)
+                    parser.feed('A&amp;amp;</'+tag+'>B&amp;amp;')
+                    parser.close()
+                    inside = 'A&amp;' if tag in ('textarea','title') else 'A&amp;amp;'
+                    self.assertEqual(''.join(parser.text),inside+'B&amp;')
+
 
 if __name__ == '__main__':
     unittest.main()

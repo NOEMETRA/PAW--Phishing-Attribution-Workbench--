@@ -19,11 +19,15 @@ confini condivisi. Le parti HTML sono analizzate separatamente e i risultati
 rimandano a parte MIME, testo e hash. Un caso malformato di 700.000 byte che
 esauriva il limite della regressione ora termina conservando l'intera coda.
 
-Suite finale: 976 test (962 superati, 14 esclusioni previste), 18 nuove prove
+Suite finale: 977 test (963 superati, 14 esclusioni previste), 19 nuove prove
 mirate. Nove integrazioni/build seriali della famiglia passate; dopo il confine
 EOF ripetuti suite, nuovi casi HTML (15 CLI/6 HTTP), liste, fonti URL e wheel
-con 95 sorgenti. I dettagli delle revisioni e dei 252 hash congelati sono nel
-contratto; review Codex e CI della nuova famiglia restano da chiudere.
+con 95 sorgenti. La prima CI ha rilevato una nuova firma del parser nei Python
+aggiornati: errore riprodotto sullo head pubblicato, corretto e riverificato con
+29 prove HTML e gli stessi 15 CLI/6 HTTP su un Python 3.13.15 separato.
+Suite generale, stessi casi sul runtime 3.13.5 e wheel ripetuti; 252 hash finali
+immutati. Il contratto distingue revisioni e limiti. Review Codex e CI sullo
+head corretto restano da chiudere.
 I contratti precedenti su [campi URL singoli](html-scalar-url-contexts.md),
 [liste HTML](html-url-list-contexts.md) e [CSS letterale](css-url-contexts.md)
 restano verificati. DOM/browser, grammatica completa e interpretazioni escluse

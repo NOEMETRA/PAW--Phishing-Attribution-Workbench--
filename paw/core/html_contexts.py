@@ -9,8 +9,12 @@ class HTMLTextContextParser(HTMLParser):
     RAWTEXT = ('script', 'style', 'xmp', 'iframe', 'noembed', 'noframes')
     CDATA_CONTENT_ELEMENTS = RCDATA + RAWTEXT + ('plaintext',)
 
-    def set_cdata_mode(self, elem):
+    def set_cdata_mode(self, elem, *, escapable=False):
         self.cdata_elem = elem.lower()
+        # Newer maintenance releases pass escapable and consult _escapable in
+        # goahead(). Keep text raw there: text_data() owns once-only RCDATA
+        # decoding on both old and new stdlibs, including the optional builder.
+        self._escapable = False
         # Only an appropriate end-tag name can leave a text context. Unlike
         # the stdlib matcher, whitespace after '</' is not an end tag, while
         # ASCII whitespace, '/' or '>' after the name permits an end token.

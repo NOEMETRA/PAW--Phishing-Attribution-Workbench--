@@ -461,3 +461,5 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_archive_inventory.py' -v
       - name: Verify actual offline Unicode ZIP CLI and HTTP exports
         run: python tests/integration_archive_inventory_real.py
+      - name: Verify shared HTML text boundaries on maintenance runtimes
+        run: python -m unittest discover -s tests -p 'test_html_text_contexts.py' -v

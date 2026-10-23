@@ -63,8 +63,8 @@ benchmark or an explanation of historical four-hour analyses.
 
 ## Verification and limits
 
-Windows Python 3.13.5 / BeautifulSoup 4.13.4: **976 tests, 962 passed and 14
-expected exclusions**, including 18 new methods. Initial boundary regressions
+Windows Python 3.13.5 / BeautifulSoup 4.13.4: **977 tests, 963 passed and 14
+expected exclusions**, including 19 new methods. Initial boundary regressions
 fail against the baseline. Actual independent-document and EOF probes also
 precede their corresponding corrections. The first source-binding integration
 caught a conditional local hashlib import shadowing the existing module import;
@@ -90,9 +90,30 @@ workflow files. The earlier CSS/scalar/CID/MIME rows describe the preceding
 family revision; committed CI independently runs the full workflow. Assertions
 check exact targets/original candidates, per-part hashes and raw/body bytes,
 5,000/4,096/904 source-link accounting, stopped owners, coverage, seals and
-CLI/API/ZIP parity. Validators stop before documentation changes. A subsequent
-print-only correction names the stress payload as 700 KB rather than 650 KB;
-assertions and runtime are unchanged. Four public static contracts pass again.
+CLI/API/ZIP parity. Validators stop before documentation changes. Four public
+static contracts pass again after the final documentation update.
+
+### Maintenance-runtime compatibility
+
+The first PR93 CI run (`39980394956`, head `4714ce3`) failed the existing HTML
+contracts on Python 3.11.17: the native parser passes an `escapable` keyword.
+An actual archived copy of that head reproduces the same two failures and one
+error with Python 3.13.15 / BeautifulSoup 4.15.0. No parser/mock substitution is
+used for that reproduction.
+
+The shared mode setter now accepts the native keyword while keeping native
+text raw; its own RCDATA decoder remains the single entity-decoding step.
+Following ordinary HTML resumes native character-reference handling. A new
+regression exercises both keyword values and subsequent text; CI also runs
+all 19 text-context methods on its Python 3.12/3.13 maintenance matrix.
+Reference: [CPython 3.11.17 parser source](https://github.com/python/cpython/blob/v3.11.17/Lib/html/parser.py).
+
+After that correction, the final 252 hashes stayed unchanged through: the full
+977-test suite on Python 3.13.5, 29 HTML/text-context methods on the actual
+Python 3.13.15 runtime, the same 15 CLI / six HTTP cases on each runtime, and
+another 95-source wheel check. These repeat the same fixtures rather than add
+independent accuracy samples. The successful local matrix supersedes the
+initial failed CI result; fresh CI/review on the corrected head remain gates.
 
 This is lexical forensic extraction, not HTML5 tree construction or browser
 rendering. Insertion modes, foreign content, scripting-dependent noscript,
