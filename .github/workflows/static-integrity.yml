@@ -348,6 +348,12 @@ jobs:
       - name: Verify actual cold Sentinel writers and passive report consumers
         run: python tests/integration_sentinel_writers_real.py
 
+      - name: Verify complete supported offline Sentinel contracts
+        run: python -m unittest discover -s tests -p 'test_sentinel_offline*.py' -v
+
+      - name: Verify actual cold offline Sentinel profiles and two-process read views
+        run: python tests/integration_sentinel_completion_real.py
+
       - name: Verify legacy campaign listing matches passive CLI without source mutation
         run: python tests/integration_legacy_campaign_list_real.py
 

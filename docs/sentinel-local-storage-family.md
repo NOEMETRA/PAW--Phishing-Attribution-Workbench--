@@ -1,5 +1,9 @@
 # Sentinel local storage family
 
+Current contract update: The later contract includes every admitted single-link regular file, including hidden names and `.pyc` bytes, adds directory/depth/output limits and end-of-report metadata checks. Historical filename exclusions below are superseded; first-scan and non-atomic snapshot limits remain. See
+[supported offline Sentinel completion](sentinel-offline-completion.md). Earlier
+evidence and counts below remain historical.
+
 This block audits campaign management and local file observation together. It
 does not enable remote checks, service control, new intelligence or UI behavior.
 

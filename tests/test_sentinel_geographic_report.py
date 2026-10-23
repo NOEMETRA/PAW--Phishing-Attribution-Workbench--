@@ -238,7 +238,7 @@ class SentinelGeographicReport(unittest.TestCase):
 
     def test_config_defaults_only_when_absent_and_never_hides_existing_source_errors(self):
         config = self.root / 'sentinel_config.json'
-        self.assertEqual(geographic_database_path(config), 'sentinel.db')
+        self.assertEqual(geographic_database_path(config), str(Path('sentinel.db').absolute()))
         for invalid in ('null', 'false', '[]', '{}', '{broken',
                         '{"storage":{}}', '{"storage":{"database_path":" "}}',
                         '{"storage":{"database_path":3}}',
@@ -252,10 +252,10 @@ class SentinelGeographicReport(unittest.TestCase):
         with self.assertRaises(UnicodeDecodeError):
             geographic_database_path(config)
         config.write_text(json.dumps({'storage': {'database_path': 'literal # Ω %.db'}}), encoding='utf-8')
-        self.assertEqual(geographic_database_path(config), 'literal # Ω %.db')
+        self.assertEqual(geographic_database_path(config), str(Path('literal # Ω %.db').absolute()))
         config.unlink()
         config.mkdir()
-        with self.assertRaises(OSError):
+        with self.assertRaises(ValueError):
             geographic_database_path(config)
 
     def test_all_sixteen_legacy_partial_layouts_keep_null_confidence_without_migration(self):

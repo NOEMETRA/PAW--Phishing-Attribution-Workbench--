@@ -7,31 +7,16 @@ from pathlib import Path
 import time
 from typing import Any, Dict, List, Optional
 import uuid
+from .config import configured_database_options, _storage_directory, _json_chunks, _bounded_report
 
 
 def geographic_database_path(config_file='sentinel_config.json'):
     """Default only on absent config; unreadable/invalid selection must fail."""
-    config = Path(config_file)
-    try:
-        config.lstat()
-    except FileNotFoundError:
-        return 'sentinel.db'
+    return geographic_database_options(config_file)['db_path']
 
-    def unique_object(pairs):
-        result = {}
-        for key, value in pairs:
-            if key in result:
-                raise ValueError('Duplicate key in geographic configuration: ' + key)
-            result[key] = value
-        return result
 
-    with config.open('r', encoding='utf-8') as source:
-        value = json.load(source, object_pairs_hook=unique_object)
-    storage = value.get('storage') if isinstance(value, dict) else None
-    database = storage.get('database_path') if isinstance(storage, dict) else None
-    if not isinstance(database, str) or not database.strip():
-        raise ValueError('Geographic configuration requires a nonblank storage.database_path')
-    return database
+def geographic_database_options(config_file='sentinel_config.json'):
+    return configured_database_options(config_file, require_explicit=True)
 
 
 def _html_text(value):
@@ -60,16 +45,27 @@ class GeographicReporter:
         if db_connection is None:
             raise RuntimeError('Geographic reports require a real database connection')
         self.db = db_connection
-        self.reports_dir = 'reports/geographic'
+        self.reports_dir = str(Path('reports/geographic').absolute())
+
+    @property
+    def reports_dir(self):
+        return self._reports_dir
+
+    @reports_dir.setter
+    def reports_dir(self, value):
+        from .contracts import _storage_path
+        self._reports_dir = str(_storage_path(value))
 
     def generate_geographic_report(self, case_id: str = None, min_confidence: float = 0.0,
                                    exclude_countries: Optional[List[str]] = None, *,
                                    output_format: str = 'both') -> Dict[str, Any]:
         validate_geographic_options(case_id, min_confidence, exclude_countries, output_format)
         report = self._build_report(case_id, min_confidence, exclude_countries)
+        self.db.check_report(report)
         report['output_files'] = self._save_report(report, output_format)
         return report
 
+    @_bounded_report
     def get_statistics(self, case_id=None, min_confidence=0.0):
         """Same selected observations as the report, without output creation."""
         report = self._build_report(case_id, min_confidence)
@@ -172,12 +168,12 @@ class GeographicReporter:
         }
 
     @staticmethod
-    def _generate_html_report(report):
+    def _generate_html_report(report, *, max_output_bytes=64*1024**2):
         """Escaped passive text; no executable markup, scripts or remote assets."""
         case = 'All cases' if report['case_id'] is None else report['case_id']
         rows = ''.join('<tr><td>' + _html_text(country) + '</td><td>' + str(count) + '</td></tr>'
                        for country, count in report['geographic_stats']['countries'].items())
-        source = escape(json.dumps(report, ensure_ascii=True, indent=2, allow_nan=False))
+        source = escape(''.join(_json_chunks(report, max_output_bytes, indent=2)))
         return ('<!doctype html><html><head><meta charset="utf-8">'
             '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; base-uri \'none\'; form-action \'none\'">'
             '<title>Stored geographic observations</title></head><body>'
@@ -190,20 +186,26 @@ class GeographicReporter:
 
     def _save_report(self, report, output_format):
         stem = 'geographic_report_' + uuid.uuid4().hex
-        directory = Path(self.reports_dir)
+        directory = _storage_directory(self.reports_dir)
         outputs = []
         if output_format in ('json', 'both'):
-            outputs.append((directory / (stem + '.json'), json.dumps(report, ensure_ascii=True,
-                            indent=2, allow_nan=False)))
+            outputs.append((directory / (stem + '.json'), ''.join(_json_chunks(
+                report, self.db.limits['max_output_bytes'], indent=2))))
         if output_format in ('html', 'both'):
-            outputs.append((directory / (stem + '.html'), self._generate_html_report(report)))
+            outputs.append((directory / (stem + '.html'), self._generate_html_report(
+                report, max_output_bytes=self.db.limits['max_output_bytes'])))
+        if sum(len(content.encode('utf-8')) for _, content in outputs) > self.db.limits['max_output_bytes']:
+            raise ValueError('Sentinel geographic output byte limit exceeded')
+        self.db.check_report({**report, 'output_files': [str(path) for path, _ in outputs]})
         directory.mkdir(parents=True, exist_ok=True)
+        _storage_directory(directory)
         attempted = []
         try:
             for path, content in outputs:
                 attempted.append(str(path))
                 with path.open('x', encoding='utf-8') as handle:
                     handle.write(content)
+            _storage_directory(directory)
         except OSError as error:
             raise OSError(f'Geographic output failed; inspect attempted files {attempted}: {error}') from error
         return attempted
@@ -213,7 +215,7 @@ def generate_geographic_report_cli(case_id=None, min_confidence=0.0, output_form
                                    exclude_countries=None):
     from .database import CampaignDatabase
     validate_geographic_options(case_id, min_confidence, exclude_countries, output_format)
-    database = CampaignDatabase(geographic_database_path(), read_only=True)
+    database = CampaignDatabase(**geographic_database_options(), read_only=True)
     report = GeographicReporter(database).generate_geographic_report(case_id, min_confidence,
         exclude_countries, output_format=output_format)
     print(f"Stored selected rows: {report['total_records']}; geographic observations: {report['total_victims']}")

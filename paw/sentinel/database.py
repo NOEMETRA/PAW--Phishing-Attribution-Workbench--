@@ -7,12 +7,16 @@ import base64
 from contextlib import contextmanager, closing
 import json
 import math
+import re
+import weakref
+from contextvars import ContextVar
 import os
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional
 from ..util.timeutil import utc_now_iso
-from .config import _storage_path, _admit_storage_path, _storage_identity, _storage_opener
+from .config import (_storage_path, _admit_storage_path, _storage_identity, _storage_opener,
+                     _resource_limits, _json_tree, _json_chunks, _encode_writer_json, _bounded_report, _require_active)
 
 
 class _StoredJSONError(ValueError):
@@ -26,7 +30,10 @@ class _InvalidUTF8Text(bytes):
 class CampaignDatabase:
     """SQLite database for managing monitored phishing campaigns."""
 
-    def __init__(self, db_path: str = "sentinel.db", *, read_only: bool = False):
+    def __init__(self, db_path: str = "sentinel.db", *, read_only: bool = False, limits=None):
+        if type(read_only) is not bool: raise ValueError('read_only must be a boolean')
+        self.limits = _resource_limits(limits)
+        self._json_budget = ContextVar('sentinel_json_budget', default=None)
         path = _storage_path(db_path)
         self.db_path = str(path)
         self.read_only = read_only
@@ -65,10 +72,41 @@ class CampaignDatabase:
         target = self._read_only_uri() if self.read_only else Path(self.db_path).as_uri() + '?mode=rw'
         with closing(sqlite3.connect(target, uri=True)) as conn:
             self._admit_database()
+            self._bound_connection(conn)
             if self.read_only:
                 conn.execute("PRAGMA query_only = ON")
+                conn.execute('BEGIN')
             with conn:
                 yield conn
+                if self.read_only: self._admit_database()
+
+    def _bound_connection(self, conn):
+        limits = self.limits
+        conn.setlimit(sqlite3.SQLITE_LIMIT_LENGTH, limits['max_row_bytes'])
+        counters = weakref.WeakKeyDictionary()
+        def bounded_row(cursor, values):
+            count, size = counters.get(cursor, (0, 0))
+            size += sum(len(v.encode('utf-8', errors='surrogatepass')) if isinstance(v, str)
+                        else len(v) if isinstance(v, bytes) else 8 for v in values)
+            if count+1 > limits['max_rows'] or size > limits['max_result_bytes']:
+                raise ValueError('Sentinel selected-result row/byte limit exceeded; no complete result')
+            counters[cursor] = (count+1, size)
+            return values
+        conn.row_factory = bounded_row
+        steps = 0; interval = min(100, limits['max_sql_steps'])
+        def progress():
+            nonlocal steps
+            steps += interval
+            return steps >= limits['max_sql_steps']
+        conn.set_progress_handler(progress, interval)
+
+    def check_report(self, value):
+        if isinstance(value, dict):
+            value['read_contract'] = {'sqlite_view': 'one_read_transaction_per_connection',
+                'atomic_filesystem_snapshot': False, 'limits': dict(self.limits),
+                'scope': 'Selected stored rows; no source history or authenticity established'}
+        for _ in _json_chunks(value, self.limits['max_output_bytes']): pass
+        return value
 
     def _require_stopped_storage(self):
         """Admit a saved rollback-journal database, without creating sidecars."""
@@ -112,9 +150,16 @@ class CampaignDatabase:
             return sqlite3.Row(cursor, values)
 
         with self.connection() as conn:
+            if not self.read_only: conn.execute('BEGIN')
+            budget = conn.row_factory
+            def bounded_named(cursor, values):
+                budget(cursor, values)
+                return named_row(cursor, values)
             conn.text_factory = decode_text
-            conn.row_factory = named_row
-            yield conn
+            conn.row_factory = bounded_named
+            token = self._json_budget.set([self.limits['max_json_nodes']])
+            try: yield conn
+            finally: self._json_budget.reset(token)
 
     def _init_db(self) -> None:
         """Initialize database tables."""
@@ -272,9 +317,19 @@ class CampaignDatabase:
                 status = 'empty'
             elif not isinstance(raw, (str, bytes)):
                 status = 'unsupported_storage_type'
+            elif ((self._json_budget.get() is not None and self._json_budget.get()[0] <= 0) or
+                    (len(raw.encode('utf-8')) if isinstance(raw,str) else len(raw)) > self.limits['max_json_bytes']):
+                status = 'resource_limit'
             else:
-                return json.loads(raw, object_pairs_hook=unique_object,
-                                  parse_constant=reject_constant, parse_float=finite_float), evidence
+                decoded = json.loads(raw, object_pairs_hook=unique_object,
+                                     parse_constant=reject_constant, parse_float=finite_float)
+                try:
+                    decoded = _json_tree(decoded, depth=self.limits['max_json_depth'], nodes=self.limits['max_json_nodes'],
+                                         budget=self._json_budget.get())
+                except ValueError:
+                    evidence.update(status='resource_limit', default_applied=True)
+                    return default, evidence
+                return decoded, evidence
         except _StoredJSONError as error:
             status = str(error)
         except json.JSONDecodeError:
@@ -288,53 +343,7 @@ class CampaignDatabase:
 
     @staticmethod
     def _encode_writer_json(value, field, expected=dict):
-        """Admit native JSON without key/tuple coercion, before any SQL access."""
-        if type(value) is not expected:
-            raise ValueError(f'{field} must be a JSON {expected.__name__}')
-        remaining = 100_000
-        active = set()
-
-        def visit(item, depth):
-            nonlocal remaining
-            remaining -= 1
-            if remaining < 0 or depth > 64:
-                raise ValueError(f'{field} JSON depth/node limit exceeded')
-            kind = type(item)
-            if kind is str:
-                if len(item) > 1024**2:
-                    raise ValueError(f'{field} JSON byte limit exceeded')
-            elif item is None or kind in (bool, int):
-                pass
-            elif kind is float:
-                if not math.isfinite(item): raise ValueError(f'{field} requires finite JSON numbers')
-            elif kind in (dict, list):
-                if id(item) in active: raise ValueError(f'{field} has a JSON cycle')
-                active.add(id(item))
-                try:
-                    if kind is dict:
-                        result = {}
-                        for key, child in item.items():
-                            if type(key) is not str: raise ValueError(f'{field} requires string JSON keys')
-                            visit(key, depth+1); result[key] = visit(child, depth+1)
-                    else:
-                        result = [visit(child, depth+1) for child in item]
-                finally: active.remove(id(item))
-                return result
-            else:
-                raise ValueError(f'{field} requires native JSON values')
-            return item
-
-        value = visit(value, 0)
-        if expected is list and any(type(item) is not str for item in value):
-            raise ValueError(f'{field} must contain only strings')
-        parts = []; size = 0
-        # ASCII encoding preserves the existing JSON spelling and makes the
-        # consumed character count the stored UTF-8 byte count.
-        for part in json.JSONEncoder(allow_nan=False).iterencode(value):
-            size += len(part)
-            if size > 1024**2: raise ValueError(f'{field} JSON byte limit exceeded')
-            parts.append(part)
-        return ''.join(parts)
+        return _encode_writer_json(value, field, expected)
 
     @staticmethod
     def _writer_text(value, field, *, optional=False, nonblank=False):
@@ -399,6 +408,8 @@ class CampaignDatabase:
 
     def remove_campaign(self, campaign_id: str, *, case_id: str = None) -> bool:
         """Acknowledge exactly one active-to-removed transition in one transaction."""
+        self._writer_text(campaign_id, 'campaign_id')
+        self._writer_text(case_id, 'case_id', optional=True)
         with self.connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
             if case_id is None:
@@ -427,6 +438,7 @@ class CampaignDatabase:
 
     def get_campaign(self, campaign_id: str) -> Optional[Dict[str, Any]]:
         """Get campaign details by ID."""
+        self._writer_text(campaign_id, 'campaign_id')
         with self._json_read_connection() as conn:
             row = conn.execute("""
                 SELECT id, case_id, created_at, last_check, status, url,
@@ -487,13 +499,26 @@ class CampaignDatabase:
         return {'total_campaigns': row[0], 'active_campaigns': row[1],
                 'unacknowledged_alerts': row[2]}
 
-    def update_campaign_status(self, campaign_id: str, status: str) -> None:
+    def update_campaign_status(self, campaign_id: str, status: str) -> bool:
         """Update campaign status."""
+        self._writer_text(campaign_id, 'campaign_id', nonblank=True)
+        self._writer_text(status, 'status', optional=True, nonblank=True)
+        return self._transition('campaigns', campaign_id, 'status', status)
+
+    def _transition(self, table, identifier, column, value):
         with self.connection() as conn:
-            conn.execute("""
-                UPDATE campaigns SET status = ? WHERE id = ?
-            """, (status, campaign_id))
-            conn.commit()
+            conn.execute('BEGIN IMMEDIATE')
+            rows = conn.execute(f'SELECT {column} FROM {table} WHERE id=? COLLATE BINARY', (identifier,)).fetchall()
+            if len(rows) > 1: raise ValueError('Ambiguous Sentinel transition target')
+            if not rows or rows == [(value,)]:
+                conn.rollback(); return False
+            cursor = conn.execute(f'UPDATE {table} SET {column}=? WHERE id=? COLLATE BINARY', (value, identifier))
+            if cursor.rowcount == 0:
+                conn.rollback(); return False
+            if (cursor.rowcount != 1 or conn.execute(f'SELECT {column} FROM {table} WHERE id=? COLLATE BINARY',
+                    (identifier,)).fetchall() != [(value,)]):
+                raise RuntimeError('Sentinel transition did not persist; transaction rolled back')
+            return True
 
     def record_check(self, campaign_id: str, status: str, response_time: float = None,
                     http_status: int = None, content_hash: str = None,
@@ -552,13 +577,15 @@ class CampaignDatabase:
 
     def get_recent_checks(self, campaign_id: str, limit: int = 10) -> List[Dict[str, Any]]:
         """Get recent checks for a campaign."""
+        self._writer_text(campaign_id, 'campaign_id')
+        self._writer_number(limit, 'limit', minimum=0, integer=True)
         checks = []
         with self._json_read_connection() as conn:
             rows = conn.execute("""
                 SELECT id, campaign_id, check_time, status, response_time, http_status,
                        content_hash, screenshot_path, error_message, metadata
                 FROM checks WHERE campaign_id = ?
-                ORDER BY check_time DESC LIMIT ?
+                ORDER BY check_time DESC, id DESC LIMIT ?
             """, (campaign_id, limit)).fetchall()
 
             for row in rows:
@@ -584,7 +611,7 @@ class CampaignDatabase:
                 SELECT id, campaign_id, alert_time, alert_type, severity, message,
                        metadata, acknowledged
                 FROM alerts WHERE acknowledged = 0
-                ORDER BY alert_time DESC
+                ORDER BY alert_time DESC, id DESC
             """).fetchall()
 
             for row in rows:
@@ -600,30 +627,44 @@ class CampaignDatabase:
                 }, {'metadata': {}}))
         return alerts
 
-    def acknowledge_alert(self, alert_id: int) -> None:
+    def acknowledge_alert(self, alert_id: int) -> bool:
         """Mark an alert as acknowledged."""
+        self._writer_number(alert_id, 'alert_id', minimum=1, integer=True)
+        return self._transition('alerts', alert_id, 'acknowledged', 1)
+
+    def cleanup_old_data(self, retention_days: int = 90):
+        """Delete only interpretable expired check/alert rows; never case files."""
+        self._writer_number(retention_days, 'retention_days', minimum=0, maximum=365_000, integer=True)
         with self.connection() as conn:
-            conn.execute("""
-                UPDATE alerts SET acknowledged = 1 WHERE id = ?
-            """, (alert_id,))
-            conn.commit()
-
-    def cleanup_old_data(self, retention_days: int = 90) -> None:
-        """Clean up old check data and screenshots."""
-        cutoff_date = (datetime.now() - timedelta(days=retention_days)).isoformat()
-
-        with self.connection() as conn:
-            # Delete old checks
-            conn.execute("""
-                DELETE FROM checks WHERE check_time < ?
-            """, (cutoff_date,))
-
-            # Delete old alerts
-            conn.execute("""
-                DELETE FROM alerts WHERE alert_time < ?
-            """, (cutoff_date,))
-
-            conn.commit()
+            conn.execute('BEGIN IMMEDIATE')
+            cutoff = datetime.fromisoformat(utc_now_iso().replace('Z', '+00:00')) - timedelta(days=retention_days)
+            result = {'complete': True, 'cutoff_utc': cutoff.strftime('%Y-%m-%dT%H:%M:%SZ'),
+                      'deleted': {}, 'retained_uninterpretable': {}}
+            for table, field in (('checks','check_time'), ('alerts','alert_time')):
+                rows = conn.execute(f'SELECT id,{field} FROM {table} ORDER BY id').fetchall()
+                if len({row[0] for row in rows}) != len(rows): raise ValueError('Ambiguous retention identifiers')
+                expired = []; unusable = []
+                for identifier, raw in rows:
+                    self._writer_number(identifier, 'retention identifier', integer=True)
+                    try:
+                        if (not isinstance(raw,str) or len(raw)>64 or not re.fullmatch(
+                                r'\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)', raw)):
+                            raise ValueError('Uninterpreted time')
+                        parsed = datetime.fromisoformat(raw.replace('Z','+00:00')).astimezone(timezone.utc)
+                    except (ValueError, OverflowError):
+                        unusable.append(identifier); continue
+                    if parsed < cutoff: expired.append(identifier)
+                deleted = 0
+                for offset in range(0, len(expired), 500):
+                    batch = expired[offset:offset+500]
+                    deleted += conn.execute(f"DELETE FROM {table} WHERE id IN ({','.join('?' for _ in batch)})", batch).rowcount
+                remaining = conn.execute(f'SELECT id,{field} FROM {table} ORDER BY id').fetchall()
+                expired_ids = set(expired)
+                if deleted != len(expired) or remaining != [row for row in rows if row[0] not in expired_ids]:
+                    raise RuntimeError('Sentinel retention did not persist exactly; transaction rolled back')
+                result['deleted'][table] = deleted; result['retained_uninterpretable'][table] = unusable
+            self.check_report(result)
+        return result
 
     # ===== VICTIM INTELLIGENCE METHODS =====
 
@@ -651,20 +692,23 @@ class CampaignDatabase:
 
     def get_victim_intelligence(self, victim_id: int = None, victim_ip: str = None) -> List[Dict[str, Any]]:
         """Get victim intelligence data."""
+        if victim_id is not None and victim_ip is not None: raise ValueError('Choose one literal selector')
+        if victim_id is not None: self._writer_number(victim_id, 'victim_id', integer=True)
+        self._writer_text(victim_ip, 'victim_ip', optional=True)
         with self._json_read_connection() as conn:
-            if victim_id:
+            if victim_id is not None:
                 rows = conn.execute("""
                     SELECT * FROM victim_intelligence WHERE id = ?
                 """, (victim_id,)).fetchall()
-            elif victim_ip:
+            elif victim_ip is not None:
                 rows = conn.execute("""
-                    SELECT * FROM victim_intelligence WHERE victim_ip = ?
-                    ORDER BY click_time DESC
+                    SELECT * FROM victim_intelligence WHERE victim_ip COLLATE BINARY = ?
+                    ORDER BY click_time DESC, id DESC
                 """, (victim_ip,)).fetchall()
             else:
                 rows = conn.execute("""
                     SELECT * FROM victim_intelligence
-                    ORDER BY click_time DESC
+                    ORDER BY click_time DESC, id DESC
                     LIMIT 100
                 """).fetchall()
 
@@ -686,11 +730,12 @@ class CampaignDatabase:
 
     def get_unanalyzed_victims(self, limit: int = 50) -> List[Dict[str, Any]]:
         """Get victims that haven't been fully analyzed yet."""
+        self._writer_number(limit, 'limit', minimum=0, integer=True)
         with self._json_read_connection() as conn:
             rows = conn.execute("""
                 SELECT * FROM victim_intelligence
                 WHERE analyzed_status IN ('captured', 'analyzing')
-                ORDER BY click_time DESC
+                ORDER BY click_time DESC, id DESC
                 LIMIT ?
             """, (limit,)).fetchall()
 
@@ -701,6 +746,7 @@ class CampaignDatabase:
         return (isinstance(value, (int, float)) and not isinstance(value, bool)
                 and (isinstance(value, int) or math.isfinite(value)))
 
+    @_bounded_report
     def get_victim_statistics(self) -> Dict[str, Any]:
         """Complete stored-row descriptions, without inferred risk or recency."""
         records = self.get_forensic_victim_intelligence()
@@ -815,6 +861,7 @@ class CampaignDatabase:
 
     def calculate_risk_score(self, risk_indicators: List[str], geolocation: Dict[str, Any], whois: Dict[str, Any]) -> int:
         """Calculate risk score from 1-10 based on analysis data."""
+        _require_active()
         score = 1  # Base score
 
         # Risk indicators add points
@@ -851,6 +898,8 @@ class CampaignDatabase:
         if not isinstance(country, str) or not country.strip():
             raise ValueError('country must be a nonblank string')
         records = self.get_forensic_victim_intelligence()
+        if any(record['json_evidence']['fields']['geolocation_data']['status']=='resource_limit' for record in records):
+            raise ValueError('Country selection JSON resource limit exceeded; no complete selection')
         return [record for record in records
                 if record['json_evidence']['fields']['geolocation_data']['status'] == 'decoded'
                 and isinstance(record['geolocation_data'], dict)

@@ -1,5 +1,9 @@
 # Configured Sentinel storage admission
 
+Current contract update: The shared loader/options now reach canonical and legacy consumers, validate native section/profile shapes and return copied containers. Windows stream/normalization aliases are explicitly rejected. Publication remains single-writer, without cross-process CAS. See
+[supported offline Sentinel completion](sentinel-offline-completion.md). Earlier
+evidence and counts below remain historical.
+
 This family covers configuration loading/publication, database source admission
 and schema initialization. It extends the named [local storage contracts](sentinel-local-storage-family.md)
 without enabling a monitor, collector, detonation or UI.

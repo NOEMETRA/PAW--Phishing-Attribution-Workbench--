@@ -1,5 +1,9 @@
 # Stored geographic observations
 
+Current contract update: The shared strict config/resource profile now reaches every consumer. Output roots are bound, combined JSON/HTML and returned metadata are bounded before writing, and exclusive files never overwrite prior outputs. Partial failed output is explicit; the pair is not atomic. See
+[supported offline Sentinel completion](sentinel-offline-completion.md). Earlier
+evidence and counts below remain historical.
+
 This contract covers the existing `GeographicReporter`, the geographic wrappers
 in `IntelligenceAnalyzer`, and `paw geographic` (`geo`) report/statistics dispatch.
 It describes stored claims, not independently verified locations, people,

@@ -22,14 +22,14 @@ race=%r
 if race:
     from paw.sentinel.database import CampaignDatabase
     original=CampaignDatabase.__init__
-    def changed_source(self,path='sentinel.db',*,read_only=False):
+    def changed_source(self,db_path='sentinel.db',*,read_only=False,limits=None):
         if not read_only:
-            with sqlite3.connect(path) as c:
+            with sqlite3.connect(db_path) as c:
                 if race=='removed':
                     c.execute("UPDATE campaigns SET status='removed' WHERE case_id='target'")
                 else:
                     c.execute("DELETE FROM campaigns WHERE case_id='target'")
-        original(self,path,read_only=read_only)
+        original(self,db_path,read_only=read_only,limits=limits)
     CampaignDatabase.__init__=changed_source
 threads=set(threading.enumerate())
 try:

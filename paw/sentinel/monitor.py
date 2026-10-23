@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Dict, List, Any, Optional, Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from .config import SentinelConfig
+from .config import SentinelConfig, _require_active
 from .database import CampaignDatabase
 from ..util.fsutil import ensure_dir
 from ..util.timeutil import utc_now_iso
@@ -20,8 +20,8 @@ class SentinelMonitor:
     """Core monitoring engine for phishing campaigns."""
 
     def __init__(self, config: SentinelConfig = None, database: CampaignDatabase = None):
-        self.config = config or SentinelConfig()
-        self.db = database or CampaignDatabase(self.config.get("storage.database_path"))
+        self.config = SentinelConfig() if config is None else config
+        self.db = CampaignDatabase(**self.config.get_database_options()) if database is None else database
         self._running = False
         self._thread = None
         self._executor = None
@@ -35,6 +35,7 @@ class SentinelMonitor:
 
     def start(self) -> None:
         """Start the monitoring service."""
+        _require_active()
         if self._running:
             return
 
@@ -117,6 +118,7 @@ class SentinelMonitor:
 
     def _perform_checks(self) -> None:
         """Perform monitoring checks for all active campaigns."""
+        _require_active()
         campaigns = self.db.get_active_campaigns()
         if not campaigns:
             return
@@ -139,6 +141,7 @@ class SentinelMonitor:
 
     def _check_campaign(self, campaign: Dict[str, Any]) -> Dict[str, Any]:
         """Check a single campaign."""
+        _require_active()
         campaign_id = campaign['id']
         url = campaign['url']
 
@@ -207,6 +210,7 @@ class SentinelMonitor:
 
     def _take_screenshot(self, url: str, campaign_id: str) -> Optional[str]:
         """Take a screenshot of the URL."""
+        _require_active()
         try:
             from playwright.sync_api import sync_playwright
 
@@ -308,6 +312,7 @@ class SentinelMonitor:
 
     def check_now(self, campaign_id: str = None) -> List[Dict[str, Any]]:
         """Perform immediate checks for campaigns."""
+        _require_active()
         if campaign_id:
             campaign = self.db.get_campaign(campaign_id)
             campaigns = [campaign] if campaign else []
