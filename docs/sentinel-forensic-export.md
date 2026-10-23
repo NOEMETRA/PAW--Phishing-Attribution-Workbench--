@@ -1,5 +1,9 @@
 # Stored Sentinel forensic export and verifiable digest
 
+Current contract update: Stored-data query/JSON/report budgets and one-transaction read views now apply. The returned-list digest remains an integrity observation, without source authentication or an atomic filesystem snapshot. See
+[supported offline Sentinel completion](sentinel-offline-completion.md). Earlier
+evidence and counts below remain historical.
+
 This S11 correction follows merged PR48 (`eaebec9`) and changes two production
 modules: the analyzer and its database export reader. Actual saved SQLite export
 reproduced a null `data_integrity_hash`: the helper serialized data but never

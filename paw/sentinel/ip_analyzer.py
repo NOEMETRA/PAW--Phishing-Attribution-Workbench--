@@ -4,9 +4,9 @@ IP Analysis Engine for victim intelligence.
 Provides geolocation, WHOIS, reverse DNS, and basic reconnaissance.
 """
 import socket
+from .config import _require_active
 import json
 import time
-import requests
 import os
 from typing import Dict, List, Optional, Tuple, Any
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -33,6 +33,7 @@ class IPAnalyzer:
 
     def analyze_ip(self, ip: str) -> Dict[str, Any]:
         """Complete analysis of an IP address."""
+        _require_active()
         result = {
             'ip': ip,
             'analysis_time': time.time(),
@@ -70,6 +71,7 @@ class IPAnalyzer:
 
     def reverse_dns_lookup(self, ip: str) -> Optional[str]:
         """Perform reverse DNS lookup."""
+        _require_active()
         try:
             hostname = socket.gethostbyaddr(ip)[0]
             return hostname
@@ -95,6 +97,7 @@ class IPAnalyzer:
 
     def geolocate_ip(self, ip: str) -> Dict[str, Any]:
         """Geolocate IP address using free APIs."""
+        _require_active()
         if ip in self.geolocation_cache:
             return self.geolocation_cache[ip]
 
@@ -120,6 +123,8 @@ class IPAnalyzer:
 
     def _geolocate_ipapi(self, ip: str) -> Optional[Dict[str, Any]]:
         """Geolocate using ip-api.com (free tier)."""
+        _require_active()
+        import requests
         try:
             response = requests.get(f"http://ip-api.com/json/{ip}",
                                   timeout=self.timeout,
@@ -141,13 +146,18 @@ class IPAnalyzer:
                         'source': 'ip-api.com'
                     }
         except Exception as e:
-            print(f"[IPAnalyzer] Geolocation error for {ip}: {e}")
+            print(f"[IPAnalyzer] Geolocation request failed: {type(e).__name__}")
         return None
 
     def _geolocate_ipify(self, ip: str) -> Optional[Dict[str, Any]]:
         """Geolocate using ipify.org (limited free tier)."""
+        _require_active()
+        api_key = os.environ.get('PAW_IPIFY_API_KEY')
+        if not api_key: return None
+        import requests
         try:
-            response = requests.get(f"https://geo.ipify.org/api/v2/country,city?apiKey=at_1234567890123456789&ipAddress={ip}",
+            response = requests.get('https://geo.ipify.org/api/v2/country,city',
+                                  params={'apiKey': api_key, 'ipAddress': ip},
                                   timeout=self.timeout,
                                   proxies=self.proxies)
             if response.status_code == 200:
@@ -164,11 +174,12 @@ class IPAnalyzer:
                     'source': 'ipify.org'
                 }
         except Exception as e:
-            print(f"[IPAnalyzer] Geolocation error for {ip}: {e}")
+            print(f"[IPAnalyzer] Geolocation request failed: {type(e).__name__}")
         return None
 
     def whois_lookup(self, ip: str) -> Dict[str, Any]:
         """Perform WHOIS lookup for IP address."""
+        _require_active()
         if ip in self.whois_cache:
             return self.whois_cache[ip]
 
@@ -198,6 +209,7 @@ class IPAnalyzer:
 
     def analyze_risk_indicators(self, analysis_result: Dict[str, Any]) -> List[str]:
         """Analyze IP for risk indicators."""
+        _require_active()
         indicators = []
 
         geo = analysis_result.get('geolocation', {})
@@ -240,6 +252,7 @@ class IPAnalyzer:
 
     def correlate_ips(self, victim_ips: List[str], known_attacker_ranges: List[str] = None) -> Dict[str, Any]:
         """Find correlations between victim IPs to identify attacker infrastructure."""
+        _require_active()
         correlations = {
             'ip_clusters': {},
             'common_networks': {},
@@ -278,6 +291,7 @@ class IPAnalyzer:
 
     def batch_analyze_ips(self, ips: List[str], max_workers: int = 5) -> Dict[str, Dict[str, Any]]:
         """Analyze multiple IPs concurrently."""
+        _require_active()
         results = {}
 
         with ThreadPoolExecutor(max_workers=max_workers) as executor:

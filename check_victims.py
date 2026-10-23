@@ -6,27 +6,8 @@ from pathlib import Path
 
 
 def _database_path():
-    config = Path('sentinel_config.json')
-    try:
-        config.lstat()
-    except FileNotFoundError:
-        return 'sentinel.db'
-
-    def unique_object(pairs):
-        result = {}
-        for key, value in pairs:
-            if key in result:
-                raise ValueError('Duplicate key in Sentinel configuration: ' + key)
-            result[key] = value
-        return result
-
-    with config.open('r', encoding='utf-8') as source:
-        value = json.load(source, object_pairs_hook=unique_object)
-    storage = value.get('storage') if isinstance(value, dict) else None
-    database = storage.get('database_path') if isinstance(storage, dict) else None
-    if not isinstance(database, str) or not database.strip():
-        raise ValueError('Sentinel configuration requires a nonblank storage.database_path')
-    return database
+    from paw.sentinel.config import configured_database_options
+    return configured_database_options(require_explicit=True)['db_path']
 
 
 def main():
@@ -35,7 +16,8 @@ def main():
     try:
         from paw.sentinel import CampaignDatabase
 
-        database = CampaignDatabase(_database_path(), read_only=True)
+        from paw.sentinel.config import configured_database_options
+        database = CampaignDatabase(**configured_database_options(require_explicit=True), read_only=True)
         report = database.get_victim_statistics()
         output = json.dumps(report, indent=2, ensure_ascii=True, allow_nan=False)
     except Exception as error:

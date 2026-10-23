@@ -12,59 +12,9 @@ from pathlib import Path, PureWindowsPath
 from typing import Dict, Any, Optional
 
 
-def _storage_path(value, *, base=None):
-    """Bind literal local paths without following away symbolic components."""
-    try: value = os.fspath(value)
-    except TypeError: raise ValueError('Sentinel requires a filesystem path') from None
-    if (not isinstance(value, str) or not value.strip() or '\x00' in value or
-            value == ':memory:' or value.lower().startswith('file:') or
-            value.startswith(('\\\\', '//'))):
-        raise ValueError('Sentinel requires a nonblank local filesystem path')
-    path = Path(value)
-    if os.name == 'nt' and (PureWindowsPath(value).drive and not path.is_absolute() or
-                           any(PureWindowsPath(part).is_reserved() for part in path.parts)):
-        raise ValueError('Device and drive-relative storage paths are unavailable')
-    bound = (Path(base) / path if base is not None and not path.is_absolute() else path).absolute()
-    if str(bound).startswith(('\\\\', '//')):
-        raise ValueError('Network storage paths are unavailable')
-    return bound
-
-
-def _admit_storage_path(path, *, must_exist=False, directory_as_missing=False):
-    """Reject non-directory ancestors and symbolic/reparse/special targets."""
-    for parent in reversed(path.parents):
-        try: metadata = parent.lstat()
-        except FileNotFoundError: continue
-        if (not stat.S_ISDIR(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode) or
-                getattr(metadata, 'st_file_attributes', 0) & getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0x400)):
-            raise ValueError(f'Unsupported Sentinel storage ancestor: {parent}')
-    try: metadata = path.lstat()
-    except FileNotFoundError:
-        if must_exist: raise
-        return None
-    if (directory_as_missing and stat.S_ISDIR(metadata.st_mode) and
-            not getattr(metadata, 'st_file_attributes', 0) & getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0x400)):
-        raise FileNotFoundError(f'Sentinel database is not an existing file: {path}')
-    if (not stat.S_ISREG(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode) or
-            getattr(metadata, 'st_file_attributes', 0) & getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0x400)):
-        raise ValueError(f'Sentinel storage must be a regular non-reparse file: {path}')
-    if metadata.st_nlink != 1:
-        raise ValueError(f'Multiple-link Sentinel storage is unavailable: {path}')
-    return metadata
-
-
-def _storage_identity(metadata):
-    return metadata.st_dev, metadata.st_ino
-
-
-def _storage_stamp(metadata):
-    # Rename may change POSIX ctime. Preserve the same fingerprint across the
-    # publication commit, without requiring a fallible target read afterward.
-    return _storage_identity(metadata), metadata.st_mode, metadata.st_size, metadata.st_mtime_ns
-
-
-def _storage_opener(path, flags):
-    return os.open(path, flags | getattr(os, 'O_NOFOLLOW', 0) | getattr(os, 'O_NONBLOCK', 0))
+from .contracts import (_resource_limits, _json_tree, _json_chunks, _bounded_report,
+    _require_active, _encode_writer_json, _storage_directory, _storage_path,
+    _admit_storage_path, _storage_identity, _storage_stamp, _storage_opener)
 
 
 class SentinelConfig:
@@ -74,6 +24,7 @@ class SentinelConfig:
         self._base_dir = Path.cwd()
         self.config_file = str(_storage_path('sentinel_config.json' if config_file is None else config_file))
         self._source_stamp = None
+        self._explicit_database = False
         self._config = self._load_config()
 
     def _load_config(self) -> Dict[str, Any]:
@@ -106,17 +57,23 @@ class SentinelConfig:
         config = json.loads(raw.decode('utf-8'), object_pairs_hook=unique_object,
                             parse_constant=finite_number, parse_float=finite_number)
         self._validate_config(config)
+        _json_tree(config)
+        self._explicit_database = isinstance(config.get('storage'), dict) and 'database_path' in config['storage']
         self._source_stamp = _storage_stamp(metadata)
         return config or self._get_defaults()
 
     def _validate_config(self, config):
         if not isinstance(config, dict):
             raise ValueError('Sentinel configuration must be an object')
+        for section in ('monitoring', 'alerts', 'analysis', 'storage'):
+            if section in config and type(config[section]) is not dict:
+                raise ValueError(f'Sentinel {section} configuration must be an object')
         if 'storage' in config:
             if not isinstance(config['storage'], dict):
                 raise ValueError('Sentinel storage configuration must be an object')
             if 'database_path' in config['storage']:
                 _storage_path(config['storage']['database_path'], base=self._base_dir)
+            if 'limits' in config['storage']: _resource_limits(config['storage']['limits'])
 
     def _get_defaults(self) -> Dict[str, Any]:
         """Get default configuration values."""
@@ -159,7 +116,7 @@ class SentinelConfig:
                 value = value[k]
             if key == 'storage.database_path' and value is not None:
                 return str(_storage_path(value, base=self._base_dir))
-            return value
+            return copy.deepcopy(value)
         except (KeyError, TypeError):
             return default
 
@@ -179,7 +136,8 @@ class SentinelConfig:
     def _save_config(self, candidate) -> None:
         """Save configuration to file."""
         self._validate_config(candidate)
-        encoded = json.dumps(candidate, indent=2, ensure_ascii=False, allow_nan=False).encode('utf-8')
+        candidate = _json_tree(candidate)
+        encoded = ''.join(_json_chunks(candidate, 1024**2, indent=2)).encode('ascii')
         if len(encoded) > 1024**2:
             raise ValueError('Sentinel configuration byte limit exceeded')
         path = Path(self.config_file)
@@ -211,18 +169,28 @@ class SentinelConfig:
 
     def get_monitoring_config(self) -> Dict[str, Any]:
         """Get monitoring-specific configuration."""
-        return self._config.get("monitoring", {})
+        return copy.deepcopy(self._config.get("monitoring", {}))
 
     def get_alert_config(self) -> Dict[str, Any]:
         """Get alert-specific configuration."""
-        return self._config.get("alerts", {})
+        return copy.deepcopy(self._config.get("alerts", {}))
 
     def get_storage_config(self) -> Dict[str, Any]:
         """Get storage-specific configuration."""
-        values = dict(self._config.get("storage", {}))
+        values = copy.deepcopy(self._config.get("storage", {}))
         if 'database_path' in values: values['database_path'] = self.get('storage.database_path')
         return values
 
+    def get_database_options(self):
+        return {'db_path': self.get('storage.database_path'), 'limits': self.get('storage.limits')}
+
     def get_analysis_config(self) -> Dict[str, Any]:
         """Get analysis-specific configuration."""
-        return self._config.get("analysis", {})
+        return copy.deepcopy(self._config.get("analysis", {}))
+
+
+def configured_database_options(config_file='sentinel_config.json', *, require_explicit=False):
+    config = SentinelConfig(config_file)
+    if require_explicit and config._source_stamp is not None and not config._explicit_database:
+        raise ValueError('Sentinel configuration requires a nonblank storage.database_path')
+    return config.get_database_options()

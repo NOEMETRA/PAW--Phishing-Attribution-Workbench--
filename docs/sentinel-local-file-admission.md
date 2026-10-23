@@ -1,5 +1,9 @@
 # Local file-monitor admission
 
+Current contract update: The later contract admits single-link regular files only, includes hidden/`.pyc` bytes, and bounds directories/depth/output. Historical filename exclusions below are superseded. Known ancestor and output-root admission remain distinct from an OS snapshot. See
+[supported offline Sentinel completion](sentinel-offline-completion.md). Earlier
+evidence and counts below remain historical.
+
 `monitor files` and `monitor integrity` dispatch directly to `FileMonitor` without
 constructing `SentinelMonitor` or loading campaign configuration/storage.
 `FileMonitor` no longer initializes a campaign database by default; an explicitly

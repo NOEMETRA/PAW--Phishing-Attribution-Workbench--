@@ -1,5 +1,9 @@
 # Stored Sentinel JSON sources and decoding outcomes
 
+Current contract update: Read profiles now bound raw JSON bytes, cumulative decoded nodes and depth. Resource exhaustion retains typed source with `resource_limit` rather than a verified default; query/publication budgets fail explicitly. See
+[supported offline Sentinel completion](sentinel-offline-completion.md). Earlier
+evidence and counts below remain historical.
+
 This S11 correction concerns only `paw/sentinel/database.py`. On merged PR46
 (`29cd3a4`), malformed, empty and SQL-null JSON fields silently became `{}` or
 `[]`. Alert metadata instead used unguarded `json.loads`, so one damaged alert

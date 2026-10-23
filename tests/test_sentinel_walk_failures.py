@@ -119,12 +119,12 @@ class SentinelWalkFailures(unittest.TestCase):
                     with self.assertRaises(error): monitor.generate_integrity_report()
         self.assertEqual(monitor.generate_integrity_report()['cases'][0]['file_count'],2)
 
-    def test_valid_empty_missing_and_existing_exclusions_keep_their_behavior(self):
+    def test_valid_empty_missing_and_hidden_or_pyc_regular_sources_are_complete(self):
         case=self.source(); monitor=FileMonitor(self.cases)
         expected=monitor.get_case_files(case.name)
-        (case/'.hidden').write_bytes(b'Existing excluded name')
-        (case/'module.pyc').write_bytes(b'Existing excluded suffix')
-        self.assertEqual(monitor.get_case_files(case.name),expected)
+        (case/'.hidden').write_bytes(b'Literal hidden source')
+        (case/'module.pyc').write_bytes(b'Literal suffix, never executed')
+        self.assertEqual(monitor.get_case_files(case.name),sorted(expected+[str(case/'.hidden'),str(case/'module.pyc')]))
         (self.cases/'case-empty').mkdir()
         self.assertEqual(monitor.get_case_files('case-empty'),[])
         self.assertEqual(monitor.get_case_files('case-missing'),[])

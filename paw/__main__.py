@@ -412,7 +412,7 @@ For help: paw help <command>
             if args.action in ("list", "status"):
                 from .sentinel import CampaignDatabase, SentinelConfig
                 config = SentinelConfig()
-                database = CampaignDatabase(config.get("storage.database_path"), read_only=True)
+                database = CampaignDatabase(**config.get_database_options(), read_only=True)
                 if args.action == "status":
                     stats = database.get_monitor_statistics()
                     print("📊 Sentinel Status (stored data):")
@@ -469,24 +469,26 @@ For help: paw help <command>
                 return
             if args.action == "add":
                 from .sentinel import CampaignDatabase, SentinelConfig
-                database = CampaignDatabase(SentinelConfig().get("storage.database_path"))
+                database = CampaignDatabase(**SentinelConfig().get_database_options())
                 campaign_id = database.add_campaign(args.case, args.url)
                 print(f"✅ Campaign added: {campaign_id}")
             elif args.action == "remove":
                 from .sentinel import CampaignDatabase, SentinelConfig
-                path = SentinelConfig().get("storage.database_path")
-                saved = CampaignDatabase(path, read_only=True)
+                options = SentinelConfig().get_database_options()
+                saved = CampaignDatabase(**options, read_only=True)
                 campaigns = [c for c in saved.get_active_campaigns() if c['case_id'] == args.case]
                 if not campaigns:
                     raise ValueError(f"Active campaign not found for case: {args.case}")
                 if len(campaigns) != 1:
                     raise ValueError(f"Multiple active campaigns for case: {args.case}")
                 campaign = campaigns[0]
-                database = CampaignDatabase(path)
+                database = CampaignDatabase(**options)
                 if not database.remove_campaign(campaign['id'], case_id=args.case):
                     raise RuntimeError("Campaign changed before removal; no active campaign removed")
                 print(f"✅ Campaign removed: {campaign['id']}")
             elif args.action == "check":
+                from .sentinel.contracts import _require_active
+                _require_active()
                 from .sentinel import SentinelMonitor
                 monitor = SentinelMonitor()
                 results = monitor.check_now(args.campaign if hasattr(args, 'campaign') and args.campaign else None)
@@ -504,11 +506,11 @@ For help: paw help <command>
 
         elif args.cmd in ["geographic", "geo"]:
             from .sentinel.intelligence_analyzer import IntelligenceAnalyzer
-            from .sentinel.geographic_reports import geographic_database_path, validate_geographic_options
+            from .sentinel.geographic_reports import geographic_database_options, validate_geographic_options
             validate_geographic_options(args.case, args.min_confidence, output_format=args.output)
             if args.action == "map":
                 raise RuntimeError('Interactive maps are unavailable; geographic report preserves stored coordinates')
-            analyzer = IntelligenceAnalyzer(geographic_database_path(), read_only=True)
+            analyzer = IntelligenceAnalyzer(**geographic_database_options(), read_only=True)
             if args.action == "report":
                 report = analyzer.generate_geographic_report(args.case, args.min_confidence,
                                                             output_format=args.output)

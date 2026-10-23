@@ -1,5 +1,9 @@
 # Stored Sentinel intelligence report
 
+Current contract update: Shared query/JSON/output budgets now apply to the passive report family. Active helpers refuse under no-egress before I/O; their algorithms remain deferred S14/S10. See
+[supported offline Sentinel completion](sentinel-offline-completion.md). Earlier
+evidence and counts below remain historical.
+
 This S11 correction follows merged PR49 (`ff86c77`). It changes only the stored
 intelligence-report path in `paw/sentinel/intelligence_analyzer.py`; geographic
 renderers, CLI actions, other statistics and active collection remain separate.

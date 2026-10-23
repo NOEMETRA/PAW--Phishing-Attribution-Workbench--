@@ -7,13 +7,14 @@ import json
 from typing import List, Dict, Any, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from .database import CampaignDatabase
+from .config import _bounded_report, _require_active
 
 
 class IntelligenceAnalyzer:
     """Analyze victim intelligence to identify attacker infrastructure."""
 
-    def __init__(self, db_path: str = "sentinel.db", use_proxy: bool = True, *, read_only: bool = False):
-        self.db = CampaignDatabase(db_path, read_only=read_only)
+    def __init__(self, db_path: str = "sentinel.db", use_proxy: bool = True, *, read_only: bool = False, limits=None):
+        self.db = CampaignDatabase(db_path, read_only=read_only, limits=limits)
         self.ip_analyzer = None
         if not read_only:
             from .ip_analyzer import IPAnalyzer
@@ -21,6 +22,7 @@ class IntelligenceAnalyzer:
 
     def analyze_unanalyzed_victims(self, max_workers: int = 3, case_id: str = None) -> Dict[str, Any]:
         """Analyze all unanalyzed victims and update database."""
+        _require_active()
         if self.db.read_only:
             raise RuntimeError("Saved read-only Sentinel storage cannot run IP analysis")
         victims = self.db.get_unanalyzed_victims()
@@ -67,6 +69,7 @@ class IntelligenceAnalyzer:
 
     def _analyze_single_victim(self, victim: Dict[str, Any]) -> Dict[str, Any]:
         """Analyze a single victim and update database."""
+        _require_active()
         if self.db.read_only:
             raise RuntimeError("Saved read-only Sentinel storage cannot run IP analysis")
         try:
@@ -131,6 +134,7 @@ class IntelligenceAnalyzer:
 
     def _update_attacker_correlations(self, case_id: str = None) -> None:
         """Update attacker correlation data for all victims."""
+        _require_active()
         if self.db.read_only:
             raise RuntimeError("Saved read-only Sentinel storage cannot update correlations")
         try:
@@ -180,6 +184,7 @@ class IntelligenceAnalyzer:
         except Exception as e:
             print(f"Error updating correlations: {e}")
 
+    @_bounded_report
     def generate_intelligence_report(self, case_id: str = None) -> Dict[str, Any]:
         """Describe selected stored rows without inferring identity or risk."""
         records = self.db.get_forensic_victim_intelligence(case_id)
@@ -263,6 +268,7 @@ class IntelligenceAnalyzer:
             }
         }
 
+    @_bounded_report
     def export_forensic_data(self, case_id: str = None) -> Dict[str, Any]:
         """Export stored claims with their source; no authentication or custody claim."""
         if case_id is not None and not isinstance(case_id, str):
@@ -325,6 +331,7 @@ class IntelligenceAnalyzer:
         return (isinstance(value, (int, float)) and not isinstance(value, bool)
                 and 0 <= value <= 1)
 
+    @_bounded_report
     def get_interaction_statistics(self, case_id: str = None) -> Dict[str, Any]:
         """Describe complete selected stored labels, without identity inference."""
         records = self._stored_interaction_rows(case_id)
@@ -373,6 +380,7 @@ class IntelligenceAnalyzer:
                 'potential_attacker_ips': 'Stored IP/interaction labels do not establish attacker identity.'},
             'count_scope': 'Stored rows and literal labels/scores; not unique people or verified behavior.'}
 
+    @_bounded_report
     def get_potential_attacker_interactions(self, case_id: str = None, min_confidence: float = 0.6) -> List[Dict[str, Any]]:
         """Legacy name: select unverified stored candidate labels and numeric scores."""
         if not self._usable_stored_confidence(min_confidence):
@@ -400,6 +408,9 @@ class IntelligenceAnalyzer:
 
     def classify_interaction_type(self, victim_data: Dict[str, Any]) -> str:
         """Classify interaction as victim, attacker, or suspicious."""
+        if self.db.read_only:
+            raise RuntimeError('Saved read-only claims cannot establish interaction identity')
+        _require_active()
         ip = victim_data.get('victim_ip', '')
         ua = victim_data.get('victim_ua', '')
         click_time = victim_data.get('click_time', '')
@@ -418,6 +429,7 @@ class IntelligenceAnalyzer:
 
     def _analyze_interaction_pattern(self, ip: str, ua: str, click_time: str, case_id: str, analysis: Dict[str, Any]) -> str:
         """Analyze patterns to classify interaction type."""
+        _require_active()
         classification = {
             'type': 'victim',  # default assumption
             'confidence': 0.5,
@@ -453,6 +465,7 @@ class IntelligenceAnalyzer:
 
     def _analyze_geographic_risk(self, geolocation: Dict[str, Any]) -> Dict[str, Any]:
         """Analyze geographic location for attacker indicators."""
+        _require_active()
         country = geolocation.get('country', '').upper()
         country_code = geolocation.get('country_code', '')
 
@@ -484,6 +497,7 @@ class IntelligenceAnalyzer:
 
     def _analyze_user_agent_risk(self, ua: str) -> Dict[str, Any]:
         """Analyze user agent for automated tools and suspicious patterns."""
+        _require_active()
         if not ua:
             return {'is_suspicious': True, 'confidence': 0.9, 'indicators': ['no_user_agent']}
 
@@ -527,6 +541,7 @@ class IntelligenceAnalyzer:
 
     def _analyze_ip_reputation(self, ip: str, analysis: Dict[str, Any]) -> Dict[str, Any]:
         """Analyze IP for reputation-based attacker indicators."""
+        _require_active()
         indicators = []
         confidence = 0.0
 

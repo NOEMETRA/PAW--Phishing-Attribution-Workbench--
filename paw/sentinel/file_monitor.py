@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from .database import CampaignDatabase
 from ..util.fsutil import ensure_dir
 from ..util.timeutil import utc_now_iso
+from .contracts import _storage_path, _storage_directory, _admit_storage_path, _json_chunks
 from ..core.verify import verify_case
 from ..core.job_registry import require_stopped_case
 
@@ -25,13 +26,16 @@ class FileMonitor:
 
     def __init__(self, cases_dir: str = "cases", database: "CampaignDatabase" = None, *,
                  max_files: int = 10000, max_bytes: int = 1024**3,
-                 max_file_bytes: int = 256 * 1024**2, max_cases: int = 1000):
+                 max_file_bytes: int = 256 * 1024**2, max_cases: int = 1000,
+                 max_directories: int = 10000, max_depth: int = 64, max_output_bytes: int = 64*1024**2):
         self._limits = dict(max_files=max_files, max_bytes=max_bytes,
-                            max_file_bytes=max_file_bytes, max_cases=max_cases)
+                            max_file_bytes=max_file_bytes, max_cases=max_cases,
+                            max_directories=max_directories, max_depth=max_depth,
+                            max_output_bytes=max_output_bytes)
         if any(type(value) is not int or value <= 0 for value in self._limits.values()):
             raise ValueError("File observation limits must be positive integers")
         # Bind relative configuration once, without resolving away root links.
-        self.cases_dir = Path(cases_dir).absolute()
+        self.cases_dir = _storage_path(cases_dir)
         # File checks do not read or write the campaign database.
         self.db = database
         self._baseline_hashes: Dict[str, str] = {}
@@ -40,6 +44,8 @@ class FileMonitor:
 
     @staticmethod
     def _admit(path, *, directory=False):
+        if directory: _storage_directory(path)
+        else: _admit_storage_path(_storage_path(path), must_exist=True)
         metadata = Path(path).lstat()
         if (stat.S_ISLNK(metadata.st_mode) or
                 getattr(metadata, 'st_file_attributes', 0) & getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0x400)):
@@ -86,7 +92,7 @@ class FileMonitor:
         return case_ids
 
     def _inventory_scope(self):
-        return {'scope': 'regular non-link files; hidden-name/pyc exclusions apply',
+        return {'scope': 'all single-link regular files; no filename or extension exclusions',
                 'atomic_snapshot': False, 'limits': dict(self._limits)}
 
     def scan_cases_directory(self) -> List[str]:
@@ -97,7 +103,9 @@ class FileMonitor:
             return []
 
         case_dirs = []
-        for item in self.cases_dir.iterdir():
+        for count, item in enumerate(self.cases_dir.iterdir(), 1):
+            if count > self._limits['max_files'] + self._limits['max_directories'] + self._limits['max_cases']:
+                raise ValueError('Root directory entry limit exceeded')
             if item.name.startswith("case-"):
                 metadata = item.lstat()
                 if stat.S_ISDIR(metadata.st_mode) or item.is_symlink() or getattr(metadata, 'st_file_attributes', 0) & getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0x400):
@@ -115,18 +123,20 @@ class FileMonitor:
         if not case_path.exists():
             return []
 
-        files = []
+        files = []; directories = 0; entries = 0
         def scan_failed(error):
             raise error
         # Walk through all subdirectories
         for root, dirs, filenames in os.walk(case_path, onerror=scan_failed):
+            directories += 1; entries += len(dirs) + len(filenames)
+            if (directories > self._limits['max_directories'] or
+                    len(Path(root).parts)-len(case_path.parts) > self._limits['max_depth'] or
+                    entries > self._limits['max_files']+self._limits['max_directories']):
+                raise ValueError('Case directory/depth/entry limit exceeded')
             self._admit(root, directory=True)
             for directory in dirs:
                 self._admit(Path(root) / directory, directory=True)
             for filename in filenames:
-                # Skip certain file types
-                if filename.endswith(('.pyc', '__pycache__')) or filename.startswith('.'):
-                    continue
                 path = Path(root) / filename
                 self._admit(path)
                 files.append(str(path))
@@ -234,6 +244,7 @@ class FileMonitor:
 
         if self._metadata(self.get_case_files(case_id)) != metadata:
             raise OSError("Case files changed during observation")
+        for _ in _json_chunks(changes, self._limits['max_output_bytes']): pass
         # Only this instance's completed scan may advance its baseline.
         for path in case_baseline: self._baseline_hashes.pop(path, None)
         self._baseline_hashes.update(current_hashes)
@@ -257,31 +268,31 @@ class FileMonitor:
                 changes = self.check_file_changes(case_id)
                 if changes['new_files'] or changes['modified_files'] or changes['deleted_files'] or changes['integrity_status'] != 'ok':
                     results.append(changes)
+            for _ in _json_chunks(results, self._limits['max_output_bytes']): pass
+            for changes in results:
+                self._record_file_check(changes['case_id'], changes)
         except Exception:
             self._baseline_hashes.clear()
             self._baseline_hashes.update(baseline)
             raise
 
-        for changes in results:
-            self._record_file_check(changes['case_id'], changes)
-
         return results
 
     def _record_file_check(self, case_id: str, changes: Dict[str, Any]) -> None:
-        """Record file check results in database."""
-        try:
-            # This would extend the CampaignDatabase to include file monitoring
-            # For now, we'll just print the results
-            print(f"[file_monitor] Case {case_id}: {len(changes['new_files'])} new, "
-                  f"{len(changes['modified_files'])} modified, "
-                  f"{len(changes['deleted_files'])} deleted files. "
-                  f"Integrity: {changes['integrity_status']}")
-        except Exception as e:
-            print(f"[file_monitor] Error recording check for {case_id}: {e}")
+        """Emit a console observation; no database persistence is performed."""
+        print(f"[file_monitor] Case {case_id}: {len(changes['new_files'])} new, "
+              f"{len(changes['modified_files'])} modified, "
+              f"{len(changes['deleted_files'])} deleted files. "
+              f"Integrity: {changes['integrity_status']}")
 
     def generate_integrity_report(self) -> Dict[str, Any]:
         """Generate a comprehensive integrity report for all cases."""
+        with self._scan_lock:
+            return self._generate_integrity_report()
+
+    def _generate_integrity_report(self):
         case_ids = self._selection()
+        inventory = {case: self._metadata(self.get_case_files(case)) for case in case_ids}
         for case_id in case_ids:
             require_stopped_case(self.cases_dir / case_id)
         report = {
@@ -308,4 +319,7 @@ class FileMonitor:
                 'file_count': len(self.get_case_files(case_id))
             })
 
+        if self._selection() != case_ids or any(self._metadata(self.get_case_files(case)) != inventory[case] for case in case_ids):
+            raise OSError('Case inventory changed during integrity report')
+        for _ in _json_chunks(report, self._limits['max_output_bytes']): pass
         return report

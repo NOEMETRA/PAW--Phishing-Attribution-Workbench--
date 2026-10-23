@@ -1,9 +1,9 @@
 # paw/sentinel/__init__.py
 """
-Sentinel - Continuous Phishing Campaign Monitoring Module
+Sentinel: local campaign records, saved-data reports and file observations.
 
-This module provides continuous monitoring capabilities for active phishing campaigns,
-enabling proactive detection of changes, automated alerts, and campaign lifecycle tracking.
+Stored claims remain unverified. Active collectors and service lifecycle require
+the separate controlled-egress validation; offline policy rejects those paths.
 """
 
 __version__ = "1.0.0"
