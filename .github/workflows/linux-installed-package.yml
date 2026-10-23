@@ -1,0 +1,51 @@
+name: PAW Linux installed package
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  installed-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Build the current wheel
+        run: python -m pip wheel --no-deps --wheel-dir "$RUNNER_TEMP/paw-wheel" .
+      - name: Install wheel and declared dependencies in a clean virtualenv
+        run: |
+          python -m venv "$RUNNER_TEMP/paw-installed"
+          "$RUNNER_TEMP/paw-installed/bin/python" -m pip install "$RUNNER_TEMP"/paw-wheel/paw-*.whl
+      - name: Verify installed console, presets, API, seals and exports outside checkout
+        working-directory: ${{ runner.temp }}
+        run: |
+          env -u PYTHONPATH -u PYTHONHOME PYTHONNOUSERSITE=1 \
+            "$RUNNER_TEMP/paw-installed/bin/python" \
+            "$GITHUB_WORKSPACE/tests/integration_installed_package_real.py" \
+            --wheel "$RUNNER_TEMP"/paw-wheel/paw-*.whl \
+            --output "$RUNNER_TEMP/paw-installed-results"
+      - name: Verify canonical and noncanonical MIME fixture accounting
+        working-directory: ${{ runner.temp }}
+        env:
+          PAW_VERIFICATION_DIR: ${{ runner.temp }}/paw-installed-results/mime-fixtures
+        run: |
+          "$RUNNER_TEMP/paw-installed/bin/python" -B "$GITHUB_WORKSPACE/tests/integration_mime_real.py"
+      - name: Retain bounded installed-package logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-installed-${{ matrix.python-version }}
+          path: ${{ runner.temp }}/paw-installed-results
+          if-no-files-found: ignore
+          retention-days: 7

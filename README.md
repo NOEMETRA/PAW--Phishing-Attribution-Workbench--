@@ -555,7 +555,10 @@ Not every artifact is generated in every run.
 
 ## Installation
 
-The dependency set is pinned in `requirements.txt`.
+PAW requires Python >=3.11. Dependency ranges in `requirements.txt` and
+`pyproject.toml` are constraints, not a lockfile. See the measured
+[Linux installation/R08 results](docs/linux-r08-validation.md) for runtime and
+optional-component limits.
 
 Create an isolated environment:
 
@@ -563,17 +566,16 @@ Create an isolated environment:
 python -m venv .venv
 ```
 
-Activate it, then install dependencies:
+Activate it, then install the package and its declared dependencies:
 
 ```bash
-python -m pip install -r requirements.txt
+python -m pip install .
 ```
 
-Browser detonation additionally requires the Playwright browser runtime:
-
-```bash
-python -m playwright install chromium
-```
+Browser collection additionally requires a Playwright browser runtime and the
+separate [S14 isolation acceptance gate](docs/s14-two-pc-linux.md). Base package
+installation does not download a browser or establish isolation. Do not start
+real detonation before that gate passes.
 
 Some optional functions also depend on platform tools such as `tcpdump`, system MIME libraries, or network access.
 
