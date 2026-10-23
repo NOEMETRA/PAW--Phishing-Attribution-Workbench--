@@ -52,7 +52,7 @@ class _HtmlURLCandidateParser(HTMLParser):
                 continue
             if value:
                 self.candidates.extend(extract_css_url_candidates(value,extract_text_url_candidates)
-                    if name == 'style' else html_attribute_url_candidates(name,value,extract_text_url_candidates))
+                    if name == 'style' else html_attribute_url_candidates(name,value,extract_text_url_candidates,tag=tag))
 
     def handle_data(self, value):
         # Visible text has already been joined across markup by MIME analysis.

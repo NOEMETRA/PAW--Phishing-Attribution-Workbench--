@@ -319,14 +319,20 @@ def _srcset_url_tokens(value):
                 break
 
 
-def html_attribute_url_candidates(name, value, extractor=extract_urls):
-    """Share list grammar between MIME observations and candidate/source views.
+def html_attribute_url_candidates(name, value, extractor=extract_urls, *, tag=None):
+    """Share HTML attribute boundaries between MIME and candidate/source views.
 
-    List URL tokens are complete candidates, not prose. An HTTP substring in a
+    Scalar URL fields and list URL tokens are complete candidates, not prose. An HTTP substring in a
     data/relative URL or descriptor is not an outer candidate. Retain an invalid
     whole token when a recognized URL prefix contains disallowed characters,
     rather than turning its truncated prefix into a different valid target.
     """
+    if name in {'href','src','action','formaction','poster'} or (tag == 'object' and name == 'data'):
+        # A scalar URL field is one supplied value, including invalid syntax or
+        # a nonnetwork envelope containing HTTP text. Never promote its inner
+        # substring or truncate legal URI punctuation. Generic metadata remains
+        # lexical; object.data is the resource field with URL semantics.
+        return [value] if extractor(value) else []
     if name not in {'srcset', 'imagesrcset'}:
         return extractor(value)
     return [token for token in _srcset_url_tokens(value)
@@ -342,7 +348,10 @@ class HtmlEvidenceParser(HTMLParser):
         if tag in {'script', 'style'}: self.excluded += 1
         for name, value in attrs:
             if value and name in {'href', 'src', 'action', 'formaction', 'poster', 'srcset', 'imagesrcset', 'data'}:
-                self.urls.extend(html_attribute_url_candidates(name, value))
+                # MIME HTTP observations must begin at the field boundary.
+                # Candidate recovery separately retains non-HTTP whole fields.
+                self.urls.extend(candidate for candidate in html_attribute_url_candidates(name,value,tag=tag)
+                                 if re.match(r'^https?://',candidate,re.IGNORECASE))
 
     def handle_endtag(self, tag):
         if tag in {'script', 'style'} and self.excluded: self.excluded -= 1
