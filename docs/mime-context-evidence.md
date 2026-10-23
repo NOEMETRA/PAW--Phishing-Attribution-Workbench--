@@ -82,6 +82,9 @@ python -B tests/integration_mime_context_real.py
 ```
 
 Constructed messages are regression fixtures, not phishing accuracy labels.
-The application guard is not an OS sandbox. Exact-head review/CI remains required;
+The application guard is not an OS sandbox. PR88 exact-head Codex review is clear;
+all three head/merge CI checks pass, integrated as
+`418f8aa6985e7b3ee18c83648048ab414b0a25ee` with the reviewed tree unchanged.
+The counts above describe that MIME family;
 other extraction contexts, platform installation, independent labels/holdout,
 controlled egress and UI retain their separate audit gates.

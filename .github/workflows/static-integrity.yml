@@ -77,6 +77,9 @@ jobs:
       - name: Verify URL identity, candidate provenance and decoding bounds
         run: python -m unittest discover -s tests -p 'test_url_contracts.py' -v
 
+      - name: Verify shared HTML URL-list token boundaries and source accounting
+        run: python -m unittest discover -s tests -p 'test_html_url_lists.py' -v
+
       - name: Verify real process supervision and interrupted evidence
         run: python -m unittest discover -s tests -p 'test_runtime_contracts.py' -v
 
@@ -224,6 +227,9 @@ jobs:
 
       - name: Verify actual MIME selection and inherited context across CLI and HTTP
         run: python tests/integration_mime_context_real.py
+
+      - name: Verify actual HTML URL list contexts and source budgets across CLI and HTTP
+        run: python tests/integration_html_url_lists_real.py
 
       - name: Verify original embedded MIME spans and separate derived evidence
         run: python -m unittest discover -s tests -p 'test_embedded_wire_evidence.py' -v

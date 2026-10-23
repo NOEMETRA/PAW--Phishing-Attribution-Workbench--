@@ -4,6 +4,7 @@ import json
 import re
 from html.parser import HTMLParser
 from ..deobfuscate.url import http_url_status
+from .mime_analysis import html_attribute_url_candidates
 
 
 def _has_base64_url_scheme(value):
@@ -49,7 +50,7 @@ class _HtmlURLCandidateParser(HTMLParser):
             if name == 'xmlns' or name.startswith('xmlns:'):
                 continue
             if value:
-                self.candidates.extend(extract_text_url_candidates(value))
+                self.candidates.extend(html_attribute_url_candidates(name, value, extract_text_url_candidates))
 
     def handle_data(self, value):
         # Visible text has already been joined across markup by MIME analysis.

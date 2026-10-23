@@ -100,7 +100,7 @@ class URLSourceTests(unittest.TestCase):
                 self.assertTrue(all(contexts(inventory,i)=={('mime_body','0',None)} for i in range(len(evidence))))
                 source=inventory['sources'][0]
                 self.assertEqual(source['representation'],'html_parser_derived_url_candidate_views')
-                self.assertEqual(source['derivation'],{'method':'paw_html_url_candidate_views_v1','persisted':False})
+                self.assertEqual(source['derivation'],{'method':'paw_html_url_candidate_views_v2','persisted':False})
                 self.assertEqual(source['derived_from']['representation'],'per_part_charset_decoded_text')
                 self.assertNotIn('text_path',source)
                 if 'xmlns' in body:self.assertEqual(evidence,[])
