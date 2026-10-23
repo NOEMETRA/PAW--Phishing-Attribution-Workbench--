@@ -23,3 +23,24 @@ def markdown_json(value):
     fence on a line of their own. No source text is interpolated outside JSON.
     """
     return '```json\n' + json.dumps(value, indent=2, ensure_ascii=True) + '\n```\n'
+
+
+def publication_json(value):
+    """Bound the literal view; source artifacts/caller values are not modified."""
+    try:
+        encoded = json.dumps(value, indent=2, ensure_ascii=True, allow_nan=False)
+    except (ValueError, TypeError, RecursionError, OverflowError):
+        return markdown_json({'status':'not_evaluated', 'reason':'Source is not finite JSON data'})
+    limit = 256 * 1024
+    if len(encoded) > limit:
+        return markdown_json({'status':'not_evaluated', 'reason':'Literal publication limit exceeded; consult source artifact',
+                              'encoded_characters':len(encoded), 'limit':limit})
+    return '```json\n' + encoded + '\n```\n'
+
+
+def rekor_report(anchor, proof, errors=None):
+    return ('## Rekor (stored provider fields)\n'
+            'Provider field presence is not inclusion verification or authenticity.\n\n'
+            + publication_json({'verification':{'status':'not_evaluated', 'result':None,
+                'reason':'No validated Rekor inclusion verifier'}, 'anchor':anchor, 'proof':proof,
+                'artifact_errors':errors or {}}))

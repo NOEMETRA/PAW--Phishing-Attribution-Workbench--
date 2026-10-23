@@ -3,6 +3,7 @@ import os, json
 import blake3
 
 def verify_case(case_dir):
+    """Return inventory/content integrity only; signatures/anchors are separate."""
     idx_path = os.path.join(case_dir, "evidence", "merkle_index.json")
     root_path = os.path.join(case_dir, "evidence", "merkle_root.bin")
     if not (os.path.exists(idx_path) and os.path.exists(root_path)):
@@ -47,25 +48,12 @@ def verify_case(case_dir):
     ok = (root == root2)
     print("[verify] Merkle root: OK" if ok else "[verify] Merkle root: BAD")
     
-    # Check Rekor inclusion proof if available
+    # Circular provider metadata is excluded by the existing inventory policy.
+    # Its presence cannot turn an unavailable verifier into a pass or a failure
+    # of the independently checked content inventory.
     proof_path = os.path.join(case_dir, "evidence", "rekor_proof.json")
     anchor_path = os.path.join(case_dir, "evidence", "rekor_anchor.json")
-    if os.path.exists(proof_path) and os.path.exists(anchor_path):
-        try:
-            from .rekor import verify_inclusion_proof
-            with open(proof_path, "r", encoding="utf-8") as f:
-                proof = json.load(f)
-            with open(anchor_path, "r", encoding="utf-8") as f:
-                anchor = json.load(f)
-            statement_sha256 = anchor.get("statement_sha256")
-            proof_ok = verify_inclusion_proof(proof, statement_sha256)
-            print("[verify] Rekor inclusion: OK" if proof_ok else "[verify] Rekor inclusion: BAD")
-            ok = ok and proof_ok
-        except Exception as e:
-            print(f"[verify] Rekor inclusion check failed: {e}")
-            ok = False
-    elif os.path.exists(anchor_path):
-        print("[verify] Rekor anchored but no inclusion proof available")
-        ok = False
+    if os.path.exists(proof_path) or os.path.exists(anchor_path):
+        print('[verify] Rekor inclusion: NOT_EVALUATED; provider fields are unverified and excluded from the content inventory')
     
     return ok

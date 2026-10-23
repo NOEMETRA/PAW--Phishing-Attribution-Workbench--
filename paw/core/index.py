@@ -9,6 +9,7 @@ from pathlib import Path
 from .domain_age import usable_age_days
 from .job_registry import require_stopped_case
 from .runtime import read_progress
+from .consumer_views import assessment_view, native_number
 
 SIMHASH_METHOD = 'simhash64_sha256_unicode_word_frequency_v1_ucd' + unicodedata.unidata_version
 SIMHASH_SCOPE = 'selected_subject_from_received_headers'
@@ -75,7 +76,8 @@ def upsert_case(case_dir: str, origin: dict, headers: dict, dominfo: dict, score
     cc = origin.get("cc", "")
     from_domain = dominfo.get("domain", "")
     nrd_days = usable_age_days(dominfo.get("nrd_days"))
-    case_score = score.get("score", 0.0)
+    case_score = score.get('score')
+    if not native_number(case_score) or not 0 <= case_score <= 1: case_score = None
     
     # Descriptive selected-header fingerprint, not body/campaign/actor evidence.
     subject = headers.get("subject", "")
@@ -175,4 +177,10 @@ def describe_fingerprint(row: dict) -> dict:
         result['simhash_status'] = 'legacy_not_similarity_fingerprint'
     result['simhash_scope'] = SIMHASH_SCOPE
     result['similarity_validation'] = 'not_validated'
+    result['assessment_view'] = assessment_view({'score':result.get('score')}, source='SQLite cases.score')
+    # JSON cannot represent SQLite infinities. Preserve their typed spelling,
+    # never serialize them as a number or invent a zero display value.
+    if isinstance(result.get('score'), float) and not native_number(result['score']):
+        result['score_source'] = {'type':'float', 'representation':repr(result['score'])}
+        result['score'] = None
     return result

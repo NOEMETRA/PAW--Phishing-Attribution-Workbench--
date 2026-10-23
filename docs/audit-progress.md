@@ -1,11 +1,11 @@
 # Stato dell'audit PAW
 
-Riferimento integrato: PR96, commit
-`d7399a5a7443e6ad3809960d9856930a550a9205`; 23 ottobre 2026 (Europe/Rome).
-[Review finale Copilot](https://github.com/NOEMETRA/PAW--Phishing-Attribution-Workbench--/pull/96#pullrequestreview-5632718504)
-sullo head `b2eb2732ad8e95900657ea3de3498b56c97f0040`: approval recommended,
+Riferimento integrato: PR97, commit
+`ccc946c5f61f197d088a924583e512241fafd56f`; 23 ottobre 2026 (Europe/Rome).
+[Review finale Copilot](https://github.com/NOEMETRA/PAW--Phishing-Attribution-Workbench--/pull/97#pullrequestreview-5633364558)
+sullo head `95f3688a753cb4675f4d34978c0e3896acd928ac`: approval recommended,
 nessuna questione aperta. Tre check verdi su head e merge, tree identico.
-Workflow: `40002240264` / `40006753434`.
+Workflow: `40010089025` / `40014199646`.
 
 I [contesti di testo HTML](html-text-contexts.md) sono integrati: confini comuni
 per MIME, URL, CID, form, kit e osservazioni HTML; documenti MIME separati con
@@ -71,13 +71,13 @@ Il nuovo [audit evidenze → score → consumatori](evidence-score-consumers.md)
 registra il percorso numerico e le proiezioni correnti, con otto residui concreti
 R01-R08. Riproduce un indicatore di iframe invisibile inventato da dimensioni
 assenti e l'assenza di conteggi indipendenti per i limiti degli osservatori HTML.
-Il contratto candidato G06 distingue completamento, errore e indisponibilità,
+Il contratto G06, integrato nella PR97, distingue completamento, errore e indisponibilità,
 con omissioni per osservatore/documento e una vista comune in JSON, score,
 report, bozze e API. Le omissioni non aggiungono rischio; i limiti sono di
 pubblicazione dopo enumerazione, non nuovi limiti di parsing/CPU. Review Copilot
-e CI sul nuovo head rimangono gate della PR; l'audit complessivo resta aperto.
+senza questioni aperte e CI sullo head/merge sono verdi; l'audit complessivo resta aperto.
 
-Validazione candidata: 1.011 test (997 superati, 14 esclusioni previste),
+Validazione della famiglia PR97: 1.011 test (997 superati, 14 esclusioni previste),
 60 contratti sul secondo runtime reale e 52 casi CLI/26 worker HTTP nella matrice
 seriale. Replay degli stessi cinque originali, fonti v6, bozze/indice/report/API/
 ZIP e wheel di 95 sorgenti verificati, con 286 hash Python/workflow invariati.
@@ -87,6 +87,30 @@ riferimenti UTC e conservando il log dell'arresto. Nessuno score numerico o caso
 storico è stato riscritto per ottenere il confronto.
 
 DOM/browser, grammatica completa e interpretazioni escluse restano esplicite.
+
+La [famiglia dei consumatori residui](residual-consumer-contracts.md) prosegue
+R01–R08 con un confine comune di lettura/proiezione/pubblicazione. R01 usa la
+decisione coerente con il profilo per i colori; R02 conserva viste storiche senza
+inventare campi o zero; R03/R04 pubblicano valori letterali e qualificati, separando
+integrità Merkle e inclusione Rekor non valutata. R05 rende PGP esplicitamente
+indisponibile prima di chiavi/output; R06 ammette file JSON/testo entro limiti e
+tipi dichiarati senza interrompere i vicini sani. R07 conserva la cattura CSS
+ristretta con interpretazione risorsa indisponibile; non amplia il parser.
+R08 resta il gate finale di installazione/componenti/piattaforme e collaudo della
+versione candidata. La nuova famiglia necessita review Codex e CI sullo stesso
+head validato; nessuna accuratezza o autenticità è dedotta dai contratti.
+
+Matrice finale dei residui: 1.030 test (1.015 superati, 15 esclusioni previste),
+107 contratti selezionati sul secondo runtime (105 superati, due esclusioni).
+La nuova integrazione verifica sei casi CLI/tre worker HTTP e una prova diretta
+offline con metadati forniti, ripetuti su entrambi gli ambienti reali. Passano
+anche le regressioni HTML/report/allegati/URL/bozze, proprietà CLI/API e recupero,
+tre replay degli stessi originali e wheel con 96 sorgenti e due template modificati.
+I 293 hash Python/template/workflow della matrice finale restano invariati.
+La prima matrice è stata fermata da una differenza CRLF nella vista API introdotta
+dal lettore; i log sono conservati e la correzione è seguita da un nuovo
+congelamento e dall'intera matrice, senza indebolire il confronto precedente.
+
 Nessuna risorsa delle email è stata visitata o risolta.
 
 Il lavoro corrente stabilizza il motore offline e la profondità delle evidenze.
@@ -96,8 +120,8 @@ verificati, audit aperti, capacità indisponibili e fasi successive.
 | Area | Evidenze già disponibili | Cosa resta per chiuderla |
 | --- | --- | --- |
 | Esecuzione e conservazione | Cinque preset CLI e worker HTTP effettivi; no-egress applicativo, timeout/cancel/recovery, lettori bloccati durante scritture, originali, inventari, sigilli e ZIP verificati nei flussi registrati. | Matrice Windows integrata registrata sul merge PR84. Contratti correnti di ammissione integrati nella PR86 con review/CI verdi; resta la matrice piattaforme/installazione, con evidenze POSIX separate. |
-| Estrazione offline | Contratti su header/MIME, Received e tempi dichiarati, corpi e messaggi incorporati, URL e trasformazioni, CID, allegati/ZIP; osservazioni statiche separate dalle interpretazioni. Perimetro HTML/CSS enumerato in H01-H10, E01-E06 e G01-G06. | La famiglia allegati riconcilia metadati/ZIP e contenuti non valutati con copertura/report espliciti; G01/G02 hanno una decisione corrente di conservazione/indisponibilità, G03/G04 restano generici/esclusi, G05 è un limite kit; il contratto candidato G06 rende espliciti disponibilità/errori/omissioni e li segue nei consumatori, con gate propri di review/CI. Restano corpus allegati e accettazione piattaforme/componenti. Combinazioni malformate e collaudo integrato restano circoscritti ai contratti supportati. |
-| Risultati e pubblicazione | Contributi numerici e decisioni non arrotondate, bozze locali, query/export e grafi con fonti e limiti verificati nei casi documentati. Il [riepilogo del terminale](terminal-summary-evidence.md) riusa il report di autenticazione; il [confine Markdown integrato](report-evidence-consistency.md) conserva osservazioni letterali e confrontabili con i JSON. | I residui R01-R08 dell'audit consumatori hanno criteri nominati; tipi malformati, risorse e renderer restano circoscritti ai contratti verificati; autenticità di firme/ancoraggi e conformità STIX/ARF/X-ARF non stabilite dai sigilli. |
+| Estrazione offline | Contratti su header/MIME, Received e tempi dichiarati, corpi e messaggi incorporati, URL e trasformazioni, CID, allegati/ZIP; osservazioni statiche separate dalle interpretazioni. Perimetro HTML/CSS enumerato in H01-H10, E01-E06 e G01-G06. | La famiglia allegati riconcilia metadati/ZIP e contenuti non valutati con copertura/report espliciti; G01/G02 hanno una decisione corrente di conservazione/indisponibilità, G03/G04 restano generici/esclusi, G05 è un limite kit; il contratto G06 rende espliciti disponibilità/errori/omissioni e li segue nei consumatori, con gate propri di review/CI. Restano corpus allegati e accettazione piattaforme/componenti. Combinazioni malformate e collaudo integrato restano circoscritti ai contratti supportati. |
+| Risultati e pubblicazione | Contributi numerici e decisioni non arrotondate, bozze locali, query/export e grafi con fonti e limiti verificati nei casi documentati. Il [riepilogo del terminale](terminal-summary-evidence.md) riusa il report di autenticazione; il [confine Markdown integrato](report-evidence-consistency.md) conserva osservazioni letterali e confrontabili con i JSON. | R01–R07 hanno disposizioni supportate/indisponibili entro i contratti dei consumatori; R08 resta accettazione finale. Tipi malformati, risorse e renderer restano circoscritti ai contratti verificati; autenticità di firme/ancoraggi e conformità STIX/ARF/X-ARF non stabilite dai sigilli. |
 | Sentinel | Campagne/file/configurazione/report offline, lifecycle per istanza, pubblicazione atomica e osservazioni HTTP/IP hanno contratti integrati con fonti e limiti; tutti i file del modulo hanno una disposizione esplicita. | Review/CI della disposizione chiuse nella PR92. Servizio persistente, browser, provider reali, isolamento e accettazione piattaforme restano separati; nessuna identità o probabilità di rischio è stabilita da questi test. |
 | Script e installazione | Disposizione dei 26 file Python esterni: 25 entry point verificati o esplicitamente indisponibili e una libreria inutilizzata/non validata, con import inerte. Pacchetto costruito realmente e confrontato con sorgenti, entrypoint e template. | I 2 launcher shell restano differiti; gli algoritmi helper non esercitati restano aperti. Installazione isolata finale e componenti opzionali sulle piattaforme supportate. La disposizione non equivale alla validazione di ogni funzione. |
 | Accuratezza e attribuzione | Pilot privato di 20 originali, con 10 legittimi confermati dal proprietario; algoritmi e ipotesi sono qualificati. | Etichette phishing indipendenti, corpus rappresentativo e holdout, falsi positivi/negativi, calibrazione e correlazione. Lo spam della casella non costituisce da solo ground truth. |

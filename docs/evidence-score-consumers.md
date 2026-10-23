@@ -103,8 +103,8 @@ shape or frontend renderer.
 | `analysis_coverage.json`, `report/score.json` | Same coverage object. `stages.html_observations` equals deobfuscation `coverage.html`; absence of HTML is `not_evaluated`, with zero documents. Numeric components are unchanged by diagnostic states. |
 | Executive Markdown | Dedicated literal JSON coverage block plus the stage list, decision score, thresholds and component explanations. Unknown counts stay null. |
 | Technical Markdown | Existing literal full deobfuscation JSON includes the same metadata, original documents and observations. Attachment coverage/table remain separate. |
-| Local MIME/JSON review drafts | Preserve full score and coverage in their assessment; no send, recipient, authenticity or ARF/X-ARF conformance claim. The plain text template retains its older short numeric view and points to case reports. |
-| SQLite and query | Stores the rounded display score. This does not independently preserve thresholds, decision or coverage and must not recompute a verdict from the column. Existing fingerprint provenance is separate. |
+| Local MIME/JSON review drafts | Preserve full score and coverage in their assessment; no send, recipient, authenticity or ARF/X-ARF conformance claim. The subsequent residual-consumer contract also gives the plain text template a literal complete assessment and explicit current/legacy view. |
+| SQLite and query | Stores the rounded display score. This does not independently preserve thresholds, decision or coverage and must not recompute a verdict from the column. The subsequent read-only assessment annotation retains missing decision/profile/coverage as unknown; existing fingerprint provenance is separate. |
 | HTTP case/list responses | Return the persisted score/coverage/deobfuscation and literal reports after stopped-owner admission. The list summary is the complete persisted score for completed cases. |
 | ZIP export and verify | Preserve selected source/report bytes and integrity inventories; neither export nor a matching seal establishes source authenticity or accuracy. |
 | Standalone deobfuscation | Direct engine output includes observer coverage; case-level stage/report/source binding belongs to supervised email analysis. |
@@ -112,21 +112,23 @@ shape or frontend renderer.
 
 ## Finite residual dispositions
 
-The following source-inspected residuals stay open or deferred. They are not
-silently covered by G06 or the tests above. This inventory is limited to current
+The following source-inspected residuals originated at this baseline. Their
+subsequent [publication contracts](residual-consumer-contracts.md) give R01–R07
+supported or unavailable dispositions; R08 remains final candidate acceptance.
+They are not silently covered by G06 or the historical tests above. This inventory is limited to current
 assessment/coverage publication and the HTML perimeter; it does not replace the
 [whole-engine register](engine-stabilization-checkpoint.md).
 
 | ID / owner | Concrete residual and next acceptance criterion |
 | --- | --- |
-| R01 — S08 | The Rich verdict color still compares against hard-coded 0.72, although text uses the persisted decision and unrounded score. Reconcile visual category with the selected profile and test all three threshold boundaries. No numeric verdict defect is claimed from that color alone. |
-| R02 — S08 | SQLite/query and plain-text draft summaries keep only the older display score, without a uniform current score-schema/coverage view. Define a backward-compatible, read-only historical annotation before expanding these projections; never turn missing metadata into zero risk or rewrite sealed cases. |
-| R03 — S08/S14/S15 | `detonation_box` and `canary_box` interpolate active/supplied endpoint strings and legacy visitor-risk labels into Markdown. Reconcile literal source handling and unavailable identity/risk claims with their actual collection boundary. Offline empty sections do not validate active output. |
-| R04 — S08/S14 | The technical Rekor branch labels `treeSize` presence as inclusion verification, while `verify_inclusion_proof` explicitly has no validated verifier. Remove that success substitute and give stored provider fields a literal, unverified view; actual proof/authenticity and acquisition remain unavailable until separately verified. No live Rekor call occurred here. |
-| R05 — S08/S13 | Optional PGP export signing and signature authenticity need independent acceptance. ZIP bytes and Merkle verification alone do not validate the signer. |
-| R06 — S08/S16 | API JSON readers and remaining terminal/provider branches lack a uniform typed/bounded historical-artifact contract; frontend rendering and readability are deferred. Existing stopped-owner/read-error checks remain supported, without arbitrary malformed-type or renderer certification. |
-| R07 — S09/S14 | HTML perimeter G05: the separate static kit CSS regex can combine a quoted argument and separator comment differently from the main URL scanner. Preserve the explicit limitation until shared supported interpretation has actual source/provenance tests. |
-| R08 — S01/S02/S13 | Preserve these source/coverage contracts in final isolated installation, optional-dependency and Windows/POSIX preset/batch/interruption acceptance. Current local checks are not that final combined matrix. |
+| R01 — S08 | Current consistent score decisions drive Rich colors; all profile/rounding boundaries and actual cells are checked. Unknown/legacy/inconsistent views are neutral. Numeric scoring is unchanged. |
+| R02 — S08 | Read-only query annotations retain recorded rounded values without inventing decisions/profiles/coverage; new missing index scores are SQL NULL. Plain drafts include the common view and full recorded assessment. Historical cases/database rows are not rewritten. |
+| R03 — S08/S14/S15 | Dynamic report sections use bounded literal JSON with unverified acquisition/identity/risk scope. No risk label is derived from stored visitor metadata. Actual active collection/behavior acceptance remains S14/S15. |
+| R04 — S08/S14 | Literal saved provider fields explicitly leave Rekor inclusion verification unavailable. The direct verifier returns None; content integrity verification separately reports NOT_EVALUATED instead of treating unavailable inclusion as a cryptographic pass or failure. Existing provider exclusions remain; actual inclusion/authenticity is not established. |
+| R05 — S08/S13 | PGP publication is explicitly unavailable before key/output access; requested manifest signing has unavailable coverage. Ordinary ZIP remains supported; requested ZIP signing rejects without changing existing archive/signature bytes. Independent signer/proof acceptance remains S08/S13. |
+| R06 — S08/S16 | Named historical JSON/report consumers share strict bounded type/encoding/ambiguity/resource admission and named errors; healthy API neighbors remain readable. Rich saved hypotheses are literal/unverified. Runtime journals, arbitrary SQLite schemas/cells, active-provider terminal branches and frontend acceptance retain separate contracts. |
+| R07 — S09/S14 | Retain G05 as an explicit narrow legacy kit CSS capture: resource interpretation unavailable, network_target false, exact capture/provenance preserved. No main-scanner parity, escape decoding or resource resolution is claimed. |
+| R08 — S01/S02/S13 | Final isolated installation and Windows/POSIX optional-component/preset/batch/interruption acceptance remain candidate gates. Current serial source/wheel/CLI/API regressions preserve the consumer contracts; they do not constitute that final combined acceptance. |
 
 G01/G02 retain their [attachment preservation/unavailability](attachment-capability-coverage.md)
 decisions; G03/G04 remain generic/excluded interpretations. G06 now has the
@@ -173,4 +175,4 @@ file links and diff checks also pass; private logs and case files stay outside G
 
 Fresh exact-head Copilot review and CI remain integration gates. No sample
 URL/DNS access, attachment execution, Docker or active provider acquisition is
-part of this audit. These measurements do not close R01-R08 or establish accuracy.
+part of this audit. These historical measurements do not substitute for the subsequent R01–R07 publication tests, R08 final acceptance or independent accuracy evidence.

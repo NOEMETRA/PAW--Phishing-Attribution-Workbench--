@@ -41,27 +41,14 @@ def domain_graph(dominfo):
 
 def detonation_box(det_sum: dict) -> str:
     if not det_sum: return ""
-    lines = ["## Detonation (observe-only)"]
-    for ep in det_sum.get("endpoints", [])[:12]:
-        lines.append(f"- {ep['host']} → {', '.join(ep.get('ips',[])[:3])} [{ep['count']} req]")
-    if det_sum.get("downloads"):
-        lines.append(f"- Downloads: {len(det_sum['downloads'])}")
-    return "\n".join(lines)
+    from .reporting import publication_json
+    return ('## Detonation (stored observations)\n'
+            'Supplied metadata; acquisition and authenticity are not established here. '
+            'No actor, maliciousness or safety conclusion.\n\n' + publication_json(det_sum))
 
 def canary_box(canary_ips: list[str], canary_visitors: list[dict] = None) -> str:
-    if not canary_ips: return ""
-    lines = ["## Canary"]
-    for ip in canary_ips[:12]:
-        visitor_info = ""
-        if canary_visitors:
-            # Find visitor details for this IP
-            for visitor in canary_visitors:
-                if visitor.get("ip") == ip:
-                    rep = visitor.get("reputation", {})
-                    score = rep.get("score", 0)
-                    category = rep.get("category", "unknown")
-                    risk_level = "🔴 High" if score >= 7 else "🟡 Medium" if score >= 4 else "🟢 Low" if score >= 1 else "⚪ Unknown"
-                    visitor_info = f" ({risk_level} risk - {category})"
-                    break
-        lines.append(f"- Visitor IP: {ip}{visitor_info}")
-    return "\n".join(lines)
+    if not canary_ips and not canary_visitors: return ""
+    from .reporting import publication_json
+    return ('## Canary (stored observations)\n'
+            'Supplied values; visitor identity, visits, risk and authenticity are not evaluated.\n\n'
+            + publication_json({'ip_values':canary_ips, 'visitor_records':canary_visitors}))

@@ -6,11 +6,12 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.application import MIMEApplication
 from email.utils import formatdate
+from .consumer_views import assessment_view, read_artifact_json
 
 
 def _read(case, name):
     path = Path(case)/name
-    return json.loads(path.read_text(encoding='utf-8')) if path.exists() else {}
+    return read_artifact_json(path, root=case) if path.exists() else {}
 
 
 def _draft(case, reporter_email=None):
@@ -37,13 +38,16 @@ def _draft(case, reporter_email=None):
 def generate_abuse_package(case_dir, Lang='en'):
     case = Path(case_dir)
     draft = _draft(case)
+    view = assessment_view(draft['assessment'])
     language = 'it' if Lang.startswith('it') else 'en'
     context = {'case_id':case.name, 'generated_utc':draft['generated_utc'],
-               'from_addr':draft['sender_claim'] or 'unavailable',
-               'origin_candidate':draft['origin_candidate'].get('ip') or 'unavailable',
-               'decision':draft['assessment'].get('decision','Inconclusive'),
-               'score':draft['assessment'].get('score'),
-               'authentication_json':json.dumps(draft['authentication_analysis'],ensure_ascii=False,indent=2)}
+               'from_addr':json.dumps(draft['sender_claim'],ensure_ascii=True),
+               'origin_candidate':json.dumps(draft['origin_candidate'].get('ip'),ensure_ascii=True),
+               'decision':json.dumps(view['decision'],ensure_ascii=True),
+               'score':view['display_score'],
+               'assessment_json':json.dumps({'view':view,
+                                            'recorded_assessment':draft['assessment']},ensure_ascii=True,indent=2),
+               'authentication_json':json.dumps(draft['authentication_analysis'],ensure_ascii=True,indent=2)}
     template = Path(__file__).resolve().parents[1]/'templates'/f'abuse_{language}_review.txt'
     output = case/'package'/f'abuse_email_{language}.txt'
     output.parent.mkdir(exist_ok=True)

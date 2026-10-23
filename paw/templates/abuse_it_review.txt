@@ -7,6 +7,9 @@ IP candidato dai Received, non accertato indipendentemente: {origin_candidate}
 Valutazione euristica: {decision}
 Score euristico, non probabilita: {score}
 
+Valutazione registrata e vista descrittiva (campi storici mancanti indisponibili):
+{assessment_json}
+
 Analisi autenticazione (dichiarazioni negli header e verifiche hanno stati distinti):
 {authentication_json}
 

@@ -101,7 +101,7 @@ risk/execution unassessed. It never fabricates eval results or rewrites code.
 | Case scoring | Implemented as hand-authored heuristics |
 | Local case index and indicator query | Implemented |
 | Evidence manifest / Merkle utilities | Implemented |
-| Optional PGP manifest signing | Implemented when a key is configured |
+| Optional PGP manifest signing | Unavailable pending signer/proof acceptance; no key access |
 | STIX export | Unavailable pending schema-conformance validation; status file only |
 | Abuse-package generation | Qualified local review drafts; ARF/X-ARF conformance not validated |
 | Playwright detonation | Implemented experimentally |
@@ -220,7 +220,7 @@ cases/
 
 The original input is copied into the case and its BLAKE3 hash is stored in `manifest.json`.
 
-When `PAW_PGP_PRIV` is configured, the manifest can also be signed.
+When `PAW_PGP_PRIV` is configured, manifest signing is reported unavailable without accessing the key. CLI ZIP signing requests reject before output mutation; unset that variable for ordinary ZIP export. Old signature bytes are neither removed nor validated.
 
 This provides useful evidence-integrity metadata, but PAW does not by itself establish a legal chain of custody. Collection procedure, analyst identity, system time, acquisition method, storage controls, and external documentation still matter.
 
@@ -330,6 +330,10 @@ The text path preserves decoded MIME text. Visual comparisons are descriptive
 metadata and do not add risk points; actual URL recovery remains separate.
 See [text preservation](docs/text-deobfuscation.md) for the audited rewriting
 defect and its measured limits.
+
+The [residual consumer contracts](docs/residual-consumer-contracts.md) qualify profile colors, legacy score projections, literal dynamic/Rekor views, unavailable PGP, strict bounded saved-artifact reads and narrow kit CSS. R08 remains final candidate acceptance; UI and active acquisition remain separate.
+
+The [residual consumer contracts](docs/residual-consumer-contracts.md) qualify profile colors, legacy score projections, literal dynamic/Rekor views, unavailable PGP, strict bounded saved-artifact reads and narrow kit CSS. R08 remains final candidate acceptance; UI and active acquisition remain separate.
 
 The [evidence/score/consumer audit](docs/evidence-score-consumers.md) records
 independent HTML observer failures, availability and publication omissions through
@@ -733,7 +737,7 @@ Offline EML ingestion now preserves the original bytes and decodes MIME text wit
 
 Attachments retain payload bytes and metadata/hashes. Document text, attachment URL extraction, resource resolution, embedded bodies, archive-member content and decryption remain `not_evaluated`, as do malware, macros and independent MIME-type detection. Metadata completion does not establish content analysis or safety. ZIP directory declarations are inventoried without member extraction or execution; errors, known omissions and limits appear in the technical coverage view. Unknown reader counts remain unknown. See [attachment capabilities](docs/attachment-capability-coverage.md). MSG conversion remains unavailable pending validation of original headers and attachment preservation.
 
-New cases inventory all case files for integrity verification, except the fixed index/root and post-seal Rekor artifacts. Unsigned local hashes establish consistency, not independent authenticity. Rekor inclusion proofs remain unverified; the legacy presence-of-fields check has been removed. Updating an existing report is unavailable until a versioned workflow can preserve sealed evidence and assessment coverage; create a new case instead.
+New cases inventory all case files for integrity verification, except the fixed index/root and post-seal Rekor artifacts. Unsigned local hashes establish consistency, not independent authenticity. Rekor inclusion proofs remain unverified; field presence is not a proof. `verify` reports content-inventory integrity and separately marks saved Rekor metadata NOT_EVALUATED; it establishes no signature or inclusion authenticity. Updating an existing report is unavailable until a versioned workflow can preserve sealed evidence and assessment coverage; create a new case instead.
 
 Independent review regression coverage includes same-name browser downloads, complete evidence inventories and organizational-domain boundaries in scoring. Brand similarity remains a structural heuristic, not an ownership check or calibrated probability. Run `python -m unittest discover -s tests -p "test_*contracts.py"` for offline contracts. The real API, MIME-engine and controlled-loopback Chromium integrations are separate scripts under `tests/integration_*_real.py`.
 

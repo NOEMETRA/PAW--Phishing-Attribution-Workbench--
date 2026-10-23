@@ -116,6 +116,6 @@ def fetch_inclusion_proof(rekor_url: str, entry_uuid: str) -> dict:
     }
     return proof
 
-def verify_inclusion_proof(proof: dict, statement_sha256: str) -> bool:
+def verify_inclusion_proof(proof: dict, statement_sha256: str) -> bool | None:
     """No validated Rekor verifier is implemented; field presence is not a proof."""
-    return False
+    return None

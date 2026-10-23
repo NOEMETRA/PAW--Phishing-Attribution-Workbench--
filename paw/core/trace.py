@@ -12,7 +12,8 @@ from .attach import scan_attachments, attachment_coverage, attachment_report_vie
 from .evidence import seal_case
 from .runtime import mark_stage, read_progress, atomic_json
 from .received import normalize_received
-from .reporting import markdown_literal, markdown_json
+from .reporting import markdown_literal, markdown_json, publication_json, rekor_report
+from .consumer_views import assessment_view, read_artifact_json, verdict_color
 from .auth import infer_alignment, authentication_report
 from .dkim_offline import verify_dkim_offline
 from .dkim_keys import parse_key_evidence
@@ -416,16 +417,9 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
     if os.environ.get('PAW_ANALYSIS_ID'):
         manifest['analysis_job'] = os.environ['PAW_ANALYSIS_ID']
     write_json(os.path.join(case_dir, 'manifest.json'), manifest)
-    # PGP sign manifest if keys available
+    # Requested signing is an unavailable capability, not a successful proof.
     if os.environ.get("PAW_PGP_PRIV"):
-        try:
-            from .signature import sign_file_pgp
-            manifest_path = os.path.join(case_dir, "manifest.json")
-            sig_path = os.path.join(case_dir, "evidence", "manifest.json.asc")
-            sign_file_pgp(manifest_path, os.environ["PAW_PGP_PRIV"], os.environ.get("PAW_PGP_PASS"), sig_path)
-            print(f"[pgp] manifest signed: {sig_path}")
-        except Exception as e:
-            print(f"[pgp] signing failed: {e}")
+        print('[pgp] manifest signing unavailable: signer/proof acceptance not validated; no key accessed')
     write_json(os.path.join(case_dir, 'mime_analysis.json'), mime_result['metadata'])
     body_inventory = preserve_body_parts(mime_result, b, os.path.join(case_dir, 'mime_body'))
     write_json(os.path.join(case_dir, 'mime_body_evidence.json'), body_inventory)
@@ -544,6 +538,9 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
     stage_status['url_sources'] = url_source_coverage(url_source_inventory)
     stage_status['mime_cids'] = cid_coverage(mime_cid_inventory)
     stage_status['html_observations'] = deobfuscation_results['coverage']['html']
+    stage_status['manifest_signing'] = {'status':'unavailable' if os.environ.get('PAW_PGP_PRIV') else 'skipped',
+        'requested':bool(os.environ.get('PAW_PGP_PRIV')), 'key_accessed':False,
+        'reason':'PGP signer/proof acceptance not validated'}
     url_results = deobfuscated.get('urls', [])
     stage_status['url_interpretation'] = {
         'status':'partial' if any(r.get('status') != 'completed' or r.get('analysis_status') == 'partial'
@@ -1077,6 +1074,7 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
     stage_status['abuse_formats'] = {'status':'partial' if abuse else 'skipped',
                                    'reason':'Local review drafts; ARF/X-ARF conformance not validated' if abuse else 'Not requested'}
     score['coverage']['not_evaluated'].append('campaign_correlation')
+    if os.environ.get('PAW_PGP_PRIV'): score['coverage']['not_evaluated'].append('pgp_signature_authenticity')
     if stix: score['coverage']['not_evaluated'].append('stix_export')
     if abuse: score['coverage']['not_evaluated'].append('arf_xarf_conformance')
     score['assessment_status'] = 'partial'
@@ -1184,18 +1182,13 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
     # Add Rekor section if anchored
     rekor_anchor_path = os.path.join(case_dir, "evidence", "rekor_anchor.json")
     rekor_proof_path = os.path.join(case_dir, "evidence", "rekor_proof.json")
-    if os.path.exists(rekor_anchor_path):
-        tech_md += "\n## Rekor\n"
-        with open(rekor_anchor_path, "r", encoding="utf-8") as f:
-            anchor_data = json.load(f)
-        tech_md += f"Entry UUID: {anchor_data.get('entry_uuid')}\n"
-        tech_md += f"Log Index: {anchor_data.get('logIndex')}\n"
-        tech_md += f"Integrated Time: {anchor_data.get('integratedTime')}\n"
-        if os.path.exists(rekor_proof_path):
-            with open(rekor_proof_path, "r", encoding="utf-8") as f:
-                proof_data = json.load(f)
-            tech_md += f"Inclusion verified: {proof_data.get('treeSize') is not None}\n"
-        tech_md += "\n"
+    if os.path.exists(rekor_anchor_path) or os.path.exists(rekor_proof_path):
+        stored, errors = {}, {}
+        for name, path in (('anchor', rekor_anchor_path), ('proof', rekor_proof_path)):
+            if not os.path.exists(path): continue
+            try: stored[name] = read_artifact_json(path, root=case_dir)
+            except (OSError, ValueError) as exc: errors[name] = type(exc).__name__
+        tech_md += '\n' + rekor_report(stored.get('anchor'), stored.get('proof'), errors)
     # Directory omissions/errors and unavailable content work are evidence too.
     # Keep this bounded view separate from the existing literal metadata table.
     tech_md += "\n## Attachment extraction coverage\n"
@@ -1374,32 +1367,44 @@ def print_beautiful_summary(case_dir: str, case_id: str, score: dict, ip: str, i
                           from_domain: str, dominfo: dict, auth: dict, lang: str = "en"):
     """Print a beautiful terminal summary using rich library."""
     console = Console()
+    score = score if isinstance(score, dict) else {}
     
     # Get key findings from analysis
     findings = []
     
     # Check for criminal infrastructure
-    criminal_intel = read_json(os.path.join(case_dir, "criminal_intelligence.json")) or {}
+    stored_errors = {}
+    def stored(name):
+        path = os.path.join(case_dir, name)
+        if not os.path.exists(path): return {}
+        try: return read_artifact_json(path, root=case_dir)
+        except (OSError, ValueError) as exc:
+            stored_errors[name] = type(exc).__name__
+            return {}
+    criminal_intel = stored('criminal_intelligence.json')
     if criminal_intel:
         findings.append("Infrastructure analysis available; actor attribution not established")
     
     # Check attribution matrix for high confidence
-    attr_matrix = read_json(os.path.join(case_dir, "attribution_matrix.json")) or {}
+    attr_matrix = stored('attribution_matrix.json')
     operator_hypothesis = attr_matrix.get("operator_hypothesis", {})
-    confidence = operator_hypothesis.get("confidence", 0)
     
     # Check anomalies
-    anomalies = read_json(os.path.join(case_dir, "received_anomalies.json")) or {}
-    if (anomalies.get('timing_observations') or {}).get('repeated_ip_claims'):
+    anomalies = stored('received_anomalies.json')
+    timing = anomalies.get('timing_observations')
+    if isinstance(timing, dict) and timing.get('repeated_ip_claims'):
         findings.append('Repeated Received IP claims; relay behavior unverified')
     
     # Determine verdict emoji and color
-    score_val = score.get("decision_score", score.get("score", 0))
-    verdict = f"{score.get('decision', 'Inconclusive')} (heuristic score: {score_val})"
-    verdict_color = 'red' if score_val >= 0.72 else 'yellow'
+    view = assessment_view(score)
+    score_val = view['decision_score']
+    verdict = f"{view['decision'] or 'Unavailable'} (heuristic score: {score_val}; {view['status']})"
+    color = verdict_color(score)
     
     # Get country flag
+    ip_res = ip_res if isinstance(ip_res, dict) else {}
     cc = ip_res.get("cc", "")
+    cc = cc if isinstance(cc, str) else ''
     flag = {"US": "🇺🇸", "DE": "🇩🇪", "RU": "🇷🇺", "CN": "🇨🇳", "IT": "🇮🇹"}.get(cc, "🌍")
     
     # Create the beautiful output
@@ -1415,11 +1420,11 @@ def print_beautiful_summary(case_dir: str, case_id: str, score: dict, ip: str, i
     table = Table(box=box.SIMPLE)
     table.add_column("Property", style="dim", width=12)
     table.add_column("Value", style="bold")
-    table.add_row("Coverage", score.get("assessment_status", "partial"))
+    table.add_row("Coverage", Text(json.dumps(score.get("assessment_status", "unavailable"), ensure_ascii=True)))
     table.add_row("Auth claims", "unverified; see checks below")
     
-    table.add_row("Case ID", f"[cyan]{case_id}[/cyan]")
-    table.add_row("Verdict", f"[{verdict_color}]{verdict}[/{verdict_color}]")
+    table.add_row("Case ID", Text(json.dumps(case_id, ensure_ascii=True), style='cyan'))
+    table.add_row("Verdict", Text(verdict, style=color))
     
     console.print(table)
     # Share the evidence-qualified report used by executive.md, including actual
@@ -1428,9 +1433,9 @@ def print_beautiful_summary(case_dir: str, case_id: str, score: dict, ip: str, i
     
     # Received observations do not independently establish a sender or actor.
     origin_panel = Panel(
-        Text(f"IP:  {ip or 'unavailable'}\n"
-        f"ASN: AS{ip_res.get('asn', 'N/A')} ({ip_res.get('asn_org', 'N/A')})\n"
-        f"CC:  {flag} {cc}\n"
+        Text(f"IP:  {json.dumps(ip or None, ensure_ascii=True)}\n"
+        f"ASN: AS{json.dumps(ip_res.get('asn'), ensure_ascii=True)} ({json.dumps(ip_res.get('asn_org'), ensure_ascii=True)})\n"
+        f"CC:  {flag} {json.dumps(cc, ensure_ascii=True)}\n"
         "Received observations are unverified; no sender or attacker attribution."),
         title="Transmitting candidate (unverified)" if ip else "Transmitting candidate unavailable",
         border_style="blue"
@@ -1447,12 +1452,12 @@ def print_beautiful_summary(case_dir: str, case_id: str, score: dict, ip: str, i
         )
         console.print(findings_panel)
     
-    # Operator hypothesis (if high confidence)
-    if confidence >= 0.7:
-        hypothesis = operator_hypothesis.get("hypothesis", "Analysis in progress")
+    # A saved confidence value does not establish an operator identity.
+    if operator_hypothesis:
         hyp_panel = Panel(
-            f"{hypothesis}\n\n[bold]Confidence: {int(confidence * 100)}%[/bold]",
-            title="🎯 Operator Hypothesis",
+            Text('Stored hypothesis; identity/confidence not independently established.\n'
+                 + publication_json(operator_hypothesis)),
+            title="Stored operator hypothesis (unverified)",
             border_style="magenta"
         )
         console.print(hyp_panel)
@@ -1469,11 +1474,13 @@ def print_beautiful_summary(case_dir: str, case_id: str, score: dict, ip: str, i
         next_steps.append(f"Abuse package (not sent): {os.path.join(case_dir, 'package')}")
     
     steps_panel = Panel(
-        "\n".join(next_steps),
+        Text("\n".join(next_steps)),
         title="🚀 Next Steps",
         border_style="green"
     )
     console.print(steps_panel)
+    if stored_errors:
+        console.print(Text('Stored artifact errors: ' + json.dumps(stored_errors, ensure_ascii=True)))
     
     console.print()
 

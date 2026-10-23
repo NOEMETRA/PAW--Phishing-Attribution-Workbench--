@@ -7,6 +7,9 @@ IP candidate from Received headers, not independently established: {origin_candi
 Heuristic assessment: {decision}
 Heuristic score, not a probability: {score}
 
+Recorded assessment and descriptive view (legacy missing fields stay unavailable):
+{assessment_json}
+
 Authentication analysis (header claims and verification have distinct statuses):
 {authentication_json}
 
