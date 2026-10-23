@@ -331,6 +331,12 @@ metadata and do not add risk points; actual URL recovery remains separate.
 See [text preservation](docs/text-deobfuscation.md) for the audited rewriting
 defect and its measured limits.
 
+The [evidence/score/consumer audit](docs/evidence-score-consumers.md) records
+independent HTML observer failures, availability and publication omissions through
+score coverage, reports, local drafts and API/ZIP. These descriptive diagnostics
+add no risk points. It also names the concrete residual consumers and acceptance
+gates; output row limits do not replace supervised input/runtime limits.
+
 The [HTML evidence contract](docs/html-evidence.md) also preserves original markup
 and separates bounded decoded attribute candidates. Routine entity handling adds
 no points; text/HTML/JavaScript risk detection remains explicitly not evaluated.

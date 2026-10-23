@@ -1,5 +1,10 @@
 # Final heuristic score explanations
 
+The subsequent [evidence/score/consumer audit](evidence-score-consumers.md)
+records current projections and finite residuals. HTML observer diagnostics now
+share explicit failure/availability/omission coverage across artifacts and
+reports; those states do not add numeric risk or change this schema-2 ledger.
+
 The final score is an attribution-review heuristic, not a calibrated probability
 or a binary phishing classifier. A successful offline run and matching evidence
 seal establish execution and local integrity, not sender authenticity or accuracy.

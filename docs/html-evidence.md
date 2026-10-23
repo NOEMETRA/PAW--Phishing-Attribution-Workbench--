@@ -78,6 +78,13 @@ contribution in this pilot. Nineteen messages have descriptive HTML observation;
 one has no HTML. No data-URI candidate occurred in the original pilot, so candidate
 behavior is checked by constructed regression inputs, not measured accuracy.
 
+The subsequent [observer coverage contract](evidence-score-consumers.md) adds
+independent failure/availability/output-limit accounting for hidden/form/iframe/
+script observations. It also prevents absent iframe dimensions from becoming
+zero-size declarations. Original source and zero HTML risk remain unchanged;
+the outer assessment now combines candidate and observer health. That contract
+has its own measured regression record; the counts above are historical.
+
 The historical four-hour online run remains unreproduced. The subsequent
 [standalone JavaScript contract](javascript-evidence.md) removes simulated eval
 results and iterative rewriting; it does not evaluate JavaScript risk/execution.

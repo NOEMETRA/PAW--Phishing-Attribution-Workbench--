@@ -1,11 +1,11 @@
 # Stato dell'audit PAW
 
-Riferimento integrato: PR95, commit
-`ce5233a83ac4a859f872a0f5b2628fa64e091133`; 23 ottobre 2026 (Europe/Rome).
-[Review finale Copilot](https://github.com/NOEMETRA/PAW--Phishing-Attribution-Workbench--/pull/95#pullrequestreview-5632222012)
-sullo head `fb1d732db7de1a601b5c786325dc4e7b97448b13`: approval recommended,
+Riferimento integrato: PR96, commit
+`d7399a5a7443e6ad3809960d9856930a550a9205`; 23 ottobre 2026 (Europe/Rome).
+[Review finale Copilot](https://github.com/NOEMETRA/PAW--Phishing-Attribution-Workbench--/pull/96#pullrequestreview-5632718504)
+sullo head `b2eb2732ad8e95900657ea3de3498b56c97f0040`: approval recommended,
 nessuna questione aperta. Tre check verdi su head e merge, tree identico.
-Workflow: `39996864057` / `39997877108`.
+Workflow: `40002240264` / `40006753434`.
 
 I [contesti di testo HTML](html-text-contexts.md) sono integrati: confini comuni
 per MIME, URL, CID, form, kit e osservazioni HTML; documenti MIME separati con
@@ -41,9 +41,9 @@ e criterio di riapertura. Distingue estrazione dei corpi MIME, osservazioni HTML
 opzionali e helper kit/form. Chiude l'enumerazione del perimetro corrente,
 non la completezza dell'estrazione: HTML/CSS allegati o incorporati, relazioni
 CID/Content-Location, grammatiche generiche, estrazione CSS dei kit e diagnostica
-degli osservatori HTML opzionali mantengono limiti nominati. Il prossimo blocco
-riconcilia capacità pubblicizzate e allegati, con decisioni esplicite per G01/G02;
-non estende indefinitamente il parser.
+degli osservatori HTML opzionali mantengono limiti nominati. Le decisioni
+G01/G02 sono ora riconciliate con la famiglia allegati; la diagnostica G06
+è il confine corretto nel successivo audit evidenze/report.
 
 La [famiglia di copertura degli allegati](attachment-capability-coverage.md)
 riproduce un'omissione del consumatore: otto casi CLI completi conservavano 24
@@ -53,7 +53,8 @@ copertura di fase e una vista JSON letterale nel report, senza duplicare i membr
 ZIP né trasformare conteggi sconosciuti in zero. G01 conserva l'esclusione
 dell'estrazione dai documenti allegati; G02 conserva indisponibile la risoluzione
 delle risorse. Metadati, originali e dichiarazioni restano distinti da capacità
-di analisi del contenuto. Review Copilot e CI sul nuovo head restano richieste.
+di analisi del contenuto. La famiglia è integrata nella PR96 con review Copilot
+senza questioni aperte e tre check verdi sia sullo head sia sul merge.
 
 Validazione locale della famiglia allegati: 1.000 test (986 superati, 14
 esclusioni previste), 65 contratti selezionati sul secondo runtime reale,
@@ -66,6 +67,25 @@ si è fermato sul timestamp; la verifica corretta ha letto gli stessi casi già
 completati, senza modificare sorgenti o ripetere le analisi. I dettagli e i limiti
 sono nel contratto della famiglia, senza affermazioni di accuratezza.
 
+Il nuovo [audit evidenze → score → consumatori](evidence-score-consumers.md)
+registra il percorso numerico e le proiezioni correnti, con otto residui concreti
+R01-R08. Riproduce un indicatore di iframe invisibile inventato da dimensioni
+assenti e l'assenza di conteggi indipendenti per i limiti degli osservatori HTML.
+Il contratto candidato G06 distingue completamento, errore e indisponibilità,
+con omissioni per osservatore/documento e una vista comune in JSON, score,
+report, bozze e API. Le omissioni non aggiungono rischio; i limiti sono di
+pubblicazione dopo enumerazione, non nuovi limiti di parsing/CPU. Review Copilot
+e CI sul nuovo head rimangono gate della PR; l'audit complessivo resta aperto.
+
+Validazione candidata: 1.011 test (997 superati, 14 esclusioni previste),
+60 contratti sul secondo runtime reale e 52 casi CLI/26 worker HTTP nella matrice
+seriale. Replay degli stessi cinque originali, fonti v6, bozze/indice/report/API/
+ZIP e wheel di 95 sorgenti verificati, con 286 hash Python/workflow invariati.
+Il primo confronto privato si è fermato sul timestamp Received proprio del run;
+la verifica corretta ha riletto gli stessi casi completati, distinguendo i due
+riferimenti UTC e conservando il log dell'arresto. Nessuno score numerico o caso
+storico è stato riscritto per ottenere il confronto.
+
 DOM/browser, grammatica completa e interpretazioni escluse restano esplicite.
 Nessuna risorsa delle email è stata visitata o risolta.
 
@@ -76,8 +96,8 @@ verificati, audit aperti, capacità indisponibili e fasi successive.
 | Area | Evidenze già disponibili | Cosa resta per chiuderla |
 | --- | --- | --- |
 | Esecuzione e conservazione | Cinque preset CLI e worker HTTP effettivi; no-egress applicativo, timeout/cancel/recovery, lettori bloccati durante scritture, originali, inventari, sigilli e ZIP verificati nei flussi registrati. | Matrice Windows integrata registrata sul merge PR84. Contratti correnti di ammissione integrati nella PR86 con review/CI verdi; resta la matrice piattaforme/installazione, con evidenze POSIX separate. |
-| Estrazione offline | Contratti su header/MIME, Received e tempi dichiarati, corpi e messaggi incorporati, URL e trasformazioni, CID, allegati/ZIP; osservazioni statiche separate dalle interpretazioni. Perimetro HTML/CSS enumerato in H01-H10, E01-E06 e G01-G06. | La famiglia allegati riconcilia metadati/ZIP e contenuti non valutati con copertura/report espliciti; G01/G02 hanno una decisione corrente di conservazione/indisponibilità, G03/G04 restano generici/esclusi, G05 è un limite kit e G06 una lacuna diagnostica da riprendere nell'audit evidenze/report. Restano corpus allegati e accettazione piattaforme/componenti. Combinazioni malformate e collaudo integrato restano circoscritti ai contratti supportati. |
-| Risultati e pubblicazione | Contributi numerici e decisioni non arrotondate, bozze locali, query/export e grafi con fonti e limiti verificati nei casi documentati. Il [riepilogo del terminale](terminal-summary-evidence.md) riusa il report di autenticazione; il [confine Markdown integrato](report-evidence-consistency.md) conserva osservazioni letterali e confrontabili con i JSON. | Altri report/publisher/consumer, tipi malformati, risorse e renderer; autenticità di firme/ancoraggi e conformità STIX/ARF/X-ARF non stabilite dai sigilli. |
+| Estrazione offline | Contratti su header/MIME, Received e tempi dichiarati, corpi e messaggi incorporati, URL e trasformazioni, CID, allegati/ZIP; osservazioni statiche separate dalle interpretazioni. Perimetro HTML/CSS enumerato in H01-H10, E01-E06 e G01-G06. | La famiglia allegati riconcilia metadati/ZIP e contenuti non valutati con copertura/report espliciti; G01/G02 hanno una decisione corrente di conservazione/indisponibilità, G03/G04 restano generici/esclusi, G05 è un limite kit; il contratto candidato G06 rende espliciti disponibilità/errori/omissioni e li segue nei consumatori, con gate propri di review/CI. Restano corpus allegati e accettazione piattaforme/componenti. Combinazioni malformate e collaudo integrato restano circoscritti ai contratti supportati. |
+| Risultati e pubblicazione | Contributi numerici e decisioni non arrotondate, bozze locali, query/export e grafi con fonti e limiti verificati nei casi documentati. Il [riepilogo del terminale](terminal-summary-evidence.md) riusa il report di autenticazione; il [confine Markdown integrato](report-evidence-consistency.md) conserva osservazioni letterali e confrontabili con i JSON. | I residui R01-R08 dell'audit consumatori hanno criteri nominati; tipi malformati, risorse e renderer restano circoscritti ai contratti verificati; autenticità di firme/ancoraggi e conformità STIX/ARF/X-ARF non stabilite dai sigilli. |
 | Sentinel | Campagne/file/configurazione/report offline, lifecycle per istanza, pubblicazione atomica e osservazioni HTTP/IP hanno contratti integrati con fonti e limiti; tutti i file del modulo hanno una disposizione esplicita. | Review/CI della disposizione chiuse nella PR92. Servizio persistente, browser, provider reali, isolamento e accettazione piattaforme restano separati; nessuna identità o probabilità di rischio è stabilita da questi test. |
 | Script e installazione | Disposizione dei 26 file Python esterni: 25 entry point verificati o esplicitamente indisponibili e una libreria inutilizzata/non validata, con import inerte. Pacchetto costruito realmente e confrontato con sorgenti, entrypoint e template. | I 2 launcher shell restano differiti; gli algoritmi helper non esercitati restano aperti. Installazione isolata finale e componenti opzionali sulle piattaforme supportate. La disposizione non equivale alla validazione di ogni funzione. |
 | Accuratezza e attribuzione | Pilot privato di 20 originali, con 10 legittimi confermati dal proprietario; algoritmi e ipotesi sono qualificati. | Etichette phishing indipendenti, corpus rappresentativo e holdout, falsi positivi/negativi, calibrazione e correlazione. Lo spam della casella non costituisce da solo ground truth. |
@@ -100,7 +120,7 @@ I prossimi blocchi hanno criteri di chiusura comuni:
    e relativa contabilità, compresi i campi URL HTML singoli, sono integrati;
    mantenere il perimetro HTML/CSS finito e completare la riconciliazione delle
    capacità pubblicizzate con header/MIME/URL/allegati e report, preservando le
-   decisioni G01/G02, il limite kit G05 e la diagnostica opzionale G06; verificare insieme ingressi malformati,
+   decisioni G01/G02, il limite kit G05, il contratto diagnostico G06 e le disposizioni R01-R08; verificare insieme ingressi malformati,
    omissioni, budget, interruzioni e parità CLI/API/verify/ZIP. Correggere per
    confine condiviso, con prove prima/dopo e review della famiglia interessata.
 3. **Versione candidata:** installazione isolata e matrice Windows/POSIX,

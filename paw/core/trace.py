@@ -18,6 +18,7 @@ from .dkim_offline import verify_dkim_offline
 from .dkim_keys import parse_key_evidence
 from .profiler import ip_rdap, domain_rdap, nrd_days, observe_domain_age
 from .scoring import score_case, finalize_score, validate_deobfuscation_weight
+from ..deobfuscate.html import html_observation_coverage
 from .network_policy import enforce_trace_policy, network_allowed, violations
 from .batch import BatchAnalysisError, select_inputs
 from .kit_static import (publish_captured_kit_inventory, analyze_phishing_kit_content,
@@ -468,6 +469,7 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
             document['source'] = {'artifact':'mime_body_evidence.json', 'part_id':source['part_id'],
                 'representation':'per_part_charset_decoded_text',
                 **{key:source[key] for key in ('text_status','text_path','text_sha256')}}
+    deobfuscation_results['coverage']['html'] = html_observation_coverage(html_result or {})
     headers["deobfuscation_analysis"] = deobfuscation_results
     # Persist deobfuscation results in the case directory for downstream analysis
     try:
@@ -541,6 +543,7 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
     stage_status['mime_body_evidence'] = body_evidence_coverage(body_inventory)
     stage_status['url_sources'] = url_source_coverage(url_source_inventory)
     stage_status['mime_cids'] = cid_coverage(mime_cid_inventory)
+    stage_status['html_observations'] = deobfuscation_results['coverage']['html']
     url_results = deobfuscated.get('urls', [])
     stage_status['url_interpretation'] = {
         'status':'partial' if any(r.get('status') != 'completed' or r.get('analysis_status') == 'partial'
@@ -1112,6 +1115,8 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
     exec_md += "\nScore components:\n\n" + '\n'.join(
         f"- {name}: {value:.12g} — {score['component_sources'][name]}" for name, value in score['score_components'].items()) + '\n'
     exec_md += "\n" + "\n".join(f"- {name}: {value['status']}" for name, value in stage_status.items()) + "\n"
+    exec_md += "\n## HTML observation coverage\n"
+    exec_md += markdown_json(stage_status['html_observations'])
     # Add detonation/canary sections if they exist
     det = {}
     can_ips = []
