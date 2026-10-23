@@ -163,7 +163,7 @@ separate `derived_from` descriptor containing the persisted
 in that file. Derived candidate views are not persisted, as explicitly recorded
 by `derivation.persisted=false`.
 
-The derivation method `paw_html_url_candidate_views_v1` re-parses each part using
+The derivation method `paw_html_url_candidate_views_v2` re-parses each part using
 fresh `HtmlEvidenceParser` state and `extract_mime_url_candidates`: character
 references in attributes/visible text are decoded once, visible text is joined
 across markup, supported attribute values are inspected, and script/style text
@@ -209,3 +209,11 @@ publication. Interrupted temporary bytes remain stable raw evidence.
 The actual limit fixture has 100 URL
 records in 50 independent text parts: 5,000 links, 4,096 retained and 904 omitted.
 Constructed inputs test linkage regressions, not classification accuracy.
+
+The [HTML URL-list boundary contract](html-url-list-contexts.md) supplies the
+current srcset/imagesrcset tokenization shared by observation, recovery and
+source views. Version 2 distinguishes separator commas, resource commas and
+descriptor/nonnetwork content; historical version 1 artifacts are retained.
+Descriptor/list conformance, relative resolution and resource selection remain
+explicitly not evaluated. These changes correct affected list-derived URLs;
+source linkage itself still does not modify the URL records it receives.

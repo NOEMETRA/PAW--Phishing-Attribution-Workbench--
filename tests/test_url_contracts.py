@@ -44,6 +44,34 @@ class URLContracts(unittest.TestCase):
         self.assertEqual(result['url_provenance'], 'derived_text_url')
         self.assertTrue(result['network_target'])
 
+    def test_raw_markup_delimiters_are_rejected_in_observed_and_recovered_urls(self):
+        for char in ('"','<','>'):
+            for value in ('https://example.invalid/a'+char+'tail',
+                          'https://example.invalid/?x=a'+char+'tail',
+                          'https://example.invalid/#a'+char+'tail',
+                          'https://user'+char+'tail@example.invalid/a'):
+                for source in (value, value.replace('https://','hxxps://'), encoded(value), quote(value,safe='')):
+                    with self.subTest(source=source):
+                        result = self.engine.deobfuscate_url(source)
+                        self.assertEqual(result['status'],'invalid')
+                        self.assertFalse(result['network_target'])
+                        self.assertEqual(result['original_url'],source)
+                        targets, evidence = build_url_evidence([value],[result])
+                        self.assertEqual(targets,[])
+                        self.assertTrue(all(not item['network_target'] for item in evidence))
+                wrapper = 'https://wrapper.invalid/?next='+encoded(value)
+                result = self.engine.deobfuscate_url(wrapper)
+                self.assertEqual(result['embedded_url_candidates'],[])
+                self.assertEqual(result['network_url'],wrapper)
+
+    def test_legal_reserved_apostrophes_and_escaped_delimiters_are_preserved(self):
+        for value in ("https://example.invalid/a'b?x=c'd#e'f",'https://example.invalid/a%22b%3Cc%3Ed%27e'):
+            with self.subTest(value=value):
+                self.assertEqual(http_url_status(value)[0],'completed')
+                result = self.engine.deobfuscate_url(value)
+                self.assertEqual(result['network_url'],value)
+                self.assertEqual(result['transformations'],[])
+
     def test_whole_url_decoding_stops_before_resource_escapes(self):
         target = 'hxxps://example[.]invalid/a%2Fb?x=a%26b%3D1'
         result = self.engine.deobfuscate_url(quote(quote(target, safe=''), safe=''))

@@ -1,27 +1,29 @@
 # Stato dell'audit PAW
 
-Riferimento integrato: PR87, commit
-`43c5c47fe4cafe62e3168a071aa8861a5663583d`; 23 ottobre 2026 (Europe/Rome).
-Review Codex senza rilievi sullo head testato `ab81261f6d0c4d19c1c3b0f5bb21ef6b4703d224`,
+Riferimento integrato: PR88, commit
+`418f8aa6985e7b3ee18c83648048ab414b0a25ee`; 23 ottobre 2026 (Europe/Rome).
+Review Codex senza rilievi sullo head testato `b714700f53fa0bd331caa5665287b05cb538205c`,
 nessun thread e tre check verdi su head e merge, con tree identico.
-La [rappresentazione letterale dei report](report-evidence-consistency.md) è integrata;
-ammissione input (PR86), Sentinel offline (PR84) e matrice integrata di esecuzione
-mantengono le loro evidenze e i limiti dichiarati. Non sono misure di accuratezza.
+Il [contesto MIME](mime-context-evidence.md) è integrato: selezioni dichiarative e
+incertezza strutturale nota raggiungono le evidenze discendenti, con parti sorelle
+indipendenti. Ammissione input, report letterali, Sentinel offline ed esecuzione
+mantengono le loro evidenze e i limiti dichiarati; non sono misure di accuratezza.
 
-Il blocco corrente copre il [contesto MIME scelto dal parser](mime-context-evidence.md):
-dichiarazioni duplicate/difettose e difetti strutturali potevano lasciare
-interpretazioni locali o discendenti senza incertezza esplicita. Ora conteggi,
-posizioni delle dichiarazioni e contesti parentali parziali accompagnano corpi,
-allegati, copertura e report. Le parti sorelle restano indipendenti. Le viste e i
-byte scelti dal parser non cambiano e non si aggiungono contributi di rischio.
+Il blocco corrente copre i [confini delle liste URL HTML](html-url-list-contexts.md):
+virgole separatrici, descrittori e sottostringhe HTTP in valori nonnetwork potevano
+generare candidati errati da srcset/imagesrcset. Un helper condiviso allinea
+osservazioni MIME, recupero e fonti v2, preservando virgole interne e stringhe
+ordinarie. Conformità della lista, descrittori, risoluzione relativa e scelta
+risorse restano non valutati; CSS e altri contesti restano aperti.
 
-Sorgenti finali congelati: 898 test (884 superati, 14 esclusioni), sei integrazioni
-seriali passate, wheel di 92 sorgenti. Nuovo collaudo: 16 full CLI e quattro
-worker HTTP reali, con header selezionati oltre il prefisso conservato, sigilli,
-originali, payload e ZIP. Passano anche corpi MIME, inventari header, report
-letterali e firme DKIM nei cinque preset/HTTP. Quattro sorgenti package esistenti
-modificati, 88 invariati; 238 hash Python/workflow ricontrollati. Documenti dopo
-la fine dei validator. Review/CI del nuovo blocco restano da chiudere.
+Suite generale: 906 test (892 superati, 14 esclusioni); cinque integrazioni reali
+seriali passate e wheel di 92 sorgenti. Nuovo collaudo: nove full CLI e tre worker
+HTTP, compreso il limite di 5.000 collegamenti/4.096 conservati/904 omessi. URL,
+fonti, byte originali/corpi, coperture, sigilli e ZIP sono confrontati. Quattro
+sorgenti package esistenti modificati, 88 invariati. Runtime/test unit invariati
+dopo la suite; aspettativa v2 di un'integrazione allineata e flusso rieseguito.
+240 hash Python/workflow ricontrollati. Documenti dopo la fine dei validator.
+Review/CI del nuovo blocco restano da chiudere.
 
 Il lavoro corrente stabilizza il motore offline e la profondità delle evidenze.
 Il [registro per famiglia](engine-stabilization-checkpoint.md) distingue contratti
@@ -51,7 +53,7 @@ I prossimi blocchi hanno criteri di chiusura comuni:
    è ora registrata sullo stesso merge; piattaforme e perimetri attivi restano separati.
 2. **Motore offline integrato:** preset/batch/HTTP/interruzioni e conservazione
    passano nella matrice integrata. Ammissione, malformati
-   e relativa contabilità sono integrati; chiudere review/CI del contesto MIME,
+   e relativa contabilità sono integrati; chiudere review/CI dei confini delle liste HTML,
    poi completare la riconciliazione delle capacità pubblicizzate con
    header/MIME/URL/allegati e report; verificare insieme ingressi malformati,
    omissioni, budget, interruzioni e parità CLI/API/verify/ZIP. Correggere per

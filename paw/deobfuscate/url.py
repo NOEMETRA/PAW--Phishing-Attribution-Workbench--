@@ -26,6 +26,12 @@ def http_url_status(value):
         return 'invalid', 'Whitespace/control characters in URL'
     if '\\' in value:
         return 'invalid', 'Backslashes have ambiguous HTTP URL parsing'
+    # Whole HTML list tokens can contain entity-decoded markup delimiters.
+    # Reject them in every component, including after whole-URL recovery;
+    # do not trim a valid-looking prefix or decode percent-escaped resources.
+    # Apostrophes remain legal URI sub-delimiters (RFC 3986 section 2.2).
+    if any(c in value for c in '<>"'):
+        return 'invalid', 'Unescaped markup delimiters in URL'
     if re.search(r'%(?![0-9a-fA-F]{2})', value):
         return 'invalid', 'Malformed percent escape in URL'
     try:

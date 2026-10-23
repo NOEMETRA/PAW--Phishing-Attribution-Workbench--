@@ -65,7 +65,7 @@ def inventory_url_sources(mime_result, body_inventory, message, headers,
             # entity-decoded attributes or visible text joined across markup.
             source_view = {'representation':'html_parser_derived_url_candidate_views',
                            'derived_from':text_source,
-                           'derivation':{'method':'paw_html_url_candidate_views_v1',
+                           'derivation':{'method':'paw_html_url_candidate_views_v2',
                                          'persisted':False}}
         add({'kind':'mime_body', 'part_id':body['part_id'],
              'artifact':'mime_body_evidence.json', **source_view}, candidates)

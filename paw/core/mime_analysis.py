@@ -290,6 +290,49 @@ def extract_urls(text):
     return list(dict.fromkeys(re.findall(r'https?://[^\s<>"\']+', text, flags=re.IGNORECASE)))
 
 
+def _srcset_url_tokens(value):
+    """URL-token boundaries only; descriptors/resource selection are not evaluated.
+
+    Follow the HTML splitting/descriptor-tokenizer boundary states. Internal
+    commas stay in URLs; trailing commas separate candidates. Parenthesized
+    descriptor text cannot introduce another URL token. MIME text bounds apply.
+    """
+    whitespace = ' \t\n\r\f'
+    position, size = 0, len(value)
+    while position < size:
+        while position < size and value[position] in whitespace+',': position += 1
+        start = position
+        while position < size and value[position] not in whitespace: position += 1
+        token = value[start:position]
+        if not token: break
+        yield token.rstrip(',')
+        if token.endswith(','): continue
+        in_parens = False
+        while position < size:
+            char = value[position]
+            position += 1
+            if in_parens:
+                if char == ')': in_parens = False
+            elif char == '(':
+                in_parens = True
+            elif char == ',':
+                break
+
+
+def html_attribute_url_candidates(name, value, extractor=extract_urls):
+    """Share list grammar between MIME observations and candidate/source views.
+
+    List URL tokens are complete candidates, not prose. An HTTP substring in a
+    data/relative URL or descriptor is not an outer candidate. Retain an invalid
+    whole token when a recognized URL prefix contains disallowed characters,
+    rather than turning its truncated prefix into a different valid target.
+    """
+    if name not in {'srcset', 'imagesrcset'}:
+        return extractor(value)
+    return [token for token in _srcset_url_tokens(value)
+            if any(token.startswith(candidate) for candidate in extractor(token))]
+
+
 class HtmlEvidenceParser(HTMLParser):
     def __init__(self):
         super().__init__(convert_charrefs=True)
@@ -298,8 +341,8 @@ class HtmlEvidenceParser(HTMLParser):
     def handle_starttag(self, tag, attrs):
         if tag in {'script', 'style'}: self.excluded += 1
         for name, value in attrs:
-            if value and name in {'href', 'src', 'action', 'formaction', 'poster', 'srcset', 'data'}:
-                self.urls.extend(extract_urls(value))
+            if value and name in {'href', 'src', 'action', 'formaction', 'poster', 'srcset', 'imagesrcset', 'data'}:
+                self.urls.extend(html_attribute_url_candidates(name, value))
 
     def handle_endtag(self, tag):
         if tag in {'script', 'style'} and self.excluded: self.excluded -= 1
