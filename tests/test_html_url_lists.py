@@ -146,7 +146,7 @@ class HTMLURLListContracts(unittest.TestCase):
         self.assertEqual(source['status'],'limited')
         for item in source['sources']:
             if item['kind']=='mime_body':
-                self.assertEqual(item['derivation']['method'],'paw_html_url_candidate_views_v4')
+                self.assertEqual(item['derivation']['method'],'paw_html_url_candidate_views_v5')
 
     def test_ascii_whitespace_multiple_separators_and_malformed_descriptors_stay_bounded(self):
         for whitespace in (' ','\t','\r\n','\f'):

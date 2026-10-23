@@ -63,7 +63,8 @@ class DeobfuscationEngine:
                     results['transformations'].extend(deobfuscated.get('transformations', []))
 
             elif artifact_type == 'html' and artifact_data:
-                deobfuscated = self.deobfuscate_html(artifact_data)
+                deobfuscated = (self.layers[1].deobfuscate_documents(artifact_data)
+                                if isinstance(artifact_data, list) else self.deobfuscate_html(artifact_data))
                 results['deobfuscated_artifacts']['html'] = deobfuscated
                 results['transformations'].extend(deobfuscated.get('transformations', []))
 

@@ -2,7 +2,7 @@
 import base64
 import json
 import re
-from html.parser import HTMLParser
+from .html_contexts import HTMLTextContextParser
 from ..deobfuscate.url import http_url_status
 from .mime_analysis import html_attribute_url_candidates
 from .css_urls import extract_css_url_candidates
@@ -35,7 +35,7 @@ def extract_text_url_candidates(text):
     return list(dict.fromkeys(candidates))
 
 
-class _HtmlURLCandidateParser(HTMLParser):
+class _HtmlURLCandidateParser(HTMLTextContextParser):
     """Inspect parsed attributes and hidden text without execution."""
 
     def __init__(self):

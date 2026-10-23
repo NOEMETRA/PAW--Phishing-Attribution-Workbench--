@@ -47,6 +47,6 @@ if __name__=='__main__':
     main(samples=fixtures(),http_names=('boundaries.eml','nonnetwork.eml','malformed.eml'),
          summary='CSS url() arguments versus surrounding syntax, nonnetwork/relative component exclusion, '
          'quoted resource identity, attribute entities versus raw style text, original invalid/escaped/malformed '
-         'and recovered candidates, independent MIME documents, source v4, original/body bytes, coverage, '
+         'and recovered candidates, independent MIME documents, source v5, original/body bytes, coverage, '
          'stopped workers, seals and CLI/API/ZIP parity. No CSS escape decoding, browser/resource selection '
          'or classifier accuracy claim.')

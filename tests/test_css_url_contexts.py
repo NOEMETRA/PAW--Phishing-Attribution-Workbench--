@@ -99,7 +99,7 @@ class CSSURLContextContracts(unittest.TestCase):
         self.assertEqual(sources['omitted_link_count'],6)
         for source in sources['sources']:
             if source['kind']=='mime_body':
-                self.assertEqual(source['derivation']['method'],'paw_html_url_candidate_views_v4')
+                self.assertEqual(source['derivation']['method'],'paw_html_url_candidate_views_v5')
 
 
 if __name__=='__main__': unittest.main()

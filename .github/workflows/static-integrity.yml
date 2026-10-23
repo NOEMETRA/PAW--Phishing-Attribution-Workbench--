@@ -61,6 +61,8 @@ jobs:
 
       - name: Verify original HTML markup, bounded candidates and descriptive coverage
         run: python -m unittest discover -s tests -p 'test_html_contracts.py' -v
+      - name: Verify shared lexical HTML text contexts and evidence consumers
+        run: python -m unittest discover -s tests -p 'test_html_text_contexts.py' -v
 
       - name: Verify JavaScript source preservation and unexecuted bounded candidates
         run: python -m unittest discover -s tests -p 'test_javascript_contracts.py' -v
@@ -238,6 +240,8 @@ jobs:
         run: python tests/integration_css_url_contexts_real.py
       - name: Verify actual scalar HTML URL CLI and HTTP publication
         run: python tests/integration_html_scalar_urls_real.py
+      - name: Verify actual HTML text contexts through offline CLI and HTTP exports
+        run: python tests/integration_html_text_contexts_real.py
 
       - name: Verify original embedded MIME spans and separate derived evidence
         run: python -m unittest discover -s tests -p 'test_embedded_wire_evidence.py' -v
@@ -457,3 +461,5 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_archive_inventory.py' -v
       - name: Verify actual offline Unicode ZIP CLI and HTTP exports
         run: python tests/integration_archive_inventory_real.py
+      - name: Verify shared HTML text boundaries on maintenance runtimes
+        run: python -m unittest discover -s tests -p 'test_html_text_contexts.py' -v
