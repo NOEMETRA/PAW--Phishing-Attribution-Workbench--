@@ -95,7 +95,7 @@ risk/execution unassessed. It never fabricates eval results or rewrites code.
 | Independent end-to-end DKIM verification in the main trace path | Not established |
 | URL extraction | Bounded supported outer-body and first Subject/From views; [sources/omissions](docs/url-evidence.md), not complete discovery |
 | Content deobfuscation | Original text/HTML/JavaScript preserved; descriptive candidates and uncalibrated URL heuristics |
-| Attachment inspection | Hashes, metadata and bounded ZIP inventory; malware/macros not evaluated |
+| Attachment inspection | Preserved payloads, metadata/hashes and bounded ZIP directory inventory; document/URL extraction, decryption, malware/macros not evaluated |
 | MIME interpretation context | [Parser-selected declarations, structural defects and inherited uncertainty](docs/mime-context-evidence.md); alternative trees not evaluated |
 | RDAP / infrastructure enrichment | Implemented where network access is available |
 | Case scoring | Implemented as hand-authored heuristics |
@@ -296,6 +296,10 @@ optional HTML observations and supplied/captured kit helpers have different
 coverage. Attached/embedded HTML and MIME CSS are preserved as attachments,
 without inner URL extraction into the outer-body inventory. Generic lexical
 matches do not establish parsed resource destinations or browser use.
+The [attachment capability contract](docs/attachment-capability-coverage.md)
+records the current preservation-only decision for attached/embedded content
+and unresolved resources, with explicit unavailable content scopes and ZIP
+omissions/errors in metadata, coverage and technical reports.
 
 ## Heuristic scoring
 
@@ -721,7 +725,7 @@ The project should be judged by whether each conclusion can be traced back to ev
 
 Offline EML ingestion now preserves the original bytes and decodes MIME text with its declared charset. HTML links, inline attachments, empty attachments and embedded messages are retained, with explicit decoding defects and resource limits. Embedded-message representations are derived artifacts; the original EML remains primary evidence.
 
-Attachment output is metadata and hashes only. Malware, macros and independent MIME-type detection remain `not_evaluated`; absence of a finding does not establish safety. ZIP members are inventoried without extraction or execution. MSG conversion is unavailable pending validation of original headers and attachment preservation.
+Attachments retain payload bytes and metadata/hashes. Document text, attachment URL extraction, resource resolution, embedded bodies, archive-member content and decryption remain `not_evaluated`, as do malware, macros and independent MIME-type detection. Metadata completion does not establish content analysis or safety. ZIP directory declarations are inventoried without member extraction or execution; errors, known omissions and limits appear in the technical coverage view. Unknown reader counts remain unknown. See [attachment capabilities](docs/attachment-capability-coverage.md). MSG conversion remains unavailable pending validation of original headers and attachment preservation.
 
 New cases inventory all case files for integrity verification, except the fixed index/root and post-seal Rekor artifacts. Unsigned local hashes establish consistency, not independent authenticity. Rekor inclusion proofs remain unverified; the legacy presence-of-fields check has been removed. Updating an existing report is unavailable until a versioned workflow can preserve sealed evidence and assessment coverage; create a new case instead.
 
