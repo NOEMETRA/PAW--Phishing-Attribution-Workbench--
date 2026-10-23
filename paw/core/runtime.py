@@ -23,9 +23,15 @@ class RunLimits:
     log_bytes: int = 8 * 1024 ** 2
 
     def __post_init__(self):
-        for value in asdict(self).values():
-            if isinstance(value, bool) or not math.isfinite(value) or value <= 0:
-                raise ValueError('Runtime limits must be positive')
+        for name in ('wall_seconds', 'stage_seconds'):
+            value = getattr(self, name)
+            try: valid = type(value) in (int, float) and math.isfinite(value) and value > 0
+            except OverflowError: valid = False
+            if not valid: raise ValueError('Runtime durations must be positive finite numbers')
+        for name in ('memory_bytes', 'artifact_bytes', 'artifact_files', 'log_bytes'):
+            value = getattr(self, name)
+            if type(value) is not int or not 0 < value < 2**63:
+                raise ValueError('Runtime byte/count limits must be positive signed-64-bit integers')
 
 
 def atomic_json(path, value):

@@ -227,7 +227,9 @@ async def upload_email(file: UploadFile = File(...)):
 @app.post('/api/analyze')
 async def analyze_email(request: AnalysisRequest, background_tasks: BackgroundTasks):
     if len(_cancel_events) >= 32: raise HTTPException(429, 'Analysis queue is full')
-    path = Path(request.file_path)
+    from ..core.batch import local_source_path
+    try: path = local_source_path(request.file_path)
+    except ValueError as exc: raise HTTPException(400, str(exc)) from exc
     path = contained(UPLOAD_DIR, path if path.is_absolute() else DATA_DIR / path)
     if not path.is_file(): raise HTTPException(404, 'Uploaded email not found')
     if path.suffix.lower() not in {'.eml','.msg'}: raise HTTPException(400,'Unsupported email format')
