@@ -1,307 +1,233 @@
-# paw/sentinel/ip_analyzer.py
-"""
-IP Analysis Engine for victim intelligence.
-Provides geolocation, WHOIS, reverse DNS, and basic reconnaissance.
-"""
-import socket
-from .config import _require_active
-import json
-import time
-import os
-from typing import Dict, List, Optional, Tuple, Any
-from concurrent.futures import ThreadPoolExecutor, as_completed
+"""Bounded IP syntax and unverified provider observations, without identity/risk inference."""
+import base64
+from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
+import copy
 import ipaddress
+import json
+import os
+import threading
+import time
+from urllib.parse import quote, urlsplit
+
+from .contracts import _require_active, _json_tree, _json_chunks
+from .transport import fetch_http, positive_number, native_integer
+from ..deobfuscate.url import http_url_status
 
 
 class IPAnalyzer:
-    """Analyze IP addresses for victim intelligence and attacker localization."""
+    def __init__(self, timeout=10, use_proxy=True, proxy_url=None, *, provider_urls=None, ptr_resolver=None):
+        positive_number(timeout,'timeout',300)
+        if type(use_proxy) is not bool: raise ValueError('use_proxy requires a native boolean')
+        self.timeout = timeout; self.use_proxy = use_proxy
+        self.proxy_url = proxy_url if proxy_url is not None else os.environ.get('PAW_PROXY_URL')
+        if self.proxy_url is not None and (type(self.proxy_url) is not str or http_url_status(self.proxy_url)[0]!='completed'):
+            raise ValueError('An absolute HTTP(S) proxy URL is required')
+        self.proxies = {'http':self.proxy_url,'https':self.proxy_url} if use_proxy and self.proxy_url else None
+        defaults = {'ip-api':'http://ip-api.com/json','ipify':'https://geo.ipify.org/api/v2/country,city'}
+        if provider_urls is not None:
+            if type(provider_urls) is not dict or any(key not in defaults or type(value) is not str or
+                    http_url_status(value)[0]!='completed' or
+                    urlsplit(value).query or urlsplit(value).fragment or '@' in urlsplit(value).netloc
+                    for key,value in provider_urls.items()):
+                raise ValueError('Known provider names and absolute HTTP(S) endpoints required')
+            defaults.update(provider_urls)
+        self.provider_urls = defaults
+        self.geolocation_cache = OrderedDict(); self.whois_cache = {}
+        self._cache_lock = threading.RLock(); self._cache_bytes = 0
+        self._ptr_resolver = ptr_resolver
 
-    def __init__(self, timeout: int = 10, use_proxy: bool = True, proxy_url: str = None):
-        self.timeout = timeout
-        self.use_proxy = use_proxy
-        self.proxy_url = proxy_url or os.environ.get('PAW_PROXY_URL')
-        self.geolocation_cache = {}
-        self.whois_cache = {}
+    @staticmethod
+    def _literal(value):
+        if type(value) is not str or not 0 < len(value) <= 45 or '%' in value:
+            raise ValueError('An unscoped textual IP literal is required')
+        try: return ipaddress.ip_address(value)
+        except ValueError: raise ValueError('An unscoped textual IP literal is required') from None
 
-        # Setup proxy for safe external requests
-        self.proxies = None
-        if self.use_proxy and self.proxy_url:
-            self.proxies = {
-                'http': self.proxy_url,
-                'https': self.proxy_url
-            }
+    def get_network_info(self, ip):
+        address = self._literal(ip); prefix = 24 if address.version == 4 else 64
+        return {'ip':ip,'canonical_ip':str(address),'is_private':address.is_private,
+            'is_global':address.is_global,'is_loopback':address.is_loopback,'is_multicast':address.is_multicast,
+            'network':str(ipaddress.ip_network(f'{address}/{prefix}',strict=False)),
+            'version':address.version,'prefix_length':prefix,'verified':False,
+            'scope':'Address syntax flags and assumed grouping prefix; not an allocated subnet, ASN or identity'}
 
-    def analyze_ip(self, ip: str) -> Dict[str, Any]:
-        """Complete analysis of an IP address."""
-        _require_active()
-        result = {
-            'ip': ip,
-            'analysis_time': time.time(),
-            'geolocation': {},
-            'whois': {},
-            'reverse_dns': None,
-            'network_info': {},
-            'risk_indicators': [],
-            'correlated_ips': []
-        }
-
+    def analyze_ip(self, ip):
+        _require_active(); self._literal(ip)
+        result = {'ip':ip,'analysis_time':time.time(),'network_info':self.get_network_info(ip),
+            'geolocation':{},'reverse_dns':None,'whois':{},'risk_indicators':[],'correlated_ips':[],
+            'verified':False,'status':'partial','availability':{}}
         try:
-            # Validate IP
-            ip_obj = ipaddress.ip_address(ip)
-
-            # Reverse DNS lookup
             result['reverse_dns'] = self.reverse_dns_lookup(ip)
-
-            # Network information
-            result['network_info'] = self.get_network_info(ip)
-
-            # Geolocation (requires API key for production)
-            result['geolocation'] = self.geolocate_ip(ip)
-
-            # WHOIS lookup
-            result['whois'] = self.whois_lookup(ip)
-
-            # Risk analysis
-            result['risk_indicators'] = self.analyze_risk_indicators(result)
-
-        except Exception as e:
-            result['error'] = str(e)
-
+            result['availability']['reverse_dns'] = 'unverified_observation' if result['reverse_dns'] else 'unavailable'
+        except Exception as error:
+            result['availability']['reverse_dns'] = type(error).__name__
+        result['geolocation'] = self.geolocate_ip(ip)
+        result['availability']['geolocation'] = result['geolocation']['status']
+        result['whois'] = self.whois_lookup(ip)
+        result['availability'].update(whois='unavailable',risk='unavailable',identity='unavailable',correlation='unavailable')
+        result['limitation'] = 'Provider/PTR claims are unverified; no validated IP risk, person/operator identity or attacker attribution'
         return result
 
-    def reverse_dns_lookup(self, ip: str) -> Optional[str]:
-        """Perform reverse DNS lookup."""
-        _require_active()
+    def reverse_dns_lookup(self, ip):
+        _require_active(); address = self._literal(ip)
         try:
-            hostname = socket.gethostbyaddr(ip)[0]
-            return hostname
-        except (socket.herror, socket.gaierror):
+            import dns.resolver
+            import dns.reversename
+            resolver = self._ptr_resolver if self._ptr_resolver is not None else dns.resolver
+            answer = resolver.resolve(dns.reversename.from_address(str(address)),'PTR',lifetime=self.timeout)
+            return str(next(iter(answer))).rstrip('.')
+        except ImportError:
+            return None
+        except Exception:
+            from ..core.network_policy import network_allowed
+            if not network_allowed(): raise
             return None
 
-    def get_network_info(self, ip: str) -> Dict[str, Any]:
-        """Extract network information from IP."""
+    @staticmethod
+    def _json_payload(observation):
+        def unique(pairs):
+            value = {}
+            for key,item in pairs:
+                if key in value: raise ValueError('Duplicate provider JSON key')
+                value[key] = item
+            return value
+        def invalid(value): raise ValueError('Nonfinite provider JSON number')
+        return _json_tree(json.loads(observation['body'].decode('utf-8'),object_pairs_hook=unique,
+                                    parse_constant=invalid),depth=32,nodes=10000)
+
+    def _provider(self, name, ip):
+        _require_active(); address = self._literal(ip)
+        endpoint = self.provider_urls[name]
+        params = None
+        if name == 'ip-api': endpoint = endpoint.rstrip('/')+'/'+quote(str(address),safe='')
+        else:
+            key = os.environ.get('PAW_IPIFY_API_KEY')
+            if not key:
+                return {'status':'unavailable','source':name,'verified':False,'reason':'Provider credential unavailable'}
+            params = {'apiKey':key,'ipAddress':str(address)}
+        observation = fetch_http(endpoint,timeout=self.timeout,max_bytes=128*1024,proxies=self.proxies,params=params)
+        body = observation.pop('body')
+        evidence = {**observation,'body_base64':base64.b64encode(body).decode('ascii')}
+        result = {'status':'unavailable','source':name,'ip':ip,'verified':False,'provider_evidence':evidence}
+        if (observation['status'] != 'observed' or observation['http_status'] != 200 or observation['body_status']!='completed'
+                or observation.get('content_encoding','identity').casefold() not in ('','identity')):
+            result['reason'] = 'Provider response unavailable, unsuccessful or limited'; return result
         try:
-            ip_obj = ipaddress.ip_address(ip)
-            network = ipaddress.ip_network(f"{ip}/24", strict=False)
+            payload = self._json_payload({'body':body})
+            if type(payload) is not dict: raise ValueError('Provider JSON object required')
+            result['provider_payload'] = payload
+            returned = payload.get('query' if name == 'ip-api' else 'ip')
+            if self._literal(returned) != address: raise ValueError('Provider IP does not match request')
+            if name == 'ip-api':
+                if payload.get('status') != 'success': raise ValueError('Provider did not report success')
+                values = payload
+                mapping = {'country':'country','country_code':'countryCode','city':'city','region':'regionName',
+                           'isp':'isp','org':'org','as':'as','timezone':'timezone','lat':'lat','lon':'lon'}
+            else:
+                values = payload.get('location')
+                if type(values) is not dict: raise ValueError('Provider location object required')
+                mapping = {'country':'country','country_code':'country','city':'city','region':'region','lat':'lat','lon':'lng'}
+            omissions = []
+            for target,source in mapping.items():
+                value = values.get(source)
+                if target in ('lat','lon'):
+                    maximum = 90 if target=='lat' else 180
+                    valid = type(value) in (int,float) and -maximum <= value <= maximum
+                else: valid = type(value) is str and bool(value.strip())
+                result[target] = value if valid else None
+                if not valid: omissions.append(target)
+            result.update(status='observed',omitted_fields=omissions)
+        except (ValueError,UnicodeError,RecursionError) as error:
+            result.update(status='invalid',reason=type(error).__name__)
+        return result
 
-            return {
-                'is_private': ip_obj.is_private,
-                'is_global': ip_obj.is_global,
-                'is_loopback': ip_obj.is_loopback,
-                'is_multicast': ip_obj.is_multicast,
-                'network': str(network),
-                'version': ip_obj.version
-            }
-        except Exception as e:
-            return {'error': str(e)}
+    def _geolocate_ipapi(self, ip):
+        _require_active(); return self._provider('ip-api',ip)
 
-    def geolocate_ip(self, ip: str) -> Dict[str, Any]:
-        """Geolocate IP address using free APIs."""
+    def _geolocate_ipify(self, ip):
+        _require_active(); return self._provider('ipify',ip)
+
+    def geolocate_ip(self, ip):
+        _require_active(); canonical = str(self._literal(ip)); now = time.monotonic()
+        with self._cache_lock:
+            cached = self.geolocation_cache.get(canonical)
+            if cached is not None:
+                if now < cached[0]:
+                    value = copy.deepcopy(cached[1]); value['cache'] = {'hit':True,'scope':'This instance, at most 300 seconds'}
+                    return value
+                self._cache_bytes -= cached[2]; del self.geolocation_cache[canonical]
+        attempts = []
+        for method in (self._geolocate_ipapi,self._geolocate_ipify):
+            value = method(ip); attempts.append(value)
+            if value['status']=='observed':
+                value = {**value,'attempts':copy.deepcopy(attempts),'cache':{'hit':False}}
+                size = sum(len(chunk) for chunk in _json_chunks(value,16*1024**2))
+                with self._cache_lock:
+                    prior = self.geolocation_cache.pop(canonical,None)
+                    if prior: self._cache_bytes -= prior[2]
+                    self.geolocation_cache[canonical] = (time.monotonic()+300,copy.deepcopy(value),size)
+                    self._cache_bytes += size
+                    while len(self.geolocation_cache)>256 or self._cache_bytes > 16*1024**2:
+                        self._cache_bytes -= self.geolocation_cache.popitem(last=False)[1][2]
+                return value
+        return {'status':'unavailable','ip':ip,'verified':False,'attempts':attempts,
+                'reason':'No complete IP-bound provider observation; no default geography invented'}
+
+    def whois_lookup(self, ip):
+        _require_active(); self._literal(ip)
+        return {'status':'unavailable','ip':ip,'verified':False,
+                'reason':'Domain WHOIS does not establish IP allocation; validated IP RDAP collection is unavailable'}
+
+    def analyze_risk_indicators(self, analysis_result):
         _require_active()
-        if ip in self.geolocation_cache:
-            return self.geolocation_cache[ip]
+        raise NotImplementedError('No validated Sentinel IP risk model; missing PTR/provider data are not suspiciousness')
 
-        # Try multiple free geolocation services
-        services = [
-            self._geolocate_ipapi(ip),
-            self._geolocate_ipify(ip),
-        ]
-
-        for service_result in services:
-            if service_result and 'country' in service_result:
-                self.geolocation_cache[ip] = service_result
-                return service_result
-
-        # Fallback to basic info
-        return {
-            'ip': ip,
-            'country': 'Unknown',
-            'city': 'Unknown',
-            'isp': 'Unknown',
-            'org': 'Unknown'
-        }
-
-    def _geolocate_ipapi(self, ip: str) -> Optional[Dict[str, Any]]:
-        """Geolocate using ip-api.com (free tier)."""
+    def correlate_ips(self, victim_ips, known_attacker_ranges=None):
         _require_active()
-        import requests
-        try:
-            response = requests.get(f"http://ip-api.com/json/{ip}",
-                                  timeout=self.timeout,
-                                  proxies=self.proxies)
-            if response.status_code == 200:
-                data = response.json()
-                if data.get('status') == 'success':
-                    return {
-                        'country': data.get('country', 'Unknown'),
-                        'country_code': data.get('countryCode', 'Unknown'),
-                        'city': data.get('city', 'Unknown'),
-                        'region': data.get('regionName', 'Unknown'),
-                        'isp': data.get('isp', 'Unknown'),
-                        'org': data.get('org', 'Unknown'),
-                        'as': data.get('as', 'Unknown'),
-                        'lat': data.get('lat'),
-                        'lon': data.get('lon'),
-                        'timezone': data.get('timezone', 'Unknown'),
-                        'source': 'ip-api.com'
-                    }
-        except Exception as e:
-            print(f"[IPAnalyzer] Geolocation request failed: {type(e).__name__}")
-        return None
+        if type(victim_ips) is not list or len(victim_ips)>1000 or any(type(value) is not str or len(value)>128 for value in victim_ips):
+            raise ValueError('At most 1000 textual IP observations required')
+        if known_attacker_ranges is not None and (type(known_attacker_ranges) is not list or
+                len(known_attacker_ranges)>256 or any(type(value) is not str or len(value)>64 for value in known_attacker_ranges)):
+            raise ValueError('At most 256 textual supplied ranges required')
+        ranges = [(value,ipaddress.ip_network(value,strict=False)) for value in (known_attacker_ranges or [])]
+        groups, invalid, membership = {},[],[]
+        for index,value in enumerate(victim_ips):
+            try: info = self.get_network_info(value); address = self._literal(value)
+            except ValueError: invalid.append(index); continue
+            group = groups.setdefault(info['network'],[])
+            if str(address) not in group: group.append(str(address))
+            matches = [raw for raw,network in ranges if address.version==network.version and address in network]
+            if matches: membership.append({'source_index':index,'supplied_ranges':matches,'verified':False})
+        result = {'schema_version':2,'source_ips':list(victim_ips),'unusable_indices':invalid,
+            'common_networks':{key:value for key,value in groups.items() if len(value)>1},
+            'ip_clusters':groups,'geographic_clusters':{},'temporal_patterns':{},'potential_attacker_ranges':[],
+            'supplied_range_membership':membership,'verified':False,'identity':'unavailable',
+            'scope':'Unique address membership in assumed IPv4 /24 or IPv6 /64 groups; not people, allocated networks or attackers'}
+        for _ in _json_chunks(result,32*1024**2): pass
+        return result
 
-    def _geolocate_ipify(self, ip: str) -> Optional[Dict[str, Any]]:
-        """Geolocate using ipify.org (limited free tier)."""
-        _require_active()
-        api_key = os.environ.get('PAW_IPIFY_API_KEY')
-        if not api_key: return None
-        import requests
-        try:
-            response = requests.get('https://geo.ipify.org/api/v2/country,city',
-                                  params={'apiKey': api_key, 'ipAddress': ip},
-                                  timeout=self.timeout,
-                                  proxies=self.proxies)
-            if response.status_code == 200:
-                data = response.json()
-                location = data.get('location', {})
-                return {
-                    'country': location.get('country', 'Unknown'),
-                    'city': location.get('city', 'Unknown'),
-                    'region': location.get('region', 'Unknown'),
-                    'isp': 'Unknown',  # Not provided by this API
-                    'org': 'Unknown',
-                    'lat': location.get('lat'),
-                    'lon': location.get('lon'),
-                    'source': 'ipify.org'
-                }
-        except Exception as e:
-            print(f"[IPAnalyzer] Geolocation request failed: {type(e).__name__}")
-        return None
-
-    def whois_lookup(self, ip: str) -> Dict[str, Any]:
-        """Perform WHOIS lookup for IP address."""
-        _require_active()
-        if ip in self.whois_cache:
-            return self.whois_cache[ip]
-
-        try:
-            import whois
-            w = whois.whois(ip)
-            result = {
-                'domain': w.domain,
-                'registrar': w.registrar,
-                'creation_date': str(w.creation_date) if w.creation_date else None,
-                'expiration_date': str(w.expiration_date) if w.expiration_date else None,
-                'name_servers': w.name_servers,
-                'org': w.org,
-                'country': w.country,
-                'state': w.state,
-                'city': w.city,
-                'address': w.address,
-                'emails': w.emails,
-                'source': 'whois'
-            }
-            self.whois_cache[ip] = result
-            return result
-        except ImportError:
-            return {'error': 'whois library not installed', 'install_command': 'pip install python-whois'}
-        except Exception as e:
-            return {'error': str(e)}
-
-    def analyze_risk_indicators(self, analysis_result: Dict[str, Any]) -> List[str]:
-        """Analyze IP for risk indicators."""
-        _require_active()
-        indicators = []
-
-        geo = analysis_result.get('geolocation', {})
-        whois = analysis_result.get('whois', {})
-        network = analysis_result.get('network_info', {})
-
-        # High-risk countries for cybercrime
-        high_risk_countries = ['RU', 'CN', 'IN', 'BR', 'NG', 'VN', 'IR', 'KP', 'UA', 'BY']
-        if geo.get('country_code') in high_risk_countries:
-            indicators.append(f"High-risk country: {geo.get('country')}")
-
-        # Recently registered domains
-        if whois.get('creation_date'):
+    def batch_analyze_ips(self, ips, max_workers=5):
+        _require_active(); native_integer(max_workers,'max_workers',64)
+        if type(ips) is not list or len(ips)>1000: raise ValueError('At most 1000 IP literals required')
+        for value in ips: self._literal(value)
+        values = list(dict.fromkeys(ips))
+        results = {}; size = 2
+        with ThreadPoolExecutor(max_workers=max_workers,thread_name_prefix='paw-sentinel-ip') as executor:
+            pending = {}; source = iter(values)
             try:
-                import datetime
-                creation = datetime.datetime.fromisoformat(str(whois['creation_date']).split(' ')[0])
-                days_old = (datetime.datetime.now() - creation).days
-                if days_old < 30:
-                    indicators.append(f"Recently registered domain ({days_old} days old)")
-                elif days_old < 90:
-                    indicators.append(f"Relatively new domain ({days_old} days old)")
-            except:
-                pass
-
-        # Suspicious ISP patterns
-        suspicious_isps = ['contabo', 'hetzner', 'digitalocean', 'vultr', 'linode']
-        isp = geo.get('isp', '').lower()
-        if any(suspicious in isp for suspicious in suspicious_isps):
-            indicators.append(f"Known bulletproof hosting: {geo.get('isp')}")
-
-        # Private IP (shouldn't be in phishing)
-        if network.get('is_private'):
-            indicators.append("Private IP address (unusual for phishing)")
-
-        # No reverse DNS
-        if not analysis_result.get('reverse_dns'):
-            indicators.append("No reverse DNS (suspicious)")
-
-        return indicators
-
-    def correlate_ips(self, victim_ips: List[str], known_attacker_ranges: List[str] = None) -> Dict[str, Any]:
-        """Find correlations between victim IPs to identify attacker infrastructure."""
-        _require_active()
-        correlations = {
-            'ip_clusters': {},
-            'common_networks': {},
-            'geographic_clusters': {},
-            'temporal_patterns': {},
-            'potential_attacker_ranges': []
-        }
-
-        # Group by /24 networks
-        network_groups = {}
-        for ip in victim_ips:
-            try:
-                network = str(ipaddress.ip_network(f"{ip}/24", strict=False))
-                if network not in network_groups:
-                    network_groups[network] = []
-                network_groups[network].append(ip)
-            except:
-                continue
-
-        # Find networks with multiple victims
-        correlations['common_networks'] = {
-            network: ips for network, ips in network_groups.items()
-            if len(ips) > 1
-        }
-
-        # Identify potential attacker ranges (networks with many victims)
-        for network, ips in network_groups.items():
-            if len(ips) >= 3:  # 3+ victims from same /24
-                correlations['potential_attacker_ranges'].append({
-                    'network': network,
-                    'victim_count': len(ips),
-                    'victim_ips': ips
-                })
-
-        return correlations
-
-    def batch_analyze_ips(self, ips: List[str], max_workers: int = 5) -> Dict[str, Dict[str, Any]]:
-        """Analyze multiple IPs concurrently."""
-        _require_active()
-        results = {}
-
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_to_ip = {executor.submit(self.analyze_ip, ip): ip for ip in ips}
-
-            for future in as_completed(future_to_ip):
-                ip = future_to_ip[future]
-                try:
-                    results[ip] = future.result()
-                except Exception as e:
-                    results[ip] = {'ip': ip, 'error': str(e)}
-
-        return results
+                while True:
+                    while len(pending) < max_workers:
+                        value = next(source,None)
+                        if value is None: break
+                        pending[executor.submit(self.analyze_ip,value)] = value
+                    if not pending: break
+                    completed,_ = wait(pending,return_when=FIRST_COMPLETED)
+                    for future in completed:
+                        key = pending.pop(future); value = future.result()
+                        size += sum(len(chunk) for chunk in _json_chunks({key:value},32*1024**2))
+                        if size > 32*1024**2: raise ValueError('Sentinel IP batch output byte limit exceeded')
+                        results[key] = value
+            finally:
+                for future in pending: future.cancel()
+        return {key:results[key] for key in values}

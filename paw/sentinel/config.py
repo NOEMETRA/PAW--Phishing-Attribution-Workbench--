@@ -68,6 +68,18 @@ class SentinelConfig:
         for section in ('monitoring', 'alerts', 'analysis', 'storage'):
             if section in config and type(config[section]) is not dict:
                 raise ValueError(f'Sentinel {section} configuration must be an object')
+        from .transport import positive_number, native_integer
+        monitoring = config.get('monitoring',{})
+        for key,maximum in (('check_interval_minutes',525600),('timeout_seconds',300)):
+            if key in monitoring: positive_number(monitoring[key],key,maximum)
+        if 'max_concurrent_checks' in monitoring:
+            native_integer(monitoring['max_concurrent_checks'],'max_concurrent_checks',64)
+        for section,keys in (('monitoring',('enabled',)),
+                ('alerts',('enabled','email_alerts','alert_on_changes','alert_on_down','alert_on_up')),
+                ('analysis',('enable_screenshots','enable_content_diff','enable_fingerprinting'))):
+            for key in keys:
+                if key in config.get(section,{}) and type(config[section][key]) is not bool:
+                    raise ValueError(f'{section}.{key} requires a native boolean')
         if 'storage' in config:
             if not isinstance(config['storage'], dict):
                 raise ValueError('Sentinel storage configuration must be an object')

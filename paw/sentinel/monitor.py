@@ -1,334 +1,261 @@
-# paw/sentinel/monitor.py
-"""
-Core monitoring engine for Sentinel.
-"""
-import time
+"""In-process Sentinel HTTP observations; service deployment and rendering are separate."""
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
+from contextlib import contextmanager
+import copy
+import base64
 import threading
-import hashlib
-import os
-from datetime import datetime
-from typing import Dict, List, Any, Optional, Callable
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import time
 
 from .config import SentinelConfig, _require_active
+from .contracts import _json_tree, _json_chunks
 from .database import CampaignDatabase
-from ..util.fsutil import ensure_dir
-from ..util.timeutil import utc_now_iso
+from .transport import fetch_http, positive_number, native_integer
+from ..deobfuscate.url import http_url_status
+
+
+class _PublicationCanceled(RuntimeError):
+    """A stopped instance declined the transaction at commit admission."""
 
 
 class SentinelMonitor:
-    """Core monitoring engine for phishing campaigns."""
-
-    def __init__(self, config: SentinelConfig = None, database: CampaignDatabase = None):
+    def __init__(self, config=None, database=None):
         self.config = SentinelConfig() if config is None else config
         self.db = CampaignDatabase(**self.config.get_database_options()) if database is None else database
-        self._running = False
-        self._thread = None
-        self._executor = None
-        self._callbacks = {
-            'on_check_complete': [],
-            'on_alert': [],
-            'on_campaign_down': [],
-            'on_campaign_up': [],
-            'on_content_changed': []
-        }
+        self._running = False; self._thread = None; self._executor = None
+        self._state = threading.Condition(threading.RLock())
+        self._stop_event = threading.Event(); self._operation_lock = threading.RLock()
+        self._publication_stopped = False
+        self._operations_done = threading.Event(); self._operations_done.set()
+        self._operations = set(); self._last_error = None; self._callback_errors = []
+        self._callbacks = {name:[] for name in ('on_check_complete','on_alert','on_campaign_down',
+                                               'on_campaign_up','on_content_changed')}
 
-    def start(self) -> None:
-        """Start the monitoring service."""
-        _require_active()
-        if self._running:
-            return
+    def _settings(self):
+        interval = positive_number(self.config.get('monitoring.check_interval_minutes',30),'interval',525600)*60
+        workers = native_integer(self.config.get('monitoring.max_concurrent_checks',5),'workers',64)
+        timeout = positive_number(self.config.get('monitoring.timeout_seconds',30),'timeout',300)
+        return interval,workers,timeout
 
-        self._running = True
-        self._executor = ThreadPoolExecutor(
-            max_workers=self.config.get("monitoring.max_concurrent_checks", 5)
-        )
+    def start(self):
+        self._require_collector(); self._settings()
+        with self._state:
+            if self._thread is not None and self._thread.is_alive():
+                if self._stop_event.is_set(): raise RuntimeError('Sentinel is still stopping')
+                return
+            if self._operations: raise RuntimeError('An immediate Sentinel check is still active')
+            if self.config.get('monitoring.enabled',True) is not True:
+                raise ValueError('Sentinel monitoring is disabled')
+            self._stop_event.clear(); self._publication_stopped = False; self._running = True
+            self._thread = threading.Thread(target=self._monitor_loop,name='paw-sentinel-monitor',daemon=True)
+            try: self._thread.start()
+            except BaseException:
+                self._running = False; self._thread = None; raise
 
-        self._thread = threading.Thread(target=self._monitor_loop, daemon=True)
-        self._thread.start()
-
-        print(f"[sentinel] Monitoring started - checking every "
-              f"{self.config.get('monitoring.check_interval_minutes')} minutes")
-
-    def stop(self) -> None:
-        """Stop the monitoring service."""
-        self._running = False
-        if self._executor:
-            self._executor.shutdown(wait=True)
-        if self._thread:
-            self._thread.join(timeout=5)
-        print("[sentinel] Monitoring stopped")
-
-    def is_running(self) -> bool:
-        """Check if monitoring is running."""
-        return self._running
-
-    def add_campaign(self, case_id: str, url: str, metadata: Dict[str, Any] = None) -> str:
-        """Add a campaign to monitoring."""
-        return self.db.add_campaign(case_id, url, metadata)
-
-    def remove_campaign(self, campaign_id: str) -> bool:
-        """Remove a campaign from monitoring."""
-        return self.db.remove_campaign(campaign_id)
-
-    def get_campaign_status(self, campaign_id: str) -> Optional[Dict[str, Any]]:
-        """Get current status of a campaign."""
-        return self.db.get_campaign(campaign_id)
-
-    def get_all_campaigns(self) -> List[Dict[str, Any]]:
-        """Get all monitored campaigns."""
-        return self.db.get_active_campaigns()
-
-    def on_check_complete(self, callback: Callable) -> None:
-        """Register callback for check completion."""
-        self._callbacks['on_check_complete'].append(callback)
-
-    def on_alert(self, callback: Callable) -> None:
-        """Register callback for alerts."""
-        self._callbacks['on_alert'].append(callback)
-
-    def on_campaign_down(self, callback: Callable) -> None:
-        """Register callback for campaign going down."""
-        self._callbacks['on_campaign_down'].append(callback)
-
-    def on_campaign_up(self, callback: Callable) -> None:
-        """Register callback for campaign coming back up."""
-        self._callbacks['on_campaign_up'].append(callback)
-
-    def on_content_changed(self, callback: Callable) -> None:
-        """Register callback for content changes."""
-        self._callbacks['on_content_changed'].append(callback)
-
-    def get_stats(self) -> Dict[str, Any]:
-        """Stored row counts and this instance's flag, not global service status."""
-        return {**self.db.get_monitor_statistics(),
-                'is_running': self.is_running(), 'is_running_scope': 'this_instance_flag'}
-
-    def _monitor_loop(self) -> None:
-        """Main monitoring loop."""
-        interval_seconds = self.config.get("monitoring.check_interval_minutes", 30) * 60
-
-        while self._running:
-            try:
-                self._perform_checks()
-                time.sleep(interval_seconds)
-            except Exception as e:
-                print(f"[sentinel] Error in monitor loop: {e}")
-                time.sleep(60)  # Wait a minute before retrying
-
-    def _perform_checks(self) -> None:
-        """Perform monitoring checks for all active campaigns."""
-        _require_active()
-        campaigns = self.db.get_active_campaigns()
-        if not campaigns:
-            return
-
-        print(f"[sentinel] Checking {len(campaigns)} campaigns...")
-
-        # Submit checks to thread pool
-        futures = []
-        for campaign in campaigns:
-            future = self._executor.submit(self._check_campaign, campaign)
-            futures.append(future)
-
-        # Wait for completion
-        for future in as_completed(futures):
-            try:
-                result = future.result()
-                self._handle_check_result(result)
-            except Exception as e:
-                print(f"[sentinel] Check failed: {e}")
-
-    def _check_campaign(self, campaign: Dict[str, Any]) -> Dict[str, Any]:
-        """Check a single campaign."""
-        _require_active()
-        campaign_id = campaign['id']
-        url = campaign['url']
-
-        result = {
-            'campaign_id': campaign_id,
-            'url': url,
-            'status': 'error',
-            'response_time': None,
-            'http_status': None,
-            'content_hash': None,
-            'screenshot_path': None,
-            'error_message': None,
-            'metadata': {}
-        }
-
+    def stop(self, timeout=5):
+        if type(timeout) not in (int,float) or not 0 <= timeout <= 300:
+            raise ValueError('Stop timeout must be a finite native number in 0..300')
+        deadline = time.monotonic()+timeout
+        # Request I/O cancellation immediately. The state lock serializes
+        # publication admission; an already-admitted commit may still finish.
+        self._stop_event.set()
+        if not self._state.acquire(timeout=max(0,deadline-time.monotonic())): return False
         try:
-            import requests
-            from urllib.parse import urlparse
+            self._stop_event.set(); self._publication_stopped = True; thread = self._thread
+            if threading.get_ident() in self._operations or thread is threading.current_thread(): return False
+        finally: self._state.release()
+        if thread is not None: thread.join(max(0,deadline-time.monotonic()))
+        while True:
+            if not self._state.acquire(timeout=max(0,deadline-time.monotonic())): return False
+            try:
+                stopped = not self._operations and (self._thread is None or not self._thread.is_alive())
+                if stopped: self._running = False; return True
+                if self._thread is not thread: return False
+            finally: self._state.release()
+            remaining = deadline-time.monotonic()
+            if remaining <= 0: return False
+            self._operations_done.wait(remaining)
 
-            # Make HTTP request
-            start_time = time.time()
-            response = requests.get(
-                url,
-                timeout=self.config.get("monitoring.timeout_seconds", 30),
-                headers={'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-            )
-            response_time = time.time() - start_time
+    def is_running(self):
+        with self._state:
+            return self._running or bool(self._operations) or bool(self._thread and self._thread.is_alive())
 
-            result.update({
-                'status': 'up' if response.status_code < 400 else 'down',
-                'response_time': response_time,
-                'http_status': response.status_code,
-            })
+    def add_campaign(self, case_id, url, metadata=None): return self.db.add_campaign(case_id,url,metadata)
+    def remove_campaign(self, campaign_id): return self.db.remove_campaign(campaign_id)
+    def get_campaign_status(self, campaign_id): return self.db.get_campaign(campaign_id)
+    def get_all_campaigns(self): return self.db.get_active_campaigns()
 
-            # Get content hash if enabled
-            if self.config.get("analysis.enable_content_diff", True):
-                content_hash = hashlib.sha256(response.content).hexdigest()
-                result['content_hash'] = content_hash
+    def _register(self, name, callback):
+        if not callable(callback): raise ValueError('A callable Sentinel callback is required')
+        with self._state:
+            if len(self._callbacks[name]) >= 128: raise ValueError('Sentinel callback limit exceeded')
+            self._callbacks[name].append(callback)
 
-                # Check for content changes
-                previous_checks = self.db.get_recent_checks(campaign_id, limit=1)
-                if previous_checks:
-                    prev_hash = previous_checks[0].get('content_hash')
-                    if prev_hash and prev_hash != content_hash:
-                        result['content_changed'] = True
-                        result['previous_hash'] = prev_hash
+    def on_check_complete(self, callback): self._register('on_check_complete',callback)
+    def on_alert(self, callback): self._register('on_alert',callback)
+    def on_campaign_down(self, callback): self._register('on_campaign_down',callback)
+    def on_campaign_up(self, callback): self._register('on_campaign_up',callback)
+    def on_content_changed(self, callback): self._register('on_content_changed',callback)
 
-            # Take screenshot if enabled
-            if self.config.get("analysis.enable_screenshots", True):
-                screenshot_path = self._take_screenshot(url, campaign_id)
-                if screenshot_path:
-                    result['screenshot_path'] = screenshot_path
+    def get_stats(self):
+        return {**self.db.get_monitor_statistics(),'is_running':self.is_running(),
+                'is_running_scope':'this_instance_flag'}
 
-        except requests.exceptions.RequestException as e:
-            result.update({
-                'status': 'down',
-                'error_message': str(e)
-            })
-        except Exception as e:
-            result.update({
-                'status': 'error',
-                'error_message': str(e)
-            })
+    def get_runtime_state(self):
+        with self._state:
+            return {'state':('stopping' if self._stop_event.is_set() else 'running') if self.is_running() else 'stopped',
+                'active_operations':len(self._operations),'last_error':self._last_error,
+                'callback_errors':copy.deepcopy(self._callback_errors),'scope':'this_instance',
+                'persistent_service':'unavailable','isolation':'not_established',
+                'unavailable_capabilities':['browser_capture','fingerprinting','webhook_notifications',
+                    'email_notifications','automatic_retries','automatic_retention','identity_and_risk'],
+                'http_body_limit_bytes':128*1024}
 
-        return result
-
-    def _take_screenshot(self, url: str, campaign_id: str) -> Optional[str]:
-        """Take a screenshot of the URL."""
+    def _require_collector(self):
         _require_active()
+        if self.db.read_only: raise RuntimeError('Read-only saved Sentinel storage cannot collect or publish observations')
+
+    def _monitor_loop(self):
         try:
-            from playwright.sync_api import sync_playwright
+            self._require_collector()
+            interval,_,_ = self._settings()
+            while not self._stop_event.is_set():
+                try: self._perform_checks()
+                except Exception as error: self._last_error = type(error).__name__
+                deadline = time.monotonic()+interval
+                while not self._stop_event.is_set():
+                    remaining = deadline-time.monotonic()
+                    if remaining <= 0: break
+                    self._stop_event.wait(min(remaining,60,threading.TIMEOUT_MAX))
+        finally:
+            with self._state:
+                self._running = False; self._state.notify_all()
 
-            screenshots_dir = self.config.get("storage.screenshots_dir", "screenshots")
-            ensure_dir(screenshots_dir)
+    @contextmanager
+    def _operation(self):
+        with self._operation_lock:
+            identifier = threading.get_ident()
+            with self._state:
+                if self._stop_event.is_set(): raise RuntimeError('Sentinel stopping; no new check admitted')
+                if identifier in self._operations: raise RuntimeError('Nested Sentinel collection is unavailable')
+                self._operations.add(identifier); self._operations_done.clear()
+            try: yield
+            finally:
+                with self._state:
+                    self._operations.discard(identifier)
+                    if not self._operations: self._operations_done.set()
+                    self._state.notify_all()
 
-            timestamp = int(datetime.now().timestamp())
-            filename = f"{campaign_id}_{timestamp}.png"
-            filepath = os.path.join(screenshots_dir, filename)
+    @staticmethod
+    def _admit_campaign(campaign):
+        if (type(campaign) is not dict or type(campaign.get('id')) is not str or not campaign['id'].strip()
+                or type(campaign.get('url')) is not str or http_url_status(campaign['url'])[0] != 'completed'):
+            raise ValueError('A named campaign with a complete HTTP(S) URL is required')
+        return {'id':campaign['id'],'url':campaign['url']}
 
-            with sync_playwright() as p:
-                browser = p.chromium.launch(headless=True)
-                page = browser.new_page()
-                page.set_viewport_size({"width": 1280, "height": 720})
+    def _perform_checks(self):
+        self._require_collector()
+        with self._operation():
+            campaigns = [self._admit_campaign(value) for value in self.db.get_active_campaigns()]
+            _,workers,_ = self._settings()
+            with ThreadPoolExecutor(max_workers=workers,thread_name_prefix='paw-sentinel-http') as executor:
+                self._executor = executor
+                try:
+                    pending = set(); source = iter(campaigns)
+                    while True:
+                        while not self._stop_event.is_set() and len(pending) < workers:
+                            campaign = next(source,None)
+                            if campaign is None: break
+                            pending.add(executor.submit(self._check_campaign,campaign))
+                        if not pending: break
+                        completed,pending = wait(pending,timeout=.05,return_when=FIRST_COMPLETED)
+                        for future in completed:
+                            result = future.result()
+                            if not self._stop_event.is_set(): self._handle_check_result(result)
+                        if self._stop_event.is_set():
+                            for future in pending: future.cancel()
+                            break
+                finally: self._executor = None
 
-                page.goto(url, timeout=30000)
-                page.wait_for_load_state('networkidle')
+    def _check_campaign(self, campaign):
+        self._require_collector(); campaign = self._admit_campaign(campaign)
+        _,_,timeout = self._settings()
+        observed = fetch_http(campaign['url'],timeout=timeout,max_bytes=128*1024,stop_event=self._stop_event)
+        body = observed.pop('body'); code = observed['http_status']
+        observed['body_base64'] = base64.b64encode(body).decode('ascii')
+        status = ('up' if code < 400 else 'down') if observed['status']=='observed' else 'error'
+        digest = observed['content_sha256'] if self.config.get('analysis.enable_content_diff',True) is True else None
+        return {'campaign_id':campaign['id'],'url':campaign['url'],'status':status,
+            'http_status':code,'response_time':observed['elapsed_seconds'],'content_hash':digest,
+            'screenshot_path':None,'error_message':observed['error'],
+            'metadata':{'http_observation':observed,'retained_body_bytes':len(body),
+                'screenshot':{'status':'unavailable' if self.config.get('analysis.enable_screenshots',True) is True else 'not_requested',
+                              'reason':'Browser capture requires the isolated collector validation'},
+                'assessment':{'status':'unavailable','reason':'HTTP observations do not establish campaign liveness or identity'}}}
 
-                page.screenshot(path=filepath, full_page=True)
-                browser.close()
-
-            return filepath
-
-        except Exception as e:
-            print(f"[sentinel] Screenshot failed for {url}: {e}")
-            return None
-
-    def _handle_check_result(self, result: Dict[str, Any]) -> None:
-        """Handle the result of a campaign check."""
-        campaign_id = result['campaign_id']
-
-        # Record the check in database
-        self.db.record_check(
-            campaign_id=campaign_id,
-            status=result['status'],
-            response_time=result.get('response_time'),
-            http_status=result.get('http_status'),
-            content_hash=result.get('content_hash'),
-            screenshot_path=result.get('screenshot_path'),
-            error_message=result.get('error_message'),
-            metadata=result.get('metadata', {})
-        )
-
-        # Trigger callbacks
-        for callback in self._callbacks['on_check_complete']:
-            try:
-                callback(result)
-            except Exception as e:
-                print(f"[sentinel] Callback error: {e}")
-
-        # Handle alerts
-        self._check_for_alerts(result)
-
-    def _check_for_alerts(self, result: Dict[str, Any]) -> None:
-        """Check if alerts should be triggered."""
-        campaign_id = result['campaign_id']
-        status = result['status']
-
-        # Get previous status
-        previous_checks = self.db.get_recent_checks(campaign_id, limit=1)
-        previous_status = previous_checks[0]['status'] if previous_checks else None
-
-        # Campaign went down
-        if status in ['down', 'error'] and previous_status == 'up':
-            if self.config.get("alerts.alert_on_down", True):
-                self._trigger_alert(campaign_id, 'down',
-                                  f"Campaign {campaign_id} went down", 'warning')
-
-        # Campaign came back up
-        elif status == 'up' and previous_status in ['down', 'error']:
-            if self.config.get("alerts.alert_on_up", False):
-                self._trigger_alert(campaign_id, 'up',
-                                  f"Campaign {campaign_id} came back up", 'info')
-
-        # Content changed
-        if result.get('content_changed') and self.config.get("alerts.alert_on_changes", True):
-            self._trigger_alert(campaign_id, 'changed',
-                              f"Campaign {campaign_id} content changed", 'info')
-
-    def _trigger_alert(self, campaign_id: str, alert_type: str, message: str,
-                      severity: str = 'info') -> None:
-        """Trigger an alert."""
-        self.db.record_alert(campaign_id, alert_type, message, severity)
-
-        # Trigger callbacks
-        for callback in self._callbacks['on_alert']:
-            try:
-                callback({
-                    'campaign_id': campaign_id,
-                    'type': alert_type,
-                    'message': message,
-                    'severity': severity,
-                    'timestamp': utc_now_iso()
-                })
-            except Exception as e:
-                print(f"[sentinel] Alert callback error: {e}")
-
-        print(f"[sentinel] ALERT: {message}")
-
-    def check_now(self, campaign_id: str = None) -> List[Dict[str, Any]]:
-        """Perform immediate checks for campaigns."""
+    def _take_screenshot(self, url, campaign_id):
         _require_active()
-        if campaign_id:
-            campaign = self.db.get_campaign(campaign_id)
-            campaigns = [campaign] if campaign else []
-        else:
-            campaigns = self.db.get_active_campaigns()
+        raise NotImplementedError('Sentinel browser capture is unavailable until isolated collector validation')
 
-        if not campaigns:
-            return []
+    def _emit(self, name, payload):
+        with self._state: callbacks = tuple(self._callbacks[name])
+        for callback in callbacks:
+            try: callback(copy.deepcopy(payload))
+            except Exception as error:
+                with self._state:
+                    self._callback_errors.append({'event':name,'error':type(error).__name__})
+                    self._callback_errors[:] = self._callback_errors[-100:]
 
-        results = []
-        print(f"[sentinel] Checking {len(campaigns)} campaigns...")
+    @contextmanager
+    def _publication_commit(self):
+        self._require_collector()
+        with self._state:
+            if self._publication_stopped or self._stop_event.is_set(): raise _PublicationCanceled()
+            # Only the actual commit holds this lock, not SQL collection,
+            # validation, busy waits before admission or user callbacks.
+            yield
 
-        for campaign in campaigns:
-            result = self._check_campaign(campaign)
-            self._handle_check_result(result)
-            results.append(result)
+    def _handle_check_result(self, result):
+        self._require_collector()
+        if self._stop_event.is_set(): return None
+        result = _json_tree(result)
+        flags = {key:self.config.get('alerts.'+key,default) for key,default in
+                 (('enabled',True),('alert_on_down',True),('alert_on_up',False),('alert_on_changes',True))}
+        try: receipt = self.db._record_monitor_result(result,flags,commit_guard=self._publication_commit)
+        except _PublicationCanceled: return None
+        published = {**result,**{key:receipt[key] for key in ('check_id','previous_check_id','content_changed')}}
+        self._emit('on_check_complete',published)
+        for event in receipt['events']:
+            self._emit({'up':'on_campaign_up','down':'on_campaign_down','changed':'on_content_changed'}[event],published)
+        for alert in receipt['alerts']: self._emit('on_alert',alert)
+        return published
 
-        print(f"[sentinel] Check complete - {len(results)} campaigns processed")
-        return results
+    def _check_for_alerts(self, result):
+        _require_active()
+        raise NotImplementedError('Use atomic monitor result publication; standalone alert inference is unavailable')
+
+    def _trigger_alert(self, campaign_id, alert_type, message, severity='info'):
+        _require_active()
+        raise NotImplementedError('Monitor alerts must be committed with their source observation')
+
+    def check_now(self, campaign_id=None):
+        self._require_collector()
+        if campaign_id is not None and (type(campaign_id) is not str or not campaign_id.strip()):
+            raise ValueError('campaign_id requires a nonblank string or None')
+        with self._state:
+            if self._stop_event.is_set():
+                if self.is_running(): raise RuntimeError('Sentinel is still stopping')
+                self._stop_event.clear(); self._publication_stopped = False
+        with self._operation():
+            selected = ([self.db.get_campaign(campaign_id)] if campaign_id is not None else self.db.get_active_campaigns())
+            campaigns = [self._admit_campaign(value) for value in selected if value is not None]
+            results = []; size = 2
+            for campaign in campaigns:
+                if self._stop_event.is_set(): break
+                result = self._check_campaign(campaign)
+                published = self._handle_check_result(result)
+                if published is None: continue
+                size += sum(len(chunk) for chunk in _json_chunks(published,self.db.limits['max_result_bytes']))+1
+                if size > self.db.limits['max_result_bytes']:
+                    raise ValueError('Immediate check result byte limit exceeded; earlier per-check commits remain, no complete batch result')
+                results.append(published)
+            return results
