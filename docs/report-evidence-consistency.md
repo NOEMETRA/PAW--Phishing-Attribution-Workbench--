@@ -72,5 +72,5 @@ Those paths retain their register dispositions. Final combined extraction
 contexts, omissions/budgets and advertised capability reconciliation remain
 open; independent accuracy/holdout, clean platform installation, controlled
 egress and UI follow their separate gates. Constructed messages are regression
-fixtures, not phishing ground truth. Exact-head review/CI of this block remains
-required before integration.
+fixtures, not phishing ground truth. PR87 exact-head Codex review has no findings; all three head/merge CI checks pass.
+Integrated as `43c5c47fe4cafe62e3168a071aa8861a5663583d` with the reviewed tree unchanged.

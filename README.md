@@ -93,9 +93,10 @@ risk/execution unassessed. It never fabricates eval results or rewrites code.
 | ARC and Received-SPF parsing | Implemented |
 | DMARC policy DNS lookup | Implemented |
 | Independent end-to-end DKIM verification in the main trace path | Not established |
-| URL extraction | Implemented |
+| URL extraction | Bounded supported outer-body and first Subject/From views; [sources/omissions](docs/url-evidence.md), not complete discovery |
 | Content deobfuscation | Original text/HTML/JavaScript preserved; descriptive candidates and uncalibrated URL heuristics |
 | Attachment inspection | Hashes, metadata and bounded ZIP inventory; malware/macros not evaluated |
+| MIME interpretation context | [Parser-selected declarations, structural defects and inherited uncertainty](docs/mime-context-evidence.md); alternative trees not evaluated |
 | RDAP / infrastructure enrichment | Implemented where network access is available |
 | Case scoring | Implemented as hand-authored heuristics |
 | Local case index and indicator query | Implemented |

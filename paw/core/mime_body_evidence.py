@@ -54,8 +54,11 @@ def preserve_body_parts(mime_result, original, evidence_dir):
                 text_status='captured')
         if 'transfer_decoding' in metadata:
             field['transfer_decoding'] = dict(metadata['transfer_decoding'])
+        if 'mime_context' in metadata:
+            field['mime_context'] = dict(metadata['mime_context'])
         field['status'] = 'partial' if (field['defects'] or field['decoding']['status'] != 'completed'
                                         or field.get('transfer_decoding', {}).get('status') == 'partial'
+                                        or field.get('mime_context', {}).get('status') == 'partial'
                                         or field['text_status'] != 'captured') else 'completed'
         parts.append(field)
     return {'schema_version':1, 'scope':'supported_outer_body_parts', 'verified':False,

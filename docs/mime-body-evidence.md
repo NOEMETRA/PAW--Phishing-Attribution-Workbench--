@@ -16,6 +16,12 @@ HTML source and JavaScript source remain text; they are not rendered or executed
 These representations are not exact MIME byte spans or independent authenticity.
 Raw transfer encoding, boundaries and original headers remain in `input.eml`.
 
+The [parser-selected MIME context](mime-context-evidence.md) also travels with
+new body records. Repeated/defective declarations, known parser structure defects
+and inherited uncertainty make the record partial without changing its existing
+byte/text view. This is separate from charset/transfer status and completeness
+of the bounded header catalog.
+
 Unsupported or empty transfer encoding declarations retain the parser's undecoded
 payload with `byte_source: undecoded_unsupported_transfer_encoding`. Failed
 base64-length or uuencode decoding uses `undecoded_failed_transfer_encoding`.
