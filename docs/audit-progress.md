@@ -1,29 +1,28 @@
 # Stato dell'audit PAW
 
-Riferimento integrato: PR85, commit
-`2ce5d842cef0c541f48f1ed3e845abfaa624f49d`; 23 ottobre 2026 (Europe/Rome).
-Il P2 documentale mantiene esplicita l'ammissione EML malformati; review finale
-senza rilievi e tre check verdi su head e merge, con tree identico.
-Sentinel offline è integrato nella PR84 con i suoi limiti dichiarati; la
-[matrice integrata dell'esecuzione](integrated-execution-acceptance.md) resta
-registrata: cinque script passati, 24 scenari CLI/95 casi con sigilli verificati,
-HTTP, crash/recovery e byte osservati. Non è una misura di accuratezza.
+Riferimento integrato: PR86, commit
+`e82e6842fbfa7082f1d334bfb4c5d37dda3e70d3`; 23 ottobre 2026 (Europe/Rome).
+Review Codex senza rilievi sullo head testato `c694a8534d62f58abeba260b96223d990d732256`,
+nessun thread aperto e tre check verdi sia sullo head sia sul merge, con tree identico.
+La [famiglia di ammissione degli input](engine-input-admission.md) è quindi integrata.
+Sentinel offline resta integrato nella PR84; la
+[matrice integrata dell'esecuzione](integrated-execution-acceptance.md) registra
+preset, batch parziali, HTTP, crash/recovery e conservazione. Non misura accuratezza.
 
-Il blocco corrente verifica la [famiglia di ammissione degli input](engine-input-admission.md):
-percorsi ammessi prima di resolve/stat/open/worker, lettura binaria non bloccante
-su descrittori regolari, budget runtime interi senza coercizioni e durate finite.
-Le modifiche interessano sei sorgenti package esistenti, con 85 invariati.
-Gli EML malformati non vuoti restano osservazioni best-effort con originali,
-difetti e copertura parziale; input vuoti/limiti/MSG restano fallimenti espliciti.
-Contabilità parziale CLI e risultati/rifiuti HTTP sono verificati realmente.
+Il blocco corrente verifica la [coerenza fra estrazione e report](report-evidence-consistency.md)
+al confine fra osservazioni e Markdown: una full reale in no-egress riproduceva
+otto nodi immagine/HTML creati da valori Received, Authentication-Results e corpo.
+La rappresentazione comune ora conserva valori letterali e JSON decodificabile,
+con riferimenti agli artefatti e senza alterare originali, estrazione o scoring.
+La tabella degli allegati riusa lo stesso contratto; NS/MX sono liste JSON.
 
-Sorgenti finali congelati: 887 test (873 superati, 14 esclusioni), cinque
-integrazioni seriali passate e wheel di 91 sorgenti. Il nuovo collaudo comprende
-50 preflight CLI con barriere prima dell'I/O, sei forme UNC via API, cinque preset,
-batch con quattro successi/due fallimenti, tre EML malformati via HTTP e undici
-richieste invalide senza job. Firme DKIM, supervisione e CLI/API condivise passano
-nei collaudi esistenti.235 hash runtime/test/workflow invariati prima dei documenti;
-nessun campione privato incluso. Review/CI del nuovo blocco restano da chiudere.
+Sorgenti congelati: 890 test (876 superati, 14 esclusioni), sei integrazioni
+seriali passate e wheel di 92 sorgenti. Il collaudo esteso confronta i due report,
+i valori executive, gli artefatti JSON, coperture, sigilli e byte ZIP attraverso
+CLI e HTTP reali. Passano anche MIME (33 CLI/14 HTTP), URL (9 CLI/5 HTTP),
+contenuto (8 CLI) e chiavi DKIM nei cinque preset/HTTP. 236 hash Python/workflow
+invariati; documenti aggiornati dopo la fine dei validator. Review/CI del nuovo
+blocco restano da chiudere. Campioni e prove private restano fuori Git.
 
 Il lavoro corrente stabilizza il motore offline e la profondità delle evidenze.
 Il [registro per famiglia](engine-stabilization-checkpoint.md) distingue contratti
@@ -31,9 +30,9 @@ verificati, audit aperti, capacità indisponibili e fasi successive.
 
 | Area | Evidenze già disponibili | Cosa resta per chiuderla |
 | --- | --- | --- |
-| Esecuzione e conservazione | Cinque preset CLI e worker HTTP effettivi; no-egress applicativo, timeout/cancel/recovery, lettori bloccati durante scritture, originali, inventari, sigilli e ZIP verificati nei flussi registrati. | Matrice Windows integrata registrata sul merge PR84. Contratti correnti di ammissione verificati nel nuovo blocco; restano review/CI e matrice piattaforme/installazione, con evidenze POSIX separate. |
+| Esecuzione e conservazione | Cinque preset CLI e worker HTTP effettivi; no-egress applicativo, timeout/cancel/recovery, lettori bloccati durante scritture, originali, inventari, sigilli e ZIP verificati nei flussi registrati. | Matrice Windows integrata registrata sul merge PR84. Contratti correnti di ammissione integrati nella PR86 con review/CI verdi; resta la matrice piattaforme/installazione, con evidenze POSIX separate. |
 | Estrazione offline | Contratti su header/MIME, Received e tempi dichiarati, corpi e messaggi incorporati, URL e trasformazioni, CID, allegati/ZIP; osservazioni statiche separate dalle interpretazioni. | Combinazioni malformate e contesti residui, limiti/omissioni, copertura di allegati e riconciliazione delle capacità pubblicizzate. |
-| Risultati e pubblicazione | Contributi numerici e decisioni non arrotondate, bozze locali, query/export e grafi con fonti e limiti verificati nei casi documentati. Il [riepilogo del terminale](terminal-summary-evidence.md) riusa il report di autenticazione per evitare interpretazioni divergenti. | Altri report/publisher/consumer, tipi malformati, risorse e renderer; autenticità di firme/ancoraggi e conformità STIX/ARF/X-ARF non stabilite dai sigilli. |
+| Risultati e pubblicazione | Contributi numerici e decisioni non arrotondate, bozze locali, query/export e grafi con fonti e limiti verificati nei casi documentati. Il [riepilogo del terminale](terminal-summary-evidence.md) riusa il report di autenticazione; il nuovo [confine Markdown](report-evidence-consistency.md) conserva osservazioni letterali e confrontabili con i JSON. | Altri report/publisher/consumer, tipi malformati, risorse e renderer; autenticità di firme/ancoraggi e conformità STIX/ARF/X-ARF non stabilite dai sigilli. |
 | Sentinel locale | Campagne: validazione API condivisa, unicità di caso e rimozione condizionale nella transazione, rollback ed esito confermato. File: radice stabile, ammissione di tipi/percorsi, limiti dichiarati, rilevazione delle mutazioni testate e serializzazione della baseline per istanza. | Contratti offline dichiarati integrati e review/CI verdi. Restano riconciliazione con accettazione globale e supporto piattaforme; servizio/raccolta attiva restano S14. |
 | Script e installazione | Disposizione dei 26 file Python esterni: 25 entry point verificati o esplicitamente indisponibili e una libreria inutilizzata/non validata, con import inerte. Pacchetto costruito realmente e confrontato con sorgenti, entrypoint e template. | I 2 launcher shell restano differiti; gli algoritmi helper non esercitati restano aperti. Installazione isolata finale e componenti opzionali sulle piattaforme supportate. La disposizione non equivale alla validazione di ogni funzione. |
 | Accuratezza e attribuzione | Pilot privato di 20 originali, con 10 legittimi confermati dal proprietario; algoritmi e ipotesi sono qualificati. | Etichette phishing indipendenti, corpus rappresentativo e holdout, falsi positivi/negativi, calibrazione e correlazione. Lo spam della casella non costituisce da solo ground truth. |
@@ -52,8 +51,9 @@ I prossimi blocchi hanno criteri di chiusura comuni:
    matrice di disposizioni per tutto il package. La matrice integrata di esecuzione
    è ora registrata sullo stesso merge; piattaforme e perimetri attivi restano separati.
 2. **Motore offline integrato:** preset/batch/HTTP/interruzioni e conservazione
-   passano nella matrice integrata. Il nuovo blocco verifica ammissione, malformati
-   e relativa contabilità; chiudere review/CI, poi riconciliare le capacità pubblicizzate con
+   passano nella matrice integrata. Ammissione, malformati
+   e relativa contabilità sono integrati; chiudere review/CI del confine Markdown,
+   poi riconciliare le capacità pubblicizzate con
    header/MIME/URL/allegati e report; verificare insieme ingressi malformati,
    omissioni, budget, interruzioni e parità CLI/API/verify/ZIP. Correggere per
    confine condiviso, con prove prima/dopo e review della famiglia interessata.

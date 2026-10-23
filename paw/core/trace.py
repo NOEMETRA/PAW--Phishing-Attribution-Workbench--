@@ -11,6 +11,7 @@ from .mime_body_evidence import preserve_body_parts, body_evidence_coverage
 from .evidence import seal_case
 from .runtime import mark_stage, read_progress, atomic_json
 from .received import normalize_received
+from .reporting import markdown_literal, markdown_json
 from .auth import infer_alignment, authentication_report
 from .dkim_offline import verify_dkim_offline
 from .dkim_keys import parse_key_evidence
@@ -1088,7 +1089,7 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
     mark_stage('reports')
     rep_dir = os.path.join(case_dir,"report")
     ensure_dir(rep_dir)
-    exec_md = f"> TRANSMITTING SERVER CANDIDATE: **{ip}** — AS{ip_res.get('asn')} {ip_res.get('asn_org')} ({ip_res.get('cc')})\n> *Unverified Received-header candidate; does not establish the original sender or attacker*\n> Recipient MX chain hops marked as [MX-internal].\n\n# Attribution Summary\n\n**Transmitting Server Candidate**: {ip} / AS{ip_res.get('asn')} {ip_res.get('asn_org')} ({ip_res.get('cc')})\n\n**From Domain**: {from_domain}\nRegistrar: {dominfo['from_domain'].get('registrar')}\nCreated: {dominfo['from_domain'].get('created')} (NRD: {dominfo['from_domain'].get('nrd_days')}d)\nNS: {', '.join(dominfo['from_domain'].get('ns',[]))}\nMX: {', '.join(dominfo['from_domain'].get('mx',[]))}\n\n**Decision**: {score['decision']} (score={score['score']})\n"
+    exec_md = f"> TRANSMITTING SERVER CANDIDATE: **{markdown_literal(ip)}** — AS{markdown_literal(ip_res.get('asn'))} {markdown_literal(ip_res.get('asn_org'))} ({markdown_literal(ip_res.get('cc'))})\n> *Unverified Received-header candidate; does not establish the original sender or attacker*\n> Recipient MX chain hops marked as [MX-internal].\n\n# Attribution Summary\n\n**Transmitting Server Candidate**: {markdown_literal(ip)} / AS{markdown_literal(ip_res.get('asn'))} {markdown_literal(ip_res.get('asn_org'))} ({markdown_literal(ip_res.get('cc'))})\n\n**From Domain**: {markdown_literal(from_domain)}\nRegistrar: {markdown_literal(dominfo['from_domain'].get('registrar'))}\nCreated: {markdown_literal(dominfo['from_domain'].get('created'))} (NRD: {markdown_literal(dominfo['from_domain'].get('nrd_days'))}d)\nNS: {markdown_literal(dominfo['from_domain'].get('ns',[]))}\nMX: {markdown_literal(dominfo['from_domain'].get('mx',[]))}\n\n**Decision**: {score['decision']} (score={score['score']})\n"
     exec_md += "\n" + authentication_report(auth)
     exec_md += f"\nAssessment coverage: {score.get('assessment_status', 'partial')}. Missing checks do not establish safety.\n"
     exec_md += f"\nDecision score (before display rounding): {score['decision_score']:.12g}. " \
@@ -1140,19 +1141,20 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
         f"- Artifact: mime_cid_inventory.json; attribute observations: {mime_cid_inventory['inventoried_observation_count']}; "
         f"candidate links: {mime_cid_inventory['inventoried_link_count']}; status: {mime_cid_inventory['status']}\n"
         "- Same-message captured Content-ID candidates; resource selection, rendering and authenticity unverified.\n"
-        "\n## Received Path\n")
+        "\n## Received Path\n"
+        "Unverified header observations; literal JSON values. Exact observations: received_path.json.\n\n")
     for i,h in enumerate(hops, start=1):
-        tech_md += f"- Hop {i}: by={h.get('by')} from={h.get('from')} ip={h.get('ip')} date={h.get('date')} helo={h.get('helo')} ptr={h.get('ptr')} skew_s={h.get('skew_s')} fqdn_ok={h.get('fqdn_ok')} helo_ptr_match={h.get('helo_ptr_match')} role={h.get('role')}\n"
+        tech_md += f"- Hop {i}: by={markdown_literal(h.get('by'))} from={markdown_literal(h.get('from'))} ip={markdown_literal(h.get('ip'))} date={markdown_literal(h.get('date'))} helo={markdown_literal(h.get('helo'))} ptr={markdown_literal(h.get('ptr'))} skew_s={markdown_literal(h.get('skew_s'))} fqdn_ok={markdown_literal(h.get('fqdn_ok'))} helo_ptr_match={markdown_literal(h.get('helo_ptr_match'))} role={markdown_literal(h.get('role'))}\n"
     tech_md += "\n## Auth Alignment\n"
-    tech_md += json.dumps(auth, indent=2) + "\n"
+    tech_md += "Artifact: auth.json; unverified reported claims and separate verification results.\n\n" + markdown_json(auth)
     tech_md += "\n## Forgery Checks\n"
-    tech_md += json.dumps(anomalies, indent=2) + "\n"
+    tech_md += "Artifact: received_anomalies.json; descriptive observations, not proof of forgery.\n\n" + markdown_json(anomalies)
     # Include deobfuscation analysis details (if available)
     try:
         tech_md += "\n## Deobfuscation Configuration\n"
         tech_md += f"- deobfuscation_weight: {float(deob_weight)}\n\n"
         tech_md += "## Deobfuscation Analysis\n"
-        tech_md += json.dumps(headers.get("deobfuscation_analysis", {}), indent=2) + "\n"
+        tech_md += "Artifact: headers.json, deobfuscation_analysis; derived observations, not executed content.\n\n" + markdown_json(headers.get("deobfuscation_analysis", {}))
     except Exception:
         tech_md += "\n## Deobfuscation Analysis\nCould not include deobfuscation details.\n"
     # Add Rekor section if anchored
@@ -1172,16 +1174,12 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
         tech_md += "\n"
     # Add attachments section
     if atts:
-        def literal_cell(value):
-            text = json.dumps(value, ensure_ascii=False)
-            fence = '`' * (max(map(len, re.findall(r'`+', text)), default=0) + 1)
-            return fence + text.replace('|', '\\|') + fence
         tech_md += "\n## Attachments (metadata-only)\n"
         tech_md += "Filename and MIME cells are literal JSON strings; exact metadata: attachments.json.\n\n"
         tech_md += "| Filename | Size | MIME | Macro | SHA256 |\n"
         tech_md += "|----------|------|------|-------|--------|\n"
         for att in atts:
-            tech_md += f"| {literal_cell(att['filename'])} | {att['size']} | {literal_cell(att['mime'])} | {'not evaluated' if att.get('ole_macro') is None else 'Yes' if att['ole_macro'] else 'No'} | {att['sha256'][:16]}... |\n"
+            tech_md += f"| {markdown_literal(att['filename'], table=True)} | {att['size']} | {markdown_literal(att['mime'], table=True)} | {'not evaluated' if att.get('ole_macro') is None else 'Yes' if att['ole_macro'] else 'No'} | {att['sha256'][:16]}... |\n"
         tech_md += "\n"
     write_text(os.path.join(rep_dir,"technical.md"), tech_md)
     # STIX

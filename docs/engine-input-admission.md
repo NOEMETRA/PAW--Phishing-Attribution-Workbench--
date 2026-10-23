@@ -105,3 +105,9 @@ The next family reconciles extraction-to-report evidence and omissions (S03-S09)
 Current-version isolated installation/platform acceptance (S13), independent
 labels/holdout (S10), controlled egress/active capabilities (S14) and UI remain
 separate gates. This admission matrix does not validate those capabilities.
+
+PR86 integration record (23 October 2026): reviewed head
+`c694a8534d62f58abeba260b96223d990d732256`, merged as
+`e82e6842fbfa7082f1d334bfb4c5d37dda3e70d3` with identical tree. Codex
+reports no findings; all three head and merge CI checks pass. The test counts
+and source inventory above describe that admission block, not later changes.
