@@ -1,11 +1,13 @@
 """Sentinel lifecycle, atomic observations and unavailable inference boundaries."""
 import inspect
+from contextlib import contextmanager
 import json
 import os
 import sys
 from pathlib import Path
 import tempfile
 import threading
+import time
 import unittest
 from unittest.mock import patch
 
@@ -33,6 +35,8 @@ class SentinelModuleAudit(unittest.TestCase):
 
     def test_internal_active_paths_refuse_before_argument_access(self):
         with offline_policy():
+            with self.assertRaises(RuntimeError):
+                with self.monitor._publication_commit(): pass
             for name in ('_monitor_loop','_handle_check_result','_check_for_alerts','_trigger_alert'):
                 method = getattr(self.monitor,name)
                 kwargs = {key:object() for key,p in inspect.signature(method).parameters.items()
@@ -257,6 +261,50 @@ class SentinelModuleAudit(unittest.TestCase):
         with patch.object(self.monitor,'_check_campaign',side_effect=collected):
             self.assertEqual(self.monitor.check_now(self.campaign),[])
         self.assertEqual(self.db.get_recent_checks(self.campaign),[])
+
+    def test_stop_before_commit_admission_rolls_back_pending_sql_and_callbacks(self):
+        entered,release = threading.Event(),threading.Event()
+        returned,errors,callbacks = [],[],[]
+        self.monitor.on_check_complete(callbacks.append)
+        original = self.db._assert_writer_record
+        def delayed(conn,table,columns,values,rowid):
+            original(conn,table,columns,values,rowid)
+            if table=='checks' and not entered.is_set():
+                entered.set(); self.assertTrue(release.wait(3))
+        def check():
+            try: returned.append(self.monitor.check_now(self.campaign))
+            except Exception as error: errors.append(type(error).__name__)
+        with patch.object(self.monitor,'_check_campaign',return_value=self.result()),patch.object(self.db,'_assert_writer_record',side_effect=delayed):
+            thread = threading.Thread(target=check); thread.start()
+            try:
+                self.assertTrue(entered.wait(2)); self.assertFalse(self.monitor.stop(0))
+            finally: release.set(); thread.join(3)
+        self.assertFalse(thread.is_alive()); self.assertEqual(errors,[])
+        self.assertEqual(returned,[[]]); self.assertEqual(callbacks,[])
+        self.assertEqual(self.db.get_recent_checks(self.campaign),[])
+        self.assertIsNone(self.db.get_campaign(self.campaign)['last_check'])
+        self.assertEqual(self.db.get_unacknowledged_alerts(),[])
+
+    def test_already_admitted_commit_may_finish_without_blocking_stop_zero(self):
+        entered,release = threading.Event(),threading.Event(); returned,errors = [],[]
+        original = self.monitor._publication_commit
+        @contextmanager
+        def delayed():
+            with original():
+                entered.set(); self.assertTrue(release.wait(3)); yield
+        def check():
+            try: returned.append(self.monitor.check_now(self.campaign))
+            except Exception as error: errors.append(type(error).__name__)
+        with patch.object(self.monitor,'_check_campaign',return_value=self.result()),patch.object(self.monitor,'_publication_commit',side_effect=delayed):
+            thread = threading.Thread(target=check); thread.start()
+            try:
+                self.assertTrue(entered.wait(2)); started = time.monotonic()
+                self.assertFalse(self.monitor.stop(0)); self.assertLess(time.monotonic()-started,.5)
+            finally: release.set(); thread.join(3)
+        self.assertFalse(thread.is_alive()); self.assertEqual(errors,[])
+        self.assertEqual(len(returned[0]),1)
+        self.assertEqual(self.db.get_recent_checks(self.campaign)[0]['id'],returned[0][0]['check_id'])
+        self.assertTrue(self.monitor.stop(2))
 
     def test_unavailable_methods_refuse_without_interpreting_opaque_claims(self):
         analyzer = IntelligenceAnalyzer(str(self.root/'saved.db'))

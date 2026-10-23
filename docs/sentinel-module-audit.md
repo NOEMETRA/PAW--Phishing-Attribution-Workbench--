@@ -9,7 +9,7 @@ and attribution are validated.
 
 ## Whole-package register
 
-The register covers all ten Sentinel Python files and 171 module/class-level
+The register covers all ten Sentinel Python files and 172 module/class-level
 function definitions (property getter/setter counted separately; nested closures
 excluded). The inventory is an accounting aid, not execution coverage.
 
@@ -23,7 +23,7 @@ excluded). The inventory is an accounting aid, not execution coverage.
 | `geographic_reports.py` (15) | Complete selected stored sources, omissions, literal numeric filters, escaped inert HTML/JSON and bounded exclusive outputs. | Locations/labels are claims; maps, attacker identity and calibrated risk unavailable. An output pair is not an atomic multi-file commit. |
 | `intelligence_analyzer.py` (18) | Saved-source reports, strict integrity serialization, descriptive counts, source-backed candidate-label selection and geographic wrappers. Existing writer-mode `ip_analyzer` attribute retained; read-only construction stays cold. | Automatic in-place enrichment/relabeling and attacker publication unavailable; classification helpers report unknown/null confidence, not invented victim/attacker probabilities. |
 | `ip_analyzer.py` (14) | Native literal admission, descriptive address flags, bounded provider/PTR observations, IP echo binding, strict source JSON, cache isolation, bounded batches and unique-address prefix membership. Real loopback HTTP/PTR protocols exercised. | No IP domain-WHOIS substitution, RDAP allocation, calibrated risk, operator identity or attacker attribution. External providers and DNS/proxy deployment remain unqualified. |
-| `monitor.py` (29) | In-process controller, bounded submitted workers, interruptible interval, truthful stop acknowledgement, local wrappers/state, deep-copied callbacks and atomic result publication. Real owned HTTP workers, callbacks and SQLite exercised. | CLI persistent service remains unavailable. Browser capture and standalone alert inference refuse explicitly. No automatic retention/retries/remote alert delivery. |
+| `monitor.py` (30) | In-process controller, bounded submitted workers, interruptible interval, truthful stop acknowledgement, local wrappers/state, deep-copied callbacks and atomic result publication. Real owned HTTP workers, callbacks and SQLite exercised. | CLI persistent service remains unavailable. Browser capture and standalone alert inference refuse explicitly. No automatic retention/retries/remote alert delivery. |
 | `transport.py` (4) | Native bounds, credential-safe source URI projection and one bounded raw-entity HTTP response without redirects or content decoding. Local oversized, compressed, broken and slow-drip responses exercised. | Library-decoded headers are not raw wire bytes; HTTP status is not campaign liveness. Cooperative I/O bounds are not hard DNS/native/process deadlines. |
 
 Earlier detailed passive contracts remain in [offline completion](sentinel-offline-completion.md),
@@ -38,7 +38,11 @@ It returns true only after the instance controller and admitted operations have
 actually ended. A callback can signal stop, but cannot join itself: it returns
 false until an external caller confirms completion. Restart during shutdown
 refuses. Interval waits are interruptible, including large admitted intervals.
-Results finishing after cancellation are not published. A true stop is required
+Cancellation before final commit admission rolls back pending SQL publication.
+The cancellation decision and commit admission share the instance state gate;
+a commit admitted first may finish and deliver its committed result/callbacks.
+`stop(0)` requests cancellation without blocking on that gate and returns false
+while owned publication/operations remain pending. A true stop is required
 before treating this instance as quiescent; it does not stop other instances or
 processes writing the same database. Callback/native/DNS code can delay it.
 
@@ -129,8 +133,8 @@ stored historical scores and supplied labels are preserved and remain readable.
 
 ## Acceptance and remaining project gates
 
-Final Windows/Python 3.13 general suite: **956 tests, 942 passed and 14 expected
-platform/optional skips**. This family adds 27 focused contracts and 18 actual
+Final Windows/Python 3.13 general suite: **958 tests, 944 passed and 14 expected
+platform/optional skips**. This family adds 29 focused contracts and 18 actual
 loopback HTTP/PTR integration cases, including truthful stop acknowledgement,
 atomic rollback/callback publication, source/digest compatibility, body limits,
 broken/slow/compressed responses, redirects, provider binding/cache copies,
@@ -154,6 +158,13 @@ A canceled pre-publication result is not returned. The real held-HTTP integratio
 confirms an immediate check canceled during transport returns no uncommitted row;
 normal real HTTP transitions retain the comparison fields consumed by the CLI.
 These refinements are included in the final reruns above.
+
+The subsequent P2 reproduces a cancellation during pending SQLite publication
+on the prior monitor/database (one failed assertion). The final guard now
+rechecks cancellation inside the transaction at commit admission. Two barrier
+regressions cover staged SQL rollback with no callbacks/results and the valid
+already-admitted-commit outcome with nonblocking `stop(0)`. The final 958-test
+suite and the four integration/build scripts above pass again on frozen sources.
 
 Runtime/tests/workflows are frozen during validation; documentation follows
 stopped validators. Originals, private logs and audit manifests stay outside Git.

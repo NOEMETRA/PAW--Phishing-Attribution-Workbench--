@@ -13,6 +13,10 @@ from .transport import fetch_http, positive_number, native_integer
 from ..deobfuscate.url import http_url_status
 
 
+class _PublicationCanceled(RuntimeError):
+    """A stopped instance declined the transaction at commit admission."""
+
+
 class SentinelMonitor:
     def __init__(self, config=None, database=None):
         self.config = SentinelConfig() if config is None else config
@@ -20,6 +24,8 @@ class SentinelMonitor:
         self._running = False; self._thread = None; self._executor = None
         self._state = threading.Condition(threading.RLock())
         self._stop_event = threading.Event(); self._operation_lock = threading.RLock()
+        self._publication_stopped = False
+        self._operations_done = threading.Event(); self._operations_done.set()
         self._operations = set(); self._last_error = None; self._callback_errors = []
         self._callbacks = {name:[] for name in ('on_check_complete','on_alert','on_campaign_down',
                                                'on_campaign_up','on_content_changed')}
@@ -39,7 +45,7 @@ class SentinelMonitor:
             if self._operations: raise RuntimeError('An immediate Sentinel check is still active')
             if self.config.get('monitoring.enabled',True) is not True:
                 raise ValueError('Sentinel monitoring is disabled')
-            self._stop_event.clear(); self._running = True
+            self._stop_event.clear(); self._publication_stopped = False; self._running = True
             self._thread = threading.Thread(target=self._monitor_loop,name='paw-sentinel-monitor',daemon=True)
             try: self._thread.start()
             except BaseException:
@@ -49,16 +55,25 @@ class SentinelMonitor:
         if type(timeout) not in (int,float) or not 0 <= timeout <= 300:
             raise ValueError('Stop timeout must be a finite native number in 0..300')
         deadline = time.monotonic()+timeout
-        with self._state:
-            self._stop_event.set(); thread = self._thread
+        # Request I/O cancellation immediately. The state lock serializes
+        # publication admission; an already-admitted commit may still finish.
+        self._stop_event.set()
+        if not self._state.acquire(timeout=max(0,deadline-time.monotonic())): return False
+        try:
+            self._stop_event.set(); self._publication_stopped = True; thread = self._thread
             if threading.get_ident() in self._operations or thread is threading.current_thread(): return False
+        finally: self._state.release()
         if thread is not None: thread.join(max(0,deadline-time.monotonic()))
-        with self._state:
-            while self._operations and time.monotonic() < deadline:
-                self._state.wait(max(0,deadline-time.monotonic()))
-            stopped = not self._operations and (self._thread is None or not self._thread.is_alive())
-            if stopped: self._running = False
-            return stopped
+        while True:
+            if not self._state.acquire(timeout=max(0,deadline-time.monotonic())): return False
+            try:
+                stopped = not self._operations and (self._thread is None or not self._thread.is_alive())
+                if stopped: self._running = False; return True
+                if self._thread is not thread: return False
+            finally: self._state.release()
+            remaining = deadline-time.monotonic()
+            if remaining <= 0: return False
+            self._operations_done.wait(remaining)
 
     def is_running(self):
         with self._state:
@@ -122,11 +137,13 @@ class SentinelMonitor:
             with self._state:
                 if self._stop_event.is_set(): raise RuntimeError('Sentinel stopping; no new check admitted')
                 if identifier in self._operations: raise RuntimeError('Nested Sentinel collection is unavailable')
-                self._operations.add(identifier)
+                self._operations.add(identifier); self._operations_done.clear()
             try: yield
             finally:
                 with self._state:
-                    self._operations.discard(identifier); self._state.notify_all()
+                    self._operations.discard(identifier)
+                    if not self._operations: self._operations_done.set()
+                    self._state.notify_all()
 
     @staticmethod
     def _admit_campaign(campaign):
@@ -188,13 +205,23 @@ class SentinelMonitor:
                     self._callback_errors.append({'event':name,'error':type(error).__name__})
                     self._callback_errors[:] = self._callback_errors[-100:]
 
+    @contextmanager
+    def _publication_commit(self):
+        self._require_collector()
+        with self._state:
+            if self._publication_stopped or self._stop_event.is_set(): raise _PublicationCanceled()
+            # Only the actual commit holds this lock, not SQL collection,
+            # validation, busy waits before admission or user callbacks.
+            yield
+
     def _handle_check_result(self, result):
         self._require_collector()
         if self._stop_event.is_set(): return None
         result = _json_tree(result)
         flags = {key:self.config.get('alerts.'+key,default) for key,default in
                  (('enabled',True),('alert_on_down',True),('alert_on_up',False),('alert_on_changes',True))}
-        receipt = self.db._record_monitor_result(result,flags)
+        try: receipt = self.db._record_monitor_result(result,flags,commit_guard=self._publication_commit)
+        except _PublicationCanceled: return None
         published = {**result,**{key:receipt[key] for key in ('check_id','previous_check_id','content_changed')}}
         self._emit('on_check_complete',published)
         for event in receipt['events']:
@@ -217,7 +244,7 @@ class SentinelMonitor:
         with self._state:
             if self._stop_event.is_set():
                 if self.is_running(): raise RuntimeError('Sentinel is still stopping')
-                self._stop_event.clear()
+                self._stop_event.clear(); self._publication_stopped = False
         with self._operation():
             selected = ([self.db.get_campaign(campaign_id)] if campaign_id is not None else self.db.get_active_campaigns())
             campaigns = [self._admit_campaign(value) for value in selected if value is not None]

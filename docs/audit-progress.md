@@ -19,15 +19,17 @@ non isolato sono indisponibili; righe e affermazioni storiche restano leggibili.
 La disposizione del modulo richiede ancora review/CI della nuova famiglia;
 non chiude la fase egress né l'audit dell'intero motore.
 
-Suite finale: 956 test (942 superati, 14 esclusioni previste). Matrice seriale di
+Suite finale: 958 test (944 superati, 14 esclusioni previste). Matrice seriale di
 25 integrazioni Sentinel/legacy/wheel passata, incluse 18 nuove prove HTTP/PTR su
 loopback. Dopo gli ultimi controlli transazionali sono stati ripetuti suite
 generale, loopback, viste SQLite tra processi, writer e wheel di 94 sorgenti.
-I 27 test mirati includono un blocco indipendente contro processi/socket/scritture
+I 29 test mirati includono un blocco indipendente contro processi/socket/scritture
 nella prova screenshot. Il P1 della prima review della famiglia è riprodotto e
 corretto: i risultati immediati includono ID/confronti committati ed escludono
-osservazioni cancellate non pubblicate. Suite e quattro integrazioni ripetute
-sulla correzione, con 248 hash finali congelati.
+osservazioni cancellate non pubblicate. Il successivo P2 sulla pubblicazione SQL
+in attesa è riprodotto e corretto con ammissione al commit sincronizzata allo stop;
+commit già ammessi possono finire e lo stop resta incompleto fino al termine.
+Suite e quattro integrazioni ripetute, con 248 hash finali congelati.
 Gli originali EML sono analizzati no-egress; arresto, fonti, sigilli e ZIP verificati.
 I dettagli e i limiti della matrice sono nel contratto del modulo.
 

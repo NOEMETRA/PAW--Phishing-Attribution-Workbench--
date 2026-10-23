@@ -4,7 +4,7 @@ Database management for Sentinel monitoring campaigns.
 """
 import sqlite3
 import base64
-from contextlib import contextmanager, closing
+from contextlib import contextmanager, closing, nullcontext
 import json
 import math
 import re
@@ -552,10 +552,11 @@ class CampaignDatabase:
             self._assert_writer_record(conn, 'checks', columns, values, rowid)
             conn.commit()
 
-    def _record_monitor_result(self, result, flags):
+    def _record_monitor_result(self, result, flags, *, commit_guard=None):
         """Compare, record and alert in one actual SQLite write transaction."""
         _require_active()
         if self.read_only: raise RuntimeError('Read-only saved storage cannot publish monitor observations')
+        if commit_guard is not None and not callable(commit_guard): raise ValueError('Callable monitor commit guard required')
         if type(result) is not dict or type(flags) is not dict:
             raise ValueError('Native monitor result and alert flags required')
         result = _json_tree(result); flags = _json_tree(flags)
@@ -645,7 +646,8 @@ class CampaignDatabase:
                                          (previous[0],)).fetchall() != [previous]:
                 raise RuntimeError('Monitor comparison source changed; transaction rolled back')
             for _ in _json_chunks(receipt,self.limits['max_output_bytes']): pass
-            conn.commit()
+            with commit_guard() if commit_guard is not None else nullcontext():
+                conn.commit()
         return receipt
 
     def record_alert(self, campaign_id: str, alert_type: str, message: str,
