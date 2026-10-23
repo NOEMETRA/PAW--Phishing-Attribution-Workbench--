@@ -9,15 +9,38 @@ import base64
 import hashlib
 from typing import Dict, List, Any, Optional
 import logging
+from ..core.html_contexts import HTMLTextContextParser
 
 logger = logging.getLogger(__name__)
 
 try:
     from bs4 import BeautifulSoup
+    from bs4.builder import HTMLParserTreeBuilder
+    from bs4.builder._htmlparser import BeautifulSoupHTMLParser
     HAS_BEAUTIFULSOUP = True
 except ImportError:
     HAS_BEAUTIFULSOUP = False
     logger.warning("BeautifulSoup non disponibile, funzionalità HTML limitate")
+
+
+if HAS_BEAUTIFULSOUP:
+    class _ContextSoupParser(HTMLTextContextParser, BeautifulSoupHTMLParser):
+        def handle_data(self, data):
+            super().handle_data(self.text_data(data))
+
+    class _ContextSoupBuilder(HTMLParserTreeBuilder):
+        def feed(self, markup):
+            args, kwargs = self.parser_args
+            parser = _ContextSoupParser(self.soup, *args, **kwargs)
+            parser.feed(markup)
+            parser.close()
+            parser.already_closed_empty_element = []
+
+
+def _observation_soup(markup):
+    # The optional tree builder consumes the same lexical boundaries as MIME,
+    # URL, CID, form and kit inventories. Original source is never rewritten.
+    return BeautifulSoup(markup, builder=_ContextSoupBuilder())
 
 class HTMLDeobfuscator:
     """Deoffuscatore specializzato per HTML"""
@@ -34,6 +57,22 @@ class HTMLDeobfuscator:
             '[style*="width:0"]',
             '[style*="height:0"]'
         ]
+
+    def deobfuscate_documents(self, documents: List[str]) -> Dict[str, Any]:
+        """Keep independent input documents independent, with local limits."""
+        if not isinstance(documents, list) or any(not isinstance(value, str) for value in documents):
+            raise ValueError('HTML documents must be a list of strings')
+        rows = [dict(document_index=index, **self.deobfuscate_html(value))
+                for index, value in enumerate(documents)]
+        return {'html_schema_version':3, 'parsing_scope':'independent_documents',
+                'document_count':len(rows), 'documents':rows,
+                'limits_scope':'per_document; aggregate input must be bounded by the caller',
+                'assessment_status':('partial' if any(row['assessment_status']=='partial' for row in rows)
+                                     else 'descriptive_only' if rows else 'not_evaluated'),
+                'parsing_status':'available' if HAS_BEAUTIFULSOUP else 'not_evaluated',
+                'transformations':[], 'suspicion_indicators':[],
+                'risk_detection':'not_evaluated', 'suspicion_score':0.0, 'calibrated':False,
+                'limitation':'Independent static documents, not one concatenated HTML tree; each document retains its original text, observations and limits. No browser rendering, script execution or calibrated risk assessment'}
 
     def deobfuscate_html(self, html_content: str) -> Dict[str, Any]:
         """
@@ -79,7 +118,7 @@ class HTMLDeobfuscator:
             'risk_detection': 'not_evaluated',
             'suspicion_score': 0.0,
             'calibrated': False,
-            'limitation': 'Best-effort static HTML observations and decoded attribute candidates do not establish safety or phishing; no browser rendering or script execution',
+            'limitation': 'Best-effort static HTML observations and decoded attribute candidates do not establish safety or phishing; no browser rendering or script execution. Shared lexical text boundaries are not HTML5 tree construction, foreign-content or scripting-dependent noscript/escaped script-data interpretation',
         }
 
     def _observe_base64_attributes(self, html_content: str) -> Dict[str, Any]:
@@ -90,7 +129,7 @@ class HTMLDeobfuscator:
             result.update(status='not_evaluated', reason='Optional HTML parser unavailable')
             return result
         try:
-            soup = BeautifulSoup(html_content, 'html.parser')
+            soup = _observation_soup(html_content)
             nodes = soup.find_all(limit=1025)
             if len(nodes) > 1024: result['status'] = 'partial'
             for index, tag in enumerate(nodes[:1024]):
@@ -132,7 +171,7 @@ class HTMLDeobfuscator:
             return []
 
         try:
-            soup = BeautifulSoup(html_content, 'html.parser')
+            soup = _observation_soup(html_content)
             hidden_elements = []
 
             for selector in self.hidden_selectors:
@@ -162,7 +201,7 @@ class HTMLDeobfuscator:
             return {'forms': [], 'suspicious_patterns': []}
 
         try:
-            soup = BeautifulSoup(html_content, 'html.parser')
+            soup = _observation_soup(html_content)
             forms = soup.find_all('form')
             analysis = {
                 'forms': [],
@@ -218,7 +257,7 @@ class HTMLDeobfuscator:
             return {'iframes': [], 'suspicious_count': 0}
 
         try:
-            soup = BeautifulSoup(html_content, 'html.parser')
+            soup = _observation_soup(html_content)
             iframes = soup.find_all('iframe')
             analysis = {
                 'iframes': [],
@@ -271,9 +310,8 @@ class HTMLDeobfuscator:
         # A raw regex sees tags inside comments as scripts. Parse original
         # markup; this is static observation, not browser execution semantics.
         try:
-            soup = BeautifulSoup(html_content, 'html.parser')
-            scripts = [tag.get_text() for tag in soup.find_all('script')
-                       if not tag.find_parent(['textarea','title','style'])]
+            soup = _observation_soup(html_content)
+            scripts = [tag.get_text() for tag in soup.find_all('script')]
         except Exception:
             return analysis
 

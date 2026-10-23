@@ -2,7 +2,10 @@
 
 Baseline: merged PR91, `801c268387347cc4793ce274a52561d4c4ec6ffc`, 23 October 2026.
 This family completes the source disposition of the current Sentinel package.
-Review/CI acceptance of this change remains a separate gate. Completion here
+Accepted through PR92: head `664954fa1612f95a9bbabcc8c6f7079b9b2079fc`
+has a clean Codex review with both earlier threads resolved. All three head and
+merge checks pass; merge `62040da2898acd523bd0513e944f16069de5455e`
+has the same tree (push workflow `39974092712`). Completion here
 means bounded supported contracts plus explicit unsupported paths; it does not
 mean every branch is covered, every deployment is qualified, or active egress
 and attribution are validated.
@@ -171,8 +174,8 @@ stopped validators. Originals, private logs and audit manifests stay outside Git
 Constructed protocol responses and declared fault injection are regression
 evidence, not classifier labels, real-provider validation or accuracy estimates.
 
-This closes the named source/contract audit of the current Sentinel module when
-the PR review and CI gates pass. It does not close S14, the whole engine audit or
+PR92 passed the review and CI gates, closing this named source/contract audit of
+the current Sentinel module. It does not close S14, the whole engine audit or
 production acceptance: controlled Windows/Linux isolation, real provider/DNS/
 proxy/browser collection, process deadlines/containment, source sealing for
 future versioned enrichment, persistent deployment and final platform/install

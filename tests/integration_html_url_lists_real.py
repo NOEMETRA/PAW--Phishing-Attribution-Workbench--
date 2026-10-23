@@ -91,7 +91,7 @@ def check(case, sample):
     for source in sources['sources']:
         if source['kind'] != 'mime_body': continue
         assert source['representation'] == 'html_parser_derived_url_candidate_views'
-        assert source['derivation'] == {'method':'paw_html_url_candidate_views_v4','persisted':False}
+        assert source['derivation'] == {'method':'paw_html_url_candidate_views_v5','persisted':False}
         text = source['derived_from']; data = (case/text['text_path']).read_bytes()
         assert hashlib.sha256(data).hexdigest() == text['text_sha256']
     parsed = BytesParser(policy=policy.default).parsebytes(raw)
@@ -107,14 +107,15 @@ def check(case, sample):
 
 def check_zip(archive,case,prefix=''):
     names = ['input.eml','headers.json','url_evidence.json','url_source_inventory.json',
-             'mime_body_evidence.json','analysis_coverage.json','report/score.json',
+             'mime_body_evidence.json','mime_cid_inventory.json','deobfuscation_results.json',
+             'analysis_coverage.json','report/score.json',
              'report/technical.md','report/executive.md']
     for item in read(case/'mime_body_evidence.json')['parts']:
         names.extend([item['payload_path'],item['text_path']])
     for name in names: assert archive.read(prefix+name) == (case/name).read_bytes(), name
 
 
-def main(samples=None, http_names=None, summary=None):
+def main(samples=None, http_names=None, summary=None, case_check=None):
     samples = fixtures() if samples is None else samples
     http_names = (('nonnetwork.eml','encoded.eml','budget.eml','entity-invalid.eml','entity-valid.eml')
                   if http_names is None else http_names)
@@ -130,6 +131,7 @@ def main(samples=None, http_names=None, summary=None):
         assert set(cases) == set(samples)
         for name,case in cases.items():
             check(case,samples[name])
+            if case_check is not None: case_check(case,samples[name])
             result = subprocess.run([sys.executable,'-B','-X','utf8','-m','paw','export','--case',str(case),'--format','zip'],
                                     cwd=root,env=env,capture_output=True,timeout=30)
             assert result.returncode == 0,result.stdout+result.stderr
@@ -167,6 +169,7 @@ def main(samples=None, http_names=None, summary=None):
                     else: raise TimeoutError('API analysis')
                     assert state['status']=='completed' and state['supervisor']['tree_stopped'],state
                     case = data/'cases'/state['case_ids'][0]; evidence,sources = check(case,samples[name])
+                    if case_check is not None: case_check(case,samples[name])
                     detail = json.loads(request('/api/cases/'+case.name))
                     assert detail['url_evidence']==evidence and detail['url_source_inventory']==sources
                     with zipfile.ZipFile(io.BytesIO(request('/api/export/'+case.name))) as archive: check_zip(archive,case)
@@ -179,7 +182,7 @@ def main(samples=None, http_names=None, summary=None):
           'list separators versus resource commas, '
           'descriptor/nonnetwork exclusion, refanged/encoded/invalid/limited original tokens, ordinary comma literals, '
           'entity-decoded invalid delimiters versus legal apostrophes/percent escapes, '
-          'independent MIME documents, source v4, exact 5000/4096/904 link accounting, raw/body bytes, coverage, '
+          'independent MIME documents, source v5, exact 5000/4096/904 link accounting, raw/body bytes, coverage, '
           'stopped owners, seals and CLI/HTTP ZIP parity. Descriptors/resource selection are not evaluated; fixtures are not accuracy labels.'))
 
 

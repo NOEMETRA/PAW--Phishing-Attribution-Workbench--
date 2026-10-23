@@ -2,7 +2,7 @@
 from dataclasses import dataclass
 from copy import copy
 import hashlib
-from html.parser import HTMLParser
+from .html_contexts import HTMLTextContextParser
 import re
 
 
@@ -339,7 +339,7 @@ def html_attribute_url_candidates(name, value, extractor=extract_urls, *, tag=No
             if any(token.startswith(candidate) for candidate in extractor(token))]
 
 
-class HtmlEvidenceParser(HTMLParser):
+class HtmlEvidenceParser(HTMLTextContextParser):
     def __init__(self):
         super().__init__(convert_charrefs=True)
         self.urls, self.text, self.excluded = [], [], 0
@@ -358,7 +358,7 @@ class HtmlEvidenceParser(HTMLParser):
         if tag in {'p', 'div', 'br', 'li'}: self.text.append('\n')
 
     def handle_data(self, value):
-        if not self.excluded: self.text.append(value)
+        if not self.excluded: self.text.append(self.text_data(value))
 
 
 def analyze_mime(message, limits=MimeLimits()):

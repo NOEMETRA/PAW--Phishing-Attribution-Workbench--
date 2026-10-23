@@ -1,6 +1,6 @@
 """Bounded CID candidate equality; never resource resolution or rendering."""
 import hashlib
-from html.parser import HTMLParser
+from .html_contexts import HTMLTextContextParser
 import re
 from urllib.parse import unquote_to_bytes
 
@@ -120,7 +120,7 @@ def inventory_mime_cids(mime_result, body_inventory, header_inventory,
             if len(links) < max_links:
                 links.append({'observation_index':ordinal,'content_id_index':index})
 
-    class Parser(HTMLParser):
+    class Parser(HTMLTextContextParser):
         def __init__(self, source_index):
             super().__init__(convert_charrefs=True)
             self.source_index, self.element_index = source_index, 0

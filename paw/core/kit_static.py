@@ -1,7 +1,7 @@
 """Bounded observations from supplied/captured HTML, JS and CSS; never execute them."""
 from dataclasses import asdict, dataclass
 import hashlib
-from html.parser import HTMLParser
+from .html_contexts import HTMLTextContextParser
 import os
 from pathlib import Path
 import re
@@ -141,7 +141,7 @@ class _Inventory:
                       representation='literal text; includes comments and strings')
 
 
-class _HTML(HTMLParser):
+class _HTML(HTMLTextContextParser):
     def __init__(self, inventory, source):
         super().__init__(convert_charrefs=True)
         self.inventory, self.source = inventory, source
@@ -165,10 +165,6 @@ class _HTML(HTMLParser):
                 self.inventory.emit(self.source, 'html_attribute', value, tag=tag, attribute=name,
                                     attribute_index=index, line=line, column=column,
                                     representation='HTML parser attribute (character references decoded)')
-
-    def handle_startendtag(self, tag, attrs):
-        self.handle_starttag(tag, attrs)
-        self.handle_endtag(tag)
 
     def handle_endtag(self, tag):
         if tag == 'script':

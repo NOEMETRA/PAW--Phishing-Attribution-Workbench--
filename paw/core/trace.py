@@ -406,7 +406,6 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
     manifest['source_name'] = os.path.basename(eml_path)
     if key_data is not None:
         key_raw, key_bundle, key_records = key_data
-        import hashlib
         with open(os.path.join(case_dir, 'dkim_keys.json'), 'wb') as stream:
             stream.write(key_raw)
         manifest['dkim_key_evidence'] = {'path':'dkim_keys.json',
@@ -449,12 +448,25 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
     deobfuscation_artifacts = {
         "text": full_text,
         "urls": list(dict.fromkeys(observed_urls + potential_urls)),
-        "html": mime_result["html"],
+        "html": mime_result["html_parts"] if len(mime_result["html_parts"]) > 1 else mime_result["html"],
         "javascript": mime_result["javascript"],
         "attachments": []
     }
     
     deobfuscation_results = deobfuscation_engine.analyze_artifacts(deobfuscation_artifacts)
+    html_result = deobfuscation_results['deobfuscated_artifacts'].get('html')
+    if html_result:
+        documents = html_result.get('documents', [html_result])
+        sources = [part for part in body_inventory['parts'] if part['declared_mime'] == 'text/html']
+        if len(documents) != len(sources):
+            raise ValueError('HTML document/source count mismatch')
+        for document, source in zip(documents, sources):
+            if (source['text_status'] == 'captured' and
+                    hashlib.sha256(document['original_html'].encode('utf-8')).hexdigest() != source['text_sha256']):
+                raise ValueError('HTML document does not match persisted text')
+            document['source'] = {'artifact':'mime_body_evidence.json', 'part_id':source['part_id'],
+                'representation':'per_part_charset_decoded_text',
+                **{key:source[key] for key in ('text_status','text_path','text_sha256')}}
     headers["deobfuscation_analysis"] = deobfuscation_results
     # Persist deobfuscation results in the case directory for downstream analysis
     try:
@@ -536,7 +548,7 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
         'invalid_or_unresolved_count':sum(r.get('status') != 'completed' for r in url_results),
         'limited_analysis_count':sum(r.get('analysis_status') == 'partial' for r in url_results),
         'embedded_candidate_count':sum(len(r.get('embedded_url_candidates', [])) for r in url_results),
-        'limitation':'Embedded destinations and visual comparisons are unverified; syntax validity is not authenticity. HTML srcset/imagesrcset URL tokenization is descriptive: list conformance, descriptor validity, relative URL resolution and resource selection are not evaluated. Literal CSS url() argument boundaries are interpreted; CSS escape decoding, full CSS conformance, cascade and browser resource selection are not evaluated. Malformed url() expressions with recognized candidates remain whole non-URL evidence; other CSS text retains lexical candidate behavior. Recognized scalar HTML URL fields retain complete supplied values; whitespace normalization, base/relative resolution and browser navigation are not evaluated, and nonnetwork envelopes never contribute an inner HTTP target'}
+        'limitation':'Embedded destinations and visual comparisons are unverified; syntax validity is not authenticity. HTML srcset/imagesrcset URL tokenization is descriptive: list conformance, descriptor validity, relative URL resolution and resource selection are not evaluated. Literal CSS url() argument boundaries are interpreted; CSS escape decoding, full CSS conformance, cascade and browser resource selection are not evaluated. Malformed url() expressions with recognized candidates remain whole non-URL evidence; other CSS text retains lexical candidate behavior. Recognized scalar HTML URL fields retain complete supplied values; whitespace normalization, base/relative resolution and browser navigation are not evaluated, and nonnetwork envelopes never contribute an inner HTTP target. HTML text-context boundaries are lexical: textarea/title decode character references once; script/style/xmp/iframe/noembed/noframes retain raw text, and plaintext continues to EOF. This is not an HTML5 tree builder: insertion modes, foreign content, scripting-dependent noscript and escaped script-data states, browser rendering and resource use are not evaluated'}
     # Automatic detonation if URLs found
     mark_stage('detonation')
     if urls and not no_egress:

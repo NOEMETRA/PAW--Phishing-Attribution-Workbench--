@@ -2,7 +2,7 @@
 from collections import Counter
 from dataclasses import asdict, dataclass
 import hashlib
-from html.parser import HTMLParser
+from .html_contexts import HTMLTextContextParser
 import re
 from urllib.parse import urljoin, urlsplit
 
@@ -166,9 +166,9 @@ class FormAnalyzer:
                 'suspicious_pattern_trends': {}}
 
 
-class _Forms(HTMLParser):
+class _Forms(HTMLTextContextParser):
     CONTROLS = {'input', 'select', 'textarea', 'button'}
-    INERT = {'script', 'style', 'title', 'textarea'}
+    INERT = set(HTMLTextContextParser.CDATA_CONTENT_ELEMENTS)
     DECLARATIONS = {'action', 'method', 'src', 'href'}
 
     def __init__(self, analyzer, result):
@@ -318,10 +318,6 @@ class _Forms(HTMLParser):
                         if row is not None: self.result['processor_observations'].append(row)
         if tag in self.INERT:
             self.inert = tag
-
-    def handle_startendtag(self, tag, attrs):
-        self.handle_starttag(tag, attrs)
-        self.handle_endtag(tag)
 
     def handle_endtag(self, tag):
         if self.inert:

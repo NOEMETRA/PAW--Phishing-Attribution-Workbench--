@@ -175,14 +175,14 @@ discarding available forensic observations or asserting unimplemented success.
 ## Source ownership index
 
 The following index accounts for every tracked package Python file at the
-baseline, plus the focused reporting, CSS, kit and Sentinel helpers (94 current files). Assignment denotes the family responsible for audit, not complete
+baseline, plus the focused reporting, CSS, kit and Sentinel helpers (95 current files). Assignment denotes the family responsible for audit, not complete
 verification of the file; mixed local/active functions keep both boundaries.
 
 - **S00 (11 files):** [paw/__init__.py](../paw/__init__.py), [paw/canary/__init__.py](../paw/canary/__init__.py), [paw/deobfuscate/__init__.py](../paw/deobfuscate/__init__.py), [paw/detonate/__init__.py](../paw/detonate/__init__.py), [paw/gui/__init__.py](../paw/gui/__init__.py), [paw/sentinel/__init__.py](../paw/sentinel/__init__.py), [paw/util/fsutil.py](../paw/util/fsutil.py), [paw/util/hashutil.py](../paw/util/hashutil.py), [paw/util/timeutil.py](../paw/util/timeutil.py), [paw/util/validators.py](../paw/util/validators.py), [paw/web/__init__.py](../paw/web/__init__.py).
 - **S01 (7 files):** [paw/__main__.py](../paw/__main__.py), [paw/core/batch.py](../paw/core/batch.py), [paw/core/parser_mail.py](../paw/core/parser_mail.py), [paw/deobfuscate/input.py](../paw/deobfuscate/input.py), [paw/standalone.py](../paw/standalone.py), [paw/standalone_worker.py](../paw/standalone_worker.py), [paw/web/worker.py](../paw/web/worker.py).
 - **S02 (4 files):** [paw/core/job_registry.py](../paw/core/job_registry.py), [paw/core/network_policy.py](../paw/core/network_policy.py), [paw/core/process_recovery.py](../paw/core/process_recovery.py), [paw/core/runtime.py](../paw/core/runtime.py).
 - **S03 (11 files):** [paw/core/auth.py](../paw/core/auth.py), [paw/core/authentication.py](../paw/core/authentication.py), [paw/core/dkim_keys.py](../paw/core/dkim_keys.py), [paw/core/dkim_offline.py](../paw/core/dkim_offline.py), [paw/core/header_inventory.py](../paw/core/header_inventory.py), [paw/core/ip_observations.py](../paw/core/ip_observations.py), [paw/core/mailbox_domains.py](../paw/core/mailbox_domains.py), [paw/core/mime_header_inventory.py](../paw/core/mime_header_inventory.py), [paw/core/received.py](../paw/core/received.py), [paw/core/received_timing.py](../paw/core/received_timing.py), [paw/core/trust_boundary.py](../paw/core/trust_boundary.py).
-- **S04 (3 files):** [paw/core/mime_analysis.py](../paw/core/mime_analysis.py), [paw/core/mime_body_evidence.py](../paw/core/mime_body_evidence.py), [paw/core/mime_cid.py](../paw/core/mime_cid.py).
+- **S04 (4 files):** [paw/core/html_contexts.py](../paw/core/html_contexts.py), [paw/core/mime_analysis.py](../paw/core/mime_analysis.py), [paw/core/mime_body_evidence.py](../paw/core/mime_body_evidence.py), [paw/core/mime_cid.py](../paw/core/mime_cid.py).
 - **S05 (9 files):** [paw/core/css_urls.py](../paw/core/css_urls.py), [paw/core/url_evidence.py](../paw/core/url_evidence.py), [paw/core/url_sources.py](../paw/core/url_sources.py), [paw/deobfuscate/core.py](../paw/deobfuscate/core.py), [paw/deobfuscate/homoglyph.py](../paw/deobfuscate/homoglyph.py), [paw/deobfuscate/html.py](../paw/deobfuscate/html.py), [paw/deobfuscate/javascript.py](../paw/deobfuscate/javascript.py), [paw/deobfuscate/text.py](../paw/deobfuscate/text.py), [paw/deobfuscate/url.py](../paw/deobfuscate/url.py).
 - **S06 (1 file):** [paw/core/attach.py](../paw/core/attach.py).
 - **S07 (6 files):** [paw/core/domain_age.py](../paw/core/domain_age.py), [paw/core/domain_unicode.py](../paw/core/domain_unicode.py), [paw/core/ml_scorer.py](../paw/core/ml_scorer.py), [paw/core/profiler.py](../paw/core/profiler.py), [paw/core/rdap_registration.py](../paw/core/rdap_registration.py), [paw/core/scoring.py](../paw/core/scoring.py).
@@ -232,7 +232,7 @@ separate evidence producers, not implicitly validated operational entry points.
 The tracked shell/PowerShell/batch extension census (`.sh`, `.bash`, `.bat`,
 `.cmd`, `.ps1`, `.psm1`, `.psd1`) finds these two launchers. Together with the
 26 external operational Python files, the register covers **28 operational
-scripts**; one shell launcher is inside the package directory. The 94-file current
+scripts**; one shell launcher is inside the package directory. The 95-file current
 package source index above counts Python files only. No launcher was executed
 to produce this inventory.
 
@@ -251,8 +251,20 @@ The [module audit](sentinel-module-audit.md) covers all ten Sentinel files,
 including the shared HTTP helper. Supported passive contracts retain their
 original evidence; in-process stop/publication and IP/HTTP observation contracts
 have actual owned-loopback protocol tests. Unsupported identity/risk and
-in-place enrichment/publication now refuse explicitly. This closes the current
-source-disposition work when its review/CI gates pass, not the S14 operational
+in-place enrichment/publication now refuse explicitly. PR92 passed exact-head
+review and head/merge CI, closing the current source-disposition work, not the S14 operational
 acceptance boundary, all platform combinations or every possible stored schema.
-The 94-file index above now includes the previously added reporting/CSS sources
-and the new Sentinel transport; ownership remains distinct from validation.
+The 95-file index above now includes the previously added reporting/CSS sources,
+the Sentinel transport and shared HTML text-context helper; ownership remains
+distinct from validation.
+
+
+## Current HTML text-context family
+
+The [shared lexical context contract](html-text-contexts.md) addresses literal
+markup promoted to nodes, independent MIME document observations with per-part
+text binding, and bounded EOF recovery. HTML source derivation is v5; multiple
+HTML documents use an indexed schema-3 collection, with local limits and original
+schema-2 observations. Source assignment above does not certify full HTML/CSS,
+DOM, scripting/foreign-content grammar or browser behavior. The family requires
+its own exact-head review/CI; current integrated baseline remains PR92.
