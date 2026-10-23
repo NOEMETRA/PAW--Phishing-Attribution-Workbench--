@@ -13,7 +13,7 @@ from typing import Dict, List, Any, Optional
 import logging
 
 from .url import URLDeobfuscator
-from .html import HTMLDeobfuscator
+from .html import HTMLDeobfuscator, html_observation_coverage
 from .javascript import JavaScriptDeobfuscator
 from .text import TextDeobfuscator
 from .homoglyph import HomoglyphDetector
@@ -98,8 +98,7 @@ class DeobfuscationEngine:
             'urls': {'status': 'heuristic_only' if analyzed.get('urls') else 'not_evaluated'},
             'javascript': {'status': js_result.get('assessment_status', 'not_evaluated'),
                            'risk_detection': 'not_evaluated', 'execution': 'not_evaluated'},
-            'html': {'status': html_result.get('assessment_status', 'not_evaluated'),
-                     'risk_detection': 'not_evaluated'},
+            'html': html_observation_coverage(html_result),
             'attachments': {'status': 'not_evaluated'},
         }
         results['score_scope'] = 'nontext_transformations_only'

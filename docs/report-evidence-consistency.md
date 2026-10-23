@@ -1,5 +1,11 @@
 # Extraction-to-report literal evidence
 
+Subsequent [evidence/score/consumer audit](evidence-score-consumers.md) adds the
+G06 HTML observer failure/availability/omission view to score coverage and the
+executive report, retaining this shared literal boundary and technical JSON.
+Its finite residual table identifies remaining consumers without implying that
+the historical matrix below certifies them.
+
 Baseline: merged PR86, `e82e6842fbfa7082f1d334bfb4c5d37dda3e70d3`,
 23 October 2026. Its exact-head Codex review has no findings; all three CI checks
 pass on the reviewed head and the merge. This block addresses one shared S08

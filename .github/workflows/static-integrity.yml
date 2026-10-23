@@ -61,6 +61,8 @@ jobs:
 
       - name: Verify original HTML markup, bounded candidates and descriptive coverage
         run: python -m unittest discover -s tests -p 'test_html_contracts.py' -v
+      - name: Verify independent HTML observer failure and omission coverage
+        run: python -B -m unittest discover -s tests -p 'test_html_observer_coverage.py' -v
       - name: Verify shared lexical HTML text contexts and evidence consumers
         run: python -m unittest discover -s tests -p 'test_html_text_contexts.py' -v
 
@@ -126,6 +128,8 @@ jobs:
         run: python tests/integration_dkim_keys_real.py
       - name: Verify real offline CLI URL evidence and coverage
         run: python tests/integration_url_evidence_real.py
+      - name: Verify HTML observations through actual score reports drafts API and ZIP
+        run: python -B tests/integration_html_observers_real.py
       - name: Verify real offline full CLI content observations and actions
         run: python tests/integration_content_assessment_real.py
 
@@ -473,6 +477,8 @@ jobs:
         run: python tests/integration_archive_inventory_real.py
       - name: Verify shared HTML text boundaries on maintenance runtimes
         run: python -m unittest discover -s tests -p 'test_html_text_contexts.py' -v
+      - name: Verify independent HTML observer coverage on maintenance runtimes
+        run: python -B -m unittest discover -s tests -p 'test_html_observer_coverage.py' -v
       - name: Verify attachment capability and report coverage on maintenance runtimes
         run: python -B -m unittest discover -s tests -p 'test_attachment_capabilities.py' -v
       - name: Verify actual attachment capability CLI HTTP and ZIP on maintenance runtimes

@@ -7,6 +7,7 @@ Deoffusca contenuto HTML offuscato nei phishing
 import re
 import base64
 import hashlib
+import copy
 from typing import Dict, List, Any, Optional
 import logging
 from ..core.html_contexts import HTMLTextContextParser
@@ -42,6 +43,29 @@ def _observation_soup(markup):
     # URL, CID, form and kit inventories. Original source is never rewritten.
     return BeautifulSoup(markup, builder=_ContextSoupBuilder())
 
+
+def html_observation_coverage(result):
+    """Metadata view shared by the score coverage, reports and API consumers."""
+    documents = result.get('documents', []) if result.get('html_schema_version') == 3 else [result] if result else []
+    rows = []
+    for index, document in enumerate(documents):
+        candidates = document.get('encoded_attribute_candidates', {})
+        row = {'document_index':index, 'status':document.get('assessment_status', 'not_evaluated'),
+               'observers':document.get('observer_coverage', {}),
+               'encoded_attributes':{key:candidates[key] for key in ('status', 'limits', 'reason') if key in candidates},
+               'source':document.get('source', {})}
+        row['encoded_attributes']['inventoried_count'] = len(candidates.get('candidates', []))
+        rows.append(row)
+    return {'schema_version':1, 'status':result.get('assessment_status', 'not_evaluated'),
+            'risk_detection':'not_evaluated', 'document_count':len(rows), 'documents':rows,
+            'scope':'parser_selected_static_observations',
+            'limitation':'Counts describe enumerated observer records, not browser behavior or exhaustive resources. '
+                         'Hidden counts include selector matches; form inputs include descendant matches per form. '
+                         'Output limits do not bound parsing or enumeration: callers must bound input. '
+                         'Failed/unavailable observers have unknown totals and omissions. '
+                         'Script content is a preview; full original HTML is retained. '
+                         'No rendering, execution, resource resolution or risk assessment'}
+
 class HTMLDeobfuscator:
     """Deoffuscatore specializzato per HTML"""
 
@@ -57,6 +81,68 @@ class HTMLDeobfuscator:
             '[style*="width:0"]',
             '[style*="height:0"]'
         ]
+
+    def _run_observer(self, name, observer, source, empty, rows_key=None):
+        """Bound published rows and retain failures separately from empty results.
+
+        Enumeration still uses the complete parser-selected tree. These are
+        output limits, not parser/CPU limits; callers must bound source input.
+        """
+        limits = {'records': 256}
+        if name == 'forms':
+            limits['inputs'] = 1024
+        if name in {'hidden', 'javascript'}:
+            limits['preview_characters'] = 200
+        coverage = {'status': 'not_evaluated', 'limits': limits,
+                    'observed_count': None, 'inventoried_count': 0,
+                    'omitted_count': None, 'issues': [],
+                    'count_scope': 'enumerated_records_before_output_limits'}
+        if not HAS_BEAUTIFULSOUP:
+            coverage['reason'] = 'Optional HTML parser unavailable'
+            return copy.deepcopy(empty), coverage
+        unavailable_counts = copy.deepcopy(coverage)
+        try:
+            result = observer(source)
+            rows = result if rows_key is None else result[rows_key]
+            coverage.update(status='completed', observed_count=len(rows),
+                            inventoried_count=min(len(rows), limits['records']),
+                            omitted_count=max(0, len(rows)-limits['records']))
+            selected = rows[:limits['records']]
+            if name == 'forms':
+                total_inputs = sum(len(row['inputs']) for row in rows)
+                retained_inputs = 0
+                for row in selected:
+                    row['inputs'] = row['inputs'][:limits['inputs']-retained_inputs]
+                    retained_inputs += len(row['inputs'])
+                    row['suspicious_indicators'] = [value for value in row['suspicious_indicators']
+                                                    if value != 'suspicious_hidden_input']
+                    row['suspicious_indicators'].extend('suspicious_hidden_input' for value in row['inputs']
+                                                        if value['suspicious'])
+                coverage.update(observed_input_count=total_inputs,
+                                inventoried_input_count=retained_inputs,
+                                omitted_input_count=total_inputs-retained_inputs)
+            if rows_key is None:
+                result = selected
+            else:
+                result[rows_key] = selected
+            # Aggregate fields describe retained rows only, never omitted rows.
+            if name == 'iframes':
+                result['suspicious_count'] = sum(len(row['suspicious_indicators']) for row in selected)
+            if name == 'javascript':
+                result['suspicious_patterns'] = [pattern for row in selected for pattern in row.pop('_patterns')]
+                coverage['truncated_content_count'] = sum(row['length'] > 200 for row in selected)
+                coverage['omitted_content_characters'] = sum(max(0, row['length']-200) for row in selected)
+            if name == 'hidden':
+                coverage['truncated_content_count'] = sum(row['element_length'] > 200 for row in selected)
+                coverage['omitted_content_characters'] = sum(max(0, row['element_length']-200) for row in selected)
+            if coverage['omitted_count'] or coverage.get('omitted_input_count'):
+                coverage.update(status='partial', reason='Published observation limit exceeded')
+            return result, coverage
+        except Exception as exc:
+            coverage = unavailable_counts
+            coverage.update(status='failed', reason='Static observer failed',
+                            issues=[{'code':'observer_error', 'exception_type':type(exc).__name__}])
+            return copy.deepcopy(empty), coverage
 
     def deobfuscate_documents(self, documents: List[str]) -> Dict[str, Any]:
         """Keep independent input documents independent, with local limits."""
@@ -90,16 +176,25 @@ class HTMLDeobfuscator:
         candidates = self._observe_base64_attributes(html_content)
 
         # 3. Analizza elementi nascosti
-        hidden_analysis = self._analyze_hidden_elements(current_html)
+        hidden_analysis, hidden_coverage = self._run_observer(
+            'hidden', self._analyze_hidden_elements, current_html, [])
 
         # 4. Analizza form offuscati
-        form_analysis = self._analyze_form_obfuscation(current_html)
+        form_analysis, form_coverage = self._run_observer(
+            'forms', self._analyze_form_obfuscation, current_html,
+            {'forms':[], 'suspicious_patterns':[]}, 'forms')
 
         # 5. Analizza iframe sospetti
-        iframe_analysis = self._analyze_iframes(current_html)
+        iframe_analysis, iframe_coverage = self._run_observer(
+            'iframes', self._analyze_iframes, current_html,
+            {'iframes':[], 'suspicious_count':0}, 'iframes')
 
         # 6. Analizza JavaScript inline offuscato
-        js_analysis = self._analyze_inline_javascript(current_html)
+        js_analysis, js_coverage = self._run_observer(
+            'javascript', self._analyze_inline_javascript, current_html,
+            {'inline_scripts':[], 'suspicious_patterns':[]}, 'inline_scripts')
+        observer_coverage = {'hidden_elements':hidden_coverage, 'forms':form_coverage,
+                             'iframes':iframe_coverage, 'javascript':js_coverage}
 
         return {
             'original_html': html_content,
@@ -113,7 +208,10 @@ class HTMLDeobfuscator:
             'form_analysis': form_analysis,
             'iframe_analysis': iframe_analysis,
             'javascript_analysis': js_analysis,
-            'assessment_status': 'partial' if candidates['status'] != 'completed' else 'descriptive_only',
+            'observer_coverage': observer_coverage,
+            'observer_schema_version': 1,
+            'assessment_status': 'partial' if candidates['status'] != 'completed' or any(
+                row['status'] != 'completed' for row in observer_coverage.values()) else 'descriptive_only',
             'parsing_status': 'available' if HAS_BEAUTIFULSOUP else 'not_evaluated',
             'risk_detection': 'not_evaluated',
             'suspicion_score': 0.0,
@@ -170,133 +268,120 @@ class HTMLDeobfuscator:
         if not HAS_BEAUTIFULSOUP:
             return []
 
-        try:
-            soup = _observation_soup(html_content)
-            hidden_elements = []
+        soup = _observation_soup(html_content)
+        hidden_elements = []
 
-            for selector in self.hidden_selectors:
-                try:
-                    elements = soup.select(selector)
-                    for elem in elements:
-                        hidden_elements.append({
-                            'element': str(elem)[:200] + '...' if len(str(elem)) > 200 else str(elem),
-                            'selector': selector,
-                            'tag': elem.name,
-                            'observation_only': True,
-                            'risk_detection': 'not_evaluated',
-                            'attributes': dict(elem.attrs) if elem.attrs else {}
-                        })
-                except Exception:
-                    continue
+        for selector in self.hidden_selectors:
+            elements = soup.select(selector)
+            for elem in elements:
+                element = str(elem)
+                hidden_elements.append({
+                    'element': element[:200] + '...' if len(element) > 200 else element,
+                    'element_length': len(element),
+                    'selector': selector,
+                    'tag': elem.name,
+                    'observation_only': True,
+                    'risk_detection': 'not_evaluated',
+                    'attributes': dict(elem.attrs) if elem.attrs else {}
+                })
 
-            return hidden_elements
+        return hidden_elements
 
-        except Exception as e:
-            logger.warning(f"Errore nell'analisi elementi nascosti: {e}")
-            return []
 
     def _analyze_form_obfuscation(self, html_content: str) -> Dict[str, Any]:
         """Analizza form potenzialmente offuscati"""
         if not HAS_BEAUTIFULSOUP:
             return {'forms': [], 'suspicious_patterns': []}
 
-        try:
-            soup = _observation_soup(html_content)
-            forms = soup.find_all('form')
-            analysis = {
-                'forms': [],
-                'suspicious_patterns': []
+        soup = _observation_soup(html_content)
+        forms = soup.find_all('form')
+        analysis = {
+            'forms': [],
+            'suspicious_patterns': []
+        }
+
+        for form in forms:
+            form_data = {
+                'action': form.get('action', ''),
+                'method': form.get('method', 'GET'),
+                'inputs': [],
+                'suspicious_indicators': []
             }
 
-            for form in forms:
-                form_data = {
-                    'action': form.get('action', ''),
-                    'method': form.get('method', 'GET'),
-                    'inputs': [],
-                    'suspicious_indicators': []
+            # Analizza action URL
+            action = form.get('action', '')
+            if action:
+                if self._is_suspicious_url(action):
+                    form_data['suspicious_indicators'].append('suspicious_action_url')
+                if 'base64' in action.lower():
+                    form_data['suspicious_indicators'].append('base64_in_action')
+
+            # Analizza input fields
+            inputs = form.find_all('input')
+            for input_field in inputs:
+                input_data = {
+                    'type': input_field.get('type', 'text'),
+                    'name': input_field.get('name', ''),
+                    'value': input_field.get('value', ''),
+                    'suspicious': False
                 }
 
-                # Analizza action URL
-                action = form.get('action', '')
-                if action:
-                    if self._is_suspicious_url(action):
-                        form_data['suspicious_indicators'].append('suspicious_action_url')
-                    if 'base64' in action.lower():
-                        form_data['suspicious_indicators'].append('base64_in_action')
+                # Controlla valori nascosti sospetti
+                if input_field.get('type') == 'hidden':
+                    value = input_field.get('value', '')
+                    if value and (len(value) > 100 or 'http' in value):
+                        input_data['suspicious'] = True
+                        form_data['suspicious_indicators'].append('suspicious_hidden_input')
 
-                # Analizza input fields
-                inputs = form.find_all('input')
-                for input_field in inputs:
-                    input_data = {
-                        'type': input_field.get('type', 'text'),
-                        'name': input_field.get('name', ''),
-                        'value': input_field.get('value', ''),
-                        'suspicious': False
-                    }
+                form_data['inputs'].append(input_data)
 
-                    # Controlla valori nascosti sospetti
-                    if input_field.get('type') == 'hidden':
-                        value = input_field.get('value', '')
-                        if value and (len(value) > 100 or 'http' in value):
-                            input_data['suspicious'] = True
-                            form_data['suspicious_indicators'].append('suspicious_hidden_input')
+            analysis['forms'].append(form_data)
 
-                    form_data['inputs'].append(input_data)
+        return analysis
 
-                analysis['forms'].append(form_data)
-
-            return analysis
-
-        except Exception as e:
-            logger.warning(f"Errore nell'analisi form: {e}")
-            return {'forms': [], 'suspicious_patterns': []}
 
     def _analyze_iframes(self, html_content: str) -> Dict[str, Any]:
         """Analizza iframe potenzialmente malevoli"""
         if not HAS_BEAUTIFULSOUP:
             return {'iframes': [], 'suspicious_count': 0}
 
-        try:
-            soup = _observation_soup(html_content)
-            iframes = soup.find_all('iframe')
-            analysis = {
-                'iframes': [],
-                'suspicious_count': 0
+        soup = _observation_soup(html_content)
+        iframes = soup.find_all('iframe')
+        analysis = {
+            'iframes': [],
+            'suspicious_count': 0
+        }
+
+        for iframe in iframes:
+            iframe_data = {
+                'src': iframe.get('src', ''),
+                'width': iframe.get('width', ''),
+                'height': iframe.get('height', ''),
+                'suspicious_indicators': [],
+                'dimension_attributes_present': {key:key in iframe.attrs for key in ('width', 'height')},
+                'visibility': 'not_evaluated',
             }
 
-            for iframe in iframes:
-                iframe_data = {
-                    'src': iframe.get('src', ''),
-                    'width': iframe.get('width', ''),
-                    'height': iframe.get('height', ''),
-                    'suspicious_indicators': []
-                }
+            src = iframe.get('src', '')
+            if src:
+                # Iframe con dimensioni 0 o molto piccole
+                width = iframe.get('width')
+                height = iframe.get('height')
 
-                src = iframe.get('src', '')
-                if src:
-                    # Iframe con dimensioni 0 o molto piccole
-                    width = iframe.get('width', '0')
-                    height = iframe.get('height', '0')
+                if any(isinstance(value, str) and re.fullmatch(r'0*[01]', value)
+                       for value in (width, height)):
+                    iframe_data['suspicious_indicators'].append('invisible_iframe')
+                    analysis['suspicious_count'] += 1
 
-                    try:
-                        if (int(width) <= 1 or int(height) <= 1):
-                            iframe_data['suspicious_indicators'].append('invisible_iframe')
-                            analysis['suspicious_count'] += 1
-                    except ValueError:
-                        pass
+                # Src sospetto
+                if self._is_suspicious_url(src):
+                    iframe_data['suspicious_indicators'].append('suspicious_src')
+                    analysis['suspicious_count'] += 1
 
-                    # Src sospetto
-                    if self._is_suspicious_url(src):
-                        iframe_data['suspicious_indicators'].append('suspicious_src')
-                        analysis['suspicious_count'] += 1
+            analysis['iframes'].append(iframe_data)
 
-                analysis['iframes'].append(iframe_data)
+        return analysis
 
-            return analysis
-
-        except Exception as e:
-            logger.warning(f"Errore nell'analisi iframe: {e}")
-            return {'iframes': [], 'suspicious_count': 0}
 
     def _analyze_inline_javascript(self, html_content: str) -> Dict[str, Any]:
         """Analizza JavaScript inline per offuscamento"""
@@ -309,11 +394,8 @@ class HTMLDeobfuscator:
             return analysis
         # A raw regex sees tags inside comments as scripts. Parse original
         # markup; this is static observation, not browser execution semantics.
-        try:
-            soup = _observation_soup(html_content)
-            scripts = [tag.get_text() for tag in soup.find_all('script')]
-        except Exception:
-            return analysis
+        soup = _observation_soup(html_content)
+        scripts = [tag.get_text() for tag in soup.find_all('script')]
 
         for script in scripts:
             script_data = {
@@ -321,24 +403,26 @@ class HTMLDeobfuscator:
                 'length': len(script),
                 'suspicious_indicators': []
             }
+            patterns = []
 
             # Controlla pattern sospetti
             if 'eval(' in script:
                 script_data['suspicious_indicators'].append('eval_usage')
-                analysis['suspicious_patterns'].append('eval_in_script')
+                patterns.append('eval_in_script')
 
             if 'String.fromCharCode' in script:
                 script_data['suspicious_indicators'].append('fromcharcode_usage')
-                analysis['suspicious_patterns'].append('fromcharcode_in_script')
+                patterns.append('fromcharcode_in_script')
 
             if 'atob(' in script:
                 script_data['suspicious_indicators'].append('base64_decode')
-                analysis['suspicious_patterns'].append('atob_in_script')
+                patterns.append('atob_in_script')
 
             if 'document.write' in script:
                 script_data['suspicious_indicators'].append('document_write')
-                analysis['suspicious_patterns'].append('document_write_in_script')
+                patterns.append('document_write_in_script')
 
+            script_data['_patterns'] = patterns
             analysis['inline_scripts'].append(script_data)
 
         return analysis
