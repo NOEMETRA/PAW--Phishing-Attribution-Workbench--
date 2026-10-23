@@ -6,6 +6,7 @@ from email.message import EmailMessage
 from .authentication import parse_authentication_results
 from .mime_analysis import MimeLimits, MimeLimitExceeded
 from .mailbox_domains import reply_domain_observation
+from .batch import local_source_path, read_source_bytes
 
 def parse_eml_bytes(b: bytes):
     return _parse_msg_obj(parse_message_bytes(b))
@@ -33,10 +34,10 @@ def parse_msg_bytes(b: bytes):
 
 
 def load_mail(path: str, limits=MimeLimits()):
+    path = local_source_path(path)
     if os.path.splitext(path)[1].lower() == '.msg': parse_msg_bytes(b'')
-    with open(path, 'rb') as stream:
-        raw = stream.read(limits.max_input_bytes + 1)
-    if len(raw) > limits.max_input_bytes: raise MimeLimitExceeded('Input email byte limit exceeded')
+    raw = read_source_bytes(path, limits.max_input_bytes, limit_error=MimeLimitExceeded,
+                            limit_message='Input email byte limit exceeded')
     msg = parse_message_bytes(raw, limits)
     return _parse_msg_obj(msg), msg, raw
 

@@ -10,11 +10,13 @@ from .core.process_recovery import process_identity
 from .core.runtime import read_progress
 from .core.job_registry import require_stopped_case
 from .core.dkim_keys import load_key_file, parse_key_evidence
+from .core.batch import local_source_path
 
 _analysis_limits = RunLimits()
 
 def trace_sources(src, lang, stix, abuse, anchor, no_egress, profile='default', deob_weight=.30, dkim_key_evidence=None):
     """CLI and API share the same supervised worker and honest terminal states."""
+    src = local_source_path(src)
     if dkim_key_evidence is not None: parse_key_evidence(dkim_key_evidence)
     identifier = 'analysis_'+uuid.uuid4().hex
     control = Path.cwd()/'jobs'/identifier
@@ -283,6 +285,7 @@ For help: paw help <command>
             analysis_parser.add_argument('--memory-mib', type=int, default=2048, help='Worker memory budget in MiB')
         args = parser.parse_args()
         if args.cmd in {'analyze','quick','full','forensic','trace'}:
+            local_source_path(args.src if args.cmd == 'trace' else args.email)
             _analysis_limits = RunLimits(wall_seconds=args.deadline, stage_seconds=args.stage_timeout,
                 memory_bytes=args.memory_mib * 1024**2)
             key_evidence = load_key_file(args.dkim_keys) if args.dkim_keys else None

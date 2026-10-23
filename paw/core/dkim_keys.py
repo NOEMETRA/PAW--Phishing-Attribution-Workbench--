@@ -1,9 +1,7 @@
 """Bounded local key evidence; analyst metadata never establishes DNS trust."""
 import json
-import os
-from pathlib import Path
 import re
-import stat
+from .batch import read_source_bytes
 
 MAX_BYTES = 64 * 1024
 MAX_RECORDS = 32
@@ -60,17 +58,7 @@ def snapshot_key_bundle(bundle):
 
 
 def load_key_file(path):
-    path = Path(path)
-    if str(path).startswith(('\\\\', '//')):
-        raise ValueError('DKIM evidence must be a local regular file')
-    # Nonblocking open prevents a FIFO from hanging CLI admission. Check the
-    # opened descriptor, rather than trusting a pre-open stat or file suffix.
-    descriptor = os.open(path, os.O_RDONLY | getattr(os, 'O_NONBLOCK', 0) | getattr(os, 'O_BINARY', 0))
-    with os.fdopen(descriptor, 'rb') as stream:
-        if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
-            raise ValueError('DKIM evidence must be a local regular file')
-        raw = stream.read(MAX_BYTES + 1)
-    if len(raw) > MAX_BYTES: raise ValueError('DKIM key evidence exceeds 64 KiB')
+    raw = read_source_bytes(path, MAX_BYTES, limit_message='DKIM key evidence exceeds 64 KiB')
     evidence = {'text': raw.decode('utf-8')}
     parse_key_evidence(evidence)
     return evidence
