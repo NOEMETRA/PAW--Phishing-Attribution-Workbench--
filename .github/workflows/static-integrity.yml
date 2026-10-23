@@ -214,7 +214,9 @@ jobs:
       - name: Verify actual offline attachment ZIP inventories and exports
         run: python tests/integration_archive_inventory_real.py
 
-      - name: Verify literal attachment table cells through actual CLI and HTTP exports
+      - name: Verify literal report evidence contracts
+        run: python -m unittest discover -s tests -p 'test_report_evidence.py' -v
+      - name: Verify literal extraction reports through actual CLI and HTTP exports
         run: python tests/integration_attachment_report_real.py
 
       - name: Verify original embedded MIME spans and separate derived evidence

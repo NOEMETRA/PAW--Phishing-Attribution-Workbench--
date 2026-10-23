@@ -1,4 +1,4 @@
-"""Actual offline report publication; passive GFM-table parser, no browser."""
+"""Actual extraction/report publication; passive CommonMark/GFM parsing only."""
 from email import policy
 from email.parser import BytesParser
 import hashlib
@@ -30,8 +30,15 @@ def read(path):
 
 def message(names):
     raw = (b'From: sender@example.invalid\r\nSubject: Inert attachment report fixture\r\n'
+           b'Received: from relay.invalid (helo=![helo](https://helo.invalid/pixel) '
+           b'<img src="https://received.invalid/pixel"> ````) by mx.invalid; '
+           b'Thu, 22 Oct 2026 10:00:00 +0000\r\n'
+           b'Authentication-Results: mx.invalid (![auth](https://auth.invalid/pixel) '
+           b'<b>literal claim</b> ````); spf=none\r\n'
            b'MIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary="report-fixture"\r\n\r\n'
-           b'--report-fixture\r\nContent-Type: text/plain\r\n\r\nExplicit presentation fixture.\r\n')
+           b'--report-fixture\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n'
+           b'Explicit presentation fixture. ![body](https://body.invalid/pixel) '
+           b'<img src="https://body.invalid/pixel">\r\n````\r\n# literal source heading\r\n')
     for index, name in enumerate(names):
         raw += (b'--report-fixture\r\nContent-Type: application/octet-stream\r\n'
                 b"Content-Disposition: attachment; filename*=utf-8''"
@@ -40,12 +47,55 @@ def message(names):
     return raw + b'--report-fixture--\r\n'
 
 
+def check_report_evidence(case):
+    reports = {name: (case/'report'/name).read_text(encoding='utf-8')
+               for name in ('executive.md', 'technical.md')}
+    parsed = {name: MarkdownIt('commonmark').enable('table').parse(text)
+              for name, text in reports.items()}
+    active = [(name, child.type, child.content)
+              for name, tokens in parsed.items() for token in tokens
+              for child in ([token] + (token.children or []))
+              if child.type in {'image', 'link_open', 'html_inline', 'html_block'}]
+    assert not active, active
+    blocks, section = {}, None
+    tokens = parsed['technical.md']
+    for index, token in enumerate(tokens):
+        if token.type == 'heading_open' and token.tag == 'h2':
+            section = tokens[index+1].content
+        elif token.type == 'fence' and token.info == 'json':
+            assert section not in blocks, section
+            blocks[section] = json.loads(token.content)
+    assert blocks['Auth Alignment'] == read(case/'auth.json')
+    assert blocks['Forgery Checks'] == read(case/'received_anomalies.json')
+    assert blocks['Deobfuscation Analysis'] == read(case/'headers.json')['deobfuscation_analysis']
+    origin = read(case/'origin.json')
+    domain = read(case/'domains.json')['from_domain']
+    candidate = [origin['ip'], origin['asn'], origin['org'], origin['cc']]
+    executive_values = [json.loads(child.content)
+                        for token in parsed['executive.md'] for child in (token.children or [])
+                        if child.type == 'code_inline']
+    assert executive_values == candidate*2 + [read(case/'auth.json')['from_domain'] or '',
+        domain.get('registrar'), domain.get('created'), domain.get('nrd_days'),
+        domain.get('ns', []), domain.get('mx', [])], executive_values
+    assert read(case/'analysis_coverage.json') == read(case/'report/score.json')['coverage']
+    hops = read(case/'received_path.json')['ordered_hops']
+    codes = [child.content for token in tokens for child in (token.children or [])
+             if child.type == 'code_inline']
+    for hop in hops:
+        for field in ('by', 'from', 'ip', 'date', 'helo', 'ptr', 'skew_s',
+                      'fqdn_ok', 'helo_ptr_match', 'role'):
+            assert json.dumps(hop.get(field), ensure_ascii=True) in codes, (field, codes)
+    assert 'unverified' in reports['technical.md'].lower()
+    assert 'Missing checks do not establish safety' in reports['executive.md']
+
+
 def check_case(case, raw, names):
     require_stopped_case(case)
     assert verify_case(str(case))
     assert (case/'input.eml').read_bytes() == raw
     execution = read(case/'execution.json')
     assert execution['no_egress'] and not execution['blocked_operations'], execution
+    check_report_evidence(case)
     metadata = read(case/'attachments.json')
     parts = list(BytesParser(policy=policy.default).parsebytes(raw).iter_attachments())
     assert len(parts) == len(metadata) == len(names)
@@ -89,7 +139,10 @@ def check_case(case, raw, names):
 
 def check_zip(archive, case, raw, metadata, prefix=''):
     assert archive.read(prefix+'input.eml') == raw
-    assert archive.read(prefix+'report/technical.md') == (case/'report/technical.md').read_bytes()
+    for name in ('report/technical.md', 'report/executive.md', 'auth.json', 'origin.json', 'domains.json',
+                 'received_path.json', 'received_anomalies.json', 'headers.json',
+                 'analysis_coverage.json', 'report/score.json'):
+        assert archive.read(prefix+name) == (case/name).read_bytes(), name
     assert json.loads(archive.read(prefix+'attachments.json')) == metadata
     for item in metadata:
         assert archive.read(prefix+item['evidence_path']) == (case/item['evidence_path']).read_bytes()
@@ -164,6 +217,7 @@ def main():
                 detail = json.loads(request('/api/cases/'+case.name))
                 assert detail['attachments'] == metadata
                 assert detail['technical_report'] == (case/'report/technical.md').read_text(encoding='utf-8')
+                assert detail['executive_report'] == (case/'report/executive.md').read_text(encoding='utf-8')
                 with zipfile.ZipFile(io.BytesIO(request('/api/export/'+case.name))) as archive:
                     check_zip(archive, case, raw, metadata)
                 assert verify_case(str(case))
@@ -172,7 +226,8 @@ def main():
                 try: server.wait(timeout=15)
                 except subprocess.TimeoutExpired: server.kill(); server.wait(timeout=15)
     print('PASS: three actual offline full CLI cases and one loopback HTTP worker; '
-          'literal filename/MIME table cells, five columns, all rows/digests, original MIME, '
+          'literal Received/authentication/deobfuscation observations and filename/MIME table cells; '
+          'JSON round trips, no source-created images/links/HTML, five columns, all rows/digests, original MIME, '
           'attachment payloads/metadata, stopped owners, seals, detail and CLI/HTTP ZIP bytes. '
           'Passive Markdown parsing only; constructed fixtures are not accuracy labels.')
 
