@@ -129,23 +129,31 @@ stored historical scores and supplied labels are preserved and remain readable.
 
 ## Acceptance and remaining project gates
 
-Final Windows/Python 3.13 general suite: **954 tests, 940 passed and 14 expected
-platform/optional skips**. This family adds 25 focused contracts and 17 actual
-loopback HTTP/PTR integration cases, including worker-stop acknowledgement,
-atomic rollback/callback publication, source/digest compatibility, raw-body
-limits, broken/slow/compressed responses, redirect refusal, provider binding,
-credential projection, cache copies and no-egress refusal.
+Final Windows/Python 3.13 general suite: **956 tests, 942 passed and 14 expected
+platform/optional skips**. This family adds 27 focused contracts and 18 actual
+loopback HTTP/PTR integration cases, including truthful stop acknowledgement,
+atomic rollback/callback publication, source/digest compatibility, body limits,
+broken/slow/compressed responses, redirects, provider binding/cache copies,
+credential projection, canceled immediate collection and no-egress refusal.
+The screenshot test independently rejects process/socket/write attempts.
 
 The general suite and **25 Sentinel/legacy/wheel integration scripts** passed
-serially on frozen sources. After final monitor-transaction literal-identity,
-comparison-source and version checks, the full suite, loopback protocols, cold
-offline completion/two-process SQLite, writers and wheel were repeated. Other
-passive method bodies were unchanged by that final refinement. The built wheel
-matches all 94 current Python sources, metadata and console entry points. After
-the final suite, only the screenshot regression test was strengthened to reject
-process/socket/write attempts independently of implementation; all 25 focused
-contracts passed again with runtime unchanged. The final manifest covers 248
-runtime/test/workflow files. GitHub review and CI must accept the published head.
+serially on frozen sources before the last focused transaction/immediate-result
+refinements. The final source then repeated the full suite, loopback protocols,
+cold offline completion/two-process SQLite, writers and wheel. Other passive
+method bodies were unchanged by those refinements. The wheel matches all 94
+current Python sources, metadata and console entry points. The final manifest
+covers 248 runtime/test/workflow files. GitHub review/CI must accept the published head.
+
+PR92's first review found a founded P1: immediate results omitted publication IDs
+and content comparisons, and could include a canceled, uncommitted observation.
+The prior monitor reproduces both defects (one assertion failure and one missing
+payload error). The handler now returns its committed payload; `check_now` returns
+only those payloads, including `check_id`, `previous_check_id`, `content_changed`.
+A canceled pre-publication result is not returned. The real held-HTTP integration
+confirms an immediate check canceled during transport returns no uncommitted row;
+normal real HTTP transitions retain the comparison fields consumed by the CLI.
+These refinements are included in the final reruns above.
 
 Runtime/tests/workflows are frozen during validation; documentation follows
 stopped validators. Originals, private logs and audit manifests stay outside Git.

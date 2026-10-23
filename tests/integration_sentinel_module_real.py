@@ -126,11 +126,13 @@ class SentinelModuleIntegration(unittest.TestCase):
         self.assertEqual(first['content_hash'],hashlib.sha256(self.body).hexdigest())
         self.assertEqual(base64.b64decode(first['metadata']['http_observation']['body_base64']),self.body)
         type(self).status = 503; type(self).body = b'owned body B'
-        self.monitor.check_now(self.campaign)
+        second, = self.monitor.check_now(self.campaign)
         type(self).status = 200
         self.monitor.check_now(self.campaign)
         self.assertEqual(tuple(map(len,(complete,down,up,changed,alerts))),(3,1,1,1,3))
         self.assertEqual(complete[1]['previous_check_id'],complete[0]['check_id'])
+        self.assertEqual(second['previous_check_id'],first['check_id'])
+        self.assertTrue(second['content_changed']); self.assertFalse(first['content_changed'])
         self.assertEqual(len(self.db.get_recent_checks(self.campaign)),3)
         self.assertEqual(len(self.db.get_unacknowledged_alerts()),3)
         with self.db.connection() as conn:
@@ -196,6 +198,23 @@ class SentinelModuleIntegration(unittest.TestCase):
         self.monitor.check_now(self.campaign)
         self.assertEqual(stops,[False]); self.assertTrue(self.monitor.stop(2))
         self.assertFalse(self.monitor.is_running())
+
+    def test_canceled_immediate_http_request_returns_no_uncommitted_observation(self):
+        self.db.remove_campaign(self.campaign)
+        campaign = self.db.add_campaign('owned-immediate-hold',self.base+'/hold')
+        self.config._config['monitoring']['timeout_seconds'] = 2
+        returned,errors = [],[]
+        def check():
+            try: returned.append(self.monitor.check_now(campaign))
+            except Exception as error: errors.append(type(error).__name__)
+        thread = threading.Thread(target=check,name='owned-immediate-sentinel'); thread.start()
+        try:
+            self.assertTrue(self.entered.wait(2)); self.assertFalse(self.monitor.stop(.01))
+        finally:
+            self.release.set(); thread.join(3)
+        self.assertFalse(thread.is_alive()); self.assertEqual(errors,[])
+        self.assertEqual(returned,[[]]); self.assertTrue(self.monitor.stop(2))
+        self.assertEqual(self.db.get_recent_checks(campaign),[])
 
     def test_read_only_monitor_refuses_before_request(self):
         reader = CampaignDatabase(str(self.root/'saved.db'),read_only=True)

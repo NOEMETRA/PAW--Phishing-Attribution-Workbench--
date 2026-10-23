@@ -189,7 +189,9 @@ class SentinelMonitor:
                     self._callback_errors[:] = self._callback_errors[-100:]
 
     def _handle_check_result(self, result):
-        self._require_collector(); result = _json_tree(result)
+        self._require_collector()
+        if self._stop_event.is_set(): return None
+        result = _json_tree(result)
         flags = {key:self.config.get('alerts.'+key,default) for key,default in
                  (('enabled',True),('alert_on_down',True),('alert_on_up',False),('alert_on_changes',True))}
         receipt = self.db._record_monitor_result(result,flags)
@@ -198,6 +200,7 @@ class SentinelMonitor:
         for event in receipt['events']:
             self._emit({'up':'on_campaign_up','down':'on_campaign_down','changed':'on_content_changed'}[event],published)
         for alert in receipt['alerts']: self._emit('on_alert',alert)
+        return published
 
     def _check_for_alerts(self, result):
         _require_active()
@@ -222,9 +225,10 @@ class SentinelMonitor:
             for campaign in campaigns:
                 if self._stop_event.is_set(): break
                 result = self._check_campaign(campaign)
-                if not self._stop_event.is_set(): self._handle_check_result(result)
-                size += sum(len(chunk) for chunk in _json_chunks(result,self.db.limits['max_result_bytes']))+1
+                published = self._handle_check_result(result)
+                if published is None: continue
+                size += sum(len(chunk) for chunk in _json_chunks(published,self.db.limits['max_result_bytes']))+1
                 if size > self.db.limits['max_result_bytes']:
                     raise ValueError('Immediate check result byte limit exceeded; earlier per-check commits remain, no complete batch result')
-                results.append(result)
+                results.append(published)
             return results

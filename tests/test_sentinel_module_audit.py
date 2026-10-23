@@ -240,6 +240,24 @@ class SentinelModuleAudit(unittest.TestCase):
         self.monitor._handle_check_result(self.result('down',503,'b'*64))
         self.assertEqual(self.db.get_unacknowledged_alerts(),[])
 
+    def test_publication_returns_committed_source_ids_and_content_comparison(self):
+        first = self.monitor._handle_check_result(self.result())
+        second = self.monitor._handle_check_result(self.result(digest='b'*64))
+        self.assertEqual(second['previous_check_id'],first['check_id'])
+        self.assertTrue(second['content_changed'])
+        with self.db.connection() as conn:
+            self.assertEqual(conn.execute('SELECT id FROM checks ORDER BY id').fetchall(),
+                             [(first['check_id'],),(second['check_id'],)])
+
+    def test_cancellation_between_collection_and_publication_has_no_immediate_result(self):
+        def collected(campaign):
+            # Declared fault-injection point: signal the real lifecycle event
+            # after a supplied observation, before SQLite publication.
+            self.assertFalse(self.monitor.stop(0)); return self.result()
+        with patch.object(self.monitor,'_check_campaign',side_effect=collected):
+            self.assertEqual(self.monitor.check_now(self.campaign),[])
+        self.assertEqual(self.db.get_recent_checks(self.campaign),[])
+
     def test_unavailable_methods_refuse_without_interpreting_opaque_claims(self):
         analyzer = IntelligenceAnalyzer(str(self.root/'saved.db'))
         for name,args in (('_analyze_geographic_risk',(object(),)),('_analyze_user_agent_risk',(object(),)),
