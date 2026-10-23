@@ -152,7 +152,7 @@ Final serial validation, 23 October 2026, on the corrected source freeze:
 
 Changed-document links, the public static contracts and diff checks also pass.
 Logs, old/new cases, frozen hashes and wheel stay outside Git. Fresh exact-head
-Copilot review and CI remain integration gates. Passing tests and constructed
+Codex review and CI remain integration gates. Passing tests and constructed
 fixtures are not independent accuracy evidence or R08 final candidate acceptance.
 
 The first frozen matrix stopped at the prior G06 HTTP report comparison: the new
@@ -162,3 +162,10 @@ recorded privately. Validators stopped before the reader and its regression test
 were corrected. The original G06 integration then passed; final validation uses a
 new freeze/matrix. Tests were not relaxed to accept a changed API representation,
 and neither source file bytes nor ZIP bytes were normalized or rewritten.
+
+The first PR98 CI run stopped because the new consumer unit step ran before
+the existing CLI/API dependency installation (`markdown_it` was unavailable).
+The workflow now runs that step after installation. Runtime, tests and templates
+retain the final matrix's frozen bytes; the workflow ordering is checked by a
+fresh CI run. Copilot could not review because its quota was exhausted; the
+owner requested Codex review for the corrected head.

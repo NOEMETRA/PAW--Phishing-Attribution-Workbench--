@@ -317,4 +317,4 @@ and explicitly narrow kit CSS captures. It adds the S08 `consumer_views.py`
 boundary to the 96-source ownership index. R08 final isolated installation,
 optional components and platform/preset/batch/interruption acceptance remain;
 active collection, browser/UI and independent labels remain separate. The current
-family still requires exact-head Copilot review and CI before integration.
+family still requires exact-head Codex review and CI before integration.

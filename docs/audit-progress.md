@@ -97,7 +97,7 @@ indisponibile prima di chiavi/output; R06 ammette file JSON/testo entro limiti e
 tipi dichiarati senza interrompere i vicini sani. R07 conserva la cattura CSS
 ristretta con interpretazione risorsa indisponibile; non amplia il parser.
 R08 resta il gate finale di installazione/componenti/piattaforme e collaudo della
-versione candidata. La nuova famiglia necessita review Copilot e CI sullo stesso
+versione candidata. La nuova famiglia necessita review Codex e CI sullo stesso
 head validato; nessuna accuratezza o autenticità è dedotta dai contratti.
 
 Matrice finale dei residui: 1.030 test (1.015 superati, 15 esclusioni previste),
