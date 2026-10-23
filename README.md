@@ -290,6 +290,13 @@ from embedded, malformed or unresolved candidates. Domain-like prose alone is
 not a network URL. See [JavaScript evidence](docs/javascript-evidence.md) and
 [URL evidence](docs/url-evidence.md) for provenance, bounds and limitations.
 
+The [finite HTML/CSS perimeter](docs/html-css-scope.md) lists supported contexts,
+intentional exclusions and concrete remaining gaps. Outer MIME-body extraction,
+optional HTML observations and supplied/captured kit helpers have different
+coverage. Attached/embedded HTML and MIME CSS are preserved as attachments,
+without inner URL extraction into the outer-body inventory. Generic lexical
+matches do not establish parsed resource destinations or browser use.
+
 ## Heuristic scoring
 
 `paw/core/scoring.py` calculates a case score from explicit rules.
