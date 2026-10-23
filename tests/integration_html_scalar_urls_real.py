@@ -51,6 +51,6 @@ if __name__=='__main__':
     main(samples=fixtures(),http_names=('nonnetwork.eml','invalid.eml','budget.eml'),
          summary='Whole scalar HTML URL fields versus embedded HTTP substrings and truncated prefixes, '
          'legal punctuation and entity identity, original invalid/nonnetwork/recovered values, unchanged '
-         'metadata extraction, repeated MIME views, source v5, exact 5000/4096/904 accounting, original/body bytes, '
+         'metadata extraction, repeated MIME views, source v6, exact 5000/4096/904 accounting, original/body bytes, '
          'coverage, stopped workers, seals and CLI/API/ZIP parity. No browser URL normalization, '
          'relative resolution, navigation, script execution or accuracy claim.')

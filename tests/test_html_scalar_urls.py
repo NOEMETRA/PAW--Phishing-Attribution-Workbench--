@@ -105,7 +105,7 @@ class HTMLScalarURLContracts(unittest.TestCase):
         self.assertEqual(sources['unmapped_evidence_count'],0)
         for source in sources['sources']:
             if source['kind']=='mime_body':
-                self.assertEqual(source['derivation']['method'],'paw_html_url_candidate_views_v5')
+                self.assertEqual(source['derivation']['method'],'paw_html_url_candidate_views_v6')
 
     def test_empty_and_unrecognized_fields_do_not_invent_http_evidence(self):
         for value in ('','/relative/path','data:text/plain,hello','mailto:user@example.invalid'):

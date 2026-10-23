@@ -127,6 +127,11 @@ Existing MIME byte/part limits, local observation budgets and worker deadlines
 remain applicable. Constructed fixtures establish regression contracts, not
 classifier accuracy. No sample URL/domain was visited/resolved, no attachment
 executed and no Docker started; application no-egress is not OS isolation.
-Fresh exact-head GitHub Codex review and CI remain required before integration.
+PR93 passed exact-head Codex review without findings on
+`cde605a9847b9d1c8dc3cca08dea6b3e51d85adc`, with no open threads and three
+successful head checks (`39982245068`). Merge
+`64d2796a0b6f8d9ae22d6c457c871c8043b0b5c5` has the identical tree and three
+successful checks (`39984028748`). Its source method remains the historical v5;
+the subsequent [CSS token family](css-token-boundaries.md) versions new views v6.
 This family does not close the whole engine, platform/install, corpus, egress
 or UI audit.
