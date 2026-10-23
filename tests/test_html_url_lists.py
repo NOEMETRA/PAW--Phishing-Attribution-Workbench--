@@ -2,6 +2,7 @@
 import base64
 from email.message import EmailMessage
 from email import policy
+from html import escape
 from pathlib import Path
 import tempfile
 import unittest
@@ -93,6 +94,44 @@ class HTMLURLListContracts(unittest.TestCase):
             with self.subTest(markup=markup):
                 _, _, targets, _, _ = self.analyze(markup)
                 self.assertEqual(targets,[url])
+
+    def test_entity_decoded_markup_delimiters_remain_whole_nontarget_evidence(self):
+        for name in ('srcset','imagesrcset'):
+            for char in ('"','<','>'):
+                for suffix in ('/a'+char+'tail','/?x=a'+char+'tail','/#a'+char+'tail'):
+                    token = 'https://bad.invalid'+suffix
+                    with self.subTest(name=name, token=token):
+                        mime, candidates, targets, evidence, sources = self.analyze(
+                            '<img '+name+'="'+escape(token,quote=True)+',">')
+                        self.assertEqual(mime['urls'],[token])
+                        self.assertEqual(candidates,[token])
+                        self.assertEqual(targets,[])
+                        self.assertEqual([item['source_url'] for item in evidence],[token])
+                        self.assertEqual(evidence[0]['status'],'invalid')
+                        self.assertFalse(evidence[0]['network_target'])
+                        self.assertEqual(sources['unmapped_evidence_count'],0)
+
+    def test_entity_delimiters_in_recovered_whole_tokens_are_not_targets(self):
+        invalid = 'https://bad.invalid/a"tail'
+        tokens = ['hxxps://bad[.]invalid/a"tail',base64.b64encode(invalid.encode()).decode()]
+        for name in ('srcset','imagesrcset'):
+            with self.subTest(name=name):
+                _, _, targets, evidence, sources = self.analyze(
+                    '<img '+name+'="'+escape(', '.join(tokens),quote=True)+'">')
+                self.assertEqual(targets,[])
+                self.assertEqual([item['source_url'] for item in evidence],tokens)
+                self.assertTrue(all(item['status']=='invalid' and not item['network_target'] for item in evidence))
+                self.assertEqual(sources['unmapped_evidence_count'],0)
+
+    def test_legal_apostrophes_and_percent_encoded_delimiters_keep_target_identity(self):
+        tokens = ["https://good.invalid/a'tail?x=b'c#d'e",'https://good.invalid/a%22b%3Cc%3Ed%27e']
+        for name in ('srcset','imagesrcset'):
+            with self.subTest(name=name):
+                _, _, targets, evidence, sources = self.analyze(
+                    '<img '+name+'="'+escape(', '.join(tokens),quote=True)+'">')
+                self.assertEqual(targets,tokens)
+                self.assertTrue(all(item['network_target'] for item in evidence))
+                self.assertEqual(sources['unmapped_evidence_count'],0)
 
     def test_source_links_share_list_grammar_and_exact_retention_accounting(self):
         _, _, targets, evidence, source = self.analyze(

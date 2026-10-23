@@ -4,6 +4,7 @@ from email import policy
 from email.message import EmailMessage
 from email.parser import BytesParser
 import hashlib
+from html import escape
 import io
 import json
 import os
@@ -32,6 +33,10 @@ def fixtures():
     token = base64.b64encode(b'https://encoded.invalid/a%2Fb').decode()
     invalid = ['https://bad.invalid/%ZZ','https://bad.invalid:bad/a','https://long.invalid/'+'x'*65536]
     budget = [f'https://slot.invalid/p{index}' for index in range(100)]
+    entity_invalid = ['https://bad.invalid/a"tail','https://bad.invalid/?x=a<tail',
+        'https://bad.invalid/#a>tail','hxxps://bad[.]invalid/a"tail',
+        base64.b64encode(b'https://encoded.invalid/a"tail').decode()]
+    entity_valid = ["https://good.invalid/a'b?x=c'd#e'f",'https://good.invalid/a%22b%3Cc%3Ed%27e']
     rows = {
         'srcset.eml': ([f'<img srcset="{one}, {two} 2x">'],[one,two],[one,two],2),
         'imagesrcset.eml': ([f'<link imagesrcset="{one}, {two} 2x">'],[one,two],[one,two],2),
@@ -45,6 +50,10 @@ def fixtures():
             ['https://refanged.invalid/a%2Fb','https://encoded.invalid/a%2Fb'],
             ['hxxps://refanged[.]invalid/a%2Fb',token],2),
         'invalid.eml': (['<img srcset="'+', '.join(invalid)+'">'],[],invalid,3),
+        'entity-invalid.eml': (['<img '+name+'="'+escape(', '.join(entity_invalid),quote=True)+'">'
+            for name in ('srcset','imagesrcset')],[],entity_invalid,10),
+        'entity-valid.eml': (['<img '+name+'="'+escape(', '.join(entity_valid),quote=True)+'">'
+            for name in ('srcset','imagesrcset')],entity_valid,entity_valid,4),
         'ordinary.eml': (['<a href="'+one+',">go</a><script>"'+one+',"</script><!-- '+one+', -->'
                           '<img srcset="'+one+',">'],[one+',',one],[one+',',one],2),
         'multipart.eml': (['<script>unfinished',f'<img srcset="{one}, {two} 2x">',f'<source srcset="{one},">'],
@@ -139,7 +148,7 @@ def main():
                     try: request('/health'); break
                     except (urllib.error.URLError,TimeoutError): time.sleep(.1)
                 else: raise TimeoutError('API startup')
-                for name in ('nonnetwork.eml','encoded.eml','budget.eml'):
+                for name in ('nonnetwork.eml','encoded.eml','budget.eml','entity-invalid.eml','entity-valid.eml'):
                     raw = samples[name][0]; boundary = 'html-list-upload'
                     upload = (f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{name}"\r\nContent-Type: message/rfc822\r\n\r\n'.encode()
                               +raw+f'\r\n--{boundary}--\r\n'.encode())
@@ -162,8 +171,9 @@ def main():
                 server.terminate()
                 try: server.wait(timeout=15)
                 except subprocess.TimeoutExpired: server.kill(); server.wait(timeout=15)
-    print('PASS: nine full no-egress CLI cases and three loopback HTTP workers; list separators versus resource commas, '
+    print('PASS: eleven full no-egress CLI cases and five loopback HTTP workers; list separators versus resource commas, '
           'descriptor/nonnetwork exclusion, refanged/encoded/invalid/limited original tokens, ordinary comma literals, '
+          'entity-decoded invalid delimiters versus legal apostrophes/percent escapes, '
           'independent MIME documents, source v2, exact 5000/4096/904 link accounting, raw/body bytes, coverage, '
           'stopped owners, seals and CLI/HTTP ZIP parity. Descriptors/resource selection are not evaluated; fixtures are not accuracy labels.')
 

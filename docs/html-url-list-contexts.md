@@ -68,6 +68,38 @@ has exactly 5,000 links, 4,096 retained and 904 omitted, including an actual HTT
 run. Constructed fixtures are not classifier ground truth; no sample resource
 is fetched and no browser is used.
 
+## Review correction: whole-token admission
+
+The initial exact-head review found that entity-decoded `"`, `<` or `>` inside
+a retained list token could pass the shared HTTP URL check outside the hostname.
+For example, `srcset="https://host.invalid/a&quot;tail,"` preserved the whole
+token but incorrectly admitted it as a network destination. The additional
+contracts reproduce this defect before the correction (20 failed subtest
+assertions, not 20 independent defects).
+
+The shared URL validator now rejects those unescaped characters in every URL
+component, including recovered whole URLs and embedded candidate admission.
+Original tokens, source links and decoding attempts remain available as
+non-target evidence; no valid-looking prefix is substituted. Percent-encoded
+resource delimiters remain unchanged. Apostrophes remain legal sub-delimiters
+in paths, queries and fragments under [RFC 3986](https://www.rfc-editor.org/rfc/rfc3986.html#section-2.2),
+so an entity-decoded apostrophe alone does not invalidate the complete URL.
+This is a syntax-admission correction, not browser selection or risk assessment.
+
+Five additional unit contracts cover both list attributes, original/recovered
+inputs, path/query/fragment/userinfo admission, embedded candidates and legal
+resource identity. The final Windows Python 3.13 suite runs 911 tests: 897 pass
+and 14 platform exclusions remain. The expanded actual no-egress matrix runs
+11 full CLI cases and five loopback HTTP workers, including invalid entity
+tokens and valid apostrophe/percent-escaped resources through source inventories,
+coverage, stopped ownership, seals and ZIP publication. That matrix, existing
+URL identity (11 CLI cases) and the actual wheel (92 sources) pass serially on
+the corrected source. All 240 frozen Python/workflow hashes match after those
+validators stop. Five existing package sources now differ from the baseline;
+87 retain their contents. The preceding five-integration evidence above records
+the initial head; it is not a new run of unchanged source/report integrations.
+Fresh exact-head review and CI are required before merging the correction.
+
 The Windows Python 3.13 general suite runs 906 tests: 892 pass and 14 platform
 exclusions remain. Five real integrations pass serially: the new list matrix,
 existing URL identity, URL sources (9 CLI/5 HTTP), literal reports (3 CLI/1 HTTP)
