@@ -5,6 +5,7 @@ import re
 from html.parser import HTMLParser
 from ..deobfuscate.url import http_url_status
 from .mime_analysis import html_attribute_url_candidates
+from .css_urls import extract_css_url_candidates
 
 
 def _has_base64_url_scheme(value):
@@ -40,27 +41,30 @@ class _HtmlURLCandidateParser(HTMLParser):
     def __init__(self):
         super().__init__(convert_charrefs=True)
         self.candidates = []
-        self.raw_text = False
+        self.raw_text = None
 
     def handle_starttag(self, tag, attrs):
         if tag in {'script', 'style'}:
-            self.raw_text = True
+            self.raw_text = tag
         for name, value in attrs:
             # Namespace URIs identify XML vocabularies; they are not links.
             if name == 'xmlns' or name.startswith('xmlns:'):
                 continue
             if value:
-                self.candidates.extend(html_attribute_url_candidates(name, value, extract_text_url_candidates))
+                self.candidates.extend(extract_css_url_candidates(value,extract_text_url_candidates)
+                    if name == 'style' else html_attribute_url_candidates(name,value,extract_text_url_candidates))
 
     def handle_data(self, value):
         # Visible text has already been joined across markup by MIME analysis.
         # Scanning individual data chunks would invent truncated URL targets.
-        if self.raw_text:
+        if self.raw_text == 'style':
+            self.candidates.extend(extract_css_url_candidates(value,extract_text_url_candidates))
+        elif self.raw_text == 'script':
             self.candidates.extend(extract_text_url_candidates(value))
 
     def handle_endtag(self, tag):
         if tag in {'script', 'style'}:
-            self.raw_text = False
+            self.raw_text = None
 
     def handle_comment(self, value):
         self.candidates.extend(extract_text_url_candidates(value))

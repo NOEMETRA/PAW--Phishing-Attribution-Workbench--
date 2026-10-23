@@ -79,6 +79,8 @@ jobs:
 
       - name: Verify shared HTML URL-list token boundaries and source accounting
         run: python -m unittest discover -s tests -p 'test_html_url_lists.py' -v
+      - name: Verify literal CSS URL argument boundaries and source views
+        run: python -m unittest discover -s tests -p 'test_css_url_contexts.py' -v
 
       - name: Verify real process supervision and interrupted evidence
         run: python -m unittest discover -s tests -p 'test_runtime_contracts.py' -v
@@ -230,6 +232,8 @@ jobs:
 
       - name: Verify actual HTML URL list contexts and source budgets across CLI and HTTP
         run: python tests/integration_html_url_lists_real.py
+      - name: Verify actual offline CSS URL argument CLI and HTTP exports
+        run: python tests/integration_css_url_contexts_real.py
 
       - name: Verify original embedded MIME spans and separate derived evidence
         run: python -m unittest discover -s tests -p 'test_embedded_wire_evidence.py' -v
