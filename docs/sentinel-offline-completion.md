@@ -160,3 +160,13 @@ and unchanged source trees. Static contracts and the actual 91-source wheel pass
 again after that text correction. The 879-test suite and ten-integration matrix
 above are evidence for the preceding `6943305` head; the final text-only runtime
 change is covered by these focused reruns and the committed GitHub CI.
+
+## Subsequent whole-module audit
+
+The [current module disposition](sentinel-module-audit.md) accounts for all ten
+Sentinel files and adds bounded controller shutdown, atomic check/alert
+publication, preserved raw HTTP observations and source-bound IP observations.
+It retains these passive contracts and their historical evidence. Identity/risk,
+automatic in-place enrichment and unisolated screenshots are explicitly
+unavailable; real-provider/browser/isolation and deployment acceptance remain
+separate S14 work. The older counts above are not current global test totals.

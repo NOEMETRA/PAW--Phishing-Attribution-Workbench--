@@ -552,6 +552,102 @@ class CampaignDatabase:
             self._assert_writer_record(conn, 'checks', columns, values, rowid)
             conn.commit()
 
+    def _record_monitor_result(self, result, flags):
+        """Compare, record and alert in one actual SQLite write transaction."""
+        _require_active()
+        if self.read_only: raise RuntimeError('Read-only saved storage cannot publish monitor observations')
+        if type(result) is not dict or type(flags) is not dict:
+            raise ValueError('Native monitor result and alert flags required')
+        result = _json_tree(result); flags = _json_tree(flags)
+        allowed = {'campaign_id','url','status','http_status','content_hash','response_time','error_message','metadata','screenshot_path'}
+        if set(result)-allowed or result.get('screenshot_path') is not None:
+            raise ValueError('Unknown monitor fields or unavailable screenshot publication')
+        for key in ('enabled','alert_on_down','alert_on_up','alert_on_changes'):
+            if type(flags.get(key)) is not bool: raise ValueError('Native boolean alert flags required')
+        campaign_id = result.get('campaign_id'); status = result.get('status')
+        self._writer_text(campaign_id,'campaign_id',nonblank=True)
+        self._writer_text(result.get('url'),'url',nonblank=True)
+        if status not in ('up','down','error'): raise ValueError('Unknown monitor status')
+        code = result.get('http_status'); digest = result.get('content_hash')
+        if code is not None: self._writer_number(code,'http_status',minimum=100,maximum=599,integer=True)
+        if status != 'error' and (code is None or status != ('up' if code < 400 else 'down')):
+            raise ValueError('Monitor status must match its HTTP status policy')
+        if digest is not None and (type(digest) is not str or re.fullmatch('[0-9a-f]{64}',digest) is None):
+            raise ValueError('A complete SHA256 observation is required')
+        if status == 'error' and digest is not None: raise ValueError('Failed collection cannot assert a complete digest')
+        elapsed = result.get('response_time')
+        if elapsed is not None: self._writer_number(elapsed,'response_time',minimum=0)
+        self._writer_text(result.get('error_message'),'error_message',optional=True)
+        source_metadata = result.get('metadata',{})
+        if type(source_metadata) is not dict: raise ValueError('Native monitor metadata object required')
+        observation = source_metadata.get('http_observation')
+        representation = ('http_entity_bytes_no_content_decoding_v1' if type(observation) is dict and
+            observation.get('body_representation') == 'HTTP entity bytes, without content decoding'
+            else 'caller_supplied_digest_unverified')
+        receipt = {'check_id':None,'events':[],'alerts':[],'previous_check_id':None,'content_changed':False}
+        columns = ('campaign_id','check_time','status','response_time','http_status','content_hash',
+                   'screenshot_path','error_message','metadata')
+        alert_columns = ('campaign_id','alert_time','alert_type','severity','message','metadata')
+        with self.connection() as conn:
+            conn.execute('BEGIN IMMEDIATE')
+            parent = conn.execute('SELECT status,url FROM campaigns WHERE id=? COLLATE BINARY',(campaign_id,)).fetchall()
+            if parent != [('active',result['url'])]:
+                raise RuntimeError('Campaign removed or changed before monitor publication')
+            previous = conn.execute('SELECT id,status,http_status,content_hash,metadata FROM checks WHERE campaign_id=? COLLATE BINARY '
+                                    'ORDER BY id DESC LIMIT 1',(campaign_id,)).fetchone()
+            prior_status = None; same_source = False; same_representation = False
+            if previous:
+                receipt['previous_check_id'] = previous[0]
+                prior_metadata,evidence = self._decode_json_field(previous[4],{})
+                prior = prior_metadata.get('monitor_comparison') if type(prior_metadata) is dict else None
+                same_source = (evidence['status']=='decoded' and type(prior) is dict and
+                    type(prior.get('schema_version')) is int and prior['schema_version'] == 1 and
+                    prior.get('observation_url') == result['url'])
+                same_representation = same_source and prior.get('content_representation') == representation
+                if same_source and type(previous[2]) is int and 100 <= previous[2] <= 599:
+                    expected = 'up' if previous[2] < 400 else 'down'
+                    if previous[1] == expected: prior_status = expected
+                receipt['content_changed'] = bool(same_representation and digest and type(previous[3]) is str and
+                    re.fullmatch('[0-9a-f]{64}',previous[3]) and digest != previous[3])
+            if status in ('up','down') and prior_status in ('up','down') and status != prior_status:
+                receipt['events'].append(status)
+            if receipt['content_changed']: receipt['events'].append('changed')
+            timestamp = utc_now_iso()
+            comparison = {'schema_version':1,'observation_url':result['url'],
+                'content_representation':representation,'same_source':same_source,
+                'same_representation':same_representation,'previous_check_id':receipt['previous_check_id'],
+                'scope':'Previous stored id, unverified HTTP status classes and literal digest comparison; not chronological history, campaign liveness or identity',
+                'verified':False}
+            metadata = self._encode_writer_json({'source_metadata':result.get('metadata',{}),
+                                                 'monitor_comparison':comparison},'metadata')
+            values = (campaign_id,timestamp,status,elapsed,code,digest,None,result.get('error_message'),metadata)
+            rowid = self._insert_writer_record(conn,'checks',columns,values); receipt['check_id'] = rowid
+            if conn.execute('UPDATE campaigns SET last_check=? WHERE id=? COLLATE BINARY',(timestamp,campaign_id)).rowcount != 1:
+                raise RuntimeError('Monitor parent timestamp did not persist')
+            inserted = []
+            for event in receipt['events']:
+                enabled = flags['enabled'] and flags['alert_on_changes' if event == 'changed' else 'alert_on_'+event]
+                if not enabled: continue
+                message = ('Stored content digest differs' if event == 'changed' else 'HTTP status class transitioned to '+event)
+                level = 'warning' if event == 'down' else 'info'
+                alert_metadata = self._encode_writer_json({**comparison,'check_id':rowid},'metadata')
+                alert_values = (campaign_id,timestamp,event,level,message,alert_metadata)
+                alert_id = self._insert_writer_record(conn,'alerts',alert_columns,alert_values)
+                inserted.append((alert_id,alert_values))
+                receipt['alerts'].append({'id':alert_id,'campaign_id':campaign_id,'type':event,
+                    'message':message,'severity':level,'timestamp':timestamp,'check_id':rowid,'verified':False})
+            self._assert_writer_record(conn,'checks',columns,values,rowid)
+            for alert_id,alert_values in inserted:
+                self._assert_writer_record(conn,'alerts',alert_columns,alert_values,alert_id)
+            if conn.execute('SELECT status,url,last_check FROM campaigns WHERE id=? COLLATE BINARY',(campaign_id,)).fetchall() != [('active',result['url'],timestamp)]:
+                raise RuntimeError('Monitor parent changed or timestamp reverted; transaction rolled back')
+            if previous and conn.execute('SELECT id,status,http_status,content_hash,metadata FROM checks WHERE id=?',
+                                         (previous[0],)).fetchall() != [previous]:
+                raise RuntimeError('Monitor comparison source changed; transaction rolled back')
+            for _ in _json_chunks(receipt,self.limits['max_output_bytes']): pass
+            conn.commit()
+        return receipt
+
     def record_alert(self, campaign_id: str, alert_type: str, message: str,
                     severity: str = "info", metadata: Dict[str, Any] = None) -> None:
         """Record an alert."""
@@ -859,29 +955,10 @@ class CampaignDatabase:
 
         return True
 
-    def calculate_risk_score(self, risk_indicators: List[str], geolocation: Dict[str, Any], whois: Dict[str, Any]) -> int:
-        """Calculate risk score from 1-10 based on analysis data."""
+    def calculate_risk_score(self, risk_indicators, geolocation, whois):
+        """Risk attribution has no independently validated model."""
         _require_active()
-        score = 1  # Base score
-
-        # Risk indicators add points
-        indicator_weights = {
-            'High-risk country': 3,
-            'Recently registered domain': 2,
-            'Relatively new domain': 1,
-            'Known bulletproof hosting': 4,
-            'Private IP address': -2,  # Unusual but not necessarily malicious
-            'No reverse DNS': 1
-        }
-
-        for indicator in risk_indicators:
-            for pattern, weight in indicator_weights.items():
-                if pattern in indicator:
-                    score += weight
-                    break
-
-        # Cap at 10
-        return min(max(score, 1), 10)
+        raise NotImplementedError("Sentinel risk scoring is unavailable; stored numeric claims are not calibrated risk")
 
     def get_victims_by_risk_score(self, min_score: int = 5) -> List[Dict[str, Any]]:
         """Legacy name: select finite stored numbers, not risk conclusions."""

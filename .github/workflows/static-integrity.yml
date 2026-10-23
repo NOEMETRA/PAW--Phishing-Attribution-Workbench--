@@ -380,6 +380,12 @@ jobs:
       - name: Verify actual cold offline Sentinel profiles and two-process read views
         run: python tests/integration_sentinel_completion_real.py
 
+      - name: Verify Sentinel atomic alerts, truthful shutdown and unavailable attribution
+        run: python -m unittest discover -s tests -p 'test_sentinel_module_audit.py' -v
+
+      - name: Verify actual Sentinel loopback HTTP and PTR, bounded evidence and worker stop
+        run: python tests/integration_sentinel_module_real.py
+
       - name: Verify legacy campaign listing matches passive CLI without source mutation
         run: python tests/integration_legacy_campaign_list_real.py
 
