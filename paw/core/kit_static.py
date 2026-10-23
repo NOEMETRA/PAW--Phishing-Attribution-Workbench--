@@ -125,7 +125,9 @@ class _Inventory:
             else:
                 for match in CSS_URL.finditer(value):
                     self.emit(record, 'css_url', next(v for v in match.groups() if v is not None).strip(),
-                              offset=match.start(), representation='CSS url() argument')
+                              offset=match.start(), representation='Legacy CSS regex capture; not a parsed resource',
+                              grammar='legacy_css_url_regex_v1', resource_interpretation='not_evaluated',
+                              network_target=False)
             for match in KEYWORDS.finditer(value):
                 self.emit(record, 'lexical_keyword', match.group(), offset=match.start(), representation='supplied text')
         except (ValueError, AssertionError) as exc:

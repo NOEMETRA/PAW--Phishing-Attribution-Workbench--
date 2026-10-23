@@ -24,6 +24,7 @@ from ..core.process_recovery import recover_worker, identity_alive
 from ..core.job_registry import control_path, case_owner, job_state, controls
 from ..core.dkim_keys import snapshot_key_bundle
 from ..core.index import describe_fingerprint
+from ..core.consumer_views import read_artifact_json, read_artifact_text, assessment_view, ReadBudget
 
 @asynccontextmanager
 async def lifespan(application):
@@ -117,8 +118,12 @@ def now():
 def load(path):
     return json.loads(path.read_text(encoding='utf-8'))
 
-def artifact(path, errors):
-    try: return load(path)
+def artifact(path, errors, expected=dict, budget=None):
+    root = path.parent.parent if path.parent.name=='report' else path.parent
+    try:
+        if not root.resolve().is_relative_to(CASES_DIR.resolve()):
+            raise ValueError('Artifact case outside configured store')
+        return read_artifact_json(path, expected, budget, root)
     except (OSError, ValueError) as exc:
         errors[path.name] = type(exc).__name__ + ': ' + str(exc)
         return None
@@ -402,7 +407,7 @@ async def get_analysis_status(analysis_id: str):
 async def list_cases(limit: int = 20, offset: int = 0):
     if not 1 <= limit <= 100 or offset < 0: raise HTTPException(400, 'Invalid pagination')
     paths = sorted(CASES_DIR.glob('*/manifest.json'), key=lambda p:p.stat().st_mtime, reverse=True)
-    cases = []
+    cases, budget = [], ReadBudget()
     for path in paths[offset:offset+limit]:
         execution, score = path.parent/'execution.json', path.parent/'report/score.json'
         status = await stable_case_status(path.parent)
@@ -410,11 +415,13 @@ async def list_cases(limit: int = 20, offset: int = 0):
             cases.append({'case_id':path.parent.name,'status':status,'summary':{},'artifact_errors':{}})
             continue
         errors = {}
-        manifest = artifact(path, errors) or {}
+        manifest = artifact(path, errors, budget=budget) or {}
+        headers = artifact(path.parent/'headers.json', errors, budget=budget) or {}
+        summary = (artifact(score, errors, budget=budget) or {}) if score.exists() and status == 'completed' else {}
         cases.append({'case_id':path.parent.name, 'created_at':manifest.get('created_utc'),
-            'subject':str(read_progress(path.parent/'headers.json').get('subject',''))[:200],
+            'subject':str(headers.get('subject',''))[:200],
             'status':status,
-            'summary':(artifact(score, errors) or {}) if score.exists() and status == 'completed' else {},
+            'summary':summary, 'assessment_view':assessment_view(summary),
             'artifact_errors':errors})
     return {'cases':cases, 'total':len(paths), 'limit':limit, 'offset':offset}
 
@@ -422,7 +429,8 @@ async def list_cases(limit: int = 20, offset: int = 0):
 async def get_case_detail(case_id: str):
     directory = case_path(case_id)
     result = {'case_id':case_id, 'status':await require_stable_case(directory)}
-    headers = read_progress(directory/'headers.json')
+    budget = ReadBudget()
+    headers = artifact(directory/'headers.json', result.setdefault('artifact_errors', {}), budget=budget) or {}
     result['email'] = {key:headers.get(key) for key in ('subject','from','to','date')}
     files = {'manifest':'manifest.json','score':'report/score.json','origin':'origin.json',
         'mime':'mime_analysis.json','attachments':'attachments.json','coverage':'analysis_coverage.json','authentication':'auth.json','deobfuscation':'deobfuscation_results.json',
@@ -433,11 +441,17 @@ async def get_case_detail(case_id: str):
         'mime_cid_inventory':'mime_cid_inventory.json'}
     for key, name in files.items():
         if (directory/name).exists():
-            result[key] = artifact(directory/name, result.setdefault('artifact_errors', {}))
+            result[key] = artifact(directory/name, result.setdefault('artifact_errors', {}),
+                                   list if key in {'attachments','url_evidence'} else dict, budget)
+    result['assessment_view'] = assessment_view(result.get('score'))
     if result.get('execution') and result['status'] != 'completed':
         result['execution'] = dict(result['execution'], recorded_status=result['execution'].get('status'), status=result['status'])
     for key, name in {'executive_report':'report/executive.md','technical_report':'report/technical.md'}.items():
-        if (directory/name).exists(): result[key] = (directory/name).read_text(encoding='utf-8', errors='replace')
+        if (directory/name).exists():
+            try: result[key] = read_artifact_text(directory/name, budget, directory)
+            except (OSError, ValueError) as exc:
+                result[key] = None
+                result.setdefault('artifact_errors', {})[name] = type(exc).__name__ + ': ' + str(exc)
     return result
 
 @app.post('/api/query')
@@ -461,16 +475,22 @@ async def query_cases(query: CaseQuery):
 @app.get('/api/statistics')
 async def get_statistics():
     paths = list(CASES_DIR.glob('*/manifest.json'))
-    countries, asns = Counter(), Counter()
+    countries, asns, errors, budget = Counter(), Counter(), {}, ReadBudget()
     for path in paths:
         if await stable_case_status(path.parent) != 'completed': continue
         origin = path.parent/'origin.json'
         if origin.exists():
-            data = read_progress(origin)
-            if data.get('cc'): countries[data['cc']] += 1
-            if data.get('asn'): asns[str(data['asn'])] += 1
+            case_errors = {}
+            data = artifact(origin, case_errors, budget=budget) or {}
+            if data.get('cc'):
+                if isinstance(data['cc'], str): countries[data['cc']] += 1
+                else: case_errors['cc'] = 'Expected country string'
+            if data.get('asn'):
+                if type(data['asn']) in (int, str): asns[str(data['asn'])] += 1
+                else: case_errors['asn'] = 'Expected ASN integer or string'
+            if case_errors: errors[path.parent.name] = case_errors
     return {'total_cases':len(paths),'top_countries':countries.most_common(10),
-        'top_asns':asns.most_common(10),'operator_attribution':'not established'}
+        'top_asns':asns.most_common(10),'operator_attribution':'not established', 'artifact_errors':errors}
 
 @app.get('/api/export/{case_id}')
 async def export_case(case_id: str, format: str = 'zip'):
