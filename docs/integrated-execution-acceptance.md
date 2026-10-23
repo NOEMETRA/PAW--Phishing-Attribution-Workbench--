@@ -81,8 +81,9 @@ collector was visited/executed to produce this evidence.
 
 ## Remaining gates
 
-- Reconcile remaining S01 admission combinations (source kinds, local-key inputs
-  and numeric options) with their existing focused contracts; this matrix is not
+- Keep malformed top-level EML admission and its CLI/API failure or partial-batch
+  accounting explicitly open. Reconcile it and the remaining S01 source-kind,
+  local-key and numeric combinations with focused contracts; this matrix is not
   an exhaustive ingress cross-product.
 - Reconcile extraction-to-report evidence, omissions and unavailable capabilities
   across S03-S09; remaining renderer/resource and optional-format contracts retain

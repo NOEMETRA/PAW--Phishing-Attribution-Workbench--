@@ -53,8 +53,8 @@ I prossimi blocchi hanno criteri di chiusura comuni:
    matrice di disposizioni per tutto il package. La matrice integrata di esecuzione
    è ora registrata sullo stesso merge; piattaforme e perimetri attivi restano separati.
 2. **Motore offline integrato:** preset/batch/HTTP/interruzioni e conservazione
-   passano nella matrice corrente. Proseguire con le combinazioni di ammissione
-   residue e riconciliare le capacità pubblicizzate con
+   passano nella matrice corrente. Proseguire con EML top-level malformati e relativi esiti/contabilità
+   CLI/API, oltre alle combinazioni di ammissione residue e riconciliare le capacità pubblicizzate con
    header/MIME/URL/allegati e report; verificare insieme ingressi malformati,
    omissioni, budget, interruzioni e parità CLI/API/verify/ZIP. Correggere per
    confine condiviso, con prove prima/dopo e review della famiglia interessata.
