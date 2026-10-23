@@ -1,0 +1,19 @@
+# Closed preparation network only. This file enables no egress.
+# Apply as one nft transaction. Touch only the PAW-owned table.
+add table inet paw_s14_guard
+flush table inet paw_s14_guard
+table inet paw_s14_guard {
+  chain host_input {
+    type filter hook input priority -310; policy accept;
+    iifname "pawbr-int" counter drop
+  }
+  chain host_output {
+    type filter hook output priority -310; policy accept;
+    oifname "pawbr-int" counter drop
+  }
+  chain transit {
+    type filter hook forward priority -310; policy accept;
+    iifname "pawbr-int" counter drop
+    oifname "pawbr-int" counter drop
+  }
+}

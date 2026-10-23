@@ -5,8 +5,10 @@ Riferimento integrato corrente: PR98, commit
 La [validazione Linux/R08](linux-r08-validation.md) registra installazioni reali
 su Python 3.13.7/3.14.4, contratti POSIX e collaudo della wheel installata, con
 PASS/FAIL e limiti dei componenti. R08 resta aperto; scoring e originali non
-sono modificati. La [proposta S14 con due PC Linux](s14-two-pc-linux.md) richiede
-un gate di isolamento sul secondo PC prima di detonazioni reali e non avvia servizi.
+sono modificati. Su richiesta del proprietario, S14 prosegue con la
+[preparazione chiusa sul solo PC Linux](s14-single-pc-linux.md): prerequisiti
+CPU/KVM e prova libvirt sospesa verificati, rete interna senza uscita preparata.
+Il gate I02–I08 resta da superare prima di qualsiasi detonazione reale.
 
 Il seguente riferimento di review riguarda la precedente PR97, commit
 `ccc946c5f61f197d088a924583e512241fafd56f`; 23 ottobre 2026 (Europe/Rome).
@@ -134,7 +136,7 @@ verificati, audit aperti, capacità indisponibili e fasi successive.
 | Sentinel | Campagne/file/configurazione/report offline, lifecycle per istanza, pubblicazione atomica e osservazioni HTTP/IP hanno contratti integrati con fonti e limiti; tutti i file del modulo hanno una disposizione esplicita. | Review/CI della disposizione chiuse nella PR92. Servizio persistente, browser, provider reali, isolamento e accettazione piattaforme restano separati; nessuna identità o probabilità di rischio è stabilita da questi test. |
 | Script e installazione | Disposizione dei 26 file Python esterni: 25 entry point verificati o esplicitamente indisponibili e una libreria inutilizzata/non validata, con import inerte. Pacchetto costruito realmente e confrontato con sorgenti, entrypoint e template. | I 2 launcher shell restano differiti; gli algoritmi helper non esercitati restano aperti. Installazione isolata finale e componenti opzionali sulle piattaforme supportate. La disposizione non equivale alla validazione di ogni funzione. |
 | Accuratezza e attribuzione | Pilot privato di 20 originali, con 10 legittimi confermati dal proprietario; algoritmi e ipotesi sono qualificati. | Etichette phishing indipendenti, corpus rappresentativo e holdout, falsi positivi/negativi, calibrazione e correlazione. Lo spam della casella non costituisce da solo ground truth. |
-| Egress e interfaccia | Alcuni protocolli locali e meccanismi di raccolta hanno test loopback circoscritti. | Dopo stabilizzazione: validare l’isolamento del secondo PC Linux proposto, poi collector/detonazione; poi completare la UI con parità delle opzioni CLI. |
+| Egress e interfaccia | Alcuni protocolli locali e meccanismi di raccolta hanno test loopback circoscritti. | Dopo stabilizzazione: superare il gate di isolamento delle VM locali, poi collector/detonazione; poi completare la UI con parità delle opzioni CLI. |
 
 Le ultime PR hanno corretto consumatori che potevano contraddire JSON già
 qualificati: publisher legacy, oggetto delle bozze e grafi. La fase corrente
@@ -159,7 +161,7 @@ I prossimi blocchi hanno criteri di chiusura comuni:
 3. **Versione candidata:** installazione isolata e matrice Windows/POSIX,
    componenti opzionali e capacità indisponibili dichiarate. Valutazione
    indipendente con holdout per eventuali affermazioni di accuratezza.
-4. **Fasi successive:** isolamento del secondo PC Linux proposto e launcher
+4. **Fasi successive:** isolamento con VM locali e launcher
    shell, raccolta/arricchimenti/detonazione; UI con parità delle opzioni CLI.
 
 Sentinel resta un'opzione con contratti locali circoscritti; nuove funzionalità
