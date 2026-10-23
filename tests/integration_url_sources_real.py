@@ -79,7 +79,7 @@ def check_case(case,raw,expected):
             assert text_source['text_sha256']==body['text_sha256']
             if body['declared_mime']=='text/html':
                 assert source['representation']=='html_parser_derived_url_candidate_views'
-                assert source['derivation']=={'method':'paw_html_url_candidate_views_v5','persisted':False}
+                assert source['derivation']=={'method':'paw_html_url_candidate_views_v6','persisted':False}
                 assert 'text_path' not in source
             else:assert 'derived_from' not in source
             if text_source['text_status']=='captured':

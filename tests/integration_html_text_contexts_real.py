@@ -85,5 +85,5 @@ if __name__=='__main__':
          case_check=check_context,
          summary='RCDATA once-only entities, RAWTEXT/plaintext literal content, no fabricated form/script/'
          'hidden/encoded/CID nodes in single documents, selfclosing/EOF boundaries and a 700KB incomplete end token, independent MIME '
-         'URL and HTML observation views with per-part hashes, source v5, exact 5000/4096/904 links, unchanged raw/body bytes, stopped owners, '
+         'URL and HTML observation views with per-part hashes, source v6, exact 5000/4096/904 links, unchanged raw/body bytes, stopped owners, '
          'coverage, seals and CLI/API/ZIP parity. Not HTML5 tree construction, browser behavior or accuracy labels.')

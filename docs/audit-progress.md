@@ -1,37 +1,41 @@
 # Stato dell'audit PAW
 
-Riferimento integrato: PR92, commit
-`62040da2898acd523bd0513e944f16069de5455e`; 23 ottobre 2026 (Europe/Rome).
-Review Codex senza rilievi sullo head `664954fa1612f95a9bbabcc8c6f7079b9b2079fc`,
-entrambi i precedenti thread risolti e tre check verdi su head e merge,
-con tree identico. Workflow sul merge: `39974092712`.
+Riferimento integrato: PR93, commit
+`64d2796a0b6f8d9ae22d6c457c871c8043b0b5c5`; 23 ottobre 2026 (Europe/Rome).
+Review Codex senza rilievi sullo head `cde605a9847b9d1c8dc3cca08dea6b3e51d85adc`,
+nessun thread aperto, tre check verdi su head e merge e tree identico.
+Workflow: `39982245068` / `39984028748`.
 
-La [disposizione di tutto Sentinel](sentinel-module-audit.md) è integrata:
-dieci file, contratti locali e HTTP/IP circoscritti, capacità indisponibili
-esplicite. Il ciclo review/CI di questa famiglia è chiuso. Restano separate
-accettazione operativa, provider reali, isolamento, deployment e piattaforme.
-Le 958 prove e la matrice Sentinel registrate nel contratto descrivono quel blocco.
+I [contesti di testo HTML](html-text-contexts.md) sono integrati: confini comuni
+per MIME, URL, CID, form, kit e osservazioni HTML; documenti MIME separati con
+parte/testo/hash; conservazione delle code incomplete e compatibilità dei parser
+Python aggiornati. La [disposizione di Sentinel](sentinel-module-audit.md) resta
+integrata dalla PR92; accettazione operativa, provider, isolamento e deployment
+restano separati.
 
-Il blocco corrente corregge i [contesti di testo HTML](html-text-contexts.md):
-markup letterale che diventava form/script/iframe/CID, testo perso e interpretazione
-CSS applicata fuori contesto. MIME, URL, CID, form, kit e osservazioni HTML usano
-confini condivisi. Le parti HTML sono analizzate separatamente e i risultati
-rimandano a parte MIME, testo e hash. Un caso malformato di 700.000 byte che
-esauriva il limite della regressione ora termina conservando l'intera coda.
+Il blocco corrente corregge i [confini dei token CSS](css-token-boundaries.md):
+nomi hash/at-keyword scambiati per funzioni, escape invalidi che inglobavano il
+token successivo, commenti dopo argomenti fra virgolette e funzioni non supportate
+troncate dentro commenti/stringhe/blocchi. Le menzioni nei separatori restano
+intere, legate alla fonte e senza promozione a destinazioni di rete.
 
-Suite finale: 977 test (963 superati, 14 esclusioni previste), 19 nuove prove
-mirate. Nove integrazioni/build seriali della famiglia passate; dopo il confine
-EOF ripetuti suite, nuovi casi HTML (15 CLI/6 HTTP), liste, fonti URL e wheel
-con 95 sorgenti. La prima CI ha rilevato una nuova firma del parser nei Python
-aggiornati: errore riprodotto sullo head pubblicato, corretto e riverificato con
-29 prove HTML e gli stessi 15 CLI/6 HTTP su un Python 3.13.15 separato.
-Suite generale, stessi casi sul runtime 3.13.5 e wheel ripetuti; 252 hash finali
-immutati. Il contratto distingue revisioni e limiti. Review Codex e CI sullo
-head corretto restano da chiudere.
-I contratti precedenti su [campi URL singoli](html-scalar-url-contexts.md),
-[liste HTML](html-url-list-contexts.md) e [CSS letterale](css-url-contexts.md)
-restano verificati. DOM/browser, grammatica completa e interpretazioni escluse
-restano esplicite. Nessuna visita alle risorse delle email.
+Copilot ha confermato un ulteriore difetto del recupero: punteggiatura dentro
+URL/bad-URL non quotati annidati poteva inglobare una funzione successiva.
+La correzione condivide il consumo del token, conserva il segmento opaco e
+mantiene separata la destinazione successiva, senza interpretare i modificatori.
+
+Suite finale: 993 test (979 superati, 14 esclusioni previste), 16 nuove prove.
+Quattro script di integrazione/build seriali passati dopo la correzione su 254
+hash congelati: casi CSS 13 CLI/6 HTTP ripetuti su due runtime reali, contratto
+CSS precedente, fonti URL e wheel di 95 sorgenti. La matrice iniziale di sette
+script, inclusi i contesti HTML, resta registrata nel documento della famiglia.
+I conteggi distinguono
+URL e segmenti testuali opachi, inclusi 5.000/4.096/904 collegamenti conservati o
+omessi. Codex resta senza esito; su richiesta del proprietario, review Copilot
+e CI sul nuovo head della famiglia restano da chiudere.
+
+DOM/browser, grammatica completa e interpretazioni escluse restano esplicite.
+Nessuna risorsa delle email è stata visitata o risolta.
 
 Il lavoro corrente stabilizza il motore offline e la profondità delle evidenze.
 Il [registro per famiglia](engine-stabilization-checkpoint.md) distingue contratti

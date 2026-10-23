@@ -91,7 +91,7 @@ def check(case, sample):
     for source in sources['sources']:
         if source['kind'] != 'mime_body': continue
         assert source['representation'] == 'html_parser_derived_url_candidate_views'
-        assert source['derivation'] == {'method':'paw_html_url_candidate_views_v5','persisted':False}
+        assert source['derivation'] == {'method':'paw_html_url_candidate_views_v6','persisted':False}
         text = source['derived_from']; data = (case/text['text_path']).read_bytes()
         assert hashlib.sha256(data).hexdigest() == text['text_sha256']
     parsed = BytesParser(policy=policy.default).parsebytes(raw)
@@ -182,7 +182,7 @@ def main(samples=None, http_names=None, summary=None, case_check=None):
           'list separators versus resource commas, '
           'descriptor/nonnetwork exclusion, refanged/encoded/invalid/limited original tokens, ordinary comma literals, '
           'entity-decoded invalid delimiters versus legal apostrophes/percent escapes, '
-          'independent MIME documents, source v5, exact 5000/4096/904 link accounting, raw/body bytes, coverage, '
+          'independent MIME documents, source v6, exact 5000/4096/904 link accounting, raw/body bytes, coverage, '
           'stopped owners, seals and CLI/HTTP ZIP parity. Descriptors/resource selection are not evaluated; fixtures are not accuracy labels.'))
 
 

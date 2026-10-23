@@ -266,5 +266,15 @@ markup promoted to nodes, independent MIME document observations with per-part
 text binding, and bounded EOF recovery. HTML source derivation is v5; multiple
 HTML documents use an indexed schema-3 collection, with local limits and original
 schema-2 observations. Source assignment above does not certify full HTML/CSS,
-DOM, scripting/foreign-content grammar or browser behavior. The family requires
-its own exact-head review/CI; current integrated baseline remains PR92.
+DOM, scripting/foreign-content grammar or browser behavior. PR93 passed exact-head
+review and all head/merge checks with identical trees, integrating this bounded
+family. Current integrated baseline: `64d2796a0b6f8d9ae22d6c457c871c8043b0b5c5`.
+
+The subsequent [CSS token boundary family](css-token-boundaries.md) corrects
+hash/at-keyword and invalid-escape boundaries, quoted argument comments and
+complete unsupported function evidence, including nested unquoted URL/bad-URL
+boundaries identified in Copilot review. New source views use v6, with separate
+non-target separator spans and exact source/omission accounting. This changes
+three existing package sources; the 95-source ownership index is unchanged.
+Its own exact-head review/CI remains required. Full CSS grammar, normalization,
+modifiers, relative resolution and browser use remain outside the contract.

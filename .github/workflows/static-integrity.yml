@@ -83,6 +83,8 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_html_url_lists.py' -v
       - name: Verify literal CSS URL argument boundaries and source views
         run: python -m unittest discover -s tests -p 'test_css_url_contexts.py' -v
+      - name: Verify CSS token names and quoted URL function evidence
+        run: python -m unittest discover -s tests -p 'test_css_token_boundaries.py' -v
       - name: Verify whole scalar HTML URL fields and non-target envelopes
         run: python -m unittest discover -s tests -p 'test_html_scalar_urls.py' -v
 
@@ -238,6 +240,8 @@ jobs:
         run: python tests/integration_html_url_lists_real.py
       - name: Verify actual offline CSS URL argument CLI and HTTP exports
         run: python tests/integration_css_url_contexts_real.py
+      - name: Verify actual CSS token and quoted function CLI and HTTP exports
+        run: python tests/integration_css_token_boundaries_real.py
       - name: Verify actual scalar HTML URL CLI and HTTP publication
         run: python tests/integration_html_scalar_urls_real.py
       - name: Verify actual HTML text contexts through offline CLI and HTTP exports
