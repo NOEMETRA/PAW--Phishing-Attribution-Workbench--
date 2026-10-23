@@ -11,6 +11,42 @@ import blake3
 from .mime_analysis import analyze_mime
 
 
+def _content_coverage():
+    """The current scanner observes payload metadata, never document contents."""
+    return {'schema_version':1, 'status':'not_evaluated',
+        'scope':'attachment_payload_content',
+        'not_evaluated':['document_text', 'url_extraction', 'resource_resolution',
+                         'embedded_message_body', 'archive_member_content', 'decryption'],
+        'reason':'Payload metadata and supported ZIP directory declarations only; no document/HTML/CSS '
+                 'or embedded-message body parsing, member analysis, URL/resource resolution or decryption'}
+
+
+def attachment_coverage(attachments):
+    """Coverage of a current completed scan, independent of content assessment."""
+    return {'schema_version':1,
+        'status':'partial' if any(item['status'] == 'partial' for item in attachments) else 'completed',
+        'count':len(attachments), 'scope':'payload_metadata_and_supported_zip_directory_declarations',
+        'content_analysis':_content_coverage(), 'mime_detection':'not_evaluated',
+        'macro_analysis':'not_evaluated', 'malware_analysis':'not_evaluated',
+        'limitation':'Metadata completion is not content analysis, exhaustive resource discovery, '
+                     'member integrity, type detection, decryption or evidence of safety'}
+
+
+def attachment_report_view(attachments, coverage):
+    """Bound the report to payload identities and directory coverage, not member rows.
+
+    Only recorded archive fields are selected: unknown reader counts must not
+    appear as zero. Historical inputs without content coverage stay unqualified.
+    """
+    archive_fields = ('status', 'reason', 'scope', 'verified', 'entry_count',
+        'inventoried_entry_count', 'omitted_entry_count', 'limited_name_count',
+        'issues', 'limits', 'macro_container_entries_scope')
+    return {'coverage':coverage, 'attachments':[
+        {**{key:item[key] for key in ('part_id', 'sha256', 'content_analysis') if key in item},
+         'archive':{key:item['archive'][key] for key in archive_fields if key in item['archive']}}
+        for item in attachments]}
+
+
 def _calculate_entropy(data):
     if not data: return 0.0
     size = len(data)
@@ -133,6 +169,7 @@ def _analyze_attachment(att_data, filename, declared_mime='application/octet-str
         'mime_detection':{'status':'not_evaluated', 'reason':'Declared MIME is not independent type detection'},
         'entropy':_calculate_entropy(att_data), 'ole_macro':None,
         'macro_analysis':{'status':'not_evaluated', 'reason':'No validated macro analysis performed'},
+        'content_analysis':_content_coverage(),
         'archive':archive,
         'status':'partial' if archive['status'] in {'limited','error','partial'} else 'metadata_only',
         'assessment_status':'partial', 'risk_score':None, 'risk_level':'not_evaluated',

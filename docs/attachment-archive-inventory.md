@@ -121,3 +121,10 @@ runtime's actual parser views determine the metadata; the tests assert the newer
 reader behavior explicitly as well as the limits and path observations.
 The additional unsanitized path observation is also available on Python 3.11,
 even though that reader does not replace its effective filename with the extra.
+
+The subsequent [attachment capability reconciliation](attachment-capability-coverage.md)
+makes unassessed document/URL/resource/member content explicit in new attachment
+records and stage coverage. Its bounded technical-report view exposes this
+inventory's recorded status, known counts, omissions and limits without copying
+all member records or inventing zero counts after reader failure. The ZIP reader
+and inventory contract above are unchanged.

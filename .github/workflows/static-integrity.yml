@@ -228,6 +228,12 @@ jobs:
       - name: Verify actual offline attachment ZIP inventories and exports
         run: python tests/integration_archive_inventory_real.py
 
+      - name: Verify attachment content coverage and bounded report observations
+        run: python -B -m unittest discover -s tests -p 'test_attachment_capabilities.py' -v
+
+      - name: Verify actual opaque attachment capabilities through CLI HTTP and ZIP
+        run: python -B tests/integration_attachment_capabilities_real.py
+
       - name: Verify literal report evidence contracts
         run: python -m unittest discover -s tests -p 'test_report_evidence.py' -v
       - name: Verify literal extraction reports through actual CLI and HTTP exports
@@ -467,3 +473,7 @@ jobs:
         run: python tests/integration_archive_inventory_real.py
       - name: Verify shared HTML text boundaries on maintenance runtimes
         run: python -m unittest discover -s tests -p 'test_html_text_contexts.py' -v
+      - name: Verify attachment capability and report coverage on maintenance runtimes
+        run: python -B -m unittest discover -s tests -p 'test_attachment_capabilities.py' -v
+      - name: Verify actual attachment capability CLI HTTP and ZIP on maintenance runtimes
+        run: python -B tests/integration_attachment_capabilities_real.py

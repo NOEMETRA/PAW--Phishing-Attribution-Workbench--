@@ -34,3 +34,10 @@ also checks literal Received/authentication/deobfuscation and executive values
 under the linked report contract. Other publishers/renderers and broader
 resource/control-character admission remain separate audit work;
 it does not establish malware detection or email authenticity.
+
+The subsequent [attachment capability family](attachment-capability-coverage.md)
+adds a separate preceding JSON section for actual metadata-stage coverage,
+unavailable content scopes and bounded archive status/count/limit summaries.
+Unknown reader counts remain absent and member rows are not duplicated into the
+report. The literal five-column table retains the contract above. This extends
+the report consumer; it does not add attachment document analysis.

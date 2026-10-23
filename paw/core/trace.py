@@ -8,6 +8,7 @@ from .mime_analysis import analyze_mime
 from .header_inventory import inventory_headers, inventory_coverage
 from .mime_header_inventory import inventory_mime_headers, mime_header_coverage
 from .mime_body_evidence import preserve_body_parts, body_evidence_coverage
+from .attach import scan_attachments, attachment_coverage, attachment_report_view
 from .evidence import seal_case
 from .runtime import mark_stage, read_progress, atomic_json
 from .received import normalize_received
@@ -568,10 +569,9 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
     atts = []
     if "_msg_obj" in headers or msg:
         try:
-            from .attach import scan_attachments
             atts = scan_attachments(msg, mime_result=mime_result, evidence_dir=os.path.join(case_dir, "attachments"))
             write_json(os.path.join(case_dir,"attachments.json"), atts)
-            stage_status["attachment_metadata"] = {"status": "partial" if any(item["status"] == "partial" for item in atts) else "completed", "count": len(atts), "malware_analysis": "not_evaluated"}
+            stage_status["attachment_metadata"] = attachment_coverage(atts)
         except Exception as e:
             stage_status["attachment_metadata"] = {"status": "failed", "reason": str(e)}
             print(f"[attach] scanning failed: {e}")
@@ -1191,6 +1191,12 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
                 proof_data = json.load(f)
             tech_md += f"Inclusion verified: {proof_data.get('treeSize') is not None}\n"
         tech_md += "\n"
+    # Directory omissions/errors and unavailable content work are evidence too.
+    # Keep this bounded view separate from the existing literal metadata table.
+    tech_md += "\n## Attachment extraction coverage\n"
+    tech_md += "Coverage and archive counts are recorded observations; unknown counts remain absent. "
+    tech_md += "Metadata completion does not establish content analysis or safety.\n\n"
+    tech_md += markdown_json(attachment_report_view(atts, stage_status['attachment_metadata']))
     # Add attachments section
     if atts:
         tech_md += "\n## Attachments (metadata-only)\n"
