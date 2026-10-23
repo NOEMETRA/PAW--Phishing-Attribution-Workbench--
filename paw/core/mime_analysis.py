@@ -244,6 +244,36 @@ def part_defects(part):
     return list(dict.fromkeys(defects))
 
 
+def _mime_context(part, partial_ancestors):
+    """Describe parser selection without guessing alternative MIME trees/views.
+
+    Counts and first positions are fixed-size observations of this entity's
+    headers, not copied declarations or completeness of the header inventory.
+    Structure defects are those already reported by message parsing; later
+    payload-decoder defects retain their separate transfer/defect observations.
+    """
+    headers = {name:{'field_count':0, 'selected_header_index':None,
+                     'selection':'parser_default', 'selected_field_defect_count':0}
+               for name in ('content-type', 'content-disposition', 'content-transfer-encoding')}
+    for index, (name, _) in enumerate(part.raw_items()):
+        field = headers.get(name.lower())
+        if field is not None:
+            field['field_count'] += 1
+            if field['selected_header_index'] is None:
+                field.update(selected_header_index=index, selection='first_occurrence')
+    for name, field in headers.items():
+        if field['field_count']:
+            field['selected_field_defect_count'] = len(getattr(part[name], 'defects', ()))
+    structure_defects = len(part.defects)
+    partial = bool(partial_ancestors) or bool(structure_defects) or any(field['field_count'] > 1 or
+        field['selected_field_defect_count'] for field in headers.values())
+    return {'status':'partial' if partial else 'completed', 'verified':False,
+        'scope':'parser_selected_mime_context', 'headers':headers,
+        'parser_structure_defect_count':structure_defects,
+        'partial_ancestor_part_ids':list(partial_ancestors),
+        'limitation':'First fields/defaults describe the existing parser view, not a unique MIME interpretation. Structure defects are counted before transfer decoding. Header indexes are per entity; mime_header_inventory.json may omit values. Exact source: input.eml. Alternatives are not interpreted.'}
+
+
 def decode_text(part, payload):
     charset = part.get_content_charset() or 'us-ascii'
     try:
@@ -296,12 +326,21 @@ def analyze_mime(message, limits=MimeLimits()):
                    if has_embedded and isinstance(raw, bytes) else None)
     parts, text, html, javascript, urls, attachments, issues = [], [], [], [], [], [], []
     body_parts = []
+    contexts = {}
     decoded_total, text_total = 0, 0
     for part, path, attached in iter_parts(message, limits):
+        parent = contexts.get(path.rpartition('.')[0])
+        ancestors = (parent['partial_ancestor_part_ids'] + [path.rpartition('.')[0]]
+                     if parent and parent['status'] == 'partial' else [])
+        context = _mime_context(part, ancestors)
+        contexts[path] = context
         content_type = part.get_content_type()
         item = {'part_id': path, 'content_type': content_type,
                 'disposition': part.get_content_disposition(), 'filename': part.get_filename(),
-                'content_id': str(part.get('Content-ID') or ''), 'attached': attached}
+                'content_id': str(part.get('Content-ID') or ''), 'attached': attached,
+                'mime_context':context}
+        if context['status'] == 'partial':
+            issues.append({'part_id':path, 'reason':'Parser-selected MIME context is partial; see part mime_context'})
         container = part.is_multipart() and part.get_content_maintype() == 'multipart'
         if container:
             item['defects'] = part_defects(part)
@@ -340,7 +379,8 @@ def analyze_mime(message, limits=MimeLimits()):
                     issues.append({'part_id':path, 'original_wire':dict(item['original_wire'])})
             attachments.append({'part':part, 'part_id':path, 'payload':payload, 'byte_source':byte_source,
                 'defects':item['defects'], 'declared_mime':content_type,
-                'filename':part.get_filename(), 'disposition':part.get_content_disposition()})
+                'filename':part.get_filename(), 'disposition':part.get_content_disposition(),
+                'mime_context':context})
             if 'original_wire' in item:
                 attachments[-1]['original_wire'] = dict(item['original_wire'])
                 attachments[-1]['original_wire_payload'] = wire
@@ -379,6 +419,8 @@ def analyze_mime(message, limits=MimeLimits()):
             'javascript':'\n'.join(javascript),
             'urls':list(dict.fromkeys(urls)), 'attachments':attachments,
             'metadata':{'status':'partial' if issues else 'completed', 'parts':parts, 'issues':issues,
+                'context_partial_part_count':sum(p['mime_context']['status'] == 'partial' for p in parts),
+                'context_inherited_part_count':sum(bool(p['mime_context']['partial_ancestor_part_ids']) for p in parts),
                 'decoded_bytes':decoded_total, 'text_bytes':text_total,
                 'limits':limits.__dict__, 'source':'MIME parts of original email',
                 'limitation':'Decoded/embedded representations do not replace original input bytes'}}

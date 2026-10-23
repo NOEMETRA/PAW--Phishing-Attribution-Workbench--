@@ -7,6 +7,12 @@ for every retained node in the existing email parser tree, including multipart
 containers, supported/unsupported content, inline parts, attachments and nodes
 below encapsulated messages. It does not decode or execute their content.
 
+Capture status is separate from the [parser-selected MIME context](mime-context-evidence.md):
+all declarations may be captured while their interpretation remains partial.
+Per-entity selected header positions remain meaningful when inventory limits omit
+their values; the original EML remains authoritative. Embedded header observations
+do not become the outer MIME extraction context.
+
 ## Identity and claim scope
 
 Preorder `part_id` values start at `0` and append zero-based child indices.

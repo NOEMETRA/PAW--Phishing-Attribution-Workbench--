@@ -1041,7 +1041,9 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
     stage_status['domain_age'] = age_observation
     if age_observation['status'] != 'observed_unverified':
         score['coverage']['not_evaluated'].append('domain_age')
-    stage_status['mime_parsing'] = {'status': mime_result['metadata']['status'], 'issues': mime_result['metadata']['issues']}
+    stage_status['mime_parsing'] = {'status': mime_result['metadata']['status'], 'issues': mime_result['metadata']['issues'],
+        'context_partial_part_count':mime_result['metadata']['context_partial_part_count'],
+        'context_inherited_part_count':mime_result['metadata']['context_inherited_part_count']}
     stage_status['received_path'] = {'status': 'partial' if norm['status']=='partial' else 'parsed_unverified' if hops else 'unavailable',
         'verified':False,'schema_version':norm['received_schema_version'],
         'parsing_issues':[{'header_index':h['header_index'],'issues':h['parsing']['issues']} for h in hops if h['parsing']['issues']],
@@ -1128,6 +1130,11 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
         f"inventoried fields: {mime_header_inventory['inventoried_field_count']}; "
         f"omitted fields: {mime_header_inventory['omitted_field_count']}; status: {mime_header_inventory['status']}\n"
         "- Per-node ordered observations; embedded header claims do not describe the outer sender. Exact original: input.eml.\n"
+        "\n## MIME Interpretation Context\n"
+        f"- Artifact: mime_analysis.json; partial selected contexts: {mime_result['metadata']['context_partial_part_count']}; "
+        f"inherited partial contexts: {mime_result['metadata']['context_inherited_part_count']}\n"
+        "- First-field/default parser views; duplicate or malformed MIME declarations, parser structure defects and inherited context uncertainty remain partial. "
+        "Alternative interpretations are not evaluated. Per-entity header positions refer to mime_header_inventory.json when retained; exact source: input.eml.\n"
         "\n## MIME Body Evidence\n"
         f"- Artifact: mime_body_evidence.json; preserved parts: {body_inventory['part_count']}; "
         f"payload bytes: {body_inventory['payload_bytes']}; status: {body_inventory['status']}\n"

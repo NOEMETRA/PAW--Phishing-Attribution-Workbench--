@@ -151,6 +151,9 @@ def scan_attachments(msg_obj, mime_result=None, evidence_dir=None):
         if 'transfer_decoding' in attachment:
             item['transfer_decoding'] = dict(attachment['transfer_decoding'])
             item['status'] = 'partial'
+        if 'mime_context' in attachment:
+            item['mime_context'] = dict(attachment['mime_context'])
+            if item['mime_context']['status'] == 'partial': item['status'] = 'partial'
         if 'original_wire' in attachment:
             item['original_wire'] = dict(attachment['original_wire'])
             if item['original_wire']['status'] != 'captured': item['status'] = 'partial'

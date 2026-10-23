@@ -71,6 +71,9 @@ jobs:
       - name: Verify per-part body byte evidence and charset provenance
         run: python -m unittest discover -s tests -p 'test_mime_body_evidence.py' -v
 
+      - name: Verify parser-selected MIME context and inherited uncertainty
+        run: python -m unittest discover -s tests -p 'test_mime_context.py' -v
+
       - name: Verify URL identity, candidate provenance and decoding bounds
         run: python -m unittest discover -s tests -p 'test_url_contracts.py' -v
 
@@ -218,6 +221,9 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_report_evidence.py' -v
       - name: Verify literal extraction reports through actual CLI and HTTP exports
         run: python tests/integration_attachment_report_real.py
+
+      - name: Verify actual MIME selection and inherited context across CLI and HTTP
+        run: python tests/integration_mime_context_real.py
 
       - name: Verify original embedded MIME spans and separate derived evidence
         run: python -m unittest discover -s tests -p 'test_embedded_wire_evidence.py' -v
