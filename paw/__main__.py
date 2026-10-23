@@ -434,7 +434,7 @@ For help: paw help <command>
                 file_monitor = FileMonitor()
                 print("File observations use this process baseline; first scan is not historical change detection.")
                 changes = file_monitor.monitor_all_cases()
-                print("Scope: regular non-link files; hidden/pyc exclusions; non-atomic observations with source limits.")
+                print("Scope: all single-link regular files; no filename or extension exclusions; non-atomic observations with source limits.")
                 if changes:
                     print("🔍 File Changes Detected:")
                     for change in changes:
@@ -455,7 +455,7 @@ For help: paw help <command>
                 from .sentinel import FileMonitor
                 file_monitor = FileMonitor()
                 report = file_monitor.generate_integrity_report()
-                print("Scope: regular non-link files; hidden/pyc exclusions; non-atomic observations with source limits.")
+                print("Scope: all single-link regular files; no filename or extension exclusions; non-atomic observations with source limits.")
                 print("🔐 File Integrity Report:")
                 print(f"   Total cases: {report['total_cases']}")
                 print(f"   ✅ Integrity OK: {report['integrity_summary']['ok']}")

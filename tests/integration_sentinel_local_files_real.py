@@ -66,21 +66,32 @@ def main():
                     case = cases / name
                     case.mkdir()
                     (case/'input.eml').write_bytes(b'Original case bytes')
+                    (case/'.hidden-source').write_bytes(b'Literal hidden fixture bytes')
+                    (case/'saved.pyc').write_bytes(b'Literal opaque fixture bytes; never executed')
                     if name != 'case-unsealed': seal_case(case)
                     if name == 'case-tampered': (case/'input.eml').write_bytes(b'Changed case bytes')
             before = snapshot(work)
             for action in ('files', 'integrity'):
                 exit_code, text = invoke(work, action)
                 assert exit_code == 0, text
+                assert 'all single-link regular files; no filename or extension exclusions' in text, text
+                assert 'hidden/pyc exclusions' not in text, text
                 if action == 'integrity':
                     expected = (0, 0, 0) if mode in ('missing-cases', 'empty-cases') else (1, 1, 1)
                     for label, count in zip(('Integrity OK', 'Compromised', 'Unknown'), expected):
                         assert f'{label}: {count}' in text, text
+                    if mode not in ('missing-cases', 'empty-cases'):
+                        for case in sorted(cases.iterdir()):
+                            assert f'{case.name}: {sum(p.is_file() for p in case.rglob("*"))} files' in text, text
                 else:
                     assert 'first scan is not historical change detection' in text, text
                     if mode in ('missing-cases', 'empty-cases'): assert 'No case observations returned' in text, text
                     else:
-                        for name in ('case-sealed', 'case-tampered', 'case-unsealed'): assert name in text, text
+                        for name in ('case-sealed', 'case-tampered', 'case-unsealed'):
+                            assert name in text, text
+                            section=text.split('Case: '+name,1)[1].split('\n📁 Case:',1)[0]
+                            count=sum(p.is_file() for p in (cases/name).rglob('*'))
+                            assert f'New files: {count}' in section, text
                 assert snapshot(work) == before, (mode, action)
                 checks.append({'case': mode, 'action': action, 'exit_code': exit_code,
                                'source_tree_unchanged': True})

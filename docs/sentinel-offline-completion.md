@@ -113,7 +113,7 @@ engine acceptance, platform installation/support and UI remain separate gates.
 
 ## Executed evidence
 
-On the final frozen runtime/test/workflow sources: **879 tests, 866 passed and 13
+On reviewed head `6943305`, with frozen runtime/test/workflow sources: **879 tests, 866 passed and 13
 platform exclusions**, in 95.797 seconds on Windows/Python 3.13. The initial 36 new
 contracts fail on the isolated merged-PR83 baseline (51 failed assertions and 24
 errors including subtests, one exclusion); these are not 75 independent defects.
@@ -151,3 +151,12 @@ After these corrections, the general suite, cold completion, original-EML storag
 family, configured admission, geographic, local-file, hash-failure, verification-error,
 both relevant legacy integrations and actual wheel checks all pass serially on
 frozen sources. Static contracts are repeated after documentation-only changes.
+
+The subsequent review identified stale CLI scope text in both file commands.
+Only those two production strings were aligned with the all-regular-file inventory.
+The final actual cold CLI integration passes all 18 invocations, now including
+literal hidden/`.pyc` fixture bytes, independent file counts, matching scope text
+and unchanged source trees. Static contracts and the actual 91-source wheel pass
+again after that text correction. The 879-test suite and ten-integration matrix
+above are evidence for the preceding `6943305` head; the final text-only runtime
+change is covered by these focused reruns and the committed GitHub CI.
