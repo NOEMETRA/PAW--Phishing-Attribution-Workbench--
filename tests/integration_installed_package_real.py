@@ -4,11 +4,13 @@ Run with the clean virtualenv's Python after installing the wheel and all its
 dependencies. No browser, Docker, external endpoint or attachment is executed.
 """
 import argparse
+from contextlib import contextmanager
 import hashlib
 import io
 import json
 import os
 from pathlib import Path
+import shutil
 import socket
 import subprocess
 import sys
@@ -24,6 +26,47 @@ REPO = Path(__file__).resolve().parents[1]
 
 def read(path):
     return json.loads(path.read_text(encoding='utf-8'))
+
+
+@contextmanager
+def validation_directory(output, env):
+    """Stop registered writers before deletion; preserve every failed run."""
+    root = Path(tempfile.mkdtemp(prefix='paw-installed-')).resolve()
+    succeeded = False
+    try:
+        yield root
+        succeeded = True
+    finally:
+        cleanup = dict(data_directory=str(root), tree_stopped=False, preserved=True)
+        try:
+            # Import only the installed recovery implementation, not checkout
+            # code. It checks boot/PID creation/group identity before killing.
+            recovery = subprocess.run([sys.executable, '-I', '-c', '''
+import asyncio,json,sys
+from pathlib import Path
+from paw.core.process_recovery import recover_worker
+async def main():
+    root = Path(sys.argv[1])
+    outcomes = []
+    for control in sorted(root.glob('*/jobs/analysis_*')):
+        if control.is_dir():
+            outcomes.append(dict(control=str(control.relative_to(root)), **await recover_worker(control)))
+    print(json.dumps(dict(controls=outcomes, tree_stopped=all(o['tree_stopped'] is True for o in outcomes))))
+asyncio.run(main())
+''', str(root)], cwd=root, env=env, capture_output=True, timeout=60)
+            (output / 'cleanup.log').write_bytes(recovery.stdout + recovery.stderr)
+            assert recovery.returncode == 0, 'Installed recovery helper failed'
+            cleanup.update(json.loads(recovery.stdout))
+        except (OSError, ValueError, AssertionError, subprocess.TimeoutExpired) as error:
+            cleanup['error'] = str(error)
+        if succeeded and cleanup['tree_stopped'] is True:
+            shutil.rmtree(root)
+            cleanup['preserved'] = False
+        (output / 'cleanup.json').write_text(json.dumps(cleanup, indent=2), encoding='utf-8')
+        if cleanup['preserved']:
+            print('Validation data preserved: ' + str(root), file=sys.stderr)
+        if succeeded and cleanup['tree_stopped'] is not True:
+            raise AssertionError('Worker shutdown unconfirmed; validation data preserved')
 
 
 def main():
@@ -45,8 +88,7 @@ def main():
         assert (result.returncode == 0) == success, (name, result.stdout + result.stderr)
         return result
 
-    with tempfile.TemporaryDirectory(prefix='paw-installed-') as temporary:
-        root = Path(temporary).resolve()
+    with validation_directory(args.output, env) as root:
         assert not root.is_relative_to(REPO)
         location = run([sys.executable, '-I', '-c',
             'import json,paw,sys; print(json.dumps({"package":paw.__file__,"prefix":sys.prefix,'

@@ -35,6 +35,14 @@ jobs:
             "$GITHUB_WORKSPACE/tests/integration_installed_package_real.py" \
             --wheel "$RUNNER_TEMP"/paw-wheel/paw-*.whl \
             --output "$RUNNER_TEMP/paw-installed-results"
+      - name: Verify failed installed acceptance stops workers and preserves data
+        working-directory: ${{ runner.temp }}
+        run: |
+          env -u PYTHONPATH -u PYTHONHOME PYTHONNOUSERSITE=1 \
+            "$RUNNER_TEMP/paw-installed/bin/python" -B \
+            "$GITHUB_WORKSPACE/tests/integration_installed_cleanup_real.py" \
+            --wheel "$RUNNER_TEMP"/paw-wheel/paw-*.whl \
+            --output "$RUNNER_TEMP/paw-installed-results/cleanup-regression"
       - name: Verify canonical and noncanonical MIME fixture accounting
         working-directory: ${{ runner.temp }}
         env:

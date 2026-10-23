@@ -86,7 +86,9 @@ env -u PYTHONPATH -u PYTHONHOME PYTHONNOUSERSITE=1 \
 ```
 
 Use a new output directory for each invocation. `results.json` and bounded command
-logs remain there; temporary case directories are deleted by the harness.
+logs remain there. Successful temporary case directories are deleted only after
+installed recovery confirms registered writers stopped. Failed runs and unknown
+shutdown states retain their directories, with paths and outcomes in `cleanup.json`.
 The parent harness uses only the standard library; isolated child imports check
 the virtualenv location. The console runs with an external data working directory
 and no `PYTHONPATH`; the installed API runs via `python -I -m uvicorn`.
@@ -134,6 +136,37 @@ expected change is this reproduced MIME harness repair. Two new acceptance files
 other 79 source jobs are not repeated after a harness-only repair; their tested
 production bytes remain identical. Case artifacts from the failed probes are
 retained separately; none is rewritten to obtain a pass.
+
+## Review follow-up, 24 October 2026
+
+The review of exact PR99 head `ef82e2236caecdc44510caad97a3505303663fe5`
+reproduced a harness lifecycle defect. An external observer suspended an actual
+registered no-egress API worker and killed its owned loopback API. The installed
+acceptance harness failed with connection refused, but its `TemporaryDirectory`
+removed the worker's data and process journal while that worker remained alive.
+The observer then killed the identified worker; this failure record is retained
+outside Git. This does not change the earlier successful-run measurements or
+establish a new production API defect: crash recovery was already an explicit
+separate protocol, which the new harness failed to invoke before deleting data.
+
+The harness now invokes the **installed** identity-checked recovery protocol on
+each registered control before successful deletion. It preserves every failed
+run and refuses success/deletion when shutdown is unconfirmed. `cleanup.json`
+records outcomes and retained paths; the parent still uses only the standard
+library and the recovery child uses `python -I`, without checkout imports.
+
+`integration_installed_cleanup_real.py` executes the complete installed acceptance
+script, observes the real registered API worker, suspends it and kills its API.
+It requires the acceptance script to fail, the worker to stop, and original
+uploaded bytes plus the original process-identity journal to remain unchanged.
+A separate incomplete-control fixture has no actual writer; it requires unknown
+shutdown to refuse success and preserve bytes. The Linux CI matrix runs this
+regression on 3.11–3.14. No mock engine, live target, browser or detonation is used.
+
+The 301/303-file freeze above describes the initially reviewed `ef82e223`.
+This follow-up changes only the acceptance harness, its new CI workflow and this
+record, and adds the cleanup regression. Production sources, scoring, parsers,
+original cases, existing unit tests and the existing static workflow stay unchanged.
 
 ## R08 closure
 
