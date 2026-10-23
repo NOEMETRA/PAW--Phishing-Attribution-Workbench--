@@ -129,6 +129,11 @@ Constructed fixtures establish execution/evidence contracts, not classifier
 accuracy or authenticity. No sample URL/domain was visited/resolved, no
 attachment executed and no Docker started. Application no-egress is not OS
 containment. Codex remained running without an actionable result; at the owner's
-request Copilot replaces that pending review for this PR. Fresh exact-head
-Copilot review and CI remain required before integration; this family does not
-close the entire engine audit.
+request Copilot replaced that pending review for this PR. The
+[final review](https://github.com/NOEMETRA/PAW--Phishing-Attribution-Workbench--/pull/94#pullrequestreview-5631910326)
+on `b82104c7a166ba245385fba7b496d5b435f33653` recommends approval with no open
+issues. All three head checks (`39992858333`) and merge checks (`39994215958`)
+passed. PR94 merged as `e7a981131e9898f1c7af6c46db2fd0338fba46b0`, with the
+same tree as the reviewed head. The [finite HTML/CSS perimeter](html-css-scope.md)
+now distinguishes supported contexts, exclusions and concrete residual gaps;
+this family does not close the entire engine audit.
