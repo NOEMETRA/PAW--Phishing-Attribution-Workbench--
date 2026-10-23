@@ -224,3 +224,10 @@ boundaries; malformed expressions remain non-target text rather than truncated
 URLs. Data/relative arguments cannot contribute embedded HTTP substrings.
 CSS escapes and browser resource selection remain unevaluated; other lexical
 contexts retain their prior behavior. Historical v1/v2 artifacts are preserved.
+
+The [whole scalar HTML field contract](html-scalar-url-contexts.md) extends source
+views to v4 for href/src/action/formaction/poster and object.data. Complete
+recognized values are retained; nonnetwork envelopes and invalid fields do not
+contribute inner HTTP strings or valid-looking prefixes. Legal punctuation and
+all original recovered-source records remain intact. Browser normalization and
+relative resolution remain unevaluated; historical v1/v2/v3 cases are preserved.

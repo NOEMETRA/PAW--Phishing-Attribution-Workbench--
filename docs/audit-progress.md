@@ -1,30 +1,32 @@
 # Stato dell'audit PAW
 
-Riferimento integrato: PR89, commit
-`d387ddbc4673bc40f7f4e5e80c9c554e9f298d49`; 23 ottobre 2026 (Europe/Rome).
-Review Codex senza rilievi sullo head corretto `03629d9aeaf8c243555c1511310cc93caa151ff9`,
+Riferimento integrato: PR90, commit
+`7d97746bc645b3c67fcff3f1921fc3044a9c8d7a`; 23 ottobre 2026 (Europe/Rome).
+Review Codex senza rilievi sullo head testato `0a3b9fac953c29a8d0eb14dfc72694c46dffe64d`,
 nessun thread aperto e tre check verdi su head e merge, con tree identico.
-I [confini srcset/imagesrcset](html-url-list-contexts.md) e la relativa ammissione
-degli URL interi sono integrati. Contesto MIME, ammissione input, report letterali,
+I [confini srcset/imagesrcset](html-url-list-contexts.md), l'ammissione degli URL
+interi e i [confini CSS letterali](css-url-contexts.md) sono integrati.
+Contesto MIME, ammissione input, report letterali,
 Sentinel offline ed esecuzione mantengono le evidenze e i limiti documentati.
 
-Il blocco corrente corregge tre casi di [confine CSS url()](css-url-contexts.md):
-sintassi finale inclusa nella destinazione e sottostringhe HTTP promosse da
-argomenti data/relativi. Attributi style e testo degli elementi style condividono
-lo scanner degli argomenti letterali; le fonti v3 ricostruiscono la stessa vista.
-Parentesi quotate, escape percentuali e differenze fra entità negli attributi e
-testo raw restano preservati. Espressioni malformate restano evidenza non-target.
-Decodifica degli escape CSS, conformità completa, cascade e scelta delle risorse
-restano non valutate; questo non chiude tutti i contesti HTML/CSS.
+Il blocco corrente corregge i [campi URL HTML singoli](html-scalar-url-contexts.md):
+href/src/action/formaction/poster e data di object. I valori completi, con spazi,
+apici o contenitori non HTTP, non diventano più prefissi o sottostringhe validi.
+Osservazioni MIME, recupero e fonti v4 condividono il confine del campo;
+metadati arbitrari e le altre grammatiche mantengono il contratto precedente.
+Normalizzazione del browser, risoluzione relativa, decodifica degli escape CSS,
+conformità completa e scelta delle risorse restano non valutate.
 
-Suite generale: 920 test (906 superati, 14 esclusioni); cinque integrazioni reali
-seriali passate e wheel di 93 sorgenti. Nuovo collaudo CSS: otto full CLI e tre
-worker HTTP; ripetuti anche HTML liste (11/5), fonti URL (9/5) e identità URL
-(11 CLI). Originali/corpi, fonti, coperture, sigilli e ZIP sono confrontati.
-Tre sorgenti package esistenti modificati, 89 invariati e un helper aggiunto.
-Il wheel è stato ricostruito dopo l'inclusione del nuovo file nell'indice Git.
-Tutti i 243 hash Python/workflow restano invariati durante i validator seriali;
-documenti aggiornati solo dopo la loro fine. Review/CI del blocco CSS da chiudere.
+Suite generale: 929 test (915 superati, 14 esclusioni); sei integrazioni reali
+seriali passate e wheel di 93 sorgenti. Nuovo collaudo campi singoli: otto full CLI
+e tre worker HTTP; ripetuti CSS (8/3), HTML liste (11/5), fonti URL (9/5) e identità
+URL (11 CLI). Originali/corpi, fonti, coperture, sigilli e ZIP sono confrontati.
+Il caso HTTP verifica anche 5.000 collegamenti/4.096 conservati/904 omessi.
+Quattro sorgenti package modificati, 89 invariati. La sola aspettativa del
+verificatore integrato sui target condivisi è stata corretta e tutte le sei
+integrazioni ripetute; runtime e test unitari invariati dopo la suite generale.
+245 hash Python/workflow finali verificati. Documenti dopo la fine dei validator;
+review/CI della famiglia corrente restano da chiudere.
 
 Il lavoro corrente stabilizza il motore offline e la profondità delle evidenze.
 Il [registro per famiglia](engine-stabilization-checkpoint.md) distingue contratti
@@ -54,7 +56,7 @@ I prossimi blocchi hanno criteri di chiusura comuni:
    è ora registrata sullo stesso merge; piattaforme e perimetri attivi restano separati.
 2. **Motore offline integrato:** preset/batch/HTTP/interruzioni e conservazione
    passano nella matrice integrata. Ammissione, malformati
-   e relativa contabilità sono integrati; chiudere review/CI dei confini CSS letterali,
+   e relativa contabilità sono integrati; chiudere review/CI dei campi URL HTML singoli,
    poi completare la riconciliazione delle capacità pubblicizzate con
    header/MIME/URL/allegati e report; verificare insieme ingressi malformati,
    omissioni, budget, interruzioni e parità CLI/API/verify/ZIP. Correggere per
