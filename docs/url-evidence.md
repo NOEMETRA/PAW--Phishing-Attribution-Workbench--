@@ -217,3 +217,10 @@ descriptor/nonnetwork content; historical version 1 artifacts are retained.
 Descriptor/list conformance, relative resolution and resource selection remain
 explicitly not evaluated. These changes correct affected list-derived URLs;
 source linkage itself still does not modify the URL records it receives.
+
+The [literal CSS URL boundary contract](css-url-contexts.md) extends HTML source
+views to v3. Style attributes and style raw text share whole `url(...)` argument
+boundaries; malformed expressions remain non-target text rather than truncated
+URLs. Data/relative arguments cannot contribute embedded HTTP substrings.
+CSS escapes and browser resource selection remain unevaluated; other lexical
+contexts retain their prior behavior. Historical v1/v2 artifacts are preserved.

@@ -536,7 +536,7 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
         'invalid_or_unresolved_count':sum(r.get('status') != 'completed' for r in url_results),
         'limited_analysis_count':sum(r.get('analysis_status') == 'partial' for r in url_results),
         'embedded_candidate_count':sum(len(r.get('embedded_url_candidates', [])) for r in url_results),
-        'limitation':'Embedded destinations and visual comparisons are unverified; syntax validity is not authenticity. HTML srcset/imagesrcset URL tokenization is descriptive: list conformance, descriptor validity, relative URL resolution and resource selection are not evaluated'}
+        'limitation':'Embedded destinations and visual comparisons are unverified; syntax validity is not authenticity. HTML srcset/imagesrcset URL tokenization is descriptive: list conformance, descriptor validity, relative URL resolution and resource selection are not evaluated. Literal CSS url() argument boundaries are interpreted; CSS escape decoding, full CSS conformance, cascade and browser resource selection are not evaluated. Malformed url() expressions with recognized candidates remain whole non-URL evidence; other CSS text retains lexical candidate behavior'}
     # Automatic detonation if URLs found
     mark_stage('detonation')
     if urls and not no_egress:

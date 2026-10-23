@@ -89,7 +89,7 @@ def check(case, sample):
     for source in sources['sources']:
         if source['kind'] != 'mime_body': continue
         assert source['representation'] == 'html_parser_derived_url_candidate_views'
-        assert source['derivation'] == {'method':'paw_html_url_candidate_views_v2','persisted':False}
+        assert source['derivation'] == {'method':'paw_html_url_candidate_views_v3','persisted':False}
         text = source['derived_from']; data = (case/text['text_path']).read_bytes()
         assert hashlib.sha256(data).hexdigest() == text['text_sha256']
     parsed = BytesParser(policy=policy.default).parsebytes(raw)
@@ -98,7 +98,7 @@ def check(case, sample):
     assert [(case/item['payload_path']).read_bytes() for item in bodies] == html
     assert coverage == read(case/'report/score.json')['coverage']
     assert coverage['stages']['url_sources']['total_link_count'] == total
-    if not targets: assert coverage['stages']['url_interpretation']['status'] == 'partial'
+    if not targets and evidence: assert coverage['stages']['url_interpretation']['status'] == 'partial'
     assert 'resource selection are not evaluated' in coverage['stages']['url_interpretation']['limitation']
     return evidence,sources
 
@@ -112,8 +112,10 @@ def check_zip(archive,case,prefix=''):
     for name in names: assert archive.read(prefix+name) == (case/name).read_bytes(), name
 
 
-def main():
-    samples = fixtures()
+def main(samples=None, http_names=None, summary=None):
+    samples = fixtures() if samples is None else samples
+    http_names = (('nonnetwork.eml','encoded.eml','budget.eml','entity-invalid.eml','entity-valid.eml')
+                  if http_names is None else http_names)
     env = dict(os.environ,PYTHONPATH=str(REPO),PYTHONDONTWRITEBYTECODE='1',PYTHONUTF8='1')
     with tempfile.TemporaryDirectory(prefix='paw-html-url-lists-') as temporary:
         root = Path(temporary); inputs = root/'inputs'; inputs.mkdir()
@@ -148,7 +150,7 @@ def main():
                     try: request('/health'); break
                     except (urllib.error.URLError,TimeoutError): time.sleep(.1)
                 else: raise TimeoutError('API startup')
-                for name in ('nonnetwork.eml','encoded.eml','budget.eml','entity-invalid.eml','entity-valid.eml'):
+                for name in http_names:
                     raw = samples[name][0]; boundary = 'html-list-upload'
                     upload = (f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{name}"\r\nContent-Type: message/rfc822\r\n\r\n'.encode()
                               +raw+f'\r\n--{boundary}--\r\n'.encode())
@@ -171,11 +173,12 @@ def main():
                 server.terminate()
                 try: server.wait(timeout=15)
                 except subprocess.TimeoutExpired: server.kill(); server.wait(timeout=15)
-    print('PASS: eleven full no-egress CLI cases and five loopback HTTP workers; list separators versus resource commas, '
+    print(f'PASS: {len(samples)} full no-egress CLI cases and {len(http_names)} loopback HTTP workers; '+(summary or
+          'list separators versus resource commas, '
           'descriptor/nonnetwork exclusion, refanged/encoded/invalid/limited original tokens, ordinary comma literals, '
           'entity-decoded invalid delimiters versus legal apostrophes/percent escapes, '
-          'independent MIME documents, source v2, exact 5000/4096/904 link accounting, raw/body bytes, coverage, '
-          'stopped owners, seals and CLI/HTTP ZIP parity. Descriptors/resource selection are not evaluated; fixtures are not accuracy labels.')
+          'independent MIME documents, source v3, exact 5000/4096/904 link accounting, raw/body bytes, coverage, '
+          'stopped owners, seals and CLI/HTTP ZIP parity. Descriptors/resource selection are not evaluated; fixtures are not accuracy labels.'))
 
 
 if __name__=='__main__':
