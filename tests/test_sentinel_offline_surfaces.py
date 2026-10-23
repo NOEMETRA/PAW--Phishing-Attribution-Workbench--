@@ -54,6 +54,72 @@ class SentinelOfflineSurfaces(unittest.TestCase):
             path.write_text(json.dumps(value),encoding='utf-8')
             with self.assertRaises(ValueError): SentinelConfig(str(path))
 
+    def test_explicit_null_profile_is_rejected_without_replacing_config(self):
+        path=Path(self.config.config_file)
+        self.config.set('storage.limits',{})
+        published=path.read_bytes(); live=self.config.get_storage_config()
+        with self.assertRaises(ValueError): self.config.set('storage.limits',None)
+        self.assertEqual(path.read_bytes(),published)
+        self.assertEqual(self.config.get_storage_config(),live)
+        path.write_text('{"storage":{"limits":null}}',encoding='utf-8')
+        with self.assertRaises(ValueError): SentinelConfig(str(path))
+        path.write_text('{"storage":{}}',encoding='utf-8')
+        self.assertIsNone(SentinelConfig(str(path)).get_database_options()['limits'])
+        self.assertEqual(CampaignDatabase(str(self.path),limits=None).limits['max_rows'],10000)
+
+    def test_set_installs_the_published_copy_without_caller_owned_containers(self):
+        supplied={'nested':[{'enabled':True}]}
+        self.config.set('monitoring.supplied',supplied)
+        path=Path(self.config.config_file); published=path.read_bytes()
+        supplied['nested'][0]['enabled']=False; supplied['nested'].append(float('nan'))
+        self.assertEqual(self.config.get('monitoring.supplied'),{'nested':[{'enabled':True}]})
+        self.assertEqual(path.read_bytes(),published)
+        self.config.set('monitoring.enabled',False)
+        self.assertEqual(json.loads(path.read_text())['monitoring']['supplied'],{'nested':[{'enabled':True}]})
+
+    def test_html_and_json_publish_above_the_default_with_a_larger_profile(self):
+        limit=192*1024**2
+        database=CampaignDatabase(str(self.path),read_only=True,limits={'max_output_bytes':limit})
+        reporter=GeographicReporter(database); reporter.reports_dir=self.root/'large-report'
+        report=reporter._build_report()
+        # Actual encoded report above the former 64 MiB HTML ceiling; no I/O stub.
+        report['declared_fixture']=['x'*(1024**2)]*65
+        outputs=reporter._save_report(report,'both')
+        self.assertEqual(len(outputs),2)
+        self.assertTrue(all(Path(name).stat().st_size>64*1024**2 for name in outputs))
+        self.assertLess(sum(Path(name).stat().st_size for name in outputs),limit)
+        with open(outputs[0],encoding='utf-8') as handle:
+            decoded=json.load(handle)
+        self.assertEqual(len(decoded['declared_fixture']),65)
+        self.assertEqual(decoded['declared_fixture'][-1],'x'*(1024**2))
+        with open(outputs[1],'rb') as handle:
+            self.assertIn(b'Content-Security-Policy',handle.read(512))
+            handle.seek(-20,2); self.assertTrue(handle.read().endswith(b'</pre></body></html>'))
+
+    def test_all_case_directory_budget_is_shared_and_preserves_baseline(self):
+        cases=self.root/'cases'
+        for name in ('case-one','case-two'): (cases/name/'child/deep').mkdir(parents=True)
+        monitor=FileMonitor(str(cases),max_directories=4)
+        before=dict(monitor._baseline_hashes)
+        for operation in (monitor.monitor_all_cases,monitor.generate_integrity_report):
+            with self.subTest(operation=operation):
+                with self.assertRaises(ValueError): operation()
+                self.assertEqual(monitor._baseline_hashes,before)
+        # A new invocation starts with a fresh budget after the failed traversal.
+        monitor._limits['max_directories']=100
+        self.assertEqual(monitor.generate_integrity_report()['total_cases'],2)
+
+    def test_all_case_budget_covers_later_walks_and_rolls_back_prior_case_effects(self):
+        cases=self.root/'cases'; case=cases/'case-one'; case.mkdir(parents=True)
+        selected=case/'input.eml'; selected.write_bytes(b'original')
+        monitor=FileMonitor(str(cases),max_directories=3)
+        monitor.check_file_changes('case-one'); before=dict(monitor._baseline_hashes)
+        selected.write_bytes(b'changed fixture')
+        with self.assertRaises(ValueError): monitor.monitor_all_cases()
+        self.assertEqual(monitor._baseline_hashes,before)
+        monitor._limits['max_directories']=100
+        self.assertTrue(monitor.monitor_all_cases()[0]['modified_files'])
+
     def test_geographic_selection_uses_the_same_config_admission_and_binding(self):
         path=self.root/'geo.json'
         for raw in ('{"storage":{"database_path":"file:unexpected?mode=rwc"}}',

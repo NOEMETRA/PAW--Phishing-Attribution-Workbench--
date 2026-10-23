@@ -18,8 +18,11 @@ attivi rifiutano sotto no-egress prima di I/O o thread; servizio e algoritmi att
 restano S14. La chiusura è del perimetro offline dichiarato, soggetta alla review/CI
 del nuovo blocco, non di ogni algoritmo del modulo o dell'intero motore.
 
-Sui sorgenti finali congelati: 874 test in 102,155 secondi, 861 superati e 13
-esclusioni Windows. I 36 nuovi contratti sul baseline PR83 riproducono 51 asserzioni
+Sui sorgenti finali congelati: 879 test in 95,797 secondi, 866 superati e 13
+esclusioni Windows. Quattro P2 fondati della review #84 sono corretti, con cinque
+regressioni aggiuntive (41 nuovi contratti nella famiglia): null configurato,
+alias mutabili dopo il salvataggio, limite HTML e budget directory condiviso.
+I primi 36 nuovi contratti sul baseline PR83 riproducono 51 asserzioni
 fallite e 24 errori, includendo sottocasi; non sono 75 difetti indipendenti.
 Passano il nuovo collaudo freddo (2 API/11 CLI e un writer SQL separato), il full
 originale no-egress (5 API/6 CLI, supervisore fermato, verify/ZIP byte per byte)

@@ -73,7 +73,10 @@ class SentinelConfig:
                 raise ValueError('Sentinel storage configuration must be an object')
             if 'database_path' in config['storage']:
                 _storage_path(config['storage']['database_path'], base=self._base_dir)
-            if 'limits' in config['storage']: _resource_limits(config['storage']['limits'])
+            if 'limits' in config['storage']:
+                if type(config['storage']['limits']) is not dict:
+                    raise ValueError('Configured Sentinel limits must be an object')
+                _resource_limits(config['storage']['limits'])
 
     def _get_defaults(self) -> Dict[str, Any]:
         """Get default configuration values."""
@@ -130,10 +133,9 @@ class SentinelConfig:
                 config[k] = {}
             config = config[k]
         config[keys[-1]] = value
-        self._save_config(candidate)
-        self._config = candidate
+        self._config = self._save_config(candidate)
 
-    def _save_config(self, candidate) -> None:
+    def _save_config(self, candidate) -> Dict[str, Any]:
         """Save configuration to file."""
         self._validate_config(candidate)
         candidate = _json_tree(candidate)
@@ -160,12 +162,12 @@ class SentinelConfig:
             self._source_stamp = published_stamp
         finally:
             if temporary is not None: temporary.unlink(missing_ok=True)
+        return candidate
 
     def reset_to_defaults(self) -> None:
         """Reset configuration to default values."""
         candidate = self._get_defaults()
-        self._save_config(candidate)
-        self._config = candidate
+        self._config = self._save_config(candidate)
 
     def get_monitoring_config(self) -> Dict[str, Any]:
         """Get monitoring-specific configuration."""

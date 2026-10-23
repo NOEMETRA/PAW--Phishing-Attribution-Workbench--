@@ -168,12 +168,12 @@ class GeographicReporter:
         }
 
     @staticmethod
-    def _generate_html_report(report):
+    def _generate_html_report(report, *, max_output_bytes=64*1024**2):
         """Escaped passive text; no executable markup, scripts or remote assets."""
         case = 'All cases' if report['case_id'] is None else report['case_id']
         rows = ''.join('<tr><td>' + _html_text(country) + '</td><td>' + str(count) + '</td></tr>'
                        for country, count in report['geographic_stats']['countries'].items())
-        source = escape(''.join(_json_chunks(report, 64*1024**2, indent=2)))
+        source = escape(''.join(_json_chunks(report, max_output_bytes, indent=2)))
         return ('<!doctype html><html><head><meta charset="utf-8">'
             '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; base-uri \'none\'; form-action \'none\'">'
             '<title>Stored geographic observations</title></head><body>'
@@ -192,7 +192,8 @@ class GeographicReporter:
             outputs.append((directory / (stem + '.json'), ''.join(_json_chunks(
                 report, self.db.limits['max_output_bytes'], indent=2))))
         if output_format in ('html', 'both'):
-            outputs.append((directory / (stem + '.html'), self._generate_html_report(report)))
+            outputs.append((directory / (stem + '.html'), self._generate_html_report(
+                report, max_output_bytes=self.db.limits['max_output_bytes'])))
         if sum(len(content.encode('utf-8')) for _, content in outputs) > self.db.limits['max_output_bytes']:
             raise ValueError('Sentinel geographic output byte limit exceeded')
         self.db.check_report({**report, 'output_files': [str(path) for path, _ in outputs]})

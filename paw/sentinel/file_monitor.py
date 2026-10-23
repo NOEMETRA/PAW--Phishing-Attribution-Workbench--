@@ -8,6 +8,8 @@ import hashlib
 import json
 import stat
 import threading
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime
 from typing import Dict, List, Set, Optional, Tuple, Any, TYPE_CHECKING
 from pathlib import Path
@@ -41,6 +43,7 @@ class FileMonitor:
         self._baseline_hashes: Dict[str, str] = {}
         self._monitored_files: Set[str] = set()
         self._scan_lock = threading.RLock()
+        self._walk_budget = ContextVar('sentinel_file_walk_budget', default=None)
 
     @staticmethod
     def _admit(path, *, directory=False):
@@ -82,14 +85,27 @@ class FileMonitor:
         return result
 
     def _selection(self):
-        case_ids = self.scan_cases_directory()
-        count = size = 0
-        for case_id in case_ids:
-            for identity in self._metadata(self.get_case_files(case_id)).values():
-                count += 1; size += identity[3]
-                if count > self._limits['max_files'] or size > self._limits['max_bytes']:
-                    raise ValueError("File observation selection limit exceeded")
-        return case_ids
+        with self._directory_budget():
+            case_ids = self.scan_cases_directory()
+            count = size = 0
+            for case_id in case_ids:
+                for identity in self._metadata(self.get_case_files(case_id)).values():
+                    count += 1; size += identity[3]
+                    if count > self._limits['max_files'] or size > self._limits['max_bytes']:
+                        raise ValueError("File observation selection limit exceeded")
+            return case_ids
+
+    @contextmanager
+    def _directory_budget(self):
+        """Share traversal work across cases and repeated walks in one operation."""
+        if self._walk_budget.get() is not None:
+            yield
+            return
+        token = self._walk_budget.set({'directories': 0, 'entries': 0})
+        try:
+            yield
+        finally:
+            self._walk_budget.reset(token)
 
     def _inventory_scope(self):
         return {'scope': 'all single-link regular files; no filename or extension exclusions',
@@ -123,15 +139,17 @@ class FileMonitor:
         if not case_path.exists():
             return []
 
-        files = []; directories = 0; entries = 0
+        files = []
+        budget = self._walk_budget.get()
+        if budget is None: budget = {'directories': 0, 'entries': 0}
         def scan_failed(error):
             raise error
         # Walk through all subdirectories
         for root, dirs, filenames in os.walk(case_path, onerror=scan_failed):
-            directories += 1; entries += len(dirs) + len(filenames)
-            if (directories > self._limits['max_directories'] or
+            budget['directories'] += 1; budget['entries'] += len(dirs) + len(filenames)
+            if (budget['directories'] > self._limits['max_directories'] or
                     len(Path(root).parts)-len(case_path.parts) > self._limits['max_depth'] or
-                    entries > self._limits['max_files']+self._limits['max_directories']):
+                    budget['entries'] > self._limits['max_files']+self._limits['max_directories']):
                 raise ValueError('Case directory/depth/entry limit exceeded')
             self._admit(root, directory=True)
             for directory in dirs:
@@ -253,7 +271,7 @@ class FileMonitor:
 
     def monitor_all_cases(self) -> List[Dict[str, Any]]:
         """Monitor all case directories for changes."""
-        with self._scan_lock:
+        with self._scan_lock, self._directory_budget():
             return self._monitor_all_cases()
 
     def _monitor_all_cases(self):
@@ -287,7 +305,7 @@ class FileMonitor:
 
     def generate_integrity_report(self) -> Dict[str, Any]:
         """Generate a comprehensive integrity report for all cases."""
-        with self._scan_lock:
+        with self._scan_lock, self._directory_budget():
             return self._generate_integrity_report()
 
     def _generate_integrity_report(self):

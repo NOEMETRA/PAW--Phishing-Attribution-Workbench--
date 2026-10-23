@@ -77,13 +77,17 @@ Arbitrary trigger side effects outside the requested effects are not certified.
 
 All configured database consumers, including `check_victims.py` and its alias,
 use the same strict loader/options. Getters return copies, preventing unsaved
-container mutation. Storage rejects known links/reparse points, multiple hard
+container mutation. A configured `limits: null` is invalid; an absent key or direct
+API `limits=None` still selects defaults. Successful config publication installs
+the admitted copy, so later caller-container changes cannot alter live state. Storage rejects known links/reparse points, multiple hard
 links, special files and Windows device/stream/normalization aliases. Those checks
 do not prove absence of mounted/network backing or metadata-preserving races.
 
 File scans now include hidden names and `.pyc` regular files as bytes, without
 execution or extension exclusions. Limits cover files, bytes, directories (10,000),
-depth (64), entries and output (64 MiB). Observed end-of-report inventory/metadata
+depth (64), entries and output (64 MiB). Directory/entry work is shared across
+all cases and repeated walks within each all-case operation; it counts traversal
+visits, not distinct paths. A new invocation gets a fresh budget. Observed end-of-report inventory/metadata
 changes fail; failed combined publication/console emission restores that instance's
 baseline. `os.walk` preallocation and transient metadata-preserving changes are not
 an OS snapshot guarantee. Console check records are not database persistence.
@@ -109,8 +113,8 @@ engine acceptance, platform installation/support and UI remain separate gates.
 
 ## Executed evidence
 
-On the final frozen runtime/test/workflow sources: **874 tests, 861 passed and 13
-platform exclusions**, in 102.155 seconds on Windows/Python 3.13. The 36 new
+On the final frozen runtime/test/workflow sources: **879 tests, 866 passed and 13
+platform exclusions**, in 95.797 seconds on Windows/Python 3.13. The initial 36 new
 contracts fail on the isolated merged-PR83 baseline (51 failed assertions and 24
 errors including subtests, one exclusion); these are not 75 independent defects.
 
@@ -131,3 +135,19 @@ Runtime/test/workflow hashes (233 files) were frozen and rechecked before docs.
 Private originals and validation artifacts stay outside Git. Constructed fixtures
 are regression contracts; a real full run and matching seal establish execution
 and preservation, not classifier accuracy or attribution.
+
+## PR84 review verification
+
+Four founded P2 findings are corrected in the same family: explicit null config
+profiles, caller-owned config aliases after publication, the fixed HTML serializer
+ceiling and per-case directory counters. Five added regression tests fail on the
+initial PR84 head (five failed assertions including subtests and one HTML error).
+They pass after the fixes, including actual JSON+HTML files individually above
+64 MiB under a 192 MiB profile, with no serializer/I/O stub. The family now has
+41 new contracts. Read-profile output limits apply equally to HTML serialization;
+the combined publication limit still applies after escaping/formatting.
+
+After these corrections, the general suite, cold completion, original-EML storage
+family, configured admission, geographic, local-file, hash-failure, verification-error,
+both relevant legacy integrations and actual wheel checks all pass serially on
+frozen sources. Static contracts are repeated after documentation-only changes.
