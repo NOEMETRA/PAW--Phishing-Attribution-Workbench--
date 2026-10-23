@@ -19,12 +19,20 @@ token successivo, commenti dopo argomenti fra virgolette e funzioni non supporta
 troncate dentro commenti/stringhe/blocchi. Le menzioni nei separatori restano
 intere, legate alla fonte e senza promozione a destinazioni di rete.
 
-Suite finale: 990 test (976 superati, 14 esclusioni previste), 13 nuove prove.
-Sette script di integrazione/build seriali passati su 254 hash congelati:
-nuovi casi CSS 11 CLI/4 HTTP ripetuti su due runtime reali, contratti CSS e HTML
-precedenti, fonti URL, contesti HTML e wheel di 95 sorgenti. I conteggi distinguono
+Copilot ha confermato un ulteriore difetto del recupero: punteggiatura dentro
+URL/bad-URL non quotati annidati poteva inglobare una funzione successiva.
+La correzione condivide il consumo del token, conserva il segmento opaco e
+mantiene separata la destinazione successiva, senza interpretare i modificatori.
+
+Suite finale: 993 test (979 superati, 14 esclusioni previste), 16 nuove prove.
+Quattro script di integrazione/build seriali passati dopo la correzione su 254
+hash congelati: casi CSS 13 CLI/6 HTTP ripetuti su due runtime reali, contratto
+CSS precedente, fonti URL e wheel di 95 sorgenti. La matrice iniziale di sette
+script, inclusi i contesti HTML, resta registrata nel documento della famiglia.
+I conteggi distinguono
 URL e segmenti testuali opachi, inclusi 5.000/4.096/904 collegamenti conservati o
-omessi. Review Codex e CI della nuova famiglia restano da chiudere.
+omessi. Codex resta senza esito; su richiesta del proprietario, review Copilot
+e CI sul nuovo head della famiglia restano da chiudere.
 
 DOM/browser, grammatica completa e interpretazioni escluse restano esplicite.
 Nessuna risorsa delle email è stata visitata o risolta.

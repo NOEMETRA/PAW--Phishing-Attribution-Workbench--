@@ -16,6 +16,9 @@ def fixtures():
     trivia = ' /* https://comment.invalid/a ) */\t/**/'
     opaque = 'url("'+url+'"/* ) https://comment.invalid/a */ junk("x)"))'
     incomplete = 'url("'+url+'"/* https://comment.invalid/a )'
+    nested_bracket = 'url("https://outer.invalid/a" url(https://nested.invalid/a[))'
+    nested_comment = 'url("https://outer.invalid/a" url(data:text/plain,/*))'
+    next_url = 'https://next.invalid/b'
     encoded = base64.b64encode(b'https://encoded.invalid/a%2Fb').decode()
     budget_urls = [f'https://slot.invalid/a{index}' for index in range(50)]
     budget_trivia = [f'/* https://comment.invalid/a{index} ) */' for index in range(50)]
@@ -33,6 +36,10 @@ def fixtures():
         'invalid-escape.eml': ([markup('prefix\\\r\nurl('+url+')',True)],[url],[url],1),
         'unsupported.eml': ([markup(opaque)],[],[opaque],1),
         'incomplete.eml': ([markup(incomplete)],[],[incomplete],1),
+        'nested-bracket.eml': ([markup(nested_bracket+' url('+next_url+')')],
+                               [next_url],[nested_bracket,next_url],2),
+        'nested-comment.eml': ([markup(nested_comment+' url('+next_url+')',True)],
+                               [next_url],[nested_comment,next_url],2),
         'recovered.eml': ([markup('url("'+encoded+'"/**/) url("hxxps://actual[.]invalid/a"/**/)')],
                           ['https://encoded.invalid/a%2Fb',url],[encoded,'hxxps://actual[.]invalid/a'],2),
         'multipart.eml': ([markup('unfinished'),markup('url("'+url+'"'+trivia+')',True)],
@@ -49,9 +56,11 @@ def fixtures():
 
 
 if __name__=='__main__':
-    main(samples=fixtures(),http_names=('opaque-trivia.eml','token-names.eml','unsupported.eml','budget.eml'),
+    main(samples=fixtures(),http_names=('opaque-trivia.eml','token-names.eml','unsupported.eml','budget.eml',
+                                       'nested-bracket.eml','nested-comment.eml'),
          summary='Quoted URL comment separators, opaque separator evidence without inner targets, '
          'hash/at-keyword names versus actual nested functions, invalid identifier escapes, '
-         'whole unsupported/EOF quoted functions, recovered origins, independent MIME views, source v6, '
+         'whole unsupported/EOF quoted functions with nested URL/bad-URL token boundaries, '
+         'recovered origins, independent MIME views, source v6, '
          '5000/4096/904 source accounting, raw/body hashes, coverage, stopped owners, seals and CLI/API/ZIP '
          'parity. Not full CSS grammar, browser/resource use or classifier accuracy.')

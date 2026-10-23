@@ -116,5 +116,43 @@ class CSSTokenBoundaries(unittest.TestCase):
         self.assertEqual(sources['total_link_count'],1)
         self.assertEqual(sources['unmapped_evidence_count'],0)
 
+    def test_nested_unquoted_url_tokens_do_not_swallow_the_following_function(self):
+        for attribute in (False,True):
+            for nested in ('url(https://nested.invalid/a[)', 'url(https://nested.invalid/a{)',
+                           'url(data:text/plain,/*)', 'URL(\t data:text/plain,/*)',
+                           'url(https://nested.invalid/a"[/*)', 'url(https://nested.invalid/a([/*)',
+                           'url(https://nested.invalid/a tail[/*)', r'url(https://nested.invalid/a\)[)',
+                           'url(https://nested.invalid/a\\\r\n[/*)'):
+                with self.subTest(attribute=attribute,nested=nested):
+                    wrapper = 'url("https://outer.invalid/a" '+nested+')'
+                    _,_,targets,evidence,sources = self.analyze(wrapper+' url(https://next.invalid/b)',
+                                                               attribute=attribute)
+                    self.assertEqual(targets,['https://next.invalid/b'])
+                    self.assertEqual([row.get('source_url',row['url']) for row in evidence],
+                                     [wrapper,'https://next.invalid/b'])
+                    self.assertFalse(evidence[0]['network_target'])
+                    self.assertEqual(sources['unmapped_evidence_count'],0)
+
+    def test_recovery_distinguishes_url_tokens_from_other_component_contexts(self):
+        for nested in ('myurl(data:text/plain,/*)', '#url(data:text/plain,/*)',
+                       '@url(data:text/plain,/*)', r'u\72l(data:text/plain,/*)',
+                       r'\url(data:text/plain,/*)'):
+            with self.subTest(nested=nested):
+                value = 'url("https://outer.invalid/a" '+nested+')) url(https://next.invalid/b)'
+                _,_,targets,evidence,_ = self.analyze(value)
+                self.assertEqual(targets,[])
+                self.assertEqual([row['source_url'] for row in evidence],[value])
+        wrapper = 'url("https://outer.invalid/a" url("https://nested.invalid/a[/*"))'
+        _,_,targets,evidence,_ = self.analyze(wrapper+' url(https://next.invalid/b)')
+        self.assertEqual(targets,['https://next.invalid/b'])
+        self.assertEqual(evidence[0]['source_url'],wrapper)
+
+    def test_many_nested_unquoted_tokens_keep_iterative_recovery_and_source_identity(self):
+        wrapper = 'url("https://outer.invalid/a" extra('+'url(data:text/plain,/*)'*20000+'))'
+        _,_,targets,evidence,sources = self.analyze(wrapper+' url(https://next.invalid/b)')
+        self.assertEqual(targets,['https://next.invalid/b'])
+        self.assertEqual(evidence[0]['source_url'],wrapper)
+        self.assertEqual(sources['unmapped_evidence_count'],0)
+
 
 if __name__=='__main__': unittest.main()

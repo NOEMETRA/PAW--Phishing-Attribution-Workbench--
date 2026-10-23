@@ -272,7 +272,8 @@ family. Current integrated baseline: `64d2796a0b6f8d9ae22d6c457c871c8043b0b5c5`.
 
 The subsequent [CSS token boundary family](css-token-boundaries.md) corrects
 hash/at-keyword and invalid-escape boundaries, quoted argument comments and
-complete unsupported function evidence. New source views use v6, with separate
+complete unsupported function evidence, including nested unquoted URL/bad-URL
+boundaries identified in Copilot review. New source views use v6, with separate
 non-target separator spans and exact source/omission accounting. This changes
 three existing package sources; the 95-source ownership index is unchanged.
 Its own exact-head review/CI remains required. Full CSS grammar, normalization,

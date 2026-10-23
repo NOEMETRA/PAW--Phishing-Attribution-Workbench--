@@ -87,6 +87,34 @@ stopped owners, seals and CLI/API/ZIP parity. All 254 runtime/test/workflow
 hashes stay unchanged through the serial matrix. Documentation is updated after
 validators stop; the four public static contracts pass again afterwards.
 
+### Copilot review correction
+
+Copilot found that quoted-function recovery interpreted punctuation inside a
+nested unquoted URL/bad-URL token as enclosing component syntax. Both
+`url("https://outer.invalid/a" url(https://nested.invalid/a[))` and
+`url("https://outer.invalid/a" url(data:text/plain,/*))` absorbed a following
+independent function. Local tinycss2 tokenization independently confirmed that
+the bracket/comment spelling belongs to the nested token, not the wrapper.
+
+Recovery now consumes literal nested unquoted URL/bad-URL tokens with the same
+nonrecursive helper as top-level arguments. Quoted functions and ordinary
+component blocks retain their own boundaries; other names, hash/at-keyword
+names and undecoded escaped names are not substituted for literal `url`.
+The complete wrapper remains non-target evidence, with the following target
+and its source mapping retained separately. The pending v6 contract remains
+v6; historical evidence is not rewritten.
+
+Three added methods cover valid/bad tokens, escapes, quoted/name controls and
+20,000 repeated nested tokens. The final frozen suite runs **993 tests: 979
+pass, 14 expected exclusions**. All 16 CSS token methods and **13 full no-egress
+CLI / 6 owned-loopback HTTP cases** pass on both real Python runtimes. The same
+cases are repeated, not independent classifier samples. After this correction,
+four distinct integration/build scripts pass serially: the expanded CSS token
+family, existing CSS arguments, URL source inventories and the 95-source wheel.
+The earlier HTML list/scalar/text integrations in the table record the initial
+revision, not additional reruns of this correction. All 254 runtime/test/workflow
+hashes remain unchanged throughout the final matrix.
+
 ## Remaining scope
 
 MIME text/part limits, decoder bounds, source retention budgets and supervisor
@@ -100,5 +128,7 @@ of the integrated HTML context contract.
 Constructed fixtures establish execution/evidence contracts, not classifier
 accuracy or authenticity. No sample URL/domain was visited/resolved, no
 attachment executed and no Docker started. Application no-egress is not OS
-containment. Fresh exact-head GitHub Codex review and CI remain required before
-integration; this family does not close the entire engine audit.
+containment. Codex remained running without an actionable result; at the owner's
+request Copilot replaces that pending review for this PR. Fresh exact-head
+Copilot review and CI remain required before integration; this family does not
+close the entire engine audit.

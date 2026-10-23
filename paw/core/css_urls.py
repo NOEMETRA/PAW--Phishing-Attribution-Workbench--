@@ -57,8 +57,21 @@ def _function_end(text, position):
             position = end+2
         elif char in '\"\'':
             position, _ = _string_end(text,position)
-        elif char == '\\':
-            position = _escape_end(text,position)
+        elif char in '#@':
+            position = _name_end(text,position+1)
+        elif _name_char(char):
+            start = position
+            position = _name_end(text,position)
+            if position == start:
+                position += 1
+                continue
+            if text[start:position].lower() == 'url' and text[position:position+1] == '(':
+                argument = position+1
+                while argument < len(text) and text[argument] in _SPACE: argument += 1
+                if argument == len(text) or text[argument] not in '\"\'':
+                    # A URL/bad-URL token owns its punctuation, including '['
+                    # and '/*'. Do not interpret it as component block syntax.
+                    position, _, _, _ = _unquoted_argument(text,argument)
         elif char in closers:
             stack.append(closers[char]); position += 1
         elif char == stack[-1]:
@@ -88,6 +101,12 @@ def _argument(text, position):
         if closed and position < len(text) and text[position] == ')':
             return position+1, text[start+1:end-1], True, text[end:position]
         return _function_end(text,start), None, False, ''
+    return _unquoted_argument(text,position)
+
+
+def _unquoted_argument(text, position):
+    """Consume one URL/bad-URL token from its first non-whitespace character."""
+    start = position
     while position < len(text):
         char = text[position]
         if char == ')': return position+1, text[start:position], True, ''
