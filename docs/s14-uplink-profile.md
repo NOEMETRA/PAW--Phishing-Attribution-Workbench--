@@ -127,3 +127,15 @@ a delayed plan could regain its original lifetime, and the evidence reader did
 not bind the prepared catalog to the measured preflight. Plans now carry a boot
 identifier and monotonic deadline, and measured hashes cover the profile plus
 all seven generated files. Previous evidence is not edited or relabelled.
+
+### Review correction: positive capture evidence
+
+Review reproduced a KVM reconciliation defect: replacing the capture with its
+24-byte header, or with ARP alone, still passed. The reader now also requires
+TCP/443 traffic from the expected SNAT address to the fixture and a response
+in the reverse direction. Six offline regression methods exercise the complete
+reader with empty, ARP-only, one-direction, wrong-direction, foreign-address
+and valid bidirectional captures; CI includes them. The stricter reader accepts
+the original 124-packet KVM evidence without changing its frozen source files
+or rerunning a VM. This is a post-run reader correction, not a new kernel or
+physical Wi-Fi measurement; historical archives remain unchanged.

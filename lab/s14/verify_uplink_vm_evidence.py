@@ -49,6 +49,12 @@ def verify(root):
         require(packet['ether_type']==0x800 and packet.get('protocol')==6,'wire_protocol')
         require({packet.get('src'),packet.get('dst')}=={'198.18.42.1','198.18.43.10'},'wire_address')
         require(443 in {packet.get('sport'),packet.get('dport')},'wire_port')
+    require(any(p.get('protocol')==6 and p.get('src')=='198.18.42.1' and
+                p.get('dst')=='198.18.43.10' and p.get('dport')==443
+                for p in packets),'no_snat_request_packet')
+    require(any(p.get('protocol')==6 and p.get('src')=='198.18.43.10' and
+                p.get('dst')=='198.18.42.1' and p.get('sport')==443
+                for p in packets),'no_fixture_response_packet')
     return {'result':'PASS','scope':'KVM and actual host routing/NAT to an owned namespace; physical Wi-Fi forwarding and live coordinator NOT_RUN',
             'tests':len(names),'captured_packets':len(packets),'fixture_requests':len(requests),
             'host_network_restored':True,'live_connections':0,
