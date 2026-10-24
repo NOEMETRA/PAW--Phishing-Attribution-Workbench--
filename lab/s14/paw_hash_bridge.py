@@ -18,10 +18,11 @@ from benign_guest_validation import digest
 CONTROL = Path('/var/lib/paw-s14/control')
 
 
-def export_receipt(raw, request, receipt, artifacts):
+def export_receipt(raw, request, receipt, artifacts, reader_gid):
     """Publish only complete root-owned ordinal data, never caller-chosen paths."""
     require = contract.require
     require(os.geteuid() == 0, 'root_operator_required')
+    require(type(reader_gid) is int and 0 <= reader_gid < 2**31, 'explicit_reader_gid')
     require(raw == contract.canonical(request), 'case_export_request_bytes')
     contract.validate_request(raw, now=request['candidate']['created_at'])
     contract.validate_receipt(contract.canonical(receipt), request, contract.digest(raw))
@@ -39,8 +40,9 @@ def export_receipt(raw, request, receipt, artifacts):
             require(set(artifacts) == {v['stored_as'] for v in receipt['artifacts']}, 'case_export_artifacts')
             for filename, content in files.items():
                 auth.fs.exclusive(fd, filename, content)
-                os.chmod(filename, 0o444, dir_fd=fd, follow_symlinks=False)
-            os.fchmod(fd, 0o755); os.fsync(fd)
+                os.chown(filename, 0, reader_gid, dir_fd=fd, follow_symlinks=False)
+                os.chmod(filename, 0o440, dir_fd=fd, follow_symlinks=False)
+            os.fchown(fd, 0, reader_gid); os.fchmod(fd, 0o750); os.fsync(fd)
         os.rename(name, rid, src_dir_fd=parent, dst_dir_fd=parent); os.fsync(parent)
     return prefix / rid
 
@@ -50,6 +52,7 @@ def main():
     parser.add_argument('--request', type=Path, required=True)
     parser.add_argument('--expected-sha256', required=True)
     parser.add_argument('--policy-sha256', required=True)
+    parser.add_argument('--reader-gid', type=int, required=True, help='Explicit local group allowed to read private root exports')
     args = parser.parse_args()
     require = contract.require
     require(os.geteuid() == 0 and Path('/proc/self/attr/current').read_text().strip() == 'unconfined',
@@ -107,7 +110,7 @@ def main():
             'bridge_contract_sha256': contract_sha, 'admitted_at': run['admitted_at'], 'completed_at': int(time.time()),
             'stop_seconds': run['stop_seconds'], 'writers_stopped': run['writers_stopped']}}
     contract.validate_receipt(contract.canonical(receipt), request, contract.digest(raw))
-    exported = export_receipt(raw, request, receipt, artifacts)
+    exported = export_receipt(raw, request, receipt, artifacts, args.reader_gid)
     with auth.fs.root_directory(jobdir) as fd:
         auth.fs.exclusive(fd, 'receipt.json', contract.canonical(receipt))
         auth.fs.exclusive(fd, 'independent-verification.json', canonical(verification))

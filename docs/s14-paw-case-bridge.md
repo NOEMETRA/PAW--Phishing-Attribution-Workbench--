@@ -23,7 +23,8 @@ historical fixed synthetic bridge remains separate and unchanged.
    `sample-analysis` policy and issues an exact-frame one-use grant. Changing the
    case/part/contract binding changes the frame and requires a new approval.
 5. A root PID1 service invokes `lab/s14/paw_hash_bridge.py --request REQUEST
-   --expected-sha256 EXACT_REQUEST_SHA --policy-sha256 INSTALLED_POLICY_SHA`.
+   --expected-sha256 EXACT_REQUEST_SHA --policy-sha256 INSTALLED_POLICY_SHA
+   --reader-gid EXPLICIT_LOCAL_READER_GROUP`.
    It uses only the frozen approved frame, not caller-supplied case paths,
    through the existing execution-only hash operator. Global consumption,
    effective controls, post-stop context and independent verification still
@@ -32,7 +33,9 @@ historical fixed synthetic bridge remains separate and unchanged.
    contract hash binds its bytes but does not attest arbitrary Python imports.
 6. Only after known stop and full independent single-job verification does the
    operator atomically publish a fixed root-owned export under
-   `/var/lib/paw-s14-case-exports/REQUEST_ID`. The receipt binds the exact outer
+   `/var/lib/paw-s14-case-exports/REQUEST_ID`. Per-request directories are root-owned
+   0750 and files root-owned 0440, readable only by the explicit local reader
+   group, never world-readable attachment content. The receipt binds the exact outer
    request, candidate, source, parent, policy/grant/readiness/consumption hashes,
    VM identity, source inventory, admission time and raw result hash. Unknown
    stop, failed infrastructure, revoked authority or changed context publishes

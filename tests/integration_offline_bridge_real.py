@@ -40,14 +40,16 @@ def fixture(args):
             'admitted_at': now, 'completed_at': now, 'stop_seconds': .1, 'writers_stopped': True},
         'artifacts': [{'stored_as': 'artifact-00.bin', 'bytes': 3, 'sha256': c.digest(b'out')}]}
     c.validate_receipt(c.canonical(receipt), request, c.digest(raw))
-    path = export_receipt(raw, request, receipt, {'artifact-00.bin': b'out'})
+    path = export_receipt(raw, request, receipt, {'artifact-00.bin': b'out'}, args.reader_gid)
+    assert path.stat().st_gid == args.reader_gid and path.stat().st_mode & 0o777 == 0o750
+    assert all(p.stat().st_uid == 0 and p.stat().st_gid == args.reader_gid and p.stat().st_mode & 0o777 == 0o440 for p in path.iterdir())
     if args.mode == 'unknown-stop':
         receipt['runtime']['writers_stopped'] = False
-        (path / 'receipt.json').chmod(0o600); (path / 'receipt.json').write_bytes(c.canonical(receipt)); (path / 'receipt.json').chmod(0o444)
+        (path / 'receipt.json').chmod(0o600); (path / 'receipt.json').write_bytes(c.canonical(receipt)); (path / 'receipt.json').chmod(0o440)
     elif args.mode == 'symlink':
         (path / 'artifact-00.bin').unlink(); (path / 'artifact-00.bin').symlink_to('/dev/null')
     elif args.mode == 'digest':
-        (path / 'artifact-00.bin').chmod(0o600); (path / 'artifact-00.bin').write_bytes(b'bad'); (path / 'artifact-00.bin').chmod(0o444)
+        (path / 'artifact-00.bin').chmod(0o600); (path / 'artifact-00.bin').write_bytes(b'bad'); (path / 'artifact-00.bin').chmod(0o440)
 
 
 def snapshot(root):
@@ -59,6 +61,7 @@ def main():
     parser.add_argument('--source', action='store_true'); parser.add_argument('--root-fixture', action='store_true')
     parser.add_argument('--output', type=Path); parser.add_argument('--publish', type=Path)
     parser.add_argument('--expected-sha256'); parser.add_argument('--remove')
+    parser.add_argument('--reader-gid', type=int)
     parser.add_argument('--mode', choices=['completed', 'failed', 'unknown-stop', 'symlink', 'digest'], default='completed')
     args = parser.parse_args()
     if args.publish or args.remove: fixture(args); return
@@ -93,7 +96,7 @@ def main():
                 if args.root_fixture:
                     exports.append(info['request_id'])
                     p = subprocess.run(['sudo', '-n', '/usr/bin/python3', '-I', str(Path(__file__).resolve()),
-                        '--publish', info['request'], '--expected-sha256', info['request_sha256'], '--mode', mode],
+                        '--publish', info['request'], '--expected-sha256', info['request_sha256'], '--mode', mode, '--reader-gid', str(os.getgid())],
                         capture_output=True, text=True, timeout=20)
                     assert p.returncode == 0, (p.stdout, p.stderr)
                 output = root / ('import-' + mode); valid = mode in {'completed', 'failed'}
