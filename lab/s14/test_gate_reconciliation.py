@@ -65,10 +65,10 @@ def write_bundle(root):
     checks[6]['observation'] = {'data': {'prior_marker_absent': True}}
     checks[7].update(overlay_bytes=1, cap_bytes=1024, emulator_io_error='IO error: File too large', fault_seconds=.1)
     checks[8].update(oom, injected_limit_bytes=1024**2, guest_payload_started=False, fault_seconds=.1)
-    (root / 'quarantine').mkdir(); (root / 'quarantine/artifact-0.bin').write_bytes(b'opaque')
+    (root / 'quarantine').mkdir(); (root / 'quarantine/artifact-00.bin').write_bytes(b'opaque')
     r = dict(result='PASS', host_before={}, host_after={}, real_connections=0,
              source_hashes=hashes, vms=vms, checks=checks, general_hostile_launcher='NOT_IMPLEMENTED',
-             quarantine=[{'stored_as': 'artifact-0.bin', 'bytes': 6, 'sha256': hashlib.sha256(b'opaque').hexdigest()}])
+             quarantine=[{'stored_as': 'artifact-00.bin', 'bytes': 6, 'sha256': hashlib.sha256(b'opaque').hexdigest()}])
     r.update({key: True for key in ['host_restored', 'source_freeze_unchanged', 'base_unchanged',
                                    'host_canary_unchanged', 'writers_stopped', 'stable_publication']})
     (root / 'results.json').write_text(json.dumps(r))
@@ -103,6 +103,23 @@ class ExportProvenance(unittest.TestCase):
                 if mutation == 'duplicate': shutil.copyfile(root / 'boundaries-domain.xml', target)
                 else: target.write_text(target.read_text().replace('<uuid>owned-host-oom</uuid>', ''))
                 with self.assertRaisesRegex(ValueError, 'domain_xml_uuid:host-oom'): verify(root)
+
+    def test_external_absolute_traversal_symlink_or_unlisted_quarantine_refuses(self):
+        for mutation in ['absolute', 'traversal', 'file_link', 'directory_link', 'unlisted']:
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                parent = Path(directory); root = parent / 'bundle'; root.mkdir(); r = write_bundle(root)
+                artifact = root / 'quarantine/artifact-00.bin'; outside = parent / 'artifact-00.bin'
+                outside.write_bytes(artifact.read_bytes())
+                if mutation in {'absolute', 'traversal'}:
+                    artifact.unlink(); (root / 'quarantine').rmdir()
+                    r['quarantine'][0]['stored_as'] = str(outside) if mutation == 'absolute' else '../../artifact-00.bin'
+                elif mutation == 'file_link': artifact.unlink(); artifact.symlink_to(outside)
+                elif mutation == 'directory_link':
+                    external = parent / 'external'; (root / 'quarantine').rename(external)
+                    (root / 'quarantine').symlink_to(external, target_is_directory=True)
+                else: (root / 'quarantine/unlisted.bin').write_bytes(b'extra')
+                (root / 'results.json').write_text(json.dumps(r))
+                with self.assertRaisesRegex(ValueError, 'quarantine_'): verify(root)
 
 
 if __name__ == '__main__': unittest.main()

@@ -114,7 +114,11 @@ class Gate(Matrix):
         if 'channel' in vm: vm['channel'].close()
         vm['stopped'] = True; vm['stop_seconds'] = time.monotonic() - began
         vm['overlay_sha256_after_stop'] = digest(vm['node']['overlay'])
-        assert vm['node']['overlay'].stat().st_size <= vm['fsize_limit']
+        # Startup can fail before admission assigns/applies the file cap. Stop
+        # still must be recorded, without claiming an unknown limit was applied.
+        vm['fsize_limit'] = vm.get('fsize_limit')
+        if vm['fsize_limit'] is not None:
+            assert vm['node']['overlay'].stat().st_size <= vm['fsize_limit']
         self.report['vms'].append({k: v for k, v in vm.items() if k not in {'owner', 'channel', 'control', 'node'}} |
                                   {'uuid': vm['node']['uuid'], 'overlay_bytes': vm['node']['overlay'].stat().st_size})
         self.active_vm = None
