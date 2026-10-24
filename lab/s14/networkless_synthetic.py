@@ -22,6 +22,26 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 from benign_synthetic import MARKER
 
+CONTROLLED_PRODUCER_SOURCES = frozenset('''fixture_server.py machine-paws14.slice
+test_uplink_policy.py paused-probe.xml benign_guest_validation.py paw-s14-guard.service
+test_controlled_uplink.py gw_admission.py host_task_budget_probe.py guest_agent.py
+gateway-wan.xml gateway-host.nft gw_fixture.py gw_fault_validation.py fetch_trusted_image.py
+internal-network.xml controlled_uplink.py test_uplink_vm_evidence.py all-guards.nft
+uplink_policy.py uplink_guest_probe.py controlled_scope.py verify_controlled_uplink.py
+verify_gateway_evidence.py gw_node.py verify_uplink_vm_evidence.py verify_gateway_reboot.py
+host-guard.nft validate_uplink_namespace.py validate_uplink_vm.py gw_quarantine.py
+prepare_uplink.py gw_validation.py controlled_guest.py libvirtd-guard.conf
+verify_uplink_evidence.py gateway-bridge.nft gateway-guest.nft gw_broker.py
+verify_benign_evidence.py benign_synthetic.py test_gw_contracts.py'''.split())
+
+
+def verify_prior_sources(root, manifest):
+    from verify_synthetic_gate import verify_sources
+    verify_sources(root, manifest, required=CONTROLLED_PRODUCER_SOURCES)
+    for name, expected in manifest.items():
+        if hashlib.sha256((HERE / name).read_bytes()).hexdigest() != expected:
+            raise ValueError('current_producer_source_changed:' + name)
+
 
 def header_authority(fetch):
     obs = fetch.get('observation', {})
@@ -94,9 +114,7 @@ def host(args):
     assert prior['result'] == 'FAIL' and not prior.get('cleanup_error') and not prior.get('monitor_abort')
     assert all(prior[k] for k in ['writers_stopped', 'host_network_restored', 'source_freeze_unchanged', 'base_unchanged'])
     assert prior['host_before'] == prior['host_after']
-    for name, expected in prior['source_hashes'].items():
-        for path in [args.prior / 'sources' / name, HERE / name]:
-            assert hashlib.sha256(path.read_bytes()).hexdigest() == expected
+    verify_prior_sources(args.prior, prior['source_hashes'])
     profile = validate(prior['profile']); plan = prior['plan']; obs = prior['fetch']['observation']
     assert plan['profile_sha256'] == fingerprint(profile) and plan['url'] == profile['targets'][0]['url'] == authority['target']
     assert obs['peer'] == plan['address'] in profile['targets'][0]['pinned_ipv4']

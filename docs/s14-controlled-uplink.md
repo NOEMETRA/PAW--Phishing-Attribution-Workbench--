@@ -118,3 +118,20 @@ are retained. This separate no-NIC harness uses 220 seconds for readiness and
 a 240-second boot owner deadline, followed by the same 30-second job limit.
 The live probe's 180-second readiness, five-second leases and all CPU/memory/task
 limits remain unchanged; the networkless harness never creates a NIC or route.
+# Review consolidation: producer inventory and quarantine
+
+Independent review of PR102 reproduced acceptance of empty producer-source
+inventories before admitting the fixed benign fixture. The host now requires
+the measured controlled producer's 42 mandatory names, exact exported membership,
+regular non-symlink files, matching hashes and matching current producer bytes.
+Missing/removed/unlisted evidence refuses before VM initialization. This adds
+no GET, network permission or execution capability; the original HTTP/refused-body
+and benign fixture exports retain their producer hashes and disposition.
+
+The synthetic evidence reader also now requires the actual ordinal quarantine
+filename, a real quarantine directory and regular files without symlinks, and
+an exact declared/exported inventory. External absolute/traversal references,
+symlinks and unlisted files cannot supply missing bundle output. Inert regressions
+cover these cases; the original 42-source controlled export and nine-vector
+synthetic export still reconcile. These corrections are host admission/read-only
+postprocessing, not changes to the measured guest/VM/policy path.

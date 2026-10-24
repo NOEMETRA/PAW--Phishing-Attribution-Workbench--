@@ -38,8 +38,8 @@ def require(value, reason):
     if not value: raise ValueError(reason)
 
 
-def verify_sources(root, manifest):
-    require(type(manifest) is dict and REQUIRED_SOURCES <= manifest.keys(), 'mandatory_source_inventory')
+def verify_sources(root, manifest, required=REQUIRED_SOURCES):
+    require(type(manifest) is dict and required <= manifest.keys(), 'mandatory_source_inventory')
     require(all(type(name) is str and Path(name).name == name and name not in {'.', '..'}
                 for name in manifest), 'source_name')
     folder = root / 'sources'
@@ -107,9 +107,14 @@ def verify(root):
     require(oom['injected_limit_bytes'] == 1024**2 and not oom['guest_payload_started'] and
             'Memory cgroup out of memory' in oom['kernel_witness'] and oom['fault_seconds'] < 12, 'host_vm_oom_admission_injection')
     require(len(r['quarantine']) == 1, 'quarantine_inventory')
-    for item in r['quarantine']:
-        path = root / 'quarantine' / item['stored_as']
-        require(path.name.startswith('artifact-') and path.suffix == '.bin' and path.stat().st_size == item['bytes'] and hashlib.sha256(path.read_bytes()).hexdigest() == item['sha256'], 'quarantine_digest')
+    folder = root / 'quarantine'
+    require(folder.is_dir() and not folder.is_symlink(), 'quarantine_directory')
+    require({p.name for p in folder.iterdir()} == {v['stored_as'] for v in r['quarantine']}, 'quarantine_inventory')
+    for number, item in enumerate(r['quarantine']):
+        require(item['stored_as'] == f'artifact-{number:02d}.bin', 'quarantine_name')
+        path = folder / item['stored_as']
+        require(path.is_file() and not path.is_symlink(), 'quarantine_file')
+        require(path.stat().st_size == item['bytes'] and hashlib.sha256(path.read_bytes()).hexdigest() == item['sha256'], 'quarantine_digest')
     return {'result': 'PASS', 'scope': 'finite offline synthetic adversarial vectors only', 'checks': len(CHECKS),
             'vms': 3, 'real_connections': 0, 'source_count': len(r['source_hashes']),
             'general_hostile_gate': 'OPEN: arbitrary-input integration and independent review not established',
