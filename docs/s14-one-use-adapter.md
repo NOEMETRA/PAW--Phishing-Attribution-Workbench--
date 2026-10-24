@@ -92,3 +92,24 @@ hash-inventoried evidence. Source review alone cannot close I08. A synthetic-onl
 I08 disposition does not authorize hostile inputs; broader input authority,
 maintenance acceptance, actual PAW noncatalog custody and other interpreters or
 browser/egress remain separate material contracts.
+
+## Measured eight-case repeat, 24 October 2026
+
+Producer `a3ae0d655a7e96f5c18a6980ea80e31990b44e24` completed the actual
+same-PC root PID1/KVM matrix: eight cases PASS, 71 frozen lab sources, stable
+pre/post effective context, max stop 1.001 seconds, unchanged host/base/canary,
+global replay refusal for all eight grants and no residual domain/QEMU/netns.
+The root store contained one policy, eight grants, eight consumption records and
+one execution lock, all root-owned with no group/other write. The driver refreshed
+APT indices successfully with Error-Mode=any and installed/upgraded no packages.
+Independent local read-only reconciliation also passed. The original PAW case's
+34 files remain byte-identical. These are runtime measurements, not CI fixtures.
+
+The sanitized [effective review record](s14-i08-effective-record.json) binds
+policy/context/cases/authority hashes, actual resource/CPU/DAC controls, fault
+witnesses and maintenance status. Full raw local evidence is retained separately.
+This documentation-only follow-up does not change any of the 71 measured lab
+source bytes. No additional runtime result is inferred for a different source
+revision. The record explicitly requests independent I08 review; its existence
+and the passing matrix do not themselves complete that review or authorize
+hostile sources. Hostile-code authorization remains false.
