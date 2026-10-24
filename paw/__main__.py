@@ -219,6 +219,16 @@ For help: paw help <command>
         p_export.add_argument("--case", required=True)
         p_export.add_argument("--format", choices=["zip"], default="zip")
 
+        p_lab = sub.add_parser('lab-synthetic', help='Prepare/import one fixed harmless offline fixture; never launches a guest')
+        lab_actions = p_lab.add_subparsers(dest='lab_action', required=True)
+        p_lab_prepare = lab_actions.add_parser('prepare', help='Link a fixed fixture request to a completed sealed case')
+        p_lab_prepare.add_argument('--case', required=True)
+        p_lab_prepare.add_argument('--output', required=True, help='New request directory outside the case')
+        p_lab_import = lab_actions.add_parser('import', help='Import a protected local producer export into a separate sealed result')
+        p_lab_import.add_argument('--case', required=True)
+        p_lab_import.add_argument('--request', required=True, help='Previously prepared local request.json')
+        p_lab_import.add_argument('--output', required=True, help='New result container outside the case')
+
         p_query = sub.add_parser("query", help="Query recent cases by indicator")
         p_query.add_argument("--by", choices=["ip", "domain", "asn", "org"], required=True, help="Query by indicator type")
         p_query.add_argument("--value", required=True, help="Indicator value to search for")
@@ -341,6 +351,12 @@ For help: paw help <command>
         elif args.cmd == "export":
             require_stopped_case(args.case)
             export_case(args.case, args.format)
+
+        elif args.cmd == 'lab-synthetic':
+            from .core.synthetic_bridge import prepare, import_result
+            value = (prepare(args.case, args.output) if args.lab_action == 'prepare' else
+                     import_result(args.case, args.request, args.output))
+            print(json.dumps(value, indent=2))
 
         elif args.cmd == "query":
             from .core.index import query_recent

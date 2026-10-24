@@ -7,7 +7,7 @@ import unittest
 
 from offline_input_matrix import job
 from offline_input import admit
-from verify_offline_input import EXTRA_SOURCES, verify
+from verify_offline_input import EXTRA_SOURCES, verify, verify_fixed_positive
 from verify_synthetic_gate import REQUIRED_SOURCES
 
 
@@ -46,6 +46,29 @@ def bundle(root):
 
 
 class Confinement(unittest.TestCase):
+    def test_linked_single_positive_does_not_replace_default_four_job_matrix(self):
+        import time
+        from paw.core import synthetic_bridge as contract
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); bundle(root)
+            with self.assertRaisesRegex(ValueError, 'linked_bridge_source'): verify_fixed_positive(root)
+            report = json.loads((root / 'results.json').read_text()); content = b'inert bridge source'
+            (root / 'sources/paw_synthetic_bridge.py').write_bytes(content)
+            report['source_hashes']['paw_synthetic_bridge.py'] = hashlib.sha256(content).hexdigest()
+            now = int(time.time()); ref = {'case_id': 'case-owned', 'manifest_sha256': '1'*64, 'merkle_index_sha256': '2'*64, 'merkle_root_blake3': '3'*64}
+            request = {'schema': 'paw-s14-synthetic-request-v1', 'request_id': '4'*32, 'profile': contract.PROFILE,
+                       'fixture': contract.FIXTURE, 'fixture_sha256': contract.FIXTURE_SHA256, 'created_at': now, 'expires_at': now+900,
+                       'case_reference': ref, 'case_reference_sha256': contract.digest(contract.canonical(ref))}
+            raw = contract.canonical(request); (root / 'paw-request.json').write_bytes(raw)
+            report.update(paw_payload_started_at=now, paw_request_sha256=contract.digest(raw),
+                          bridge_contract_sha256=contract.digest(Path(contract.__file__).read_bytes()))
+            (root / 'results.json').write_text(json.dumps(report))
+            with self.assertRaisesRegex(ValueError, 'job_inventory'): verify_fixed_positive(root)
+            report['vms'] = report['vms'][:1]; report['input_runs'] = report['input_runs'][:1]
+            (root / 'results.json').write_text(json.dumps(report))
+            self.assertEqual(verify_fixed_positive(root)['jobs'], 1)
+            with self.assertRaisesRegex(ValueError, 'job_inventory'): verify(root)
+
     def test_complete_synthetic_export_passes(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); bundle(root); self.assertEqual(verify(root)['jobs'], 4)

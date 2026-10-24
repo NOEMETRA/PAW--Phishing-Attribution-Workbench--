@@ -49,6 +49,13 @@ jobs:
           PAW_VERIFICATION_DIR: ${{ runner.temp }}/paw-installed-results/mime-fixtures
         run: |
           "$RUNNER_TEMP/paw-installed/bin/python" -B "$GITHUB_WORKSPACE/tests/integration_mime_real.py"
+      - name: Verify installed synthetic CLI case linkage and protected receipt import without KVM
+        working-directory: ${{ runner.temp }}
+        run: |
+          env -u PYTHONPATH -u PYTHONHOME PYTHONNOUSERSITE=1 \
+            "$RUNNER_TEMP/paw-installed/bin/python" -B \
+            "$GITHUB_WORKSPACE/tests/integration_synthetic_bridge_real.py" \
+            --root-fixture --output "$RUNNER_TEMP/paw-installed-results/synthetic-bridge"
       - name: Retain bounded installed-package logs
         if: always()
         uses: actions/upload-artifact@v4
