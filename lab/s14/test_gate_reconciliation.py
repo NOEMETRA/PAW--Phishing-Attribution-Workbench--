@@ -46,7 +46,7 @@ def write_bundle(root):
     vms, oom = fixture()
     for vm in vms:
         vm.update(stopped=True, stop_seconds=.1, overlay_bytes=1, fsize_limit=1024, host_status='Seccomp:\t2')
-        vm['actual'].update(limits={'memory.max': str(768 * 1024**2), 'memory.swap.max': '0', 'pids.max': '64'},
+        vm['actual'].update(limits={'memory.max': str(768 * 1024**2), 'memory.swap.max': '0', 'pids.max': '64', 'cpu.max': '50000 100000'},
                             apparmor='libvirt-owned (enforce)')
         (root / (vm['label'] + '-domain.xml')).write_text(
             '<domain><uuid>' + vm['uuid'] + '</uuid><memory>512</memory>'

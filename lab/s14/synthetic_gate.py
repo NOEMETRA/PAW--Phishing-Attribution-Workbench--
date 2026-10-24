@@ -27,6 +27,14 @@ from gate_channel import GateChannel
 from gw_quarantine import validate_records, publish
 
 
+def observe_cpu_quota(actual):
+    """Read the applied scope limit after set-property, before guest resume."""
+    value = (Path(actual['scope']) / 'cpu.max').read_text().strip()
+    if value != '50000 100000':
+        raise ValueError('host_cpu_quota_not_applied')
+    actual['limits']['cpu.max'] = value
+
+
 class Gate(Matrix):
     snapshot_host = Validation.snapshot_host
     def seed(self, folder, role, job_id, token):
@@ -70,6 +78,7 @@ class Gate(Matrix):
         vm = {'node': node, 'owner': child, 'control': control, 'label': label}; self.active_vm = vm
         actual = self.wait_file(ready, 30); vm['actual'] = actual
         self.run(['/usr/bin/systemctl', 'set-property', '--runtime', Path(actual['scope']).name, 'CPUQuota=50%'])
+        observe_cpu_quota(actual)
         self.run(['/usr/bin/prlimit', '--pid', str(actual['pid']), '--fsize=268435456:268435456', '--core=0:0'])
         vm['fsize_limit'] = 256 * 1024**2
         vm['host_file_size_limit'] = next(line for line in Path('/proc', str(actual['pid']), 'limits').read_text().splitlines() if line.startswith('Max file size'))

@@ -78,6 +78,7 @@ def verify(root):
         require(vm['stopped'] and vm['stop_seconds'] < 12 and vm['overlay_bytes'] <= vm['fsize_limit'] <= 256 * 1024**2, 'vm_stop_or_storage_bound')
         actual = vm['actual']; limits = actual['limits']
         require(limits['memory.max'] == str(768 * 1024**2) and limits['memory.swap.max'] == '0' and limits['pids.max'] == '64', 'host_budget')
+        require(limits.get('cpu.max') == '50000 100000', 'host_cpu_quota')
         require(actual['apparmor'].startswith('libvirt-') and '(enforce)' in actual['apparmor'], 'apparmor')
         require('Seccomp:\t2' in vm['host_status'], 'qemu_seccomp')
         xml = ET.fromstring((root / (vm['label'] + '-domain.xml')).read_bytes())
