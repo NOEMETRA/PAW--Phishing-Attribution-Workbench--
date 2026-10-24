@@ -4,7 +4,7 @@ Before=libvirtd.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/sbin/nft -f /etc/paw-s14/host-guard.nft
+ExecStart=/usr/sbin/nft -f /etc/paw-s14/all-guards.nft
 RemainAfterExit=yes
 
 [Install]

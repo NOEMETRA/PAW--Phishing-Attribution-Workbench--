@@ -1,0 +1,19 @@
+table inet paw_gateway {
+  chain input {
+    type filter hook input priority 0; policy drop;
+    iifname "lo" accept
+    iifname "lan0" ip saddr 192.0.2.20 tcp dport 3128 accept
+    iifname "lan0" ip saddr 192.0.2.20 udp dport 5353 accept
+    iifname "wan0" ip saddr 198.18.40.10 tcp sport { 18080, 8443 } ct state established accept
+    iifname "wan0" ip saddr 198.18.40.10 udp sport 5353 ct state established accept
+  }
+  chain output {
+    type filter hook output priority 0; policy drop;
+    oifname "lo" accept
+    oifname "lan0" ip daddr 192.0.2.20 tcp sport 3128 accept
+    oifname "lan0" ip daddr 192.0.2.20 udp sport 5353 accept
+    oifname "wan0" ip daddr 198.18.40.10 tcp dport { 18080, 8443 } accept
+    oifname "wan0" ip daddr 198.18.40.10 udp dport 5353 accept
+  }
+  chain forward { type filter hook forward priority 0; policy drop; }
+}

@@ -1,0 +1,19 @@
+# Closed synthetic WAN; there is no route/NAT/uplink to a physical interface.
+add table inet paw_s14_gateway
+flush table inet paw_s14_gateway
+table inet paw_s14_gateway {
+  chain input {
+    type filter hook input priority -320; policy accept;
+    iifname { "pawbr-int", "pawbr-wan" } counter drop
+    iifname != "lo" tcp dport 18080 counter drop
+  }
+  chain output {
+    type filter hook output priority -320; policy accept;
+    oifname { "pawbr-int", "pawbr-wan" } counter drop
+  }
+  chain forward {
+    type filter hook forward priority -320; policy accept;
+    iifname { "pawbr-int", "pawbr-wan" } counter drop
+    oifname { "pawbr-int", "pawbr-wan" } counter drop
+  }
+}

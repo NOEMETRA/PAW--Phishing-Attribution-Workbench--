@@ -1,5 +1,9 @@
 # S14: verified image, bounded guest, owned traffic and failure fixtures
 
+Current follow-up: [closed gateway and target admission](s14-gateway-validation.md),
+including corrected supervision, a 2 GiB aggregate budget and the still-open gate.
+The measurements below retain their historical profile.
+
 24 October 2026. Follow-up to the [single-PC preparation](s14-single-pc-linux.md).
 The owner authorized a trusted Linux image, tighter process budgets and benign
 traffic/failure tests, with no real egress or detonation. **The bounded matrix

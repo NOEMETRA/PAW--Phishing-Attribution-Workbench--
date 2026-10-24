@@ -1,5 +1,9 @@
 # S14: closed preparation on one Linux PC
 
+Current follow-up: [closed gateway and target admission](s14-gateway-validation.md),
+including corrected supervision, a 2 GiB aggregate budget and the still-open gate.
+The measurements below retain their historical profile.
+
 Initial preparation record at `42fc8d6`. The later
 [trusted-guest traffic/failure matrix](s14-benign-guest-validation.md) adds a
 verified image, tighter budgets and actual benign guest execution. Read that

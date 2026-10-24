@@ -6,6 +6,6 @@ CPUAccounting=yes
 MemoryAccounting=yes
 TasksAccounting=yes
 CPUQuota=100%
-MemoryMax=1280M
+MemoryMax=2G
 MemorySwapMax=0
 TasksMax=128

@@ -171,3 +171,9 @@ Sentinel resta un'opzione con contratti locali circoscritti; nuove funzionalità
 sono separate dal percorso corrente. Ottimizzare la durata delle analisi non è
 l'obiettivo di questa fase. Full offline e full con raccolta/detonazione attiva
 mantengono ambiti diversi fino alla verifica della successiva fase egress.
+
+The [S14 closed gateway validation](s14-gateway-validation.md) records owned
+synthetic-WAN target admission, finite L2 and lifecycle faults, networkless
+quarantine extraction and corrected VM-loss supervision. The overall gate remains
+open for host reboot/startup and final review; real egress/detonation and R08
+are not enabled or closed by those fixtures.

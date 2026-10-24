@@ -332,3 +332,9 @@ active collection, browser/UI and independent labels remain separate. The curren
 family is integrated in PR98 as `62f19daf63eea781e7e6eb3e6a383f88573030a1`.
 Its pre-integration validation history remains in the linked contract; current
 Linux/platform acceptance is recorded separately and does not close R08.
+
+The [S14 closed gateway validation](s14-gateway-validation.md) records owned
+synthetic-WAN target admission, finite L2 and lifecycle faults, networkless
+quarantine extraction and corrected VM-loss supervision. The overall gate remains
+open for host reboot/startup and final review; real egress/detonation and R08
+are not enabled or closed by those fixtures.

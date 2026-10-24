@@ -1,0 +1,4 @@
+# Apply all dedicated PAW tables in one nft transaction; never flush host rules.
+include "/etc/paw-s14/host-guard.nft"
+include "/etc/paw-s14/gateway-host.nft"
+include "/etc/paw-s14/gateway-bridge.nft"
