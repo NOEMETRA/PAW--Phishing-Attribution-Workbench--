@@ -172,8 +172,10 @@ sono separate dal percorso corrente. Ottimizzare la durata delle analisi non è
 l'obiettivo di questa fase. Full offline e full con raccolta/detonazione attiva
 mantengono ambiti diversi fino alla verifica della successiva fase egress.
 
-The [S14 closed gateway validation](s14-gateway-validation.md) records owned
-synthetic-WAN target admission, finite L2 and lifecycle faults, networkless
-quarantine extraction and corrected VM-loss supervision. The overall gate remains
-open for host reboot/startup and final review; real egress/detonation and R08
-are not enabled or closed by those fixtures.
+S14 update, 24 October 2026: the complete closed 2 GiB profile and actual
+post-reboot startup check now pass. The host guard is active before explicit
+local libvirt activation; no guests/networks autostart, policy/image/version
+hashes match, and source/scoring/originals remain unchanged. See the
+[final full-profile and cold-boot record](s14-gateway-validation.md#final-full-profile-and-cold-boot-acceptance).
+The broader S14 real-uplink/collector/target-authorization gate and R08 remain
+open; no real egress or detonation was run.

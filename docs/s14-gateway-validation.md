@@ -129,19 +129,60 @@ verifier checks that exact delta. Failed bootstrap/serial/cleanup/injection
 attempts and the worker-loss reproduction remain separate evidence. The package
 under `paw/`, scoring, originals, prior evidence and seals are unchanged.
 
-**The overall S14 gate is OPEN.** I01–I07 have the measured offline component
-results above; whole-host reboot/startup ordering remains NOT RUN, final
-configuration review/I08 remains open, and an actual uplink/admission/collector
-profile is undefined. These fixtures establish neither production egress nor
-browser/detonation readiness. The earlier benign harness describes its previous
-frozen topology; the gateway harness supersedes it for this profile.
+## Final full profile and cold-boot acceptance
 
-The whole-host reboot/startup test remains a separate measured step. For the passing targeted
-correction, `lab/s14/verify_gateway_reboot.py` performs read-only
-checks against its `results.json`; it rejects the same boot ID, changed filters,
-missing persistent dependencies, auto-started networks/guests or surviving QEMU.
-That checker does not start lab traffic and does not authorize live targets.
+The final full matrix at runtime source `5736a53` (identical runtime bytes on
+head `712c4e8`) passes all twelve scenarios on the 2 GiB aggregate profile.
+All 27 runtime/policy sources remain frozen. Independent reconciliation checks
+1,201 packets and the complete output inventory; ten fault stops take
+0.977–3.970 seconds. Final guard-failed libvirt startup and cleanup pass. CI on
+`712c4e8` passes all seven jobs. The historical component-only limitation above
+is superseded by that complete stopped-run record; earlier FAIL evidence stays
+unchanged.
 
-Use the latest passing full-profile `results.json` for that check, or the
-passing targeted correction while a full repeat is still unaccepted. The main
-run’s FAIL remains unchanged and must not be supplied as a passing baseline.
+The actual host reboot was measured on 24 October 2026:
+
+- Boot ID changes from `2d078918-b7b2-416f-abf5-aa36033d656b` to
+  `7dd92ea7-3191-492d-bd6d-5e224279dbde`.
+- The enabled host guard is active 18.942357 seconds after boot. Effective
+  fingerprints, installed rule/unit hashes and the root-owned read-only base
+  image match the passing matrix.
+- Libvirt and its UNIX control sockets intentionally remain stopped at cold
+  boot. The first read-only query therefore refuses with a missing UNIX socket;
+  that diagnostic attempt is retained. No guard, VM or network is started to
+  turn the cold-boot guard check into a pass.
+- After confirming the guard is already active and no domain/network autostart
+  entries exist, the operator starts only the local UNIX sockets and libvirtd.
+  The daemon becomes active at 558.580296 seconds, after the guard. Persistent
+  service/network autostart settings are unchanged; no guest start is requested.
+- `verify_gateway_reboot.py` then returns PASS: no domains/QEMU, no private
+  bridges or fixture namespace, both defined networks inactive with autostart
+  off, and no libvirt TCP/TLS listener. The 2 GiB / 128-task / zero-swap budget
+  persists.
+- Kernel, QEMU, nft, the installed nft loader/runtime and all 27 source hashes
+  match the full matrix. SMT remains off, KVM entry L1D flush remains always,
+  and the L1TF/GDS boot mitigations remain configured. Management addressing and
+  the physical uplink inventory are unchanged.
+
+This closes the missing cold-boot measurement for the **fixed closed profile**.
+The configuration consistency review covers its pinned roles, synthetic target
+allowlist, independent host guards, stopped-writer publication and frozen
+versions/hashes. It is not an independent certification or general hostile-code
+acceptance.
+
+**The overall S14 real-egress/collector gate remains OPEN.** The current mode is
+still `offline-fixture`, with no physical WAN port or live transport. An actual
+uplink, admitted real-target scope, broader collector/browser/detonation
+contracts and their review/authorization remain separate acceptance work.
+R08 remains open. Neither a cold-boot PASS nor a matching hash authorizes real
+egress or detonation.
+
+For subsequent cold-boot checks, first record that the enabled guard is already
+active and matches the previous freeze. If it is absent/changed, stop: manually
+starting it would not establish successful boot ordering. If only the local
+libvirt control plane is stopped, check that autostart entries are empty before
+explicitly starting `libvirtd.socket`, `libvirtd-ro.socket`,
+`libvirtd-admin.socket` and `libvirtd.service`. Then run
+`lab/s14/verify_gateway_reboot.py` against the latest passing full-profile
+`results.json`. The checker stays read-only, rejects the same boot ID and does
+not start guests or lab traffic.
