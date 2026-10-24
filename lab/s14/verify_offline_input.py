@@ -3,6 +3,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import re
 import sys
 import xml.etree.ElementTree as ET
 
@@ -40,6 +41,11 @@ def verify(root):
         require(run['vm_uuid'] == vm['uuid'] == vm['actual']['uuid'], 'job_vm_binding')
         xml = ET.fromstring((root / (vm['label'] + '-domain.xml')).read_bytes())
         require(xml.findtext('uuid') == vm['uuid'], 'xml_uuid_binding')
+        dac = re.fullmatch(r'\+([0-9]+):\+([0-9]+)', xml.findtext('seclabel[@model="dac"]/label') or '')
+        require(dac is not None and all(int(part) > 0 for part in dac.groups()), 'qemu_dac_identity')
+        memory = xml.find('memory')
+        require(memory is not None and (memory.get('unit'), memory.text) in {('MiB', '512'), ('KiB', '524288')}, 'guest_memory_budget')
+        require(xml.find('defaultiothread').get('thread_pool_max') == '8', 'guest_io_budget')
         require(not any(xml.findall('devices/' + name) for name in ['interface', 'filesystem', 'hostdev']), 'vm_exposure')
         require(vm['actual']['apparmor'].startswith('libvirt-') and '(enforce)' in vm['actual']['apparmor'] and 'Seccomp:\t2' in vm['host_status'], 'mandatory_controls')
         limits = vm['actual']['limits']

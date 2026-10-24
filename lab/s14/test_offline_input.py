@@ -6,10 +6,11 @@ from pathlib import Path
 import subprocess
 import sys
 import time
+import tempfile
 import unittest
 
 from offline_input import MAX_FRAME, admit, decode
-from offline_input_matrix import authorize, job
+from offline_input_matrix import authorize, job, run_job
 
 
 class Admission(unittest.TestCase):
@@ -38,6 +39,19 @@ class Admission(unittest.TestCase):
         value.update(source_hex=source.hex(), source_sha256=hashlib.sha256(source).hexdigest())
         self.assertEqual(admit(value)['source'], source)
         with self.assertRaisesRegex(ValueError, 'synthetic_catalog_only'): authorize(value)
+
+    def test_api_stops_partial_startup_before_propagating_failure(self):
+        class Gate:
+            def __init__(self, root): self.output = root; self.active_vm = None; self.stopped = []
+            def start(self, label):
+                self.active_vm = {'label': label}; raise TimeoutError('owned readiness timeout')
+            def stop(self, vm): self.stopped.append(vm); self.active_vm = None
+        with tempfile.TemporaryDirectory() as directory:
+            gate = Gate(Path(directory))
+            with self.assertRaisesRegex(TimeoutError, 'readiness'): run_job(gate, job('success'))
+            self.assertIsNone(gate.active_vm)
+            self.assertEqual(len(gate.stopped), 1)
+            self.assertEqual(gate.stopped[0]['label'], 'owned-success')
 
 
 if __name__ == '__main__': unittest.main()

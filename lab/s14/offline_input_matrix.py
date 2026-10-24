@@ -67,8 +67,8 @@ def run_job(gate, value, cancel=False):
     with (folder / (current['job']['job_id'] + '.json')).open('x') as stream:
         stream.write(json.dumps(current['job'], sort_keys=True)); stream.flush(); os.fsync(stream.fileno())
     gate.current = current
-    vm = gate.start(current['job']['job_id'])
     try:
+        vm = gate.start(current['job']['job_id'])
         authorize(current['job'])  # expiry/digest rechecked after boot, before execution
         started = vm['channel'].call('start')
         if started['source_sha256'] != current['job']['source_sha256'] or started['job_sha256'] != current['job_sha256']:

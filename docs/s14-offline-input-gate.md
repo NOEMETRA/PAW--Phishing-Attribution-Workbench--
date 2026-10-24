@@ -46,3 +46,12 @@ CLI/HTTP integration is a material contract change requiring its own acceptance;
 this profile does not silently enable it. Browser/egress, other interpreters and
 R08 remain separate. Results and exact producer/CI heads are recorded in the PR
 and private local evidence, including any failed attempt.
+
+The initial runtime attempt was interrupted after the first positive job when
+independent Codex review reproduced an API cleanup gap on partial startup and
+acceptance of XML claiming root DAC/oversized guest memory/I/O pool. Its FAIL
+export retains stopped writers, restored host and unchanged source freeze.
+Startup is now inside the API cleanup region. The reader validates non-root DAC,
+512 MiB guest memory with explicit MiB/KiB units and the eight-worker I/O budget.
+Six inert methods include the real CLI, partial-startup fault and complete-export
+corruption regressions. A fresh full runtime run is required on corrected sources.
