@@ -14,6 +14,7 @@ import tty
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from uplink_policy import address
+from controlled_scope import PUBLIC_HOST, PUBLIC_PATH, FIXTURE_HOST, FIXTURE_PATH
 
 
 class BoundedReader(io.RawIOBase):
@@ -46,9 +47,11 @@ class OneShot:
         if mode not in {'fixture', 'public'}:
             raise ValueError('mode')
         self.mode = mode
-        self.host = 'allow.fixture.invalid' if mode == 'fixture' else 'httpbingo.org'
+        self.host = FIXTURE_HOST if mode == 'fixture' else PUBLIC_HOST
+        self.path = FIXTURE_PATH if mode == 'fixture' else PUBLIC_PATH
         self.ca_file = ca_file
         self.used = False
+        self.observation = {'requests': 0, 'redirects': 0}
 
     def execute(self, command):
         if self.used:
@@ -76,17 +79,22 @@ class OneShot:
                     if client.getpeername()[0] != peer:
                         raise ValueError('peer_binding')
                     certificate = hashlib.sha256(client.getpeercert(binary_form=True)).hexdigest()
-                    client.sendall(('GET /get HTTP/1.0\r\nHost: ' + self.host +
-                                    '\r\nAccept: application/json\r\nAccept-Encoding: identity\r\n'
+                    self.observation.update(peer=peer, tls_hostname=self.host, tls_verified=True,
+                                            certificate_sha256=certificate, tls_version=client.version())
+                    client.sendall(('GET ' + self.path + ' HTTP/1.0\r\nHost: ' + self.host +
+                                    '\r\nAccept: */*\r\nAccept-Encoding: identity\r\n'
                                     'Connection: close\r\n\r\n').encode('ascii'))
+                    self.observation['requests'] = 1
                     response = http.client.HTTPResponse(ResponseSocket(client))
                     try:
                         response.begin()
+                        self.observation['http_status'] = response.status
                         if response.status != 200:
                             raise ValueError('http_status_' + str(response.status))
                         if response.getheader('Content-Encoding', 'identity') != 'identity':
                             raise ValueError('content_encoding')
                         data = response.read(8193)
+                        self.observation['body_bytes_read'] = len(data)
                         if len(data) > 8192:
                             raise ValueError('response_budget')
                         if response.length not in {None, 0}:
@@ -99,6 +107,7 @@ class OneShot:
                     finally:
                         response.close()
         finally:
+            self.observation['elapsed_seconds'] = time.monotonic() - start
             signal.setitimer(signal.ITIMER_REAL, 0)
             signal.signal(signal.SIGALRM, previous)
 
@@ -124,7 +133,7 @@ def main():
         try:
             op = command.pop('op'); ident = command.pop('id')
             if op == 'state':
-                result = {'used': probe.used, 'host': probe.host, 'mode': probe.mode}
+                result = {'used': probe.used, 'host': probe.host, 'path': probe.path, 'mode': probe.mode}
             elif op == 'fetch':
                 result = probe.execute(command)
             else:
@@ -132,7 +141,8 @@ def main():
             emit({'id': ident, 'ok': True, 'data': result})
         except Exception as error:
             emit({'id': command.get('id', locals().get('ident')), 'ok': True,
-                  'data': {'status': 'refused', 'reason': str(error), 'used': probe.used}})
+                  'data': {'status': 'refused', 'reason': str(error), 'used': probe.used,
+                           'observation': probe.observation}})
 
 
 if __name__ == '__main__':

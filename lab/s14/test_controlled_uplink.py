@@ -4,19 +4,21 @@ import unittest
 from unittest.mock import patch
 
 from controlled_guest import OneShot
+from controlled_scope import PUBLIC_HOST, PUBLIC_URL
+from controlled_uplink import observe_dns
 from verify_controlled_uplink import positive_packets
 
 
 class Socket:
-    def __init__(self, data=b'', fail=False):
-        self.data = data; self.fail = fail; self.sent = []; self.connected = []
+    def __init__(self, data=b'', fail=False, peer='198.18.43.10'):
+        self.data = data; self.fail = fail; self.peer = peer; self.sent = []; self.connected = []
     def __enter__(self): return self
     def __exit__(self, *_): pass
     def settimeout(self, timeout): self.timeout = timeout
     def connect(self, peer):
         self.connected.append(peer)
         if self.fail: raise TimeoutError('fixture_timeout')
-    def getpeername(self): return ('198.18.43.10', 443)
+    def getpeername(self): return (self.peer, 443)
     def getpeercert(self, binary_form=False): return b'fixture certificate'
     def version(self): return 'TLSv1.3'
     def sendall(self, data): self.sent.append(data)
@@ -84,6 +86,45 @@ class ControlledTransport(unittest.TestCase):
             with self.subTest(packets=packets), self.assertRaises(ValueError):
                 positive_packets(packets, '198.18.42.1', '198.18.43.10', True)
         positive_packets([request, response], '198.18.42.1', '198.18.43.10', True)
+
+    def test_owned_public_scope_is_exact_root_and_sni(self):
+        client = Socket(b'HTTP/1.0 200 OK\r\nContent-Length: 2\r\n\r\n{}', peer='8.8.8.8')
+        probe = OneShot('public', 'unused-fixture-ca')
+        with patch('controlled_guest.socket.socket', return_value=client), \
+             patch('controlled_guest.socket.getaddrinfo', side_effect=AssertionError('No DNS')), \
+             patch('controlled_guest.ssl.create_default_context') as context:
+            context.return_value.wrap_socket.return_value = client
+            result = probe.execute({'address': '8.8.8.8', 'lease_ms': 1000})
+            context.return_value.wrap_socket.assert_called_once_with(client, server_hostname='squishylab.fun')
+        self.assertEqual(PUBLIC_URL, 'https://squishylab.fun/')
+        self.assertEqual(result['tls_hostname'], PUBLIC_HOST)
+        self.assertIn(b'GET / HTTP/1.0\r\nHost: squishylab.fun\r\n', client.sent[0])
+        self.assertNotIn(b'/get ', client.sent[0])
+
+    def test_refusal_retains_verified_tls_and_http_metadata(self):
+        client = Socket(b'HTTP/1.0 402 Refused\r\n\r\n')
+        probe = OneShot('fixture', 'unused-fixture-ca')
+        with patch('controlled_guest.socket.socket', return_value=client), \
+             patch('controlled_guest.ssl.create_default_context') as context:
+            context.return_value.wrap_socket.return_value = client
+            with self.assertRaisesRegex(ValueError, 'http_status_402'):
+                probe.execute({'address': '198.18.43.10', 'lease_ms': 1000})
+        self.assertTrue(probe.observation['tls_verified'])
+        self.assertEqual(probe.observation['http_status'], 402)
+        self.assertEqual(probe.observation['requests'], 1)
+        self.assertEqual(len(probe.observation['certificate_sha256']), 64)
+
+    def test_dns_observation_queries_only_owned_name_and_refuses_foreign_or_special(self):
+        from types import SimpleNamespace
+        answer = 'squishylab.fun. 60 IN A 8.8.8.8\n'
+        with patch('controlled_uplink.subprocess.run', return_value=SimpleNamespace(stdout=answer)) as run:
+            observation = observe_dns()
+            self.assertEqual(observation['answers'], ['8.8.8.8'])
+            self.assertIn('squishylab.fun.', run.call_args.args[0])
+            self.assertNotIn('httpbingo.org.', run.call_args.args[0])
+        for answer in ['foreign.invalid. 60 IN A 8.8.8.8\n', 'squishylab.fun. 60 IN A 127.0.0.1\n']:
+            with self.subTest(answer=answer), patch('controlled_uplink.subprocess.run', return_value=SimpleNamespace(stdout=answer)):
+                with self.assertRaises(ValueError): observe_dns()
 
 
 if __name__ == '__main__':

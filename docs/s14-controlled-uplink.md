@@ -10,7 +10,7 @@ mode additionally requires `--authorize-public-one-get` and root-owned successfu
 local evidence for the success, guard-loss and owner-loss cases on the exact
 current source inventory. Failed prerequisites cannot fall back to public mode.
 
-The public scope is one `GET https://httpbingo.org/get`, with no query, user
+The current public scope is one `GET https://squishylab.fun/`, with no query, user
 data, credentials, cookies, redirects, retries, IPv6 or guest DNS. After the
 verified disposable KVM image boots under empty guards, the host coordinator
 queries its existing DNS resolver twice for this exact name, checks all observed
@@ -49,8 +49,17 @@ retry refusal and positive request/response packets. Public mode reconciles both
 the bridge capture and a destination-filtered Wi-Fi capture showing host SNAT.
 The destination-filtered capture is not a capture of all host traffic.
 
-The source includes seven inert regression methods. Local KVM and public results
+The source includes ten inert regression methods. Local KVM and public results
 must be recorded separately; the presence of this code is not a passing run.
 No full live worker/gateway/broker integration, hostile-code acceptance, corpus
 accuracy, general collector acceptance or R08 closure follows from a successful
 trusted GET. Real detonation remains outside the authorized scope.
+
+The earlier httpbingo.org attempt remains a recorded HTTP 402 application FAIL;
+it is not overwritten or relabelled. The user subsequently asserted ownership
+of squishylab.fun and explicitly authorized one root-page GET. The fixed scope
+module is shared by resolver, guest and evidence reader; no arbitrary target
+parameter is exposed. The fixture still uses its local `/get` path. A new
+disabled profile and fresh local matrix are required for the changed source
+inventory. Refusals now retain bounded TLS certificate/peer/status metadata
+when those stages actually completed; previous missing metadata is not invented.

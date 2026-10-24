@@ -29,12 +29,13 @@ from prepare_uplink import current_uplink
 from uplink_policy import (address, validate, match_uplink, guard_tables, bridge_table,
                            nat_table, interop_commands, admit, lease_transaction, fingerprint)
 from validate_uplink_vm import VMValidation, TABLES, policy_fingerprint
+from controlled_scope import PUBLIC_HOST, PUBLIC_URL
 
 
 def observe_dns():
     """A single exact-name query through the host's existing resolver; no guest DNS."""
     started = time.monotonic()
-    result = subprocess.run(['/usr/bin/dig', '-r', '@127.0.0.53', 'httpbingo.org.', 'A',
+    result = subprocess.run(['/usr/bin/dig', '-r', '@127.0.0.53', PUBLIC_HOST + '.', 'A',
                              '+noall', '+answer', '+tries=1', '+time=2', '+nosearch'],
                             capture_output=True, text=True, check=True, timeout=4)
     records = []
@@ -45,7 +46,7 @@ def observe_dns():
         if cls != 'IN' or kind not in {'A', 'CNAME'}:
             raise ValueError('unexpected_dns_record')
         records.append({'name': name.lower(), 'ttl': int(ttl), 'type': kind, 'value': value})
-    owners = {'httpbingo.org.'}
+    owners = {PUBLIC_HOST + '.'}
     for _ in range(8):
         owners.update(r['value'].lower() for r in records if r['name'] in owners.copy() and r['type'] == 'CNAME')
     if not records or any(r['name'] not in owners or r['ttl'] <= 0 for r in records):
@@ -85,7 +86,7 @@ class Controlled(VMValidation):
         match_uplink(self.prepared_profile, current_uplink())
         assert self.prepared_profile['mode'] == 'wifi-routed'
         assert len(self.prepared_profile['targets']) == 1
-        assert self.prepared_profile['targets'][0]['url'] == 'https://httpbingo.org/get'
+        assert self.prepared_profile['targets'][0]['url'] == PUBLIC_URL
         assert not self.prepared_profile['targets'][0]['pinned_ipv4']
         self.profile = copy.deepcopy(self.prepared_profile)
         self.before = self.snapshot_host()
@@ -120,7 +121,7 @@ class Controlled(VMValidation):
                    'StandardInput=tty-force\nStandardOutput=tty\nStandardError=tty\nTTYPath=/dev/ttyS0\n'
                    'TasksMax=32\nMemoryMax=128M\nMemorySwapMax=0\nCPUQuota=50%\n')
         files = [('/usr/local/lib/paw-s14/' + n, (HERE / n).read_bytes())
-                 for n in ['controlled_guest.py', 'uplink_policy.py', 'gw_admission.py']]
+                 for n in ['controlled_guest.py', 'controlled_scope.py', 'uplink_policy.py', 'gw_admission.py']]
         files += [('/etc/paw-controlled-ca.pem', (self.output / 'ca.pem').read_bytes()),
                   ('/etc/paw-controlled.json', json.dumps({'mode': self.args.mode}).encode()),
                   ('/etc/systemd/system/paw-controlled.service', service.encode())]
@@ -203,7 +204,7 @@ class Controlled(VMValidation):
             first = observe_dns(); second = observe_dns()
             assert first['answers'] == second['answers'], 'dns_binding_changed'
             self.profile['targets'][0]['pinned_ipv4'] = first['answers']
-            self.profile['targets'][0]['authorization_ref'] = 'User authorized one controlled real HTTPS connectivity test, 2026-10-24'
+            self.profile['targets'][0]['authorization_ref'] = 'User asserted ownership of squishylab.fun and authorized one controlled root GET, 2026-10-24'
             self.report['dns_observations'] = [first, second]
             observation = second
             self.wifi_capture = self.capture_on(self.profile['uplink']['interface'], 'wifi-target.pcap',

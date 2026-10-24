@@ -9,6 +9,7 @@ import xml.etree.ElementTree as ET
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from verify_gateway_evidence import pcap
 from uplink_policy import validate, address, fingerprint
+from controlled_scope import PUBLIC_HOST, PUBLIC_URL, FIXTURE_HOST, FIXTURE_PATH
 
 
 def require(value, reason):
@@ -72,7 +73,9 @@ def verify(root, mode, case='success', current_sources=None):
     require(plan['profile_sha256'] == fingerprint(profile), 'plan_profile')
     peer = address(plan['address'], mode == 'fixture')
     require(peer in profile['targets'][0]['pinned_ipv4'] and result['peer'] == peer, 'peer_binding')
-    host = 'httpbingo.org' if mode == 'public' else 'allow.fixture.invalid'
+    host = PUBLIC_HOST if mode == 'public' else FIXTURE_HOST
+    url = PUBLIC_URL if mode == 'public' else 'https://' + FIXTURE_HOST + FIXTURE_PATH
+    require(plan['url'] == profile['targets'][0]['url'] == url, 'exact_url_binding')
     require(result['status'] == 'completed' and result['tls_verified'] and result['tls_hostname'] == host and
             result['http_status'] == 200 and 0 < result['bytes'] <= 8192 and
             result['requests'] == 1 and result['redirects'] == 0 and result['elapsed_seconds'] <= 5.5, 'fetch_contract')
@@ -91,7 +94,7 @@ def verify(root, mode, case='success', current_sources=None):
         counts['wifi'] = len(wifi)
     else:
         require(not report['public_get_attempted'], 'unexpected_public_attempt')
-    return {'result': 'PASS', 'mode': mode, 'case': case, 'target': 'https://' + host + '/get',
+    return {'result': 'PASS', 'mode': mode, 'case': case, 'target': url,
             'peer': peer, 'packet_counts': counts, 'source_count': len(report['source_hashes']),
             'response_bytes': result['bytes'], 'body_sha256': result['sha256'],
             'real_gets': int(mode == 'public'), 'host_restored': True, 'detonation': False}
