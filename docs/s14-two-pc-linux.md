@@ -1,5 +1,10 @@
 # S14 proposal: two Linux PCs and isolated egress
 
+Historical allocation: on 24 October 2026 the owner required all work on the
+current Linux PC. See the [single-PC closed preparation](s14-single-pc-linux.md)
+for the measured platform/configuration and unpassed gate. The two-PC allocation
+below was not implemented; its evidence and isolation criteria remain relevant.
+
 Proposal following the [Linux/R08 measurements](linux-r08-validation.md),
 23 October 2026. **Not implemented or isolation-validated.** No second-PC
 hardware inventory, remote access, network layout or successful containment test

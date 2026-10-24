@@ -1,0 +1,7 @@
+<network>
+  <!-- Preparation only: no uplink, forward mode, host IP, DHCP or DNS. -->
+  <!-- Starting this network does not establish the S14 isolation gate. -->
+  <name>paw-s14-internal</name>
+  <bridge name='pawbr-int' stp='off' delay='0'/>
+  <dns enable='no'/>
+</network>

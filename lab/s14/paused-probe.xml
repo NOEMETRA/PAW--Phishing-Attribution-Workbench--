@@ -1,0 +1,31 @@
+<domain type='kvm'>
+  <name>paw-s14-platform-probe</name>
+  <memory unit='MiB'>128</memory>
+  <currentMemory unit='MiB'>128</currentMemory>
+  <vcpu placement='static'>1</vcpu>
+  <memtune>
+    <hard_limit unit='MiB'>384</hard_limit>
+    <swap_hard_limit unit='MiB'>384</swap_hard_limit>
+  </memtune>
+  <cputune>
+    <global_period>100000</global_period>
+    <global_quota>50000</global_quota>
+  </cputune>
+  <os>
+    <type arch='x86_64' machine='q35'>hvm</type>
+  </os>
+  <features><acpi/><apic/></features>
+  <cpu mode='host-passthrough' check='none' migratable='off'/>
+  <on_poweroff>destroy</on_poweroff>
+  <on_reboot>destroy</on_reboot>
+  <on_crash>destroy</on_crash>
+  <devices>
+    <emulator>/usr/bin/qemu-system-x86_64</emulator>
+    <interface type='network'>
+      <source network='paw-s14-internal'/>
+      <model type='virtio'/>
+    </interface>
+    <memballoon model='none'/>
+  </devices>
+  <seclabel type='dynamic' model='apparmor' relabel='yes'/>
+</domain>

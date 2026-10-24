@@ -1,0 +1,11 @@
+[Unit]
+Description=Aggregate budget for the closed PAW S14 lab
+
+[Slice]
+CPUAccounting=yes
+MemoryAccounting=yes
+TasksAccounting=yes
+CPUQuota=100%
+MemoryMax=2G
+MemorySwapMax=0
+TasksMax=128

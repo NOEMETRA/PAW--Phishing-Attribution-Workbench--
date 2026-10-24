@@ -1,0 +1,40 @@
+# Fixed offline roles. No dynamic caller-selected interface, MAC, IP or port.
+add table bridge paw_s14_roles
+flush table bridge paw_s14_roles
+table bridge paw_s14_roles {
+  chain ingress {
+    type filter hook prerouting priority -320; policy accept;
+    meta ibrname { "pawbr-int", "pawbr-wan" } ether type ip6 counter drop
+    meta ibrname { "pawbr-int", "pawbr-wan" } ether type { 0x8100, 0x88a8, 0x8847, 0x8848 } counter drop
+    meta ibrname { "pawbr-int", "pawbr-wan" } vlan id 1 counter drop
+    meta ibrname { "pawbr-int", "pawbr-wan" } ether type ip ip frag-off & 0x3fff != 0 counter drop
+    meta ibrname "pawbr-int" jump lan
+    meta ibrname "pawbr-wan" jump wan
+  }
+  chain lan {
+    iifname "pgw-worker" ether saddr 52:54:00:14:00:20 ether type arp arp saddr ether 52:54:00:14:00:20 arp saddr ip 192.0.2.20 arp daddr ip 192.0.2.1 counter accept
+    iifname "pgw-lan" ether saddr 52:54:00:14:00:01 ether type arp arp saddr ether 52:54:00:14:00:01 arp saddr ip 192.0.2.1 arp daddr ip 192.0.2.20 counter accept
+    iifname "pgw-worker" ether saddr 52:54:00:14:00:20 ether daddr 52:54:00:14:00:01 ether type ip ip saddr 192.0.2.20 ip daddr 192.0.2.1 tcp dport 3128 counter accept
+    iifname "pgw-worker" ether saddr 52:54:00:14:00:20 ether daddr 52:54:00:14:00:01 ether type ip ip saddr 192.0.2.20 ip daddr 192.0.2.1 udp dport 5353 counter accept
+    iifname "pgw-lan" ether saddr 52:54:00:14:00:01 ether daddr 52:54:00:14:00:20 ether type ip ip saddr 192.0.2.1 ip daddr 192.0.2.20 tcp sport 3128 counter accept
+    iifname "pgw-lan" ether saddr 52:54:00:14:00:01 ether daddr 52:54:00:14:00:20 ether type ip ip saddr 192.0.2.1 ip daddr 192.0.2.20 udp sport 5353 counter accept
+    counter drop
+  }
+  chain wan {
+    iifname "pgw-wan" ether saddr 52:54:00:14:40:02 ether type arp arp saddr ether 52:54:00:14:40:02 arp saddr ip 198.18.40.2 arp daddr ip 198.18.40.10 counter accept
+    iifname "pgw-fixture" ether saddr 52:54:00:14:40:10 ether type arp arp saddr ether 52:54:00:14:40:10 arp saddr ip 198.18.40.10 arp daddr ip 198.18.40.2 counter accept
+    iifname "pgw-wan" ether saddr 52:54:00:14:40:02 ether daddr 52:54:00:14:40:10 ether type ip ip saddr 198.18.40.2 ip daddr 198.18.40.10 tcp dport { 18080, 8443 } counter accept
+    iifname "pgw-wan" ether saddr 52:54:00:14:40:02 ether daddr 52:54:00:14:40:10 ether type ip ip saddr 198.18.40.2 ip daddr 198.18.40.10 udp dport 5353 counter accept
+    iifname "pgw-fixture" ether saddr 52:54:00:14:40:10 ether daddr 52:54:00:14:40:02 ether type ip ip saddr 198.18.40.10 ip daddr 198.18.40.2 tcp sport { 18080, 8443 } counter accept
+    iifname "pgw-fixture" ether saddr 52:54:00:14:40:10 ether daddr 52:54:00:14:40:02 ether type ip ip saddr 198.18.40.10 ip daddr 198.18.40.2 udp sport 5353 counter accept
+    counter drop
+  }
+  chain ports {
+    type filter hook forward priority -320; policy accept;
+    meta ibrname "pawbr-int" iifname "pgw-worker" oifname "pgw-lan" counter accept
+    meta ibrname "pawbr-int" iifname "pgw-lan" oifname "pgw-worker" counter accept
+    meta ibrname "pawbr-wan" iifname "pgw-wan" oifname "pgw-fixture" counter accept
+    meta ibrname "pawbr-wan" iifname "pgw-fixture" oifname "pgw-wan" counter accept
+    meta ibrname { "pawbr-int", "pawbr-wan" } counter drop
+  }
+}

@@ -1,0 +1,5 @@
+<network>
+  <name>paw-s14-wan</name>
+  <bridge name='pawbr-wan' stp='off' delay='0'/>
+  <dns enable='no'/>
+</network>

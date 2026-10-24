@@ -1,0 +1,11 @@
+[Unit]
+Description=PAW S14 closed preparation network guard
+Before=libvirtd.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/nft -f /etc/paw-s14/all-guards.nft
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
