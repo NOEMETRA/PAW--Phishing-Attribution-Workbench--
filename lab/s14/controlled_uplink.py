@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import queue
 import shutil
 import signal
 import subprocess
@@ -30,6 +31,21 @@ from uplink_policy import (address, validate, match_uplink, guard_tables, bridge
                            nat_table, interop_commands, admit, lease_transaction, fingerprint)
 from validate_uplink_vm import VMValidation, TABLES, policy_fingerprint
 from controlled_scope import PUBLIC_HOST, PUBLIC_TARGETS, public_scope
+
+
+def wait_ready(channel, abort, seconds=180):
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        if abort.is_set():
+            raise RuntimeError('boot_monitor_aborted')
+        try:
+            value = channel.ready(min(.5, max(.001, deadline - time.monotonic())))
+        except queue.Empty:
+            continue
+        if abort.is_set():
+            raise RuntimeError('boot_monitor_aborted')
+        return value
+    raise TimeoutError('guest_ready_deadline')
 
 
 def observe_dns(host=PUBLIC_HOST):
@@ -149,6 +165,7 @@ class Controlled(VMValidation):
     def start_vm(self):
         node = self.descriptor('worker', 'controlled', str(uuid.uuid4()), uuid.uuid4().hex)
         xml = ET.fromstring(node['xml'].read_text()); nic = xml.find('devices/interface')
+        ET.SubElement(xml, 'defaultiothread', {'thread_pool_min': '0', 'thread_pool_max': '8'})
         nic.set('type', 'bridge'); nic.find('source').attrib = {'bridge': 'pawbr-up'}
         nic.find('mac').set('address', '52:54:00:14:41:02'); nic.find('target').set('dev', 'pu-gw')
         node['xml'].write_bytes(ET.tostring(xml)); self.vm = node
@@ -166,16 +183,26 @@ class Controlled(VMValidation):
                                                   for n in ['memory.max', 'memory.swap.max', 'pids.max', 'cpu.max']}
         domain = self.connection.lookupByUUIDString(node['uuid']); runtime = ET.fromstring(domain.XMLDesc(0))
         (self.output / 'actual-domain.xml').write_bytes(ET.tostring(runtime))
+        assert runtime.find('defaultiothread').attrib == {'thread_pool_min': '0', 'thread_pool_max': '8'}
+        self.report['domain'] = {**actual, 'uuid': node['uuid'], 'overlay': str(node['overlay'])}
+        self.report['resources'] = {'pids_peak_sampled': 0, 'memory_peak_sampled': 0, 'pids_events_max': 0}
         self.channel = Channel(runtime.find('devices/serial/source').get('path'), self.output / 'guest-serial.log')
         def monitor():
             while not self.monitor_done:
                 try:
-                    assert policy_fingerprint() == self.expected
-                    assert process_identity(actual['pid']) == actual['pid_identity']
+                    scope = Path(actual['scope'])
+                    values = self.report['resources']
+                    values['pids_peak_sampled'] = max(values['pids_peak_sampled'], int((scope / 'pids.current').read_text()))
+                    values['memory_peak_sampled'] = max(values['memory_peak_sampled'], int((scope / 'memory.current').read_text()))
+                    values['pids_events_max'] = int(dict(line.split() for line in (scope / 'pids.events').read_text().splitlines())['max'])
+                    assert values['pids_events_max'] == 0, 'pids_controller_rejected_fork'
+                    assert policy_fingerprint() == self.expected, 'effective_policy_changed'
+                    assert process_identity(actual['pid']) == actual['pid_identity'], 'qemu_identity_lost'
                     ports = {p.name for p in Path('/sys/class/net/pawbr-up/brif').iterdir()}
-                    assert ports <= {'pu-gw'} if self.offline_phase else ports == {'pu-gw'}
+                    assert (ports <= {'pu-gw'} if self.offline_phase else ports == {'pu-gw'}), 'unexpected_bridge_ports:' + str(ports)
                     match_uplink(self.prepared_profile, current_uplink())
-                    assert all(p.poll() is None for p in self.processes)
+                    statuses = {str(p.pid): p.poll() for p in self.processes}
+                    assert all(v is None for v in statuses.values()), 'health_process_exit:' + str(statuses)
                     if self.public and self.report.get('plan'):
                         route = json.loads(subprocess.check_output(['/usr/sbin/ip', '-j', 'route', 'get', self.report['plan']['address']], timeout=3))[0]
                         assert route['dev'] == self.profile['uplink']['interface'] and route['prefsrc'] == self.profile['uplink']['host_ipv4']
@@ -188,9 +215,8 @@ class Controlled(VMValidation):
                     return
                 time.sleep(.4)
         self.monitor = threading.Thread(target=monitor, daemon=True); self.monitor.start()
-        self.channel.ready(180)
+        wait_ready(self.channel, self.abort)
         self.absolute_limit = min(self.absolute_limit, time.monotonic() + 30)
-        self.report['domain'] = {**actual, 'uuid': node['uuid'], 'overlay': str(node['overlay'])}
         self.report['guest_state'] = self.channel.call('state')
         assert not self.abort.is_set()
 

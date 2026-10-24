@@ -56,6 +56,11 @@ def verify(root, mode, case='success', current_sources=None):
             limits['pids.max'] == '64' and limits['cpu.max'].startswith('50000 '), 'domain_budget')
     require(domain['apparmor'].startswith('libvirt-') and '(enforce)' in domain['apparmor'], 'apparmor')
     xml = ET.fromstring((root / 'actual-domain.xml').read_bytes())
+    require(xml.find('defaultiothread') is not None and xml.find('defaultiothread').attrib ==
+            {'thread_pool_min': '0', 'thread_pool_max': '8'}, 'qemu_thread_pool')
+    if case == 'success':
+        require(report['resources']['pids_events_max'] == 0 and report['resources']['pids_peak_sampled'] <= 64 and
+                report['resources']['memory_peak_sampled'] <= 768 * 1024**2, 'effective_resource_pressure')
     interfaces = xml.findall('devices/interface')
     require(len(interfaces) == 1 and interfaces[0].get('type') == 'bridge' and
             interfaces[0].find('source').get('bridge') == 'pawbr-up', 'guest_nic')

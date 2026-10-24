@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 from controlled_guest import OneShot, run_synthetic
 from controlled_scope import PUBLIC_HOST, PUBLIC_URL, public_scope
-from controlled_uplink import observe_dns
+from controlled_uplink import observe_dns, wait_ready
 from verify_controlled_uplink import positive_packets
 
 
@@ -186,6 +186,20 @@ class ControlledTransport(unittest.TestCase):
             self.assertTrue(argv[2].endswith('/benign_synthetic.py'))
             with self.assertRaisesRegex(ValueError, 'synthetic_gate'): run_synthetic(probe)
             popen.assert_called_once()
+
+    def test_boot_monitor_abort_does_not_wait_for_readiness_timeout(self):
+        import queue
+        import threading
+        from unittest.mock import Mock
+        abort = threading.Event(); channel = Mock()
+        def interrupted(seconds):
+            self.assertLessEqual(seconds, .5)
+            abort.set()
+            raise queue.Empty
+        channel.ready.side_effect = interrupted
+        with self.assertRaisesRegex(RuntimeError, 'boot_monitor_aborted'):
+            wait_ready(channel, abort, seconds=180)
+        channel.ready.assert_called_once()
 
 
 if __name__ == '__main__':

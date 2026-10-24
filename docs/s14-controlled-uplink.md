@@ -49,7 +49,7 @@ retry refusal and positive request/response packets. Public mode reconciles both
 the bridge capture and a destination-filtered Wi-Fi capture showing host SNAT.
 The destination-filtered capture is not a capture of all host traffic.
 
-The source includes fourteen inert regression methods. Local KVM and public results
+The source includes fifteen inert regression methods. Local KVM and public results
 must be recorded separately; the presence of this code is not a passing run.
 No full live worker/gateway/broker integration, hostile-code acceptance, corpus
 accuracy, general collector acceptance or R08 closure follows from a successful
@@ -85,3 +85,13 @@ before any host publication. A local fixture rehearsal exercises this same path
 before a public run; no website scripts, downloaded content or malware are run.
 This accepts a finite benign execution path only and does not close the broader
 hostile-code, browser, collector or R08 gates.
+
+The first final-host VM stopped before readiness and before any request. Host
+journal evidence records a PID-controller fork rejection in its 64-task scope.
+The controlled probe now bounds the default QEMU I/O worker pool at eight
+(`defaultiothread`, as specified by the [libvirt domain format](https://libvirt.org/formatdomain.html#iothreads-allocation)),
+keeps the 64-task/768 MiB/zero-swap limits unchanged, and records live task/memory
+peaks plus PID rejection events. Boot aborts are named and surfaced immediately
+instead of being hidden behind the 180-second readiness timeout. The earlier
+boot failure remains FAIL; the already observed apex-to-www Location needs no
+second discovery request. New source hashes require a fresh local rehearsal.
