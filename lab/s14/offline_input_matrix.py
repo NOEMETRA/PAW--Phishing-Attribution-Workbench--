@@ -66,7 +66,7 @@ def run_job(gate, value, cancel=False):
     return _run_admitted_job(gate, current, lambda: authorize(current['job']), cancel)
 
 
-def _run_admitted_job(gate, current, revalidate, cancel=False):
+def _run_admitted_job(gate, current, revalidate, cancel=False, before_publish=None):
     """Shared lifecycle; only trusted adapters supply already admitted input."""
     if getattr(gate, 'active_vm', None) is not None: raise ValueError('gate_busy')
     folder = gate.output / 'admissions'; folder.mkdir(mode=0o700, exist_ok=True)
@@ -94,6 +94,7 @@ def _run_admitted_job(gate, current, revalidate, cancel=False):
         records = outcome['records']
         # Same publication function used for normal, timeout, cancellation and fault cases.
         gate.stop(vm)
+        if before_publish is not None: before_publish()
         quarantine = publish(gate.output / (current['job']['job_id'] + '-quarantine'), records, stopped=vm.get('stopped'))
         result = {'job': current['job'], 'job_sha256': current['job_sha256'], 'vm_uuid': vm['node']['uuid'],
                   'guest_admission': started, 'outcome': outcome, 'stop_seconds': vm['stop_seconds'],
