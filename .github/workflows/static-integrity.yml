@@ -41,6 +41,10 @@ jobs:
           python -B -m unittest discover -s lab/s14 -p 'test_granted_evidence.py' -v
       - name: Verify hash-pinned outside-catalogue authority and single-job custody without guests
         run: python -B -m unittest discover -s lab/s14 -p 'test_hash*.py' -v
+      - name: Verify inert browser image budgets and private input media
+        run: |
+          python -B -m unittest discover -s lab/s14 -p 'test_browser*.py' -v
+          python -B -m unittest discover -s lab/s14 -p 'test_input_media_privacy.py' -v
       - name: Check public metadata and safety wording
         run: python -m unittest discover -s tests -p 'test_static_contracts.py' -v
       - name: Verify Python requirement and sources in the actual built wheel
