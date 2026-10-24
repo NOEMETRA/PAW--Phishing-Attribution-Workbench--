@@ -55,3 +55,21 @@ Startup is now inside the API cleanup region. The reader validates non-root DAC,
 512 MiB guest memory with explicit MiB/KiB units and the eight-worker I/O budget.
 Six inert methods include the real CLI, partial-startup fault and complete-export
 corruption regressions. A fresh full runtime run is required on corrected sources.
+
+## Frozen operational interface
+
+The only supported operational adapter here is the synchronous, single-caller
+local Python `run_job(gate, job, cancel=False)` API exercised by the synthetic CLI
+matrix. Calls must be sequential, with one owned idle gate; parallel callers and
+a production HTTP endpoint are not supported. No PAW detonation route points to
+this lab API, and passing the admission CLI does not authorize execution.
+
+A repeated call on a busy gate now refuses before consuming a ledger entry or
+starting/stopping anything. The earlier implementation could stop the prior job
+when the new startup refused; this was reproduced without a VM and corrected.
+A startup failure before VM registration also retains its original exception
+instead of masking it with a missing-state error. Two regressions bring this
+family to eight inert methods. Startup/readiness failure, known stop, unknown
+stop and partial output remain distinct from successful completion. The full
+KVM matrix must be repeated for this final adapter revision; historical exports
+keep their original producer heads and bytes.

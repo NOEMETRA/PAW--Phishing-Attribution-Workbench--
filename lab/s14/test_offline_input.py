@@ -53,5 +53,25 @@ class Admission(unittest.TestCase):
             self.assertEqual(len(gate.stopped), 1)
             self.assertEqual(gate.stopped[0]['label'], 'owned-success')
 
+    def test_busy_gate_keeps_prior_job_and_does_not_consume_admission(self):
+        class Gate:
+            def __init__(self, root): self.output = root; self.active_vm = {'label': 'prior-job'}
+            def start(self, label): raise AssertionError('busy admission must not start')
+            def stop(self, vm): raise AssertionError('busy admission must not stop the prior job')
+        with tempfile.TemporaryDirectory() as directory:
+            gate = Gate(Path(directory)); prior = gate.active_vm
+            with self.assertRaisesRegex(ValueError, 'gate_busy'): run_job(gate, job('success'))
+            self.assertIs(gate.active_vm, prior)
+            self.assertFalse((gate.output / 'admissions').exists())
+
+    def test_startup_before_vm_registration_keeps_original_error(self):
+        class Gate:
+            def __init__(self, root): self.output = root
+            def start(self, label): raise TimeoutError('owned failure before registration')
+            def stop(self, vm): raise AssertionError('no owned VM to stop')
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(TimeoutError, 'before registration'):
+                run_job(Gate(Path(directory)), job('success'))
+
 
 if __name__ == '__main__': unittest.main()

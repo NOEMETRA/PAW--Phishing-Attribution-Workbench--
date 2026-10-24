@@ -61,6 +61,7 @@ class InputGate(Gate):
 
 def run_job(gate, value, cancel=False):
     """The single measured local Python API, used by the CLI acceptance matrix."""
+    if getattr(gate, 'active_vm', None) is not None: raise ValueError('gate_busy')
     current = authorize(value)
     folder = gate.output / 'admissions'; folder.mkdir(mode=0o700, exist_ok=True)
     # Atomic one-use ledger, before any guest creation. No caller-selected paths.
@@ -93,7 +94,7 @@ def run_job(gate, value, cancel=False):
                   'writers_stopped': vm['stopped'], 'quarantine': quarantine}
         return result
     finally:
-        if gate.active_vm: gate.stop(gate.active_vm)
+        if getattr(gate, 'active_vm', None) is not None: gate.stop(gate.active_vm)
 
 
 def main():
