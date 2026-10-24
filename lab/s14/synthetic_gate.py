@@ -37,6 +37,9 @@ def observe_cpu_quota(actual):
 
 class Gate(Matrix):
     snapshot_host = Validation.snapshot_host
+    def validate_runtime(self, runtime):
+        """Additional fixed-policy admission for a more restrictive adapter."""
+        pass
     def seed(self, folder, role, job_id, token):
         service = ('[Unit]\nAfter=cloud-final.service\n[Service]\n'
                    'ExecStart=/usr/bin/python3 -I -u /usr/local/lib/paw-s14/gate_guest.py\n'
@@ -84,6 +87,7 @@ class Gate(Matrix):
         vm['host_file_size_limit'] = next(line for line in Path('/proc', str(actual['pid']), 'limits').read_text().splitlines() if line.startswith('Max file size'))
         runtime = ET.fromstring(self.connection.lookupByUUIDString(node['uuid']).XMLDesc(0))
         assert not runtime.findall('devices/interface') and runtime.find('defaultiothread').get('thread_pool_max') == '8'
+        self.validate_runtime(runtime)
         (self.output / (label + '-domain.xml')).write_bytes(ET.tostring(runtime))
         status = Path('/proc', str(actual['pid']), 'status').read_text()
         assert next(line for line in status.splitlines() if line.startswith('Seccomp:')).split()[1] == '2'

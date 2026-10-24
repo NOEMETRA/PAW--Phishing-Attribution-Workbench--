@@ -63,6 +63,12 @@ def run_job(gate, value, cancel=False):
     """The single measured local Python API, used by the CLI acceptance matrix."""
     if getattr(gate, 'active_vm', None) is not None: raise ValueError('gate_busy')
     current = authorize(value)
+    return _run_admitted_job(gate, current, lambda: authorize(current['job']), cancel)
+
+
+def _run_admitted_job(gate, current, revalidate, cancel=False):
+    """Shared lifecycle; only trusted adapters supply already admitted input."""
+    if getattr(gate, 'active_vm', None) is not None: raise ValueError('gate_busy')
     folder = gate.output / 'admissions'; folder.mkdir(mode=0o700, exist_ok=True)
     # Atomic one-use ledger, before any guest creation. No caller-selected paths.
     with (folder / (current['job']['job_id'] + '.json')).open('x') as stream:
@@ -70,7 +76,7 @@ def run_job(gate, value, cancel=False):
     gate.current = current
     try:
         vm = gate.start(current['job']['job_id'])
-        authorize(current['job'])  # expiry/digest rechecked after boot, before execution
+        revalidate()  # expiry/digest/authority rechecked after boot, before execution
         started = vm['channel'].call('start')
         if started['source_sha256'] != current['job']['source_sha256'] or started['job_sha256'] != current['job_sha256']:
             raise ValueError('guest_admission_binding')
