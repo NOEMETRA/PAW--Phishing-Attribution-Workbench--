@@ -25,6 +25,14 @@ jobs:
         run: python -B -m unittest discover -s lab/s14 -p 'test_gw_contracts.py' -v
       - name: Verify disabled uplink admission and evidence reconciliation without network
         run: python -B -m unittest discover -s lab/s14 -p 'test_uplink*.py' -v
+      - name: Verify one-shot controlled transport without network or privileged operations
+        run: python -B -m unittest discover -s lab/s14 -p 'test_controlled_uplink.py' -v
+      - name: Verify benign metadata authority preserves refused-body status without execution
+        run: python -B -m unittest discover -s lab/s14 -p 'test_networkless_synthetic.py' -v
+      - name: Verify hostile-synthetic frames and descriptor handoff without privileged execution
+        run: python -B -m unittest discover -s lab/s14 -p 'test_gate_*.py' -v
+      - name: Verify immutable offline input through real CLI and local API without execution
+        run: python -B -m unittest discover -s lab/s14 -p 'test_offline_input*.py' -v
       - name: Check public metadata and safety wording
         run: python -m unittest discover -s tests -p 'test_static_contracts.py' -v
       - name: Verify Python requirement and sources in the actual built wheel
