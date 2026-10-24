@@ -92,17 +92,23 @@ The privileged matrix requires the verified base, the separately recorded nft
 runtime bundle, no existing domains and empty private bridges. It deliberately
 refuses an occupied or changed lab. It is not a general detonation launcher.
 
-## Measured results and remaining acceptance
+## Historical component checkpoint and final acceptance
 
-The evidence combines the main component matrix and targeted correction checks.
+The table below records the composed checkpoint before the final complete repeat
+on the 2 GiB profile. The latest full-profile result and exact-head CI are
+recorded in [PR100](https://github.com/NOEMETRA/PAW--Phishing-Attribution-Workbench--/pull/100)
+and the retained stopped-run evidence; no result is inferred from a scheduled run.
+
+That historical evidence combines the main component matrix and targeted correction checks.
 **The original main run remains FAIL**: all twelve component scenarios passed,
 but final cleanup used a stale network handle after restarting libvirt. The
 empty WAN was recovered with no domains/ports; the handle is now reacquired on
 the new connection. A separate real reproduction showed worker-domain loss
 leaving its gateway alive; the owner now checks each identified QEMU process.
 The corrected three-case run also repeats guard startup failure and complete
-post-restart cleanup. No full rerun of all twelve scenarios on the final
-supervisor source or enlarged budget is claimed.
+post-restart cleanup. That composed checkpoint did not claim a full rerun of all twelve scenarios
+on the final supervisor source or enlarged budget. A later full run supersedes
+that limitation only when its own stopped evidence verifies.
 
 | Check | Measured result |
 | --- | --- |
@@ -136,5 +142,6 @@ checks against its `results.json`; it rejects the same boot ID, changed filters,
 missing persistent dependencies, auto-started networks/guests or surviving QEMU.
 That checker does not start lab traffic and does not authorize live targets.
 
-Use the passing targeted correction’s `results.json` for that check. The main
+Use the latest passing full-profile `results.json` for that check, or the
+passing targeted correction while a full repeat is still unaccepted. The main
 run’s FAIL remains unchanged and must not be supplied as a passing baseline.
