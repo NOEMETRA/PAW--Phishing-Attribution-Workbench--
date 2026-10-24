@@ -73,3 +73,10 @@ family to eight inert methods. Startup/readiness failure, known stop, unknown
 stop and partial output remain distinct from successful completion. The full
 KVM matrix must be repeated for this final adapter revision; historical exports
 keep their original producer heads and bytes.
+
+Codex also reproduced a reset-observation race: the success child could create
+its marker before the controller recorded the old-state observation. The reset
+check now occurs before spawning; an existing marker refuses execution, and a
+new child-created marker cannot change the saved observation. Two deterministic
+stub regressions require no root/guest/payload execution. The input family now
+contains ten inert methods. No new execution profile or production route is added.

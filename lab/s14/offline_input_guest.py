@@ -25,6 +25,8 @@ def start():
     global ACTIVE, STARTED, USED
     if USED: raise ValueError('single_job_only')
     USED = True
+    prior_marker_absent = not (WORK / 'previous-job-marker').exists()
+    if not prior_marker_absent: raise ValueError('reset_marker_survived_before_execution')
     clean(); group()
     source = Path('/opt/paw-input/sample.py')
     config = json.loads(Path('/etc/paw-input.json').read_text())
@@ -44,7 +46,7 @@ def start():
         SELECTOR.register(pipe, selectors.EVENT_READ, name)
     STARTED = time.monotonic()
     return {'started': True, 'pid': ACTIVE.pid, 'source_sha256': config['source_sha256'],
-            'job_sha256': config['job_sha256'], 'prior_marker_absent': not (WORK / 'previous-job-marker').exists()}
+            'job_sha256': config['job_sha256'], 'prior_marker_absent': prior_marker_absent}
 
 
 def poll():
