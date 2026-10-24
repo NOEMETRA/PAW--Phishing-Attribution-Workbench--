@@ -51,6 +51,8 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_execution_contracts.py' -v
       - name: Verify offline synthetic case linkage and protected producer admission
         run: python -B -m unittest discover -s tests -p 'test_synthetic_bridge.py' -v
+      - name: Verify sealed outside-catalogue attachment and opaque sidecar custody
+        run: python -B -m unittest discover -s tests -p 'test_offline_bridge.py' -v
       - name: Verify authentication and missing evidence contracts
         run: python -m unittest discover -s tests -p 'test_authentication_contracts.py' -v
       - name: Verify bounded local DKIM key evidence and unverified provenance
@@ -142,6 +144,8 @@ jobs:
         env:
           PYTHONDONTWRITEBYTECODE: '1'
         run: python -B tests/integration_synthetic_bridge_real.py --source --root-fixture --output "${{ runner.temp }}/paw-synthetic-bridge"
+      - name: Verify real outside-catalogue CLI with inert protected root exports
+        run: python -B tests/integration_offline_bridge_real.py --source --root-fixture --output "${{ runner.temp }}/paw-case-bridge"
 
       - name: Verify actual HTTP analysis and neutral review-subject ZIP export
         env:
