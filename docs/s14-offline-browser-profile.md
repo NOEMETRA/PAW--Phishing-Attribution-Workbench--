@@ -83,3 +83,15 @@ final review/CI and an owned end-to-end smoke remain required before real HTML.
 No TCP debugging server, input-selected URL/arguments, host browser rendering,
 credential entry, form submission or real egress is authorized by this code.
 Ordinary PAW analysis will not launch a privileged job automatically.
+
+## Preparation review corrections
+
+The first review reproduced three issues before any preparation VM was started.
+Limit monitoring now resolves the actual systemd scope ancestor when libvirt
+places QEMU in its threaded `libvirt/emulator` subgroup. Publication requires a
+libvirt STOPPED/SHUTDOWN lifecycle event and a successful owner result; mere
+process absence or a shutdown acknowledgement cannot promote an overlay after
+owner-triggered destruction. CI's symlink refusal test also substitutes the QEMU
+account lookup, so inert tests require no host libvirt account or provisioning.
+The original failed CI and review remain historical; new exact-head review/CI
+and actual preparation/runtime evidence are still required.

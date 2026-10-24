@@ -81,6 +81,12 @@ def copy_approved(source, target, expected, size):
     finally: os.close(fd)
 
 
+def validate_builder_shutdown(result, expected_uuid):
+    require(type(result) is dict and result.get('reason') == 'guest_shutdown' and
+            result.get('connection_closed') is True and result.get('guest_shutdown_event') is True and
+            result.get('vm_uuid') == expected_uuid, 'builder_requires_successful_guest_shutdown')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--manifest', type=Path, required=True); parser.add_argument('--expected-sha256', required=True)
@@ -125,6 +131,11 @@ def main():
             deadline = time.monotonic() + 45
             while not gate.absent(vm) and time.monotonic() < deadline: time.sleep(.1)
             require(gate.absent(vm), 'graceful_builder_shutdown_not_observed')
+            vm['owner'].wait(timeout=3)
+            with platform.fs.root_directory(output) as fd:
+                owner_result = json.loads(platform.fs.read(fd, Path(vm['owner_result_path']).name, 65536))
+            validate_builder_shutdown(owner_result, vm['node']['uuid'])
+            gate.report['graceful_shutdown_evidence'] = owner_result
             gate.stop(vm); vm = None
             require(before == gate.snapshot_host() and digest(BASE) == platform.fs.IMAGE_SHA256 and digest(gate.canary) == canary and
                     platform.capture() == context, 'browser_build_host_or_foundation_changed')

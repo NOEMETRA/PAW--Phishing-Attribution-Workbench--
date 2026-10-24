@@ -60,6 +60,13 @@ def validate_owner_config(config, path):
         require(target.parent == path.parent and target.suffix == ('.xml' if key == 'xml' else '.json'), 'browser_owner_output_paths')
 
 
+def scope_root(cgroup):
+    parts = Path(cgroup).parts
+    require(len(parts) >= 4 and parts[:3] == ('/', 'machine.slice', 'machine-paws14.slice') and
+            parts[3].endswith('.scope') and '..' not in parts, 'browser_scope_partition')
+    return Path('/sys/fs/cgroup', *parts[1:4])
+
+
 def owner(config_path):
     """PID1-owned libvirt connection destroys the VM on owner/controller loss."""
     import libvirt
@@ -74,10 +81,20 @@ def owner(config_path):
         nonlocal stopped
         stopped = True
     signal.signal(signal.SIGTERM, requested)
+    libvirt.virEventRegisterDefaultImpl()
+    timer = libvirt.virEventAddTimeout(100, lambda timer, opaque: None, None)
     connection = libvirt.open('qemu:///system'); reason = 'owner_error'
+    shutdown_event = {'observed': False}; events = []; expected_uuid = None
+    def lifecycle(conn, domain, event, detail, opaque):
+        if domain.UUIDString() != expected_uuid: return
+        if len(events) < 16: events.append({'event': event, 'detail': detail})
+        if event == libvirt.VIR_DOMAIN_EVENT_STOPPED and detail == libvirt.VIR_DOMAIN_EVENT_STOPPED_SHUTDOWN:
+            shutdown_event['observed'] = True
+    connection.domainEventRegisterAny(None, libvirt.VIR_DOMAIN_EVENT_ID_LIFECYCLE, lifecycle, None)
     try:
         require(guard_fingerprint() == config['guard'], 'browser_guard_before_creation')
         xml = Path(config['xml']).read_bytes(); validate_xml(ET.fromstring(xml))
+        expected_uuid = ET.fromstring(xml).findtext('uuid')
         domain = connection.createXML(xml.decode(), libvirt.VIR_DOMAIN_START_PAUSED | libvirt.VIR_DOMAIN_START_AUTODESTROY)
         pid = int(Path('/run/libvirt/qemu', domain.name() + '.pid').read_text())
         identity = process_identity(pid); require(identity is not None, 'browser_process_identity')
@@ -88,7 +105,7 @@ def owner(config_path):
                         'MemorySwapMax=0', 'CPUQuota=50%'], check=True, timeout=15)
         cap = FILE_CAP[config['phase']]
         subprocess.run(['/usr/bin/prlimit', '--pid', str(pid), '--fsize=' + str(cap) + ':' + str(cap), '--core=0:0'], check=True, timeout=10)
-        scope = Path('/sys/fs/cgroup') / cg.lstrip('/')
+        scope = scope_root(cg)
         limits = {k: (scope / k).read_text().strip() for k in LIMITS}; require(limits == LIMITS, 'browser_effective_limits')
         status = Path('/proc', str(pid), 'status').read_text(); apparmor = Path('/proc', str(pid), 'attr/current').read_text().strip()
         require(all(int(v) != 0 for v in next(v for v in status.splitlines() if v.startswith('Uid:')).split()[1:]) and
@@ -102,20 +119,27 @@ def owner(config_path):
         atomic(config['ready'], actual)
         began = time.monotonic(); offset = time.time() - began; resumed = False
         while not stopped:
+            libvirt.virEventRunDefaultImpl()
             control = json.loads(Path(config['control']).read_text())
             if process_identity(config['parent_pid']) != config['parent_identity']: reason = 'controller_lost'; break
-            if process_identity(pid) != identity: reason = 'qemu_exited'; break
             if time.monotonic() - began > LIFETIME[config['phase']]: reason = 'deadline'; break
             if control.get('heartbeat', 0) < time.monotonic() - 5: reason = 'heartbeat_lost'; break
             if abs(time.time() - time.monotonic() - offset) > 3: reason = 'clock_changed'; break
             if guard_fingerprint() != config['guard']: reason = 'guard_changed'; break
+            if process_identity(pid) != identity:
+                until = time.monotonic() + 1
+                while not shutdown_event['observed'] and time.monotonic() < until: libvirt.virEventRunDefaultImpl()
+                reason = 'guest_shutdown' if shutdown_event['observed'] else 'qemu_exited'
+                break
             if {k: (scope / k).read_text().strip() for k in LIMITS} != LIMITS: reason = 'limits_changed'; break
             if control.get('resume') is True and not resumed: domain.resume(); resumed = True
             time.sleep(.25)
         if stopped: reason = 'requested_stop'
     finally:
         connection.close()
-        atomic(config['result'], {'reason': reason, 'connection_closed': True})
+        libvirt.virEventRemoveTimeout(timer)
+        atomic(config['result'], {'reason': reason, 'connection_closed': True, 'guest_shutdown_event': shutdown_event['observed'],
+                                  'vm_uuid': expected_uuid, 'events': events})
 
 
 class BrowserVM(HashGate):
@@ -194,7 +218,7 @@ class BrowserVM(HashGate):
                   'control': str(self._control_path), 'ready': str(ready), 'result': str(self.output / (label + '-owner-result.json'))}
         path = self.output / (label + '-owner.json'); atomic(path, config)
         child = self.spawn(['/usr/bin/python3', '-I', str(Path(__file__).resolve()), '--owner', str(path)], label + '-owner')
-        vm = {'node': node, 'owner': child, 'control': self._control_path, 'label': label}; self.active_vm = vm
+        vm = {'node': node, 'owner': child, 'control': self._control_path, 'label': label, 'owner_result_path': config['result']}; self.active_vm = vm
         vm['actual'] = self.wait_file(ready, 35); vm['fsize_limit'] = FILE_CAP[self.phase]
         runtime = ET.fromstring(self.connection.lookupByUUIDString(node['uuid']).XMLDesc(0)); validate_xml(runtime)
         self.validate_runtime(runtime); vm['host_status'] = vm['actual']['host_status']

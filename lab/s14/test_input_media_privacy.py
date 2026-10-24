@@ -32,7 +32,9 @@ class InputPrivacy(unittest.TestCase):
             with patch('hash_offline_adapter.os.geteuid',return_value=1000),self.assertRaises(ValueError):
                 protect_input_folder({'folder':root,'overlay':overlay})
             (root/'seed.iso').symlink_to(overlay)
-            with patch('hash_offline_adapter.os.geteuid',return_value=0),patch('hash_offline_adapter.os.chown'),self.assertRaises(ValueError):
+            with patch('hash_offline_adapter.os.geteuid',return_value=0), \
+                 patch('hash_offline_adapter.pwd.getpwnam',return_value=types.SimpleNamespace(pw_gid=64055)), \
+                 patch('hash_offline_adapter.os.chown'),self.assertRaises(ValueError):
                 protect_input_folder({'folder':root,'overlay':overlay})
 
 

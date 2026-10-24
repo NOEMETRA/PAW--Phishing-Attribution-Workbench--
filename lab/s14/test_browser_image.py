@@ -8,9 +8,9 @@ import tempfile
 import unittest
 import xml.etree.ElementTree as ET
 
-from browser_image import validate_packages, copy_approved, GOOGLE_PRIMARY
+from browser_image import validate_packages, copy_approved, GOOGLE_PRIMARY, validate_builder_shutdown
 from browser_policy import chrome_arguments, JOB_MEMORY, JOB_TASKS, MAX_HTML
-from browser_vm import validate_xml, LIMITS, FILE_CAP, LIFETIME, HERE, validate_owner_config
+from browser_vm import validate_xml, LIMITS, FILE_CAP, LIFETIME, HERE, validate_owner_config, scope_root
 from owned_grant_fixtures import CPU_DISABLED
 from offline_candidate import canonical
 
@@ -87,6 +87,24 @@ class BrowserImage(unittest.TestCase):
             elif mutation=='media':changed.find('devices/disk[3]').remove(changed.find('devices/disk[3]/readonly'))
             else:changed.find('resource/partition').text='/machine/other'
             with self.subTest(mutation=mutation),self.assertRaises(ValueError):validate_xml(changed)
+
+    def test_threaded_libvirt_descendant_resolves_the_modified_scope_root(self):
+        parent='/machine.slice/machine-paws14.slice/machine-qemu-owned.scope'
+        expected=Path('/sys/fs/cgroup'+parent)
+        self.assertEqual(scope_root(parent),expected)
+        self.assertEqual(scope_root(parent+'/libvirt/emulator'),expected)
+        # The old code read descendant files ('max' or absent), not these limits.
+        self.assertNotEqual(Path('/sys/fs/cgroup'+parent+'/libvirt/emulator'),scope_root(parent+'/libvirt/emulator'))
+        with self.assertRaises(ValueError):scope_root('/machine.slice/other.slice/unrelated.scope/libvirt/emulator')
+
+    def test_absence_after_owner_failure_cannot_publish_a_derived_image(self):
+        good={'reason':'guest_shutdown','connection_closed':True,'guest_shutdown_event':True,'vm_uuid':'owned-uuid'}
+        validate_builder_shutdown(good,'owned-uuid')
+        for reason in ['guard_changed','heartbeat_lost','clock_changed','limits_changed','requested_stop','qemu_exited']:
+            with self.subTest(reason=reason),self.assertRaises(ValueError):
+                validate_builder_shutdown({**good,'reason':reason},'owned-uuid')
+        with self.assertRaises(ValueError):validate_builder_shutdown({**good,'guest_shutdown_event':False},'owned-uuid')
+        with self.assertRaises(ValueError):validate_builder_shutdown(good,'other-uuid')
 
     def test_owner_configuration_cannot_choose_other_host_paths_or_budgets(self):
         path=Path('/var/lib/paw-s14/control/browser-image-owned/owner.json')
