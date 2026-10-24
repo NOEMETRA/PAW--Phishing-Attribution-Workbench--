@@ -136,7 +136,7 @@ def host(args):
         ET.SubElement(xml, 'defaultiothread', {'thread_pool_min': '0', 'thread_pool_max': '8'})
         node['xml'].write_bytes(ET.tostring(xml))
         control = args.output / 'owner-control.json'; ready = args.output / 'owner-ready.json'
-        atomic(control, {'resume': False, 'expiry': time.monotonic() + 220})
+        atomic(control, {'resume': False, 'expiry': time.monotonic() + 260})
         config = {'parent_pid': os.getpid(), 'guard_fingerprint': guard_fingerprint(), 'xml': str(node['xml']),
                   'ready': str(ready), 'control': str(control), 'result': str(args.output / 'owner-result.json'), 'health': []}
         path = args.output / 'owner-config.json'; atomic(path, config)
@@ -148,8 +148,10 @@ def host(args):
         (args.output / 'networkless-domain.xml').write_bytes(ET.tostring(runtime))
         run.report['domain'] = actual
         channel = Channel(runtime.find('devices/serial/source').get('path'), args.output / 'guest-serial.log')
-        atomic(control, {'resume': True, 'expiry': time.monotonic() + 200})
-        state = channel.ready(180); assert state['network_interfaces'] == ['lo']
+        atomic(control, {'resume': True, 'expiry': time.monotonic() + 240})
+        # The immutable image waits ~120 s for network-online with no NIC.
+        # This budget applies only to this networkless VM, never a live lease.
+        state = channel.ready(220); assert state['network_interfaces'] == ['lo']
         atomic(control, {'resume': True, 'expiry': time.monotonic() + 30})
         result = channel.call('run-known-fixture', seconds=5)
         assert result['returncode'] == 0 and result['child_reaped'] and result['network_interfaces'] == ['lo']

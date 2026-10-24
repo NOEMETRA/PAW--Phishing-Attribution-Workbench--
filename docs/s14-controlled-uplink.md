@@ -110,3 +110,11 @@ stop oracle and unchanged host snapshot guard publication. Three inert tests
 ensure this metadata authority preserves the refused-body outcome and rejects
 redirects, unverified/wrong hosts and unrelated failures. This is separate from
 the stricter completed-body gate of the same-VM connectivity probe.
+
+The first separate networkless boot exposed the immutable image's roughly
+120-second network-online wait; it reached cloud-config too late for the
+inherited 180-second readiness allowance. That FAIL and its clean stop/restore
+are retained. This separate no-NIC harness uses 220 seconds for readiness and
+a 240-second boot owner deadline, followed by the same 30-second job limit.
+The live probe's 180-second readiness, five-second leases and all CPU/memory/task
+limits remain unchanged; the networkless harness never creates a NIC or route.
