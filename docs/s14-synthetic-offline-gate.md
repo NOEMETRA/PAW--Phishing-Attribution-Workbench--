@@ -23,7 +23,7 @@ parser or consumer audits, and changes no `paw/` module.
 
 `lab/s14/synthetic_gate.py --synthetic-matrix` is an operator-only bounded PID1
 service harness, not a privileged application API. It accepts no payload, URL or
-command argument. Two fresh verified KVM overlays have no NIC, shared filesystem
+command argument. Three fresh verified KVM overlays have no NIC, shared filesystem
 or hostdev; QEMU retains non-root DAC, AppArmor, seccomp, 512 MiB guest RAM,
 768 MiB host cap, 64 host tasks, zero swap and an eight-worker I/O pool.
 
@@ -38,11 +38,26 @@ existing 2 GiB aggregate lab cap remains in place.
 | Privilege and host separation | Actual uid/gid65534, no effective capabilities, no-new-privileges; positive local read works while an owned host canary, host socket paths, setuid, mount and cgroup writes refuse. No real host secret is read. |
 | Network | XML and guest contain no NIC; owned benchmark IPv4/TCP, IPv4/UDP and IPv6 attempts cannot route. No ordinary LAN peer is scanned. |
 | Task/memory/file budgets | A guest-only root-owned job cgroup limits to 16 tasks/64 MiB/no swap. Fixed bounded forks hit the PID controller; one bounded allocation triggers its actual OOM counter; a file write hits RLIMIT_FSIZE. The trusted controller is outside the job group. Injections without counter/result evidence fail. |
+| Host VM OOM admission | A third VM remains paused before guest execution. Lowering only its own memory cgroup must kill the identified QEMU; an exact-PID kernel memcg OOM witness is required. This does not claim an in-payload host-OOM test and does not pressurize the host globally. |
 | Host storage | A separately lowered QEMU file cap, followed by a bounded write in the second VM, must stop/pause then stop the VM near the cap, without filling the host disk. A failed injection cannot pass. |
 | Host-facing protocol | A separate bounded channel rejects non-object, non-finite, excessive-complexity, wrong/unsolicited response frames. The trusted-fixture channel is not silently promoted to an adversarial ABI. |
 | Lifecycle | A fixed parent/grandchild ignore termination and plan a late write; malformed guest protocol triggers owner loss and external stopped UUID/PID oracles before that late-write deadline. Unknown stop blocks publication. |
 | Reset | A second fresh overlay must not see the first VM's marker. Base, owned host canary and prior admitted artifacts remain unchanged. |
 | Output custody | Actual guest-supplied traversal, duplicate, digest and oversized records refuse. Live publication refuses before creating a directory. After all writers stop, bounded valid bytes become ordinal opaque `.bin` files; HTML is never rendered. |
+
+The initial component run passes seven vectors but remains FAIL: its file-cap
+oracle incorrectly demanded that QCOW2 reach almost the exact file-size bound.
+The protected emulator log independently records `File too large` while the VM
+pauses and stops below the cap. The revised oracle requires that direct I/O
+error witness from this injection, instead of an assumption about QCOW2 growth.
+The earlier run is not relabelled.
+
+A separate harmless process probe reproduces inherited controller stdin. The
+payload handoff now uses `/dev/null` and explicitly closes unrelated descriptors;
+a real child test cannot read an owned parent control canary, and the in-guest
+boundary vector also requires the null stdin path. Four inert frame/handoff
+tests pass; the entire final matrix must be repeated on these sources. Existing
+trusted-fixture helpers and their historical results are unchanged.
 
 `verify_synthetic_gate.py` independently reconciles the named result inventory,
 frozen sources, effective domain confinement, kernel limit observations, stop and

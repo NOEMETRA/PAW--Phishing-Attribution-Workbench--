@@ -52,7 +52,7 @@ class Gate(Matrix):
         self.report['checks'].append({'name': name, 'result': 'PASS', **value})
         print('PASS: ' + name, flush=True)
 
-    def start(self, label):
+    def start(self, label, boot=True):
         assert not self.connection.listAllDomains(0) and guard_fingerprint()
         node = self.descriptor('extractor', 'synthetic-' + label, str(uuid.uuid4()), uuid.uuid4().hex)
         xml = ET.fromstring(node['xml'].read_text())
@@ -79,6 +79,8 @@ class Gate(Matrix):
         status = Path('/proc', str(actual['pid']), 'status').read_text()
         assert next(line for line in status.splitlines() if line.startswith('Seccomp:')).split()[1] == '2'
         vm['host_status'] = status
+        if not boot:
+            return vm
         vm['channel'] = GateChannel(runtime.find('devices/serial/source').get('path'), self.output / (label + '-serial.log'))
         atomic(control, {'resume': True, 'expiry': time.monotonic() + 240})
         vm['channel'].ready(220)
@@ -123,6 +125,7 @@ class Gate(Matrix):
         boundary = channel.call('boundary')
         data = boundary['data']
         assert data['uid'] == data['gid'] == 65534 and data['no_new_privs'] == '1' and int(data['cap_eff'], 16) == 0
+        assert data['stdin_path'] == '/dev/null', 'control_descriptor_inherited'
         assert data['interfaces'] == ['lo'] and data['positive_read']
         assert all(data['denied_paths'].values()) and all(v['denied'] for v in data['network'])
         assert data['setuid_denied'] and data['mount_denied'] and data['cgroup_write_denied']
@@ -164,6 +167,8 @@ class Gate(Matrix):
         overlay = vm['node']['overlay']
         maximum = ((overlay.stat().st_size + 1024**2 - 1) // 1024**2 + 2) * 1024**2
         assert maximum <= vm['fsize_limit']
+        log_path = Path('/var/log/libvirt/qemu') / (ET.fromstring(vm['node']['xml'].read_bytes()).find('name').text + '.log')
+        log_offset = log_path.stat().st_size
         self.run(['/usr/bin/prlimit', '--pid', str(vm['actual']['pid']), '--fsize=' + str(maximum) + ':' + str(maximum)])
         vm['fsize_limit'] = maximum
         before = time.monotonic(); channel.call('storage', seconds=3)
@@ -178,9 +183,33 @@ class Gate(Matrix):
         assert trigger, 'FAILED_INJECTION_host_overlay_file_cap'
         self.stop(vm)
         assert overlay.stat().st_size <= maximum
-        assert overlay.stat().st_size >= maximum - 65536, 'FAILED_INJECTION_overlay_did_not_reach_cap'
+        witness = '\n'.join(line for line in log_path.read_bytes()[log_offset:].decode(errors='replace').splitlines() if 'IO error' in line and 'File too large' in line)
+        assert witness, 'FAILED_INJECTION_no_emulator_file_cap_error'
         self.record('host_enforced_overlay_cap_stops_vm_without_filling_host_disk', trigger=trigger,
-                    cap_bytes=maximum, overlay_bytes=overlay.stat().st_size, fault_seconds=time.monotonic() - before)
+                    cap_bytes=maximum, overlay_bytes=overlay.stat().st_size, fault_seconds=time.monotonic() - before,
+                    emulator_io_error=witness)
+        vm = self.start('host-oom', boot=False)
+        scope = Path(vm['actual']['scope']); limit = 1024**2
+        score = int(Path('/proc', str(vm['actual']['pid']), 'oom_score_adj').read_text())
+        assert score > -1000, 'FAILED_INJECTION_oom_protected_vm'
+        resident = int((scope / 'memory.current').read_text()); assert resident > limit
+        since = '@' + str(int(time.time()) - 1); began = time.monotonic()
+        code = "from pathlib import Path;Path(" + repr(str(scope / 'memory.max')) + ").write_text('1048576')"
+        subprocess.run(['/usr/bin/python3', '-I', '-c', code], check=True, timeout=5)
+        while not self.absent(vm) and time.monotonic() - began < 10: time.sleep(.05)
+        assert self.absent(vm), 'FAILED_INJECTION_host_vm_oom'
+        witness = ''
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline:
+            value = self.run(['/usr/bin/journalctl', '-k', '--since', since, '--no-pager', '-g', 'Killed process ' + str(vm['actual']['pid']) + ' '], required=False)
+            witness = value.stdout
+            if 'Memory cgroup out of memory' in witness: break
+            time.sleep(.1)
+        assert 'Memory cgroup out of memory' in witness, 'FAILED_INJECTION_no_kernel_vm_oom_witness'
+        self.stop(vm)
+        self.record('host_cgroup_oom_before_admission_stops_only_identified_vm', initial_bytes=resident,
+                    injected_limit_bytes=limit, kernel_witness=witness, fault_seconds=time.monotonic() - began,
+                    guest_payload_started=False, initial_oom_score_adj=score)
 
 
 def main():

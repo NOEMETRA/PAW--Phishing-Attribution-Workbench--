@@ -14,7 +14,8 @@ WORK = Path('/tmp/paw-gate-fixture')
 
 
 def boundary(config):
-    result = {'uid': os.getuid(), 'gid': os.getgid(), 'interfaces': sorted(p.name for p in Path('/sys/class/net').iterdir())}
+    result = {'uid': os.getuid(), 'gid': os.getgid(), 'interfaces': sorted(p.name for p in Path('/sys/class/net').iterdir()),
+              'stdin_path': os.readlink('/proc/self/fd/0')}
     status = dict(line.split(':', 1) for line in Path('/proc/self/status').read_text().splitlines() if ':' in line)
     result.update(cap_eff=status['CapEff'].strip(), no_new_privs=status['NoNewPrivs'].strip())
     result['positive_read'] = (WORK / 'positive.txt').read_text() == 'owned positive control'

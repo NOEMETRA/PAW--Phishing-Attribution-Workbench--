@@ -44,6 +44,12 @@ def clean():
         GROUP.rmdir()
 
 
+def isolated_process(argv, admission, directory):
+    return subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, preexec_fn=admission, close_fds=True,
+                            start_new_session=True, cwd=directory)
+
+
 def spawn(case):
     no_network(); clean(); group()
     config = json.loads(CONFIG.read_text()); config['cgroup'] = str(GROUP); CONFIG.write_text(json.dumps(config))
@@ -56,9 +62,7 @@ def spawn(case):
         resource.setrlimit(resource.RLIMIT_NOFILE, (32, 32))
         os.setgroups([]); os.setgid(65534); os.setuid(65534)
         if ctypes.CDLL(None).prctl(38, 1, 0, 0, 0) != 0: os._exit(125)
-    return subprocess.Popen(['/usr/bin/python3', '-I', '-B', str(HERE / 'gate_payload.py'), case],
-                            stdout=subprocess.PIPE, stderr=subprocess.PIPE, preexec_fn=admission,
-                            start_new_session=True, cwd=WORK)
+    return isolated_process(['/usr/bin/python3', '-I', '-B', str(HERE / 'gate_payload.py'), case], admission, WORK)
 
 
 def execute(case):
