@@ -75,6 +75,7 @@ def verify_bundle(root,single=False):
         fault='outcome' not in run;when=ledger['consumed_at'] if fault else run['admitted_at']
         require(type(when) is int and type(ledger['consumed_at']) is int,'admission_clock_type')
         summary,value,source=auth.validate_binding(raw,grant,policy_raw,policy['context'],maintenance,ready,now=when)
+        require(summary['request_id']==rid,'candidate_consumption_request_id')
         if inputs is not None:
             entry=next(v for v in inputs['inputs'] if v['case']==run['case'])
             require(source.hex()==entry['source_hex'],'approved_source_bytes')

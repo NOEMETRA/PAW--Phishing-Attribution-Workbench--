@@ -115,3 +115,26 @@ Do not treat the code's existence, an old synthetic PASS or a readiness receipt
 as an instruction to run a real sample. Browser/egress, arbitrary binary input,
 other interpreter profiles and automatic PAW noncatalog custody remain outside
 this profile and require separate contracts.
+
+## Measured post-maintenance acceptance
+
+The root/PID1 run `paw-s14-hash-v2-a` completed all eight fresh-input KVM
+scenarios on producer `03eb074e8b5e94b59b7da0f0742249cc4f41d5dd`.
+Every grant was consumed once; replay under a new output was refused. All VM
+stops were known, the host/context/base/canary were restored and no QEMU
+remained. No real samples or guest network connections were used.
+
+Review reproduced a reader-only gap: changing the candidate/grant request ID
+and dependent hashes could leave the ledger/execution ID unchanged in an
+otherwise consistent inert audit bundle. The reader now requires those IDs to
+match, with a regression for that exact mutation. The stricter reader also
+passes the untouched eight-case runtime export. Execution/admission/guest/
+supervision source bytes are unchanged; historical policy/source hashes were
+preserved. The only lab-source delta is the reader and its inert regression.
+
+`docs/s14-hash-i08-effective-record.json` records measured context, root custody,
+VM controls and this reconciliation. Its readiness context is a **proposal**:
+activation requires a fresh root capture matching it exactly, final independent
+review and green CI on that reviewed head. No readiness receipt has been
+installed by the eight-case validation run. A fresh harmless single-hash run
+through `sample-analysis` is still required before any actual hostile input.

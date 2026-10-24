@@ -76,6 +76,25 @@ class HashEvidence(unittest.TestCase):
             root=Path(directory);bundle(root);self.assertEqual(verify(root)['jobs'],8)
             with self.assertRaisesRegex(ValueError,'single_analysis_scope'):verify_single(root)
 
+    def test_rebound_candidate_and_grant_cannot_keep_old_execution_id(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory);r=bundle(root);run=r['runs'][0]
+            folder=root/'authority-copy'/run['request_id']
+            candidate=json.loads((folder/'candidate.json').read_bytes())
+            candidate['request_id']='f'*32;raw=canonical(candidate);summary=inspect_candidate(raw)
+            grant=json.loads((folder/'grant.json').read_bytes())
+            for key in ['request_id','frame_sha256','candidate_sha256','source_sha256','case_reference_sha256']:
+                grant[key]=summary[key]
+            grant_raw=canonical(grant)
+            (folder/'candidate.json').write_bytes(raw);(folder/'grant.json').write_bytes(grant_raw)
+            ledger=json.loads((folder/'consumed.json').read_bytes())
+            ledger.update(frame_sha256=auth.digest(raw),grant_sha256=auth.digest(grant_raw))
+            (folder/'consumed.json').write_bytes(canonical(ledger))
+            run.update(candidate_frame_sha256=auth.digest(raw),candidate_sha256=summary['candidate_sha256'],
+                       grant_sha256=auth.digest(grant_raw),consumption=ledger)
+            (root/'results.json').write_text(json.dumps(r))
+            with self.assertRaisesRegex(ValueError,'candidate_consumption_request_id'):verify(root)
+
     def test_changed_approval_binary_merge_mode_lease_and_stop_refuse(self):
         for mutation in ['approval','binary','merge','mode','lease','stop','output']:
             with self.subTest(mutation=mutation),tempfile.TemporaryDirectory() as directory:
