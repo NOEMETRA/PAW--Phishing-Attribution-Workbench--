@@ -8,13 +8,14 @@ from pathlib import Path
 import signal
 import socket
 import ssl
+import subprocess
 import sys
 import time
 import tty
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from uplink_policy import address
-from controlled_scope import PUBLIC_HOST, PUBLIC_PATH, FIXTURE_HOST, FIXTURE_PATH
+from controlled_scope import public_scope, PUBLIC_PATH, FIXTURE_HOST, FIXTURE_PATH
 
 
 class BoundedReader(io.RawIOBase):
@@ -43,14 +44,17 @@ class ResponseSocket:
 
 
 class OneShot:
-    def __init__(self, mode, ca_file):
+    def __init__(self, mode, ca_file, target='apex'):
         if mode not in {'fixture', 'public'}:
             raise ValueError('mode')
         self.mode = mode
-        self.host = FIXTURE_HOST if mode == 'fixture' else PUBLIC_HOST
+        public_host, _ = public_scope(target)
+        self.host = FIXTURE_HOST if mode == 'fixture' else public_host
         self.path = FIXTURE_PATH if mode == 'fixture' else PUBLIC_PATH
         self.ca_file = ca_file
         self.used = False
+        self.completed = False
+        self.synthetic_used = False
         self.observation = {'requests': 0, 'redirects': 0}
 
     def execute(self, command):
@@ -89,6 +93,12 @@ class OneShot:
                     try:
                         response.begin()
                         self.observation['http_status'] = response.status
+                        if 300 <= response.status < 400:
+                            location = response.getheader('Location')
+                            if location is not None:
+                                if len(location) > 2048 or any(ord(c) <= 32 or ord(c) >= 127 for c in location):
+                                    raise ValueError('redirect_location_shape')
+                                self.observation['redirect_location'] = location
                         if response.status != 200:
                             raise ValueError('http_status_' + str(response.status))
                         if response.getheader('Content-Encoding', 'identity') != 'identity':
@@ -99,6 +109,7 @@ class OneShot:
                             raise ValueError('response_budget')
                         if response.length not in {None, 0}:
                             raise ValueError('incomplete_response')
+                        self.completed = True
                         return {'status': 'completed', 'http_status': response.status, 'bytes': len(data),
                                 'sha256': hashlib.sha256(data).hexdigest(), 'peer': peer,
                                 'tls_hostname': self.host, 'tls_verified': True,
@@ -112,6 +123,31 @@ class OneShot:
             signal.signal(signal.SIGALRM, previous)
 
 
+def network_names():
+    return sorted(p.name for p in Path('/sys/class/net').iterdir())
+
+
+def run_synthetic(probe):
+    if not probe.completed or probe.synthetic_used or network_names() != ['lo']:
+        raise ValueError('synthetic_gate_requires_completed_get_and_networkless_once')
+    probe.synthetic_used = True
+    program = Path(__file__).resolve().with_name('benign_synthetic.py')
+    with subprocess.Popen(['/usr/bin/python3', '-I', str(program)], stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE, start_new_session=True) as child:
+        try:
+            stdout, stderr = child.communicate(timeout=3)
+        except subprocess.TimeoutExpired:
+            child.kill(); child.communicate(timeout=1)
+            raise ValueError('synthetic_deadline')
+        if child.returncode != 0 or len(stdout) > 4096 or len(stderr) > 4096:
+            raise ValueError('synthetic_result')
+        value = json.loads(stdout)
+        if value['pid'] != child.pid:
+            raise ValueError('synthetic_child_identity')
+        return {**value, 'returncode': child.returncode, 'child_reaped': True,
+                'scope': 'fixed benign fixture only; no hostile-code acceptance'}
+
+
 def emit(value):
     data = ('PAW14 ' + json.dumps(value) + '\n').encode()
     while data:
@@ -120,7 +156,7 @@ def emit(value):
 
 def main():
     config = json.loads(open('/etc/paw-controlled.json').read())
-    probe = OneShot(config['mode'], '/etc/paw-controlled-ca.pem')
+    probe = OneShot(config['mode'], '/etc/paw-controlled-ca.pem', config['target'])
     tty.setraw(0)
     emit({'ready': True, 'mode': config['mode'], 'one_shot': True})
     while True:
@@ -133,9 +169,12 @@ def main():
         try:
             op = command.pop('op'); ident = command.pop('id')
             if op == 'state':
-                result = {'used': probe.used, 'host': probe.host, 'path': probe.path, 'mode': probe.mode}
+                result = {'used': probe.used, 'completed': probe.completed, 'host': probe.host,
+                          'path': probe.path, 'mode': probe.mode, 'network_interfaces': network_names()}
             elif op == 'fetch':
                 result = probe.execute(command)
+            elif op == 'synthetic' and not command:
+                result = run_synthetic(probe)
             else:
                 raise ValueError('fixed_operations_only')
             emit({'id': ident, 'ok': True, 'data': result})

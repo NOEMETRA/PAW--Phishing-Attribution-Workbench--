@@ -49,7 +49,7 @@ retry refusal and positive request/response packets. Public mode reconciles both
 the bridge capture and a destination-filtered Wi-Fi capture showing host SNAT.
 The destination-filtered capture is not a capture of all host traffic.
 
-The source includes ten inert regression methods. Local KVM and public results
+The source includes fourteen inert regression methods. Local KVM and public results
 must be recorded separately; the presence of this code is not a passing run.
 No full live worker/gateway/broker integration, hostile-code acceptance, corpus
 accuracy, general collector acceptance or R08 closure follows from a successful
@@ -63,3 +63,25 @@ parameter is exposed. The fixture still uses its local `/get` path. A new
 disabled profile and fresh local matrix are required for the changed source
 inventory. Refusals now retain bounded TLS certificate/peer/status metadata
 when those stages actually completed; previous missing metadata is not invented.
+
+The subsequent user instruction authorizes final-URL discovery and, after a
+successful controlled GET, execution of a **fixed benign synthetic fixture**.
+The only separately admissible public aliases are `apex` and `www`, both with
+root path under squishylab.fun. The client never follows redirects: it records
+a bounded Location value. An operator must separately admit a new fixed target;
+foreign hosts, alternative paths/schemes and redirect loops are outside this
+two-endpoint probe. Every VM still performs at most one GET, with fresh DNS,
+pins, exact-name TLS and the same body/time budgets.
+
+`--synthetic-fixture` requires a completed HTTP-200 GET within all existing
+budgets. Both host lease sets are emptied, the live VM NIC is detached, and
+the TAP, domain NIC and guest interfaces are checked absent/loopback-only.
+Only then can the serial operation execute `benign_synthetic.py` once. This
+fixed program accepts no payload/command arguments, checks its own loopback-only
+state, applies CPU/address-space/file-size/file-descriptor limits, writes a
+known short marker and exits. Its parent waits/reaps the exact child. Marker
+bytes/hash, resource/stop records and the networkless domain XML are reconciled
+before any host publication. A local fixture rehearsal exercises this same path
+before a public run; no website scripts, downloaded content or malware are run.
+This accepts a finite benign execution path only and does not close the broader
+hostile-code, browser, collector or R08 gates.

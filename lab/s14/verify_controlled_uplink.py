@@ -9,7 +9,8 @@ import xml.etree.ElementTree as ET
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from verify_gateway_evidence import pcap
 from uplink_policy import validate, address, fingerprint
-from controlled_scope import PUBLIC_HOST, PUBLIC_URL, FIXTURE_HOST, FIXTURE_PATH
+from controlled_scope import public_scope, FIXTURE_HOST, FIXTURE_PATH
+from benign_synthetic import MARKER
 
 
 def require(value, reason):
@@ -73,8 +74,9 @@ def verify(root, mode, case='success', current_sources=None):
     require(plan['profile_sha256'] == fingerprint(profile), 'plan_profile')
     peer = address(plan['address'], mode == 'fixture')
     require(peer in profile['targets'][0]['pinned_ipv4'] and result['peer'] == peer, 'peer_binding')
-    host = PUBLIC_HOST if mode == 'public' else FIXTURE_HOST
-    url = PUBLIC_URL if mode == 'public' else 'https://' + FIXTURE_HOST + FIXTURE_PATH
+    public_host, public_url = public_scope(report['target_id'])
+    host = public_host if mode == 'public' else FIXTURE_HOST
+    url = public_url if mode == 'public' else 'https://' + FIXTURE_HOST + FIXTURE_PATH
     require(plan['url'] == profile['targets'][0]['url'] == url, 'exact_url_binding')
     require(result['status'] == 'completed' and result['tls_verified'] and result['tls_hostname'] == host and
             result['http_status'] == 200 and 0 < result['bytes'] <= 8192 and
@@ -94,10 +96,19 @@ def verify(root, mode, case='success', current_sources=None):
         counts['wifi'] = len(wifi)
     else:
         require(not report['public_get_attempted'], 'unexpected_public_attempt')
+    if report['synthetic_requested']:
+        synthetic = report['synthetic']
+        require(all(synthetic[k] for k in ['lease_sets_empty', 'tap_removed', 'guest_nic_absent', 'child_reaped']), 'synthetic_stop_or_isolation')
+        require(synthetic['network_interfaces'] == ['lo'] and synthetic['returncode'] == 0 and
+                synthetic['fixture'] == 'fixed-benign-v1', 'synthetic_execution')
+        require(bytes.fromhex(synthetic['marker_hex']) == MARKER and synthetic['marker_bytes'] == len(MARKER) and
+                synthetic['marker_sha256'] == hashlib.sha256(MARKER).hexdigest(), 'synthetic_marker')
+        require(not ET.fromstring((root / 'networkless-domain.xml').read_bytes()).findall('devices/interface'), 'synthetic_domain_has_nic')
     return {'result': 'PASS', 'mode': mode, 'case': case, 'target': url,
             'peer': peer, 'packet_counts': counts, 'source_count': len(report['source_hashes']),
             'response_bytes': result['bytes'], 'body_sha256': result['sha256'],
-            'real_gets': int(mode == 'public'), 'host_restored': True, 'detonation': False}
+            'real_gets': int(mode == 'public'), 'host_restored': True,
+            'benign_synthetic': bool(report['synthetic_requested']), 'hostile_detonation': False}
 
 
 if __name__ == '__main__':

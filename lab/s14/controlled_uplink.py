@@ -29,13 +29,15 @@ from prepare_uplink import current_uplink
 from uplink_policy import (address, validate, match_uplink, guard_tables, bridge_table,
                            nat_table, interop_commands, admit, lease_transaction, fingerprint)
 from validate_uplink_vm import VMValidation, TABLES, policy_fingerprint
-from controlled_scope import PUBLIC_HOST, PUBLIC_URL
+from controlled_scope import PUBLIC_HOST, PUBLIC_TARGETS, public_scope
 
 
-def observe_dns():
+def observe_dns(host=PUBLIC_HOST):
     """A single exact-name query through the host's existing resolver; no guest DNS."""
+    if host not in PUBLIC_TARGETS.values():
+        raise ValueError('fixed_dns_name_only')
     started = time.monotonic()
-    result = subprocess.run(['/usr/bin/dig', '-r', '@127.0.0.53', PUBLIC_HOST + '.', 'A',
+    result = subprocess.run(['/usr/bin/dig', '-r', '@127.0.0.53', host + '.', 'A',
                              '+noall', '+answer', '+tries=1', '+time=2', '+nosearch'],
                             capture_output=True, text=True, check=True, timeout=4)
     records = []
@@ -46,7 +48,7 @@ def observe_dns():
         if cls != 'IN' or kind not in {'A', 'CNAME'}:
             raise ValueError('unexpected_dns_record')
         records.append({'name': name.lower(), 'ttl': int(ttl), 'type': kind, 'value': value})
-    owners = {PUBLIC_HOST + '.'}
+    owners = {host + '.'}
     for _ in range(8):
         owners.update(r['value'].lower() for r in records if r['name'] in owners.copy() and r['type'] == 'CNAME')
     if not records or any(r['name'] not in owners or r['ttl'] <= 0 for r in records):
@@ -63,11 +65,15 @@ class Controlled(VMValidation):
     def __init__(self, args):
         super().__init__(args)
         self.public = args.mode == 'public'
+        self.target_host, self.target_url = public_scope(args.target)
+        self.offline_phase = False
         self.abort = threading.Event()
         self.absolute_limit = time.monotonic() + 220
         self.report['scope'] = 'one trusted KVM HTTPS GET; no worker, collector or detonation'
         self.report['mode'] = args.mode
         self.report['case'] = args.case
+        self.report['target_id'] = args.target
+        self.report['synthetic_requested'] = args.synthetic_fixture
         self.report['public_get_attempted'] = False
 
     def prepare(self):
@@ -86,7 +92,7 @@ class Controlled(VMValidation):
         match_uplink(self.prepared_profile, current_uplink())
         assert self.prepared_profile['mode'] == 'wifi-routed'
         assert len(self.prepared_profile['targets']) == 1
-        assert self.prepared_profile['targets'][0]['url'] == PUBLIC_URL
+        assert self.prepared_profile['targets'][0]['url'] == self.target_url
         assert not self.prepared_profile['targets'][0]['pinned_ipv4']
         self.profile = copy.deepcopy(self.prepared_profile)
         self.before = self.snapshot_host()
@@ -121,9 +127,9 @@ class Controlled(VMValidation):
                    'StandardInput=tty-force\nStandardOutput=tty\nStandardError=tty\nTTYPath=/dev/ttyS0\n'
                    'TasksMax=32\nMemoryMax=128M\nMemorySwapMax=0\nCPUQuota=50%\n')
         files = [('/usr/local/lib/paw-s14/' + n, (HERE / n).read_bytes())
-                 for n in ['controlled_guest.py', 'controlled_scope.py', 'uplink_policy.py', 'gw_admission.py']]
+                 for n in ['controlled_guest.py', 'controlled_scope.py', 'benign_synthetic.py', 'uplink_policy.py', 'gw_admission.py']]
         files += [('/etc/paw-controlled-ca.pem', (self.output / 'ca.pem').read_bytes()),
-                  ('/etc/paw-controlled.json', json.dumps({'mode': self.args.mode}).encode()),
+                  ('/etc/paw-controlled.json', json.dumps({'mode': self.args.mode, 'target': self.args.target}).encode()),
                   ('/etc/systemd/system/paw-controlled.service', service.encode())]
         cloud = {'package_update': False, 'package_upgrade': False, 'ssh_pwauth': False, 'ssh_genkeytypes': [],
                  'write_files': [{'path': p, 'encoding': 'b64', 'content': base64.b64encode(data).decode(),
@@ -166,7 +172,8 @@ class Controlled(VMValidation):
                 try:
                     assert policy_fingerprint() == self.expected
                     assert process_identity(actual['pid']) == actual['pid_identity']
-                    assert {p.name for p in Path('/sys/class/net/pawbr-up/brif').iterdir()} == {'pu-gw'}
+                    ports = {p.name for p in Path('/sys/class/net/pawbr-up/brif').iterdir()}
+                    assert ports <= {'pu-gw'} if self.offline_phase else ports == {'pu-gw'}
                     match_uplink(self.prepared_profile, current_uplink())
                     assert all(p.poll() is None for p in self.processes)
                     if self.public and self.report.get('plan'):
@@ -201,10 +208,10 @@ class Controlled(VMValidation):
             self.record('local_fault_stopped_without_lease')
             return
         if self.public:
-            first = observe_dns(); second = observe_dns()
+            first = observe_dns(self.target_host); second = observe_dns(self.target_host)
             assert first['answers'] == second['answers'], 'dns_binding_changed'
             self.profile['targets'][0]['pinned_ipv4'] = first['answers']
-            self.profile['targets'][0]['authorization_ref'] = 'User asserted ownership of squishylab.fun and authorized one controlled root GET, 2026-10-24'
+            self.profile['targets'][0]['authorization_ref'] = 'User authorized final-URL discovery and controlled GET on squishylab.fun, 2026-10-24'
             self.report['dns_observations'] = [first, second]
             observation = second
             self.wifi_capture = self.capture_on(self.profile['uplink']['interface'], 'wifi-target.pcap',
@@ -237,6 +244,38 @@ class Controlled(VMValidation):
         self.report['second_request'] = refused
         assert not self.abort.is_set()
         self.record('one_pinned_verified_get_and_retry_refusal')
+        if self.args.synthetic_fixture:
+            self.synthetic()
+
+    def synthetic(self):
+        assert self.report['fetch']['status'] == 'completed' and not self.abort.is_set()
+        self.clear()
+        sets = [json.loads(self.run(['/usr/sbin/nft', '-j', 'list', 'set', 'inet', name, 'targets4']).stdout)
+                for name in ['paw_s14_up_floor', 'paw_s14_up_lease']]
+        assert all(not item.get('set', {}).get('elem') for data in sets for item in data['nftables'])
+        self.offline_phase = True
+        domain = self.connection.lookupByUUIDString(self.vm['uuid'])
+        xml = ET.fromstring(domain.XMLDesc(0))
+        nic = xml.find('devices/interface'); assert nic is not None
+        domain.detachDeviceFlags(ET.tostring(nic).decode(), self.libvirt.VIR_DOMAIN_AFFECT_LIVE)
+        deadline = time.monotonic() + 8
+        while time.monotonic() < deadline:
+            state = self.channel.call('state')
+            if not Path('/sys/class/net/pu-gw').exists() and state['network_interfaces'] == ['lo']:
+                break
+            time.sleep(.1)
+        assert not Path('/sys/class/net/pu-gw').exists() and state['network_interfaces'] == ['lo']
+        after = ET.fromstring(domain.XMLDesc(0)); assert not after.findall('devices/interface')
+        (self.output / 'networkless-domain.xml').write_bytes(ET.tostring(after))
+        assert not self.abort.is_set()
+        result = self.channel.call('synthetic', seconds=5)
+        assert result.get('returncode') == 0 and result['child_reaped'] and result['network_interfaces'] == ['lo'], result
+        from benign_synthetic import MARKER
+        assert bytes.fromhex(result['marker_hex']) == MARKER
+        assert result['marker_sha256'] == hashlib.sha256(MARKER).hexdigest()
+        assert not self.abort.is_set()
+        self.report['synthetic'] = {**result, 'lease_sets_empty': True, 'tap_removed': True,
+                                    'guest_nic_absent': True}
 
 
 def main():
@@ -245,6 +284,8 @@ def main():
     parser.add_argument('--output', type=Path); parser.add_argument('--export', type=Path)
     parser.add_argument('--mode', choices=['fixture', 'public'], default='fixture')
     parser.add_argument('--case', choices=['success', 'guard-loss', 'owner-loss'], default='success')
+    parser.add_argument('--target', choices=sorted(PUBLIC_TARGETS), default='apex')
+    parser.add_argument('--synthetic-fixture', action='store_true')
     parser.add_argument('--authorize-public-one-get', action='store_true')
     parser.add_argument('--local-evidence', type=Path)
     args = parser.parse_args()

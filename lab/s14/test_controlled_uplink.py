@@ -3,8 +3,8 @@ import socket
 import unittest
 from unittest.mock import patch
 
-from controlled_guest import OneShot
-from controlled_scope import PUBLIC_HOST, PUBLIC_URL
+from controlled_guest import OneShot, run_synthetic
+from controlled_scope import PUBLIC_HOST, PUBLIC_URL, public_scope
 from controlled_uplink import observe_dns
 from verify_controlled_uplink import positive_packets
 
@@ -125,6 +125,67 @@ class ControlledTransport(unittest.TestCase):
         for answer in ['foreign.invalid. 60 IN A 8.8.8.8\n', 'squishylab.fun. 60 IN A 127.0.0.1\n']:
             with self.subTest(answer=answer), patch('controlled_uplink.subprocess.run', return_value=SimpleNamespace(stdout=answer)):
                 with self.assertRaises(ValueError): observe_dns()
+
+    def test_www_is_separate_fixed_target_with_exact_sni(self):
+        client = Socket(b'HTTP/1.0 200 OK\r\nContent-Length: 2\r\n\r\n{}', peer='8.8.8.8')
+        probe = OneShot('public', 'unused-fixture-ca', 'www')
+        with patch('controlled_guest.socket.socket', return_value=client), patch('controlled_guest.ssl.create_default_context') as context:
+            context.return_value.wrap_socket.return_value = client
+            result = probe.execute({'address': '8.8.8.8', 'lease_ms': 1000})
+            context.return_value.wrap_socket.assert_called_once_with(client, server_hostname='www.squishylab.fun')
+        self.assertTrue(probe.completed)
+        self.assertEqual(result['tls_hostname'], 'www.squishylab.fun')
+        self.assertIn(b'GET / HTTP/1.0\r\nHost: www.squishylab.fun\r\n', client.sent[0])
+        for value in ['https://other.invalid/', 'other', None, True]:
+            with self.subTest(value=value), self.assertRaises(ValueError): public_scope(value)
+
+    def test_redirect_location_is_bounded_metadata_never_followed(self):
+        for location, reason in [('https://www.squishylab.fun/', 'http_status_308'),
+                                 ('x' * 2049, 'redirect_location_shape')]:
+            client = Socket(('HTTP/1.0 308 Redirect\r\nLocation: ' + location + '\r\n\r\n').encode())
+            probe = OneShot('fixture', 'unused')
+            with self.subTest(location=location), patch('controlled_guest.socket.socket', return_value=client), \
+                 patch('controlled_guest.ssl.create_default_context') as context:
+                context.return_value.wrap_socket.return_value = client
+                with self.assertRaisesRegex(ValueError, reason):
+                    probe.execute({'address': '198.18.43.10', 'lease_ms': 1000})
+            self.assertEqual(len(client.connected), 1)
+            self.assertEqual(len(client.sent), 1)
+            self.assertFalse(probe.completed)
+            if len(location) <= 2048:
+                self.assertEqual(probe.observation['redirect_location'], location)
+
+    def test_synthetic_gate_refuses_before_execution(self):
+        from types import SimpleNamespace
+        for completed, used, names in [(False, False, ['lo']), (True, True, ['lo']),
+                                       (True, False, ['lo', 'wan0'])]:
+            probe = SimpleNamespace(completed=completed, synthetic_used=used)
+            with self.subTest(completed=completed, used=used, names=names), \
+                 patch('controlled_guest.network_names', return_value=names), \
+                 patch('controlled_guest.subprocess.Popen', side_effect=AssertionError('No execution')):
+                with self.assertRaisesRegex(ValueError, 'synthetic_gate'):
+                    run_synthetic(probe)
+
+    def test_synthetic_fixed_child_reaped_and_allowance_consumed(self):
+        import json
+        from types import SimpleNamespace
+        from benign_synthetic import MARKER
+        probe = SimpleNamespace(completed=True, synthetic_used=False)
+        value = {'pid': 1234, 'network_interfaces': ['lo'], 'marker_hex': MARKER.hex(),
+                 'fixture': 'fixed-benign-v1'}
+        with patch('controlled_guest.network_names', return_value=['lo']), \
+             patch('controlled_guest.subprocess.Popen') as popen:
+            child = popen.return_value.__enter__.return_value
+            child.pid = 1234; child.returncode = 0
+            child.communicate.return_value = (json.dumps(value).encode(), b'')
+            result = run_synthetic(probe)
+            self.assertTrue(result['child_reaped'])
+            self.assertTrue(probe.synthetic_used)
+            argv = popen.call_args.args[0]
+            self.assertEqual(argv[:2], ['/usr/bin/python3', '-I'])
+            self.assertTrue(argv[2].endswith('/benign_synthetic.py'))
+            with self.assertRaisesRegex(ValueError, 'synthetic_gate'): run_synthetic(probe)
+            popen.assert_called_once()
 
 
 if __name__ == '__main__':
