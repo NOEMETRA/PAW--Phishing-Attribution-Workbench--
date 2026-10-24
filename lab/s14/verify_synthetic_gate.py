@@ -8,6 +8,23 @@ import xml.etree.ElementTree as ET
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+# Mandatory inventory of the measured finite profile. Later exports may add
+# sources, but may not silently discard its runner, guest or isolation policy.
+REQUIRED_SOURCES = frozenset('''all-guards.nft benign_guest_validation.py
+benign_synthetic.py controlled_guest.py controlled_scope.py controlled_uplink.py
+fetch_trusted_image.py fixture_server.py gate_channel.py gate_guest.py gate_payload.py
+gateway-bridge.nft gateway-guest.nft gateway-host.nft gateway-wan.xml guest_agent.py
+gw_admission.py gw_broker.py gw_fault_validation.py gw_fixture.py gw_node.py
+gw_quarantine.py gw_validation.py host-guard.nft host_task_budget_probe.py
+internal-network.xml libvirtd-guard.conf machine-paws14.slice networkless_synthetic.py
+paused-probe.xml paw-s14-guard.service prepare_uplink.py synthetic_gate.py
+test_controlled_uplink.py test_gate_channel.py test_gate_stdio.py test_gw_contracts.py
+test_networkless_synthetic.py test_uplink_policy.py test_uplink_vm_evidence.py
+uplink_guest_probe.py uplink_policy.py validate_uplink_namespace.py validate_uplink_vm.py
+verify_benign_evidence.py verify_controlled_uplink.py verify_gateway_evidence.py
+verify_gateway_reboot.py verify_synthetic_gate.py verify_uplink_evidence.py
+verify_uplink_vm_evidence.py'''.split())
+
 CHECKS = ['unprivileged_no_nic_host_canary_socket_mount_and_capability_denials',
           'kernel_enforced_fork_budget', 'kernel_enforced_memory_budget', 'kernel_enforced_file_budget',
           'untrusted_output_and_live_publication_refused',
@@ -19,6 +36,19 @@ CHECKS = ['unprivileged_no_nic_host_canary_socket_mount_and_capability_denials',
 
 def require(value, reason):
     if not value: raise ValueError(reason)
+
+
+def verify_sources(root, manifest):
+    require(type(manifest) is dict and REQUIRED_SOURCES <= manifest.keys(), 'mandatory_source_inventory')
+    require(all(type(name) is str and Path(name).name == name and name not in {'.', '..'}
+                for name in manifest), 'source_name')
+    folder = root / 'sources'
+    require(folder.is_dir() and not folder.is_symlink(), 'source_directory')
+    exported = {path.name: path for path in folder.iterdir()}
+    require(exported.keys() == manifest.keys(), 'exported_source_inventory')
+    for name, path in exported.items():
+        require(path.is_file() and not path.is_symlink(), 'source_file:' + name)
+        require(hashlib.sha256(path.read_bytes()).hexdigest() == manifest[name], 'source_hash:' + name)
 
 
 def verify_vm_bindings(vms, oom):
@@ -41,8 +71,7 @@ def verify(root):
     require(all(r[k] for k in ['host_restored', 'source_freeze_unchanged', 'base_unchanged', 'host_canary_unchanged', 'writers_stopped', 'stable_publication']), 'stop_restore_integrity')
     require(r['host_before'] == r['host_after'] and r['real_connections'] == 0, 'host_or_network_changed')
     require([v['name'] for v in r['checks']] == CHECKS and all(v['result'] == 'PASS' for v in r['checks']), 'case_inventory')
-    for name, expected in r['source_hashes'].items():
-        require(hashlib.sha256((root / 'sources' / name).read_bytes()).hexdigest() == expected, 'source_hash:' + name)
+    verify_sources(root, r['source_hashes'])
     require(len(r['vms']) == 3, 'vm_inventory')
     verify_vm_bindings(r['vms'], r['checks'][8])
     for vm in r['vms']:
@@ -52,6 +81,7 @@ def verify(root):
         require(actual['apparmor'].startswith('libvirt-') and '(enforce)' in actual['apparmor'], 'apparmor')
         require('Seccomp:\t2' in vm['host_status'], 'qemu_seccomp')
         xml = ET.fromstring((root / (vm['label'] + '-domain.xml')).read_bytes())
+        require(xml.findtext('uuid') == vm['uuid'], 'domain_xml_uuid:' + vm['label'])
         require(not xml.findall('devices/interface') and not xml.findall('devices/filesystem') and not xml.findall('devices/hostdev'), 'guest_exposure')
         require(xml.find('defaultiothread').get('thread_pool_max') == '8' and xml.find('memory').text in {'512', '524288'}, 'guest_budget')
         require(xml.find('seclabel[@model="dac"]/label').text.split(':')[0] != '+0', 'qemu_root')

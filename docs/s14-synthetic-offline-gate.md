@@ -68,6 +68,17 @@ Only the reader/tests/documentation change after this run, not the runner,
 guest, image or isolation policy. Historical source snapshots are kept, and the
 corrected reader rechecks the same stopped evidence without rerunning guests.
 
+The independent Codex review of `da42a4f` subsequently identified two further
+reconciler defects. Copies of the stopped export reproduced PASS with an empty
+source manifest, with the runner removed from both manifest and export, and with
+one domain's XML substituted for another. The reader now requires the measured
+profile's 51 mandatory source names, exact manifest/export membership and byte
+hashes, and binds each confinement XML UUID to its recorded VM. Additional
+sources may be exported only with matching manifest entries. Ten inert test
+methods now cover the gate, including complete-export acceptance and rejection
+of missing, altered, unlisted and wrongly assigned evidence. The original runtime
+sources and FAIL/PASS exports remain unchanged; these are read-only fixes.
+
 `verify_synthetic_gate.py` independently reconciles the named result inventory,
 frozen sources, effective domain confinement, kernel limit observations, stop and
 reset records, host snapshots and quarantine byte hashes. CI runs inert channel
