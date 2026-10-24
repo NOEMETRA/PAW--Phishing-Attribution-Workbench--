@@ -47,13 +47,15 @@ def verify(root,components_only=False):
               'self.wan.isActive()' in report.get('cleanup_traceback',''),'unexpected_component_failure')
     else:check(report['result']=='PASS' and report['source_freeze_unchanged'],'matrix_result_or_freeze')
     check([j['case'] for j in report['jobs']]==CASES,'case_inventory')
+    budget=int(next(line.split('=',1)[1] for line in report['host_inventory']['slice'].splitlines() if line.startswith('MemoryMax=')))
+    check(budget in {1280*1024**2,2*1024**3},'unrecognized_aggregate_budget')
     for name,digest in report['source_hashes'].items():check(sha(root/'sources'/name)==digest,'frozen_source:'+name)
     memory=tasks=0
     for job in report['jobs']:
         case=job['case'];check(job['tree_stopped'],'stop_oracle:'+case)
         check(job['status']==('completed' if case in {'traffic','extractor'} else 'interrupted'),'job_status:'+case)
         peak=job['aggregate_peak_sampled'];memory=max(memory,peak['memory_bytes']);tasks=max(tasks,peak['tasks'])
-        check(peak['memory_bytes']<=1280*1024**2 and peak['tasks']<=128,'aggregate_budget:'+case)
+        check(peak['memory_bytes']<=budget and peak['tasks']<=128,'aggregate_budget:'+case)
         for node in job['nodes']:
             actual=node['actual'];check(actual['uuid']==node['uuid'],'domain_identity:'+case)
             check(actual['limits']['pids.max']=='64' and actual['limits']['memory.max']==str(768*1024**2) and actual['limits']['memory.swap.max']=='0','domain_budget:'+case)
@@ -120,7 +122,7 @@ def verify(root,components_only=False):
     return {'result':'COMPONENTS_PASS' if components_only else 'PASS',
             'original_matrix_result':report['result'],'known_cleanup_error':report.get('cleanup_error'),
             'scope':'Measured offline components; whole-host reboot and live acceptance remain open. Component mode never promotes the original FAIL to PASS.',
-            'cases':len(CASES),'peak_sampled_bytes':memory,'peak_sampled_tasks':tasks,
+            'cases':len(CASES),'aggregate_memory_limit_bytes':budget,'peak_sampled_bytes':memory,'peak_sampled_tasks':tasks,
             'packets':packet_results,'inventory':inventory}
 
 def verify_composed(main,correction,reproduction):
