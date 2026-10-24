@@ -95,3 +95,18 @@ peaks plus PID rejection events. Boot aborts are named and surfaced immediately
 instead of being hidden behind the 180-second readiness timeout. The earlier
 boot failure remains FAIL; the already observed apex-to-www Location needs no
 second discovery request. New source hashes require a fresh local rehearsal.
+
+The corrected final-host run reached authenticated HTTP200, but its root page
+exceeded the existing 8 KiB body limit; the complete fetch remains FAIL and the
+body limit is unchanged. The user's conditional authorization concerns a fixed
+benign sample after HTTP200. `networkless_synthetic.py` therefore accepts the
+protected, stopped run's verified header metadata for **that benign action only**,
+without promoting the rejected body or performing another GET. It checks the
+frozen producer sources, DNS/profile/peer/capture binding and restore records,
+then creates a new trusted VM with no NIC at any point in its XML/lifetime.
+Only the fixed marker program is seeded; no website data becomes executable.
+An in-guest loopback-only check, bounded service/child, waited child, marker hash,
+stop oracle and unchanged host snapshot guard publication. Three inert tests
+ensure this metadata authority preserves the refused-body outcome and rejects
+redirects, unverified/wrong hosts and unrelated failures. This is separate from
+the stricter completed-body gate of the same-VM connectivity probe.
