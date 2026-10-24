@@ -16,7 +16,7 @@ EXTRA_SOURCES = {'offline_input.py', 'offline_input_guest.py', 'offline_input_ma
                  'verify_offline_input.py', 'test_offline_input.py'}
 
 
-def verify(root):
+def _verify(root, expected):
     root = Path(root); r = json.loads((root / 'results.json').read_text())
     require(r['result'] == 'PASS' and not r.get('cleanup_error'), 'matrix_failed')
     require(all(r.get(k) is True for k in ['host_restored', 'base_unchanged', 'host_canary_unchanged',
@@ -24,11 +24,10 @@ def verify(root):
     require(r['real_connections'] == 0 and r['host_before'] == r['host_after'], 'host_or_network')
     require(EXTRA_SOURCES <= r['source_hashes'].keys(), 'input_profile_sources')
     verify_sources(root, r['source_hashes'])
-    expected = {'success': 'completed', 'timeout': 'timeout', 'cancel': 'cancelled', 'overflow': 'output_budget'}
-    require(len(r['vms']) == len(r['input_runs']) == 4, 'job_inventory')
+    require(len(r['vms']) == len(r['input_runs']) == len(expected), 'job_inventory')
     require({v['label'] for v in r['vms']} == {'owned-' + case for case in expected}, 'vm_labels')
-    require(len({v['uuid'] for v in r['vms']}) == 4, 'vm_reuse')
-    require(len({(v['actual']['pid'], v['actual']['pid_identity']) for v in r['vms']}) == 4, 'process_reuse')
+    require(len({v['uuid'] for v in r['vms']}) == len(expected), 'vm_reuse')
+    require(len({(v['actual']['pid'], v['actual']['pid_identity']) for v in r['vms']}) == len(expected), 'process_reuse')
     require({j['job']['job_id'] for j in r['input_runs']} == {'owned-' + case for case in expected}, 'job_ids')
     for run in r['input_runs']:
         job = run['job']; case = job['job_id'].removeprefix('owned-')
@@ -70,9 +69,28 @@ def verify(root):
             require(path.is_file() and not path.is_symlink(), 'quarantine_file')
             data = path.read_bytes()
             require(data == bytes.fromhex(records[index]['bytes_hex']) and len(data) == item['bytes'] <= 1024 and hashlib.sha256(data).hexdigest() == item['sha256'], 'output_bytes')
-    return {'result': 'PASS', 'jobs': 4, 'sources': len(r['source_hashes']), 'real_connections': 0,
+    return {'result': 'PASS', 'jobs': len(expected), 'sources': len(r['source_hashes']), 'real_connections': 0,
             'profile': 'synthetic-only offline input path; arbitrary execution unavailable',
             'general_hostile_gate': 'OPEN pending independent I08/platform disposition'}
+
+
+def verify(root):
+    return _verify(root, {'success': 'completed', 'timeout': 'timeout', 'cancel': 'cancelled', 'overflow': 'output_budget'})
+
+
+def verify_fixed_positive(root):
+    """Narrow one-job witness for the PAW bridge; default matrix remains four jobs."""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    from paw.core import synthetic_bridge as contract
+    root = Path(root); report = json.loads((root / 'results.json').read_text())
+    require('paw_synthetic_bridge.py' in report['source_hashes'], 'linked_bridge_source')
+    raw = (root / 'paw-request.json').read_bytes()
+    # Historical validation checks the recorded admission time, not a fresh lease.
+    require(type(report.get('paw_payload_started_at')) is int, 'linked_bridge_clock')
+    contract.validate_request(raw, now=report['paw_payload_started_at'])
+    require(report.get('paw_request_sha256') == contract.digest(raw) and
+            report.get('bridge_contract_sha256') == contract.digest(Path(contract.__file__).read_bytes()), 'linked_bridge_contract')
+    return _verify(root, {'success': 'completed'})
 
 
 if __name__ == '__main__':
