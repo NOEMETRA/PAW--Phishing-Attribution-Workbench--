@@ -80,3 +80,13 @@ check now occurs before spawning; an existing marker refuses execution, and a
 new child-created marker cannot change the saved observation. Two deterministic
 stub regressions require no root/guest/payload execution. The input family now
 contains ten inert methods. No new execution profile or production route is added.
+
+The complete four-job repeat passes on producer `9503aca`, preserving 59 frozen
+sources. Subsequent consolidation integrates the reviewed base's complete
+producer/quarantine inventory checks and partial-startup stop correction. The
+input reader's analogous directory/file symlink acceptance was independently
+reproduced and now refuses; this brings the input family to eleven inert methods.
+The final combined adapter must pass both the four-job matrix and a real paused
+VM refusal before any payload is admitted. Unknown pre-admission file limits
+are recorded as null, never fabricated as applied limits. These are interface
+and evidence corrections within the same profile, not new execution features.

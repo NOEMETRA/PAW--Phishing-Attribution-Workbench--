@@ -58,5 +58,16 @@ class Confinement(unittest.TestCase):
                 path.write_text(path.read_text().replace(old, new))
                 with self.assertRaisesRegex(ValueError, reason): verify(root)
 
+    def test_quarantine_directory_and_artifacts_cannot_be_external_symlinks(self):
+        for mutation in ['directory', 'artifact']:
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                parent = Path(directory); root = parent / 'bundle'; root.mkdir(); bundle(root)
+                folder = root / 'owned-success-quarantine'; outside = parent / 'outside'
+                if mutation == 'directory':
+                    folder.rename(outside); folder.symlink_to(outside, target_is_directory=True)
+                else:
+                    path = folder / 'artifact-00.bin'; path.rename(outside); path.symlink_to(outside)
+                with self.assertRaisesRegex(ValueError, 'quarantine_'): verify(root)
+
 
 if __name__ == '__main__': unittest.main()

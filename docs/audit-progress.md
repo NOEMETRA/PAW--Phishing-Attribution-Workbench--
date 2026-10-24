@@ -1,5 +1,13 @@
 # Stato dell'audit PAW
 
+Il consolidamento S14 mantiene un solo [profilo operativo Python Linux offline](s14-offline-input-gate.md):
+API locale sincrona e CLI di accettazione sul medesimo adattatore, input immutabili,
+un job per VM senza NIC e risultati opachi pubblicati solo dopo stop verificato.
+Le correzioni di review riguardano avvio parziale, gate occupato, reset e inventari
+delle evidenze. Il profilo resta limitato al catalogo sintetico: nessuna nuova
+capacità di detonazione PAW, HTTP privilegiato o esecuzione arbitraria è abilitata.
+I08 effettivo/manutenzione e integrazione con il prodotto restano separati.
+
 La [matrice sintetica avversariale offline](s14-synthetic-offline-gate.md) aggiunge
 verifiche mirate del profilo senza NIC, dei limiti kernel/storage e degli output
 guest. Rimane una matrice di fixture innocue: il launcher per input arbitrari,

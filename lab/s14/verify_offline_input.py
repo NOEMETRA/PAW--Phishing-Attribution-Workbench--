@@ -62,10 +62,13 @@ def verify(root):
         records = outcome['records']; manifest = run['quarantine']
         require(len(records) == len(manifest) == (0 if case == 'cancel' else 2), 'output_inventory')
         folder = root / (job['job_id'] + '-quarantine')
+        require(folder.is_dir() and not folder.is_symlink(), 'quarantine_directory')
         require({p.name for p in folder.iterdir()} == {v['stored_as'] for v in manifest}, 'quarantine_inventory')
         for index, item in enumerate(manifest):
             require(item['stored_as'] == f'artifact-{index:02d}.bin', 'quarantine_path')
-            data = (folder / item['stored_as']).read_bytes()
+            path = folder / item['stored_as']
+            require(path.is_file() and not path.is_symlink(), 'quarantine_file')
+            data = path.read_bytes()
             require(data == bytes.fromhex(records[index]['bytes_hex']) and len(data) == item['bytes'] <= 1024 and hashlib.sha256(data).hexdigest() == item['sha256'], 'output_bytes')
     return {'result': 'PASS', 'jobs': 4, 'sources': len(r['source_hashes']), 'real_connections': 0,
             'profile': 'synthetic-only offline input path; arbitrary execution unavailable',
