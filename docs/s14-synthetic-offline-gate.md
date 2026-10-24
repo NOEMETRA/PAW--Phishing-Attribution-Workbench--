@@ -59,6 +59,15 @@ boundary vector also requires the null stdin path. Four inert frame/handoff
 tests pass; the entire final matrix must be repeated on these sources. Existing
 trusted-fixture helpers and their historical results are unchanged.
 
+The nine-vector final runtime run passes on 51 frozen sources at its producer
+head. A subsequent evidence-tamper probe reproduced acceptance of an unrelated
+PID in the kernel OOM log. The read-only reconciler now binds that victim to the
+declared host-OOM VM and verifies distinct VM UUIDs and PID/start-time pairs;
+three regressions cover false victim, reused domain and legitimate PID reuse.
+Only the reader/tests/documentation change after this run, not the runner,
+guest, image or isolation policy. Historical source snapshots are kept, and the
+corrected reader rechecks the same stopped evidence without rerunning guests.
+
 `verify_synthetic_gate.py` independently reconciles the named result inventory,
 frozen sources, effective domain confinement, kernel limit observations, stop and
 reset records, host snapshots and quarantine byte hashes. CI runs inert channel

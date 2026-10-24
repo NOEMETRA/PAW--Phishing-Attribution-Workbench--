@@ -21,6 +21,20 @@ def require(value, reason):
     if not value: raise ValueError(reason)
 
 
+def verify_vm_bindings(vms, oom):
+    require(len(vms) == 3 and {vm['label'] for vm in vms} == {'boundaries', 'reset-storage', 'host-oom'}, 'vm_label_inventory')
+    require(len({vm['uuid'] for vm in vms}) == 3, 'reused_vm_uuid')
+    identities = []
+    for vm in vms:
+        actual = vm['actual']
+        require(actual['uuid'] == vm['uuid'] and type(actual['pid']) is int and actual['pid'] > 0, 'actual_vm_identity')
+        require(type(actual['pid_identity']) is str and actual['pid_identity'].isdecimal(), 'pid_start_identity')
+        identities.append((actual['pid'], actual['pid_identity']))
+    require(len(set(identities)) == 3, 'reused_process_identity')
+    victim = next(vm['actual']['pid'] for vm in vms if vm['label'] == 'host-oom')
+    require('Killed process ' + str(victim) + ' (' in oom['kernel_witness'], 'oom_victim_does_not_match_vm')
+
+
 def verify(root):
     root = Path(root); r = json.loads((root / 'results.json').read_text())
     require(r['result'] == 'PASS' and not r.get('cleanup_error'), 'matrix_or_cleanup')
@@ -30,6 +44,7 @@ def verify(root):
     for name, expected in r['source_hashes'].items():
         require(hashlib.sha256((root / 'sources' / name).read_bytes()).hexdigest() == expected, 'source_hash:' + name)
     require(len(r['vms']) == 3, 'vm_inventory')
+    verify_vm_bindings(r['vms'], r['checks'][8])
     for vm in r['vms']:
         require(vm['stopped'] and vm['stop_seconds'] < 12 and vm['overlay_bytes'] <= vm['fsize_limit'] <= 256 * 1024**2, 'vm_stop_or_storage_bound')
         actual = vm['actual']; limits = actual['limits']
