@@ -1,5 +1,12 @@
 # Stato dell'audit PAW
 
+Il [ponte PAW per hash fuori catalogo](s14-paw-case-bridge.md) aggiunge preparazione
+e importazione di evidenze opache per allegati Python del caso sigillato, senza
+lancio automatico o modifica del caso originale/scoring. Il profilo VM resta
+senza NIC e con approvazione root per ogni hash; HTML/browser e altri formati
+restano fuori dall'esecuzione. Accettazione reale e review/CI sono registrate
+separatamente; le fixture non sono etichette di accuratezza.
+
 Il consolidamento S14 mantiene un solo [profilo operativo Python Linux offline](s14-offline-input-gate.md):
 API locale sincrona e CLI di accettazione sul medesimo adattatore, input immutabili,
 un job per VM senza NIC e risultati opachi pubblicati solo dopo stop verificato.
