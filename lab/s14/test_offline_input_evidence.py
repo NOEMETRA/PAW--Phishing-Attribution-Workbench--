@@ -25,7 +25,7 @@ def bundle(root):
         j = job(case); admitted = admit(j); uid = 'owned-vm-' + str(i)
         (root / 'admissions' / (j['job_id'] + '.json')).write_text(json.dumps(j))
         vm = dict(label=j['job_id'], uuid=uid, actual=dict(uuid=uid, pid=100 + i, pid_identity=str(200 + i),
-            apparmor='libvirt-owned (enforce)', limits={'memory.max': str(768 * 1024**2), 'memory.swap.max': '0', 'pids.max': '64'}),
+            apparmor='libvirt-owned (enforce)', limits={'memory.max': str(768 * 1024**2), 'memory.swap.max': '0', 'pids.max': '64', 'cpu.max': '50000 100000'}),
             host_status='Seccomp:\t2', stopped=True, stop_seconds=.1, overlay_bytes=1, fsize_limit=256 * 1024**2)
         r['vms'].append(vm)
         (root / (j['job_id'] + '-domain.xml')).write_text('<domain><uuid>' + uid + '</uuid><memory unit="KiB">524288</memory>'
@@ -46,6 +46,17 @@ def bundle(root):
 
 
 class Confinement(unittest.TestCase):
+    def test_stale_missing_unbounded_and_larger_cpu_quota_refuse(self):
+        for value in [None, '75000 100000', 'max 100000', '50000 50000', '50000 100000 extra']:
+            with self.subTest(value=value), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory); bundle(root)
+                path = root / 'results.json'; report = json.loads(path.read_text())
+                limits = report['vms'][0]['actual']['limits']
+                if value is None: limits.pop('cpu.max')
+                else: limits['cpu.max'] = value
+                path.write_text(json.dumps(report))
+                with self.assertRaisesRegex(ValueError, 'host_cpu_quota'): verify(root)
+
     def test_linked_single_positive_does_not_replace_default_four_job_matrix(self):
         import time
         from paw.core import synthetic_bridge as contract

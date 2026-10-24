@@ -4,10 +4,23 @@ from types import SimpleNamespace
 import tempfile
 import unittest
 
-from synthetic_gate import Gate
+from synthetic_gate import Gate, observe_cpu_quota
 
 
 class PartialStartup(unittest.TestCase):
+    def test_cpu_observation_replaces_stale_snapshot_and_refuses_failed_application(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'cpu.max'
+            actual = {'scope': directory, 'limits': {'cpu.max': '75000 100000'}}
+            path.write_text('50000 100000\n'); observe_cpu_quota(actual)
+            self.assertEqual(actual['limits']['cpu.max'], '50000 100000')
+            for value in ['75000 100000', 'max 100000', '50000 50000']:
+                path.write_text(value)
+                with self.subTest(value=value), self.assertRaisesRegex(ValueError, 'host_cpu_quota_not_applied'):
+                    observe_cpu_quota(actual)
+            path.unlink()
+            with self.assertRaises(FileNotFoundError): observe_cpu_quota(actual)
+
     def check_stop(self, limit):
         with tempfile.TemporaryDirectory() as directory:
             overlay = Path(directory) / 'overlay'; overlay.write_bytes(b'owned')

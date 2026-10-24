@@ -49,6 +49,7 @@ def _verify(root, expected):
         require(vm['actual']['apparmor'].startswith('libvirt-') and '(enforce)' in vm['actual']['apparmor'] and 'Seccomp:\t2' in vm['host_status'], 'mandatory_controls')
         limits = vm['actual']['limits']
         require(limits['memory.max'] == str(768 * 1024**2) and limits['memory.swap.max'] == '0' and limits['pids.max'] == '64', 'host_limits')
+        require(limits.get('cpu.max') == '50000 100000', 'host_cpu_quota')
         require(vm['stopped'] is True and run['writers_stopped'] is True and vm['stop_seconds'] < 12 and run['stop_seconds'] == vm['stop_seconds'], 'unknown_stop')
         require(vm['overlay_bytes'] <= vm['fsize_limit'] == 256 * 1024**2, 'file_cap')
         guest = run['guest_admission']

@@ -33,6 +33,8 @@ jobs:
         run: python -B -m unittest discover -s lab/s14 -p 'test_gate_*.py' -v
       - name: Verify immutable offline input through real CLI and local API without execution
         run: python -B -m unittest discover -s lab/s14 -p 'test_offline_input*.py' -v
+      - name: Verify noncatalog candidate bytes without authorization or execution
+        run: python -B -m unittest discover -s lab/s14 -p 'test_offline_candidate.py' -v
       - name: Check public metadata and safety wording
         run: python -m unittest discover -s tests -p 'test_static_contracts.py' -v
       - name: Verify Python requirement and sources in the actual built wheel
