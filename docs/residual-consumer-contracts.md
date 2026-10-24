@@ -7,6 +7,12 @@ This is the next finite disposition of [R01–R08](evidence-score-consumers.md),
 within the current offline candidate. It does not enable active acquisition,
 independent signatures, a browser, UI completion or classifier calibration.
 
+Integration update: this family merged in PR98 as
+`62f19daf63eea781e7e6eb3e6a383f88573030a1`. The review/CI requests and validation
+counts below describe that PR's pre-integration record. Current clean Linux
+installation and component/platform measurements are in the
+[R08 acceptance record](linux-r08-validation.md); R08 remains open.
+
 ## Reproduced boundary
 
 The baseline passive/supplied-data probes reproduced:
