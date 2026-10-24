@@ -1,5 +1,12 @@
 # Stato dell'audit PAW
 
+La [matrice sintetica avversariale offline](s14-synthetic-offline-gate.md) aggiunge
+verifiche mirate del profilo senza NIC, dei limiti kernel/storage e degli output
+guest. Rimane una matrice di fixture innocue: il launcher per input arbitrari,
+l'integrazione operativa e la revisione indipendente I08 restano non accettati.
+Gli esiti misurati sono registrati nella PR e nel resoconto locale; la presenza
+dei test non chiude il gate generale per codice ostile.
+
 Riferimento integrato corrente: PR98, commit
 `62f19daf63eea781e7e6eb3e6a383f88573030a1`; 23 ottobre 2026.
 La [validazione Linux/R08](linux-r08-validation.md) registra installazioni reali
