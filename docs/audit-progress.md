@@ -8,7 +8,10 @@ PASS/FAIL e limiti dei componenti. R08 resta aperto; scoring e originali non
 sono modificati. Su richiesta del proprietario, S14 prosegue con la
 [preparazione chiusa sul solo PC Linux](s14-single-pc-linux.md): prerequisiti
 CPU/KVM e prova libvirt sospesa verificati, rete interna senza uscita preparata.
-Il gate I02–I08 resta da superare prima di qualsiasi detonazione reale.
+La successiva [matrice con guest fidato](s14-benign-guest-validation.md) passa
+immagine verificata, budget, traffico su fixture proprie e guasti: un run
+completato, quattro interrotti attesi e due ammissioni rifiutate. Il gate I02–I08
+complessivo resta da superare prima di qualsiasi detonazione reale.
 
 Il seguente riferimento di review riguarda la precedente PR97, commit
 `ccc946c5f61f197d088a924583e512241fafd56f`; 23 ottobre 2026 (Europe/Rome).

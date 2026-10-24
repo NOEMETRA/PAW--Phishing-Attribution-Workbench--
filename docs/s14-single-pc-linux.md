@@ -1,5 +1,11 @@
 # S14: closed preparation on one Linux PC
 
+Initial preparation record at `42fc8d6`. The later
+[trusted-guest traffic/failure matrix](s14-benign-guest-validation.md) adds a
+verified image, tighter budgets and actual benign guest execution. Read that
+follow-up for current measured results and remaining gates; the paused-only
+statements below describe this initial stage.
+
 24 October 2026. The user requires all laboratory work on the current Linux
 computer. This supersedes the hardware allocation in the earlier
 [two-PC proposal](s14-two-pc-linux.md), while preserving its isolation gates and

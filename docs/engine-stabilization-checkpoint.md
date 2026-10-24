@@ -36,7 +36,9 @@ and POSIX measurements while preserving the existing finite family dispositions.
 The user now requires all S14 work on this Linux PC. The
 [single-PC closed preparation](s14-single-pc-linux.md) records CPU/KVM and paused
 libvirt measurements plus a private network without egress. Its isolation gate
-remains unpassed; no real detonation or executing guest is accepted by that record.
+remains unpassed. The later [trusted-guest matrix](s14-benign-guest-validation.md)
+adds verified image/budgets, actual owned traffic and interrupted-guest evidence;
+it accepts no real egress or detonation and does not close the complete gate.
 
 Each family closes only when its supported inputs, outputs, source provenance,
 limits, omissions and failure behavior have named expectations; applicable actual
