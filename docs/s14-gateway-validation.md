@@ -186,3 +186,7 @@ explicitly starting `libvirtd.socket`, `libvirtd-ro.socket`,
 `lab/s14/verify_gateway_reboot.py` against the latest passing full-profile
 `results.json`. The checker stays read-only, rejects the same boot ID and does
 not start guests or lab traffic.
+
+The next [Wi-Fi routed-uplink preparation](s14-uplink-profile.md) is a separate,
+disabled candidate and evidence set. Its owned-namespace/KVM routing tests do
+not change the closed-profile measurements above or enable live transport.

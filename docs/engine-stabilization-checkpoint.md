@@ -340,3 +340,11 @@ hashes match, and source/scoring/originals remain unchanged. See the
 [final full-profile and cold-boot record](s14-gateway-validation.md#final-full-profile-and-cold-boot-acceptance).
 The broader S14 real-uplink/collector/target-authorization gate and R08 remain
 open; no real egress or detonation was run.
+
+The separate [disabled Wi-Fi uplink preparation](s14-uplink-profile.md) adds an
+exact public testing-service candidate, address/lease admission and compiled
+routing/guard files without activating them. Eight inert methods, sixteen
+namespace scenarios and six KVM-to-host-NAT scenarios pass against owned local
+fixtures; host policy/routes are restored. Physical Wi-Fi forwarding, real DNS
+pins and a supported live coordinator remain unaccepted. The established closed
+profile, engine scoring, originals and seals remain unchanged.
