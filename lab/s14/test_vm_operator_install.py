@@ -216,6 +216,24 @@ class NativeAcceptance(unittest.TestCase):
             native.accept_installation(host, storage, self.meta, self.installed)
         self.assertTrue((self.state/'revoked').exists()); self.assertFalse(self.rule.exists())
 
+    def test_failure_before_acceptance_log_creation_still_removes_rule_and_revokes(self):
+        folder = self.state/'enrollment-acceptance'; folder.mkdir(mode=0o700)
+        (folder/'result.json').write_bytes(b'prior owned record')
+        with self.assertRaises(FileExistsError): native.accept_installation(host, storage, self.meta, self.installed)
+        self.assertFalse(self.rule.exists()); self.assertTrue((self.state/'revoked').exists())
+        self.assertEqual((folder/'result.json').read_bytes(), b'prior owned record')
+
+    def test_failure_persisting_final_acceptance_proof_revokes_permission(self):
+        original = host.write_state
+        def fail_final(fd, name, value):
+            if value.get('schema') == 'paw-vm-native-acceptance-v1' and value.get('result') == 'PASS':
+                raise OSError('owned final proof storage failure')
+            return original(fd, name, value)
+        with patch.object(native, 'acceptance_phase', side_effect=self.phase), \
+             patch.object(host, 'write_state', side_effect=fail_final), self.assertRaises(OSError):
+            native.accept_installation(host, storage, self.meta, self.installed)
+        self.assertFalse(self.rule.exists()); self.assertTrue((self.state/'revoked').exists())
+
 
 class NativePolkitProbe(unittest.TestCase):
     def setUp(self):

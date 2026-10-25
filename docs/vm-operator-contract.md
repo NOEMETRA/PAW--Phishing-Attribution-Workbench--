@@ -135,6 +135,12 @@ passwordless rule and retains immutable sources/protected results; it does not
 delete code under a possibly running bounded job or infer a known VM stop.
 The source tree stays frozen during the native batch.
 
+Two inert fault reproductions failed before correction: acceptance-directory
+creation failure and final proof persistence failure left the new rule enabled.
+Both now enter the failure boundary, which removes the rule before attempting
+revocation storage. A preexisting acceptance directory is never overwritten;
+final proof persistence is inside acceptance, so its failure cannot report PASS.
+
 These implementation tests use private owned files and simulated UID/process
 checks. Actual root installation, polkit behavior and VM acceptance remain
 pending exact-head review, green CI and the one native authentication. No host

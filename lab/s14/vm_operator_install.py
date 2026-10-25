@@ -284,11 +284,12 @@ def accept_installation(host, storage, meta, installed):
     from under a possibly running bounded job or infers a known VM stop.
     """
     require(os.geteuid() == 0, 'native_acceptance_root_required')
-    folder = host.STATE/'enrollment-acceptance'
-    with host.trusted_directory(host.STATE) as fd: os.mkdir(folder.name, mode=0o700, dir_fd=fd)
+    folder = host.STATE/'enrollment-acceptance'; created = False
     record = {'schema': 'paw-vm-native-acceptance-v1', 'result': 'FAIL', 'release_sha': meta['head_sha'],
               'real_samples_executed': 0, 'completed_phases': [], 'native_restore_only': True}
     try:
+        with host.trusted_directory(host.STATE) as fd: os.mkdir(folder.name, mode=0o700, dir_fd=fd)
+        created = True
         with host.trusted_directory(host.STATE/'jobs') as fd: before = set(os.listdir(fd))
         record['authorization'] = authorization_probe(host, meta)
         acceptance_phase(host, meta, folder, 'probe'); record['completed_phases'].append('probe')
@@ -315,16 +316,24 @@ def accept_installation(host, storage, meta, installed):
             os.unlink('revoked', dir_fd=fd); os.fsync(fd)
         acceptance_phase(host, meta, folder, 'restored'); record['completed_phases'].append('restored')
         record['result'] = 'PASS'
+        # A success that cannot be durably recorded is failed acceptance too.
+        with host.trusted_directory(folder) as fd: host.write_state(fd, 'result.json', record)
     except BaseException as error:
-        with host.trusted_directory(host.STATE) as fd: host.revoke(fd)
+        # Disable no-prompt authority even if acceptance storage/revocation
+        # creation fails. Never overwrite a previous acceptance directory.
         with host.trusted_directory(RULE_FILE.parent) as fd:
             try: os.unlink(RULE_FILE.name, dir_fd=fd); os.fsync(fd)
             except FileNotFoundError: pass
-        record.update(error=type(error).__name__+':'+str(error), passwordless_rule_removed=True,
+        with host.trusted_directory(host.STATE) as fd: host.revoke(fd)
+        record.update(result='FAIL', error=type(error).__name__+':'+str(error), passwordless_rule_removed=True,
                       accepted_jobs_remain_bounded=True)
+        if created:
+            try:
+                with host.trusted_directory(folder) as fd: host.write_state(fd, 'result.json', record)
+            except Exception as storage_error:
+                record['failure_record_error'] = type(storage_error).__name__
         raise
     finally:
-        with host.trusted_directory(folder) as fd: host.write_state(fd, 'result.json', record)
         print(json.dumps({'enrollment_acceptance': record['result'], 'completed_phases': record['completed_phases'],
                           'real_samples_executed': 0}), flush=True)
     return record
