@@ -37,8 +37,9 @@ every command and value itself; `command_line` is not a security boundary.
 Automatic promotion is a distinct privileged operation: independently verify
 repository identity, immutable full commit, completed review, required exact-head
 CI, merged/main state and a bounded release manifest. User-supplied local JSON
-claiming that review passed is not authority. A shortened review receipt must
-resolve unambiguously to the expected full commit; otherwise refuse promotion.
+claiming that review passed is not authority. Automatic promotion requires the
+bot's authenticated structured review state with a full40-character commit and
+clear code/security disposition. A shortened prose receipt is insufficient.
 Trust in GitHub/repository governance and the configured reviewer remains an
 explicit deployment assumption, not remote attestation. Installation/update and
 revocation must be auditable and fail closed on missing or stale proof.
@@ -102,3 +103,34 @@ P0 is being implemented on `codex/vm-project-automation`. The heartbeat exists;
 the privileged helper and promotion mechanism are not installed or accepted.
 P1–P5 are not complete. Historical PR110 readiness does not authorize these new
 capabilities without their corresponding review, context and runtime acceptance.
+
+
+### P0 implementation evidence, current draft
+
+The first P0 draft contains strict pure release admission and immutable snapshot
+verification, plus a bounded read-only GitHub adapter.33 new inert tests pass;
+the existing38 browser and2 input-media privacy tests also passed after adding
+the initial contract/storage modules. Early review6400146782 found no major
+issues on12e5253; it does not cover the later adapter until fresh review/CI.
+
+An actual read-only collection for PR110 verified the full reviewed df103af
+head, merge bbf7f643, all resolved review threads and four exact head/main
+workflow runs, using13 API requests. Nothing was installed/promoted/executed.
+The first collection failed closed because GraphQL Bot.login omits REST's
+`[bot]` suffix. The adapter now checks GraphQL Bot identity plus REST's enrolled
+numeric actor ID. Automatic proof uses the bot's structured full-commit state;
+legacy abbreviated prose alone cannot authorize promotion. Pending/findings
+security review, changed observations, incomplete thread enumeration, queued or
+failed latest CI, redirects, arbitrary queries and mutations refuse.
+
+The caller's GitHub credential is used only in process memory for fixed HTTPS
+read queries; it is not an Ubuntu administrator password and is never saved or
+included in evidence. The future installed dispatcher must acquire proofs
+itself with the fixed client, sanitize its environment, validate fixed root
+ancestors and hold the deployment/execution locks. Accepting a local proof file
+or an injected client is not an implementation of that authority boundary.
+
+P0 remains open: bounded remote archive acquisition/installation, the fixed
+polkit entrypoint, actual no-prompt owned work, failure/revocation and source
+freezing acceptance are still required. No host privilege configuration has
+been installed by these tests.
