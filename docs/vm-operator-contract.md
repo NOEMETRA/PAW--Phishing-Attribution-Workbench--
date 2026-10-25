@@ -52,6 +52,25 @@ ordinary reviewed payload releases do not replace the static trust verifier.
   retain their bounded deadline and known-stop obligations. A native admin
   enrollment is needed to re-enable, not an unprivileged resume argument.
 
+Ordinary run/promotion additionally require a protected successful native
+acceptance receipt bound to the enrolled initial anchor, the four core phases,
+nine harmless cases, integer zero real inputs and the protected job digest.
+Missing/failed/foreign receipt means `enrollment_incomplete`, including after
+SIGTERM/SIGKILL where no Python cleanup handler runs. Status/revoke remain
+available; status does not invent completion from an installed polkit rule.
+
+Initial native testing is distinct from ordinary authority: the administrator
+arms one root0600 grant for the exact browser recipe/release, a live root native
+PID/start identity and a60s admission lease. A random256-bit capability travels
+only through stdin pipes to the UID1000 client/entrypoint; only its hash is
+stored. The entrypoint durably consumes it once under the operation lock before
+starting the same bounded owned worker. Expired/incorrect/replayed capability,
+dead/reused native owner or another recipe refuses. Already admitted work keeps
+its existing bounded lifetime and known-stop obligations if the installer dies.
+After core acceptance the root receipt enables ordinary authority; a final
+unprivileged status confirms it. No unprivileged command can manufacture the
+grant, write the receipt or re-enable a revoked enrollment.
+
 The implemented worker currently supports `browser-owned-v1`. Other finite
 recipe IDs are reserved for reviewed later phases and refuse until implemented.
 The unit uses512MiB/64tasks/swap0/CPU100%,1800s lifetime,20s service stop bound,
@@ -140,6 +159,14 @@ creation failure and final proof persistence failure left the new rule enabled.
 Both now enter the failure boundary, which removes the rule before attempting
 revocation storage. A preexisting acceptance directory is never overwritten;
 final proof persistence is inside acceptance, so its failure cannot report PASS.
+
+Review4371817603 found default signal termination bypassed exception cleanup.
+The old dispatcher was reproduced accepting an ordinary run without acceptance
+in an owned fixture; it now refuses. A real owned fork/SIGKILL regression stops
+native acceptance at its authorization probe, leaves the rule present without
+any cleanup/receipt, and verifies ordinary run remains denied. Further tests
+cover receipt failure/identity, dead/reused owner, expiry, wrong capability and
+durable one-use consumption. No root or VM is involved in these regressions.
 
 Review4371784558 reproduced another immutable-snapshot failure without a VM:
 the browser owner `--help` import path generated18 `.pyc` files because a new

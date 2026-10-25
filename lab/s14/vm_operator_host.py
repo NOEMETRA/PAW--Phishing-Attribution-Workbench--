@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import select
 import stat
 import subprocess
@@ -45,7 +46,7 @@ def trusted_directory(path):
 
 
 def private_json(fd, name):
-    require(name in {'policy.json', 'active.json', 'result.json'}, 'operator_state_name')
+    require(name in {'policy.json', 'active.json', 'result.json', 'enrollment-test.json'}, 'operator_state_name')
     handle = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=fd)
     try:
         info = os.fstat(handle)
@@ -115,6 +116,63 @@ def credential():
     return token
 
 
+def enrollment_complete(installed):
+    """Absence/failure is durable denial, independent of installer survival."""
+    try:
+        with trusted_directory(STATE/'enrollment-acceptance') as fd: value = private_json(fd, 'result.json')
+    except FileNotFoundError: return False
+    return (value.get('schema') == 'paw-vm-native-acceptance-v1' and value.get('result') == 'PASS' and
+            value.get('release_sha') == installed['anchor_sha'] and
+            value.get('completed_phases') == ['probe', 'run', 'revoke', 'restored'] and
+            type(value.get('cases')) is int and value['cases'] == 9 and
+            type(value.get('real_samples_executed')) is int and value['real_samples_executed'] == 0 and
+            storage.hex64(value.get('protected_job_sha256')))
+
+
+def enrollment_test_consumed(fd):
+    try: value = os.stat('enrollment-test-consumed', dir_fd=fd, follow_symlinks=False)
+    except FileNotFoundError: return False
+    require(stat.S_ISREG(value.st_mode) and value.st_uid == ROOT_UID and value.st_nlink == 1 and
+            stat.S_IMODE(value.st_mode) == 0o600, 'operator_native_test_consumption_protection')
+    return True
+
+
+def consume_enrollment_test(fd, current, recipe):
+    """Native-armable one-use browser test, never ordinary delegated authority.
+
+    A secret pipe frame alone is insufficient: root-private grant, live native
+    owner identity, one-minute admission lease, fixed recipe/release and durable
+    consumption must all agree. Owner loss after admission retains job bounds.
+    """
+    require(recipe == 'browser-owned-v1', 'operator_enrollment_incomplete')
+    require(not enrollment_test_consumed(fd), 'operator_native_test_consumed')
+    try: grant = private_json(fd, 'enrollment-test.json')
+    except FileNotFoundError: raise ValueError('operator_enrollment_incomplete') from None
+    contract.shape(grant, {'schema', 'release_sha', 'recipe', 'token_sha256', 'owner_pid', 'owner_start',
+                           'created_at', 'expires_at'}, 'operator_native_test_shape')
+    require(grant['schema'] == 'paw-vm-native-test-v1' and grant['release_sha'] == current['release_sha'] and
+            grant['recipe'] == recipe and storage.hex64(grant['token_sha256']) and
+            contract.positive(grant['owner_pid']) and grant['owner_pid'] > 1 and
+            type(grant['owner_start']) is str and grant['owner_start'].isdigit() and
+            type(grant['created_at']) is int and type(grant['expires_at']) is int and
+            grant['created_at'] <= time.time() < grant['expires_at'] <= grant['created_at']+60,
+            'operator_native_test_identity_or_lease')
+    proc = Path('/proc')/str(grant['owner_pid'])
+    try:
+        fields = (proc/'stat').read_text().rsplit(')', 1)[1].split()
+        alive = proc.stat().st_uid == ROOT_UID and fields[0] not in {'Z', 'X'} and fields[19] == grant['owner_start']
+    except (OSError, IndexError): alive = False
+    require(alive, 'operator_native_test_owner_lost')
+    require(not os.isatty(0) and select.select([0], [], [], 5)[0], 'operator_native_test_pipe_required')
+    raw = os.read(0, 66)
+    require(len(raw) == 65 and raw[-1:] == b'\n' and re.fullmatch(b'[0-9a-f]{64}', raw[:-1]) and
+            hashlib.sha256(raw[:-1]).hexdigest() == grant['token_sha256'], 'operator_native_test_authorization_required')
+    marker = os.open('enrollment-test-consumed', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=fd)
+    try: os.write(marker, b'Native browser acceptance test consumed.\n'); os.fsync(marker)
+    finally: os.close(marker)
+    os.fsync(fd)
+
+
 def promote(fd, installed, current, number):
     # Authority comes from fixed HTTPS queries, never caller-supplied proof JSON.
     enrolled = dict(installed, anchor_sha=current['release_sha'])
@@ -174,11 +232,16 @@ def main(argv, caller_uid):
         if verb == 'revoke': revoke(fd); return {'status': 'revoked', 'accepted_jobs_remain_bounded': True}
         current = active(private_json(fd, 'active.json'))
         if verb == 'status':
-            return {'status': 'revoked' if revoked(fd) else 'enrolled', 'expires_at': installed['expires_at'],
+            complete = enrollment_complete(installed)
+            return {'status': 'revoked' if revoked(fd) else ('enrolled' if complete else 'enrollment_incomplete'),
+                    'enrollment_complete': complete, 'expires_at': installed['expires_at'],
                     'lease_valid': installed['created_at'] <= time.time() < installed['expires_at'], **current}
         contract.policy(installed); require(not revoked(fd), 'operator_revoked')
         with operation_lock(fd):
             current = active(private_json(fd, 'active.json'))
             require(not revoked(fd), 'operator_revoked')
+            if not enrollment_complete(installed):
+                require(verb == 'run', 'operator_enrollment_incomplete')
+                consume_enrollment_test(fd, current, parameter)
             if verb == 'promote': return promote(fd, installed, current, parameter)
             require(verb == 'run', 'operator_unknown_command'); return run_owned(fd, current, parameter)

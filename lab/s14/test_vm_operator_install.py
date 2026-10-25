@@ -5,8 +5,11 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import select
+import signal
 import stat
 import tempfile
+import time
 from types import SimpleNamespace
 import unittest
 from unittest.mock import patch, Mock
@@ -108,7 +111,7 @@ class NativeLayout(unittest.TestCase):
         def selfcheck(*args, **kwargs):
             self.assertFalse(self.rule.exists()); self.assertFalse(self.policy.exists())
             self.assertTrue((self.host.STATE/'bootstrap.json').exists())
-            return SimpleNamespace(returncode=0, stdout='{"status":"enrolled"}')
+            return SimpleNamespace(returncode=0, stdout='{"status":"enrollment_incomplete"}')
         with patch.object(native.subprocess, 'run', side_effect=selfcheck):
             result = native.install_layout(self.host, storage, archive, self.meta, self.files, self.proof)
         self.assertEqual(result['result'], 'INSTALLED_NOT_RUNTIME_ACCEPTED')
@@ -174,8 +177,9 @@ class NativeAcceptance(unittest.TestCase):
         for p in reversed(self.patchers): p.stop()
         self.tmp.cleanup()
 
-    def phase(self, _, meta, folder, phase):
+    def phase(self, _, meta, folder, phase, nonce=None):
         if phase == 'run':
+            marker = self.state/'enrollment-test-consumed'; marker.write_bytes(b'owned consumed'); marker.chmod(0o600)
             path = self.state/'jobs'/self.job; path.mkdir(mode=0o700)
             with host.trusted_directory(path) as fd: host.write_state(fd, 'result.json', self.outcome)
         elif phase == 'revoke':
@@ -202,7 +206,7 @@ class NativeAcceptance(unittest.TestCase):
     def test_phase_failure_after_native_restore_reinstates_revocation(self):
         def failed(*args):
             self.phase(*args)
-            if args[-1] == 'restored': raise ValueError('owned post-restore failure')
+            if args[3] == 'restored': raise ValueError('owned post-restore failure')
         with patch.object(native, 'acceptance_phase', side_effect=failed), self.assertRaises(ValueError):
             native.accept_installation(host, storage, self.meta, self.installed)
         self.assertTrue((self.state/'revoked').exists()); self.assertFalse(self.rule.exists())
@@ -211,7 +215,7 @@ class NativeAcceptance(unittest.TestCase):
     def test_revoked_attempt_must_not_create_another_job(self):
         def bad(*args):
             self.phase(*args)
-            if args[-1] == 'revoke': (self.state/'jobs'/('f'*32)).mkdir(mode=0o700)
+            if args[3] == 'revoke': (self.state/'jobs'/('f'*32)).mkdir(mode=0o700)
         with patch.object(native, 'acceptance_phase', side_effect=bad), self.assertRaises(ValueError):
             native.accept_installation(host, storage, self.meta, self.installed)
         self.assertTrue((self.state/'revoked').exists()); self.assertFalse(self.rule.exists())
@@ -233,6 +237,40 @@ class NativeAcceptance(unittest.TestCase):
              patch.object(host, 'write_state', side_effect=fail_final), self.assertRaises(OSError):
             native.accept_installation(host, storage, self.meta, self.installed)
         self.assertFalse(self.rule.exists()); self.assertTrue((self.state/'revoked').exists())
+
+    @unittest.skipUnless(hasattr(os, 'fork'), 'POSIX process-loss contract')
+    def test_sigkill_before_acceptance_leaves_no_ordinary_delegated_authority(self):
+        policy, _ = fixture(); now = int(time.time()); policy.update(created_at=now, expires_at=now+3600, anchor_sha=self.head)
+        current = {'schema': 'paw-vm-active-v1', 'release_sha': self.head, 'manifest_sha256': 'e'*64, 'pull_request': 111}
+        for name, value in [('policy.json', policy), ('active.json', current)]:
+            path = self.state/name; path.write_bytes(storage.canonical(value)); path.chmod(0o600)
+        read, write = os.pipe(); pid = os.fork()
+        if pid == 0:
+            os.close(read)
+            def held(*args):
+                os.write(write, b'R'); signal.pause()
+            try:
+                with patch.object(native, 'authorization_probe', side_effect=held):
+                    native.accept_installation(host, storage, self.meta, self.installed)
+            except BaseException: os._exit(2)
+            os._exit(3)
+        os.close(write); reaped = False
+        try:
+            self.assertTrue(select.select([read], [], [], 5)[0]); self.assertEqual(os.read(read, 1), b'R')
+            os.kill(pid, signal.SIGKILL); _, status = os.waitpid(pid, 0); reaped = True
+            self.assertEqual(os.WTERMSIG(status), signal.SIGKILL)
+            self.assertTrue(self.rule.exists())  # No exception cleanup ran.
+            self.assertFalse((self.state/'enrollment-acceptance'/'result.json').exists())
+            with patch.object(host, 'run_owned') as run:
+                with self.assertRaisesRegex(ValueError, 'enrollment_incomplete'): host.main(['run', 'browser-owned-v1'], 1000)
+                run.assert_not_called()
+            self.assertEqual(host.main(['status'], 1000)['status'], 'enrollment_incomplete')
+        finally:
+            os.close(read)
+            if not reaped:
+                try: os.kill(pid, signal.SIGKILL)
+                except ProcessLookupError: pass
+                os.waitpid(pid, 0)
 
 
 class NativePolkitProbe(unittest.TestCase):

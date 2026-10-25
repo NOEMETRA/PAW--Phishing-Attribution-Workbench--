@@ -48,22 +48,28 @@ def call(argv, expected=0, reason=None):
 need(os.getuid()==os.geteuid()==1000,'enrollment_client_not_unprivileged')
 phase=sys.argv[1]
 if phase=='probe':
-    need(call(['status'])['status']=='enrolled','enrollment_initial_status')
+    need(call(['status'])['status']=='enrollment_incomplete','enrollment_initial_status')
     call(['unknown-command'],expected=1,reason='operator_unknown_command')
     call(['run','/tmp/untrusted.py'],expected=1,reason='operator_unknown_recipe')
+    call(['run','browser-owned-v1'],expected=1,reason='operator_enrollment_incomplete')
     for path in [ENTRY,'/usr/local/lib/paw-vm','/var/lib/paw-vm','/opt/paw-vm/releases']:
         need(not os.access(path,os.W_OK),'enrollment_user_writable_privileged_path')
     need(not os.access('/var/lib/paw-vm',os.R_OK),'enrollment_user_readable_private_state')
 elif phase=='run':
+    nonce=sys.stdin.buffer.read(66)
+    need(len(nonce)==65 and nonce[-1:]==b'\n','enrollment_one_use_pipe_frame')
     # Stream to the root-owned bounded log, not an unbounded memory buffer.
-    p=subprocess.run(['/usr/bin/pkexec','--disable-internal-agent',ENTRY,'run','browser-owned-v1'],timeout=1860)
+    p=subprocess.run(['/usr/bin/pkexec','--disable-internal-agent',ENTRY,'run','browser-owned-v1'],input=nonce,timeout=1860)
     need(p.returncode==0,'enrollment_owned_job_failed')
+    call(['run','browser-owned-v1'],expected=1,reason='operator_native_test_consumed')
 elif phase=='revoke':
     need(call(['revoke'])['status']=='revoked','enrollment_revoke_failed')
     need(call(['status'])['status']=='revoked','enrollment_revoked_status')
     call(['run','browser-owned-v1'],expected=1,reason='operator_revoked')
 elif phase=='restored':
-    need(call(['status'])['status']=='enrolled','enrollment_native_restore_failed')
+    need(call(['status'])['status']=='enrollment_incomplete','enrollment_native_restore_failed')
+elif phase=='accepted':
+    need(call(['status'])['status']=='enrolled','enrollment_completed_status_failed')
 else: raise ValueError('enrollment_unknown_phase')
 print(json.dumps({'phase':phase,'result':'PASS','uid':os.getuid()}),flush=True)
 '''
@@ -203,7 +209,7 @@ def install_layout(host, storage, archive, meta, files, proof):
         # Self-check before adding any no-prompt authorization.
         result = subprocess.run([str(host.ENTRY), 'status'], capture_output=True, text=True, timeout=20,
             env={'PKEXEC_UID': str(meta['owner_uid']), 'PATH': '/usr/sbin:/usr/bin:/sbin:/bin', 'HOME': '/root', 'LANG': 'C.UTF-8'})
-        require(result.returncode == 0 and json.loads(result.stdout)['status'] == 'enrolled', 'native_installed_selfcheck_failed')
+        require(result.returncode == 0 and json.loads(result.stdout)['status'] == 'enrollment_incomplete', 'native_installed_selfcheck_failed')
         username = pwd.getpwuid(meta['owner_uid']).pw_name
         policy_data, rule_data = polkit_configuration(username, host.ENTRY)
         write(POLICY_FILE, policy_data, 0o644); write(RULE_FILE, rule_data, 0o644)
@@ -222,13 +228,16 @@ def install_layout(host, storage, archive, meta, files, proof):
         raise
 
 
-def acceptance_phase(host, meta, folder, phase):
-    require(phase in {'probe', 'run', 'revoke', 'restored'}, 'native_acceptance_fixed_phase')
+def acceptance_phase(host, meta, folder, phase, nonce=None):
+    require(phase in {'probe', 'run', 'revoke', 'restored', 'accepted'}, 'native_acceptance_fixed_phase')
+    require((phase == 'run' and type(nonce) is bytes and re.fullmatch(b'[0-9a-f]{64}', nonce)) or
+            (phase != 'run' and nonce is None), 'native_acceptance_pipe_authority')
     user = pwd.getpwuid(meta['owner_uid'])
     with host.trusted_directory(folder) as fd:
         log = os.open(phase+'.log', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=fd)
     try:
-        result = subprocess.run(['/usr/bin/python3', '-I', '-B', '-c', CLIENT, phase], stdin=subprocess.DEVNULL,
+        result = subprocess.run(['/usr/bin/python3', '-I', '-B', '-c', CLIENT, phase],
+            **({'input': nonce+b'\n'} if phase == 'run' else {'stdin': subprocess.DEVNULL}),
             stdout=log, stderr=log, cwd='/', user=user.pw_uid, group=user.pw_gid,
             extra_groups=os.getgrouplist(user.pw_name, user.pw_gid),
             env={'PATH': '/usr/sbin:/usr/bin:/sbin:/bin', 'HOME': user.pw_dir, 'LANG': 'C.UTF-8'},
@@ -293,7 +302,20 @@ def accept_installation(host, storage, meta, installed):
         with host.trusted_directory(host.STATE/'jobs') as fd: before = set(os.listdir(fd))
         record['authorization'] = authorization_probe(host, meta)
         acceptance_phase(host, meta, folder, 'probe'); record['completed_phases'].append('probe')
-        acceptance_phase(host, meta, folder, 'run'); record['completed_phases'].append('run')
+        nonce = os.urandom(32).hex().encode(); now = int(time.time())
+        grant = {'schema': 'paw-vm-native-test-v1', 'release_sha': meta['head_sha'], 'recipe': 'browser-owned-v1',
+                 'token_sha256': hashlib.sha256(nonce).hexdigest(), 'owner_pid': os.getpid(),
+                 'owner_start': Path('/proc/self/stat').read_text().rsplit(')', 1)[1].split()[19],
+                 'created_at': now, 'expires_at': now+60}
+        with host.trusted_directory(host.STATE) as fd:
+            handle = os.open('enrollment-test.json', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=fd)
+            try:
+                with os.fdopen(handle, 'wb', closefd=False) as stream: stream.write(canonical(grant)); stream.flush(); os.fsync(handle)
+            finally: os.close(handle)
+            os.fsync(fd)
+        acceptance_phase(host, meta, folder, 'run', nonce); record['completed_phases'].append('run')
+        with host.trusted_directory(host.STATE) as fd:
+            require(host.enrollment_test_consumed(fd), 'native_acceptance_test_not_consumed')
         with host.trusted_directory(host.STATE/'jobs') as fd: after = set(os.listdir(fd))
         new = after-before
         require(len(new) == 1, 'native_acceptance_one_owned_job_required')
@@ -317,6 +339,9 @@ def accept_installation(host, storage, meta, installed):
         acceptance_phase(host, meta, folder, 'restored'); record['completed_phases'].append('restored')
         record['result'] = 'PASS'
         # A success that cannot be durably recorded is failed acceptance too.
+        with host.trusted_directory(folder) as fd: host.write_state(fd, 'result.json', record)
+        acceptance_phase(host, meta, folder, 'accepted')
+        record['post_acceptance_status_checked'] = True
         with host.trusted_directory(folder) as fd: host.write_state(fd, 'result.json', record)
     except BaseException as error:
         # Disable no-prompt authority even if acceptance storage/revocation

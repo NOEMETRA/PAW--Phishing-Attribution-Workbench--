@@ -36,6 +36,11 @@ class InstalledOperator(unittest.TestCase):
                         'manifest_sha256': digest, 'pull_request': 111}
         for name, value in [('policy.json', self.policy), ('active.json', self.current)]:
             path = self.state/name; path.write_bytes(storage.canonical(value)); path.chmod(0o600)
+        accepted = self.state/'enrollment-acceptance'; accepted.mkdir(mode=0o700)
+        proof = {'schema': 'paw-vm-native-acceptance-v1', 'result': 'PASS', 'release_sha': self.policy['anchor_sha'],
+                 'completed_phases': ['probe', 'run', 'revoke', 'restored'], 'cases': 9,
+                 'real_samples_executed': 0, 'protected_job_sha256': 'f'*64}
+        (accepted/'result.json').write_bytes(storage.canonical(proof)); (accepted/'result.json').chmod(0o600)
         @contextmanager
         def owned_directory(path):
             # Test-only fd fixture. Production walks and checks fixed root ancestors.
@@ -64,6 +69,56 @@ class InstalledOperator(unittest.TestCase):
         self.assertEqual(host.main(['status'], 1000)['status'], 'revoked')
         with patch.object(host.subprocess, 'run') as run, self.assertRaises(ValueError): host.main(['run', 'browser-owned-v1'], 1000)
         run.assert_not_called()
+
+    def test_missing_failed_or_foreign_acceptance_blocks_ordinary_run_and_promotion(self):
+        receipt = self.state/'enrollment-acceptance'/'result.json'; saved = receipt.read_bytes()
+        for condition in ['missing', 'failed', 'foreign', 'false_count']:
+            if condition == 'missing': receipt.unlink()
+            else:
+                value = json.loads(saved)
+                if condition == 'failed': value['result'] = 'FAIL'
+                elif condition == 'foreign': value['release_sha'] = '0'*40
+                else: value['real_samples_executed'] = False
+                receipt.write_bytes(storage.canonical(value)); receipt.chmod(0o600)
+            with self.subTest(condition=condition), patch.object(host, 'run_owned') as run, patch.object(host, 'promote') as promote:
+                self.assertEqual(host.main(['status'], 1000)['status'], 'enrollment_incomplete')
+                for argv in [['run', 'browser-owned-v1'], ['promote', '111']]:
+                    with self.assertRaisesRegex(ValueError, 'enrollment_incomplete'): host.main(argv, 1000)
+                run.assert_not_called(); promote.assert_not_called()
+
+    def native_test(self):
+        (self.state/'enrollment-acceptance'/'result.json').unlink()
+        now = int(time.time()); token = b'a'*64
+        value = {'schema': 'paw-vm-native-test-v1', 'release_sha': self.current['release_sha'],
+                 'recipe': 'browser-owned-v1', 'token_sha256': __import__('hashlib').sha256(token).hexdigest(),
+                 'owner_pid': os.getpid(), 'owner_start': Path('/proc/self/stat').read_text().rsplit(')', 1)[1].split()[19],
+                 'created_at': now, 'expires_at': now+60}
+        path = self.state/'enrollment-test.json'; path.write_bytes(storage.canonical(value)); path.chmod(0o600)
+        return value, token, path
+
+    def test_incomplete_native_test_requires_private_live_one_use_pipe_authority(self):
+        _, token, _ = self.native_test()
+        with patch.object(host.os, 'isatty', return_value=False), patch.object(host.select, 'select', return_value=([0], [], [])), \
+             patch.object(host.os, 'read', return_value=token+b'\n'), patch.object(host, 'run_owned', return_value={'owned': True}) as run:
+            self.assertEqual(host.main(['run', 'browser-owned-v1'], 1000), {'owned': True})
+            with self.assertRaisesRegex(ValueError, 'native_test_consumed'): host.main(['run', 'browser-owned-v1'], 1000)
+            run.assert_called_once()
+        self.assertEqual(host.main(['status'], 1000)['status'], 'enrollment_incomplete')
+
+    def test_dead_or_reused_native_owner_expired_grant_or_wrong_token_never_runs(self):
+        value, token, path = self.native_test(); saved = dict(value)
+        for mutation in ['owner_start', 'dead_owner', 'expired', 'wrong_token']:
+            changed = dict(saved)
+            if mutation == 'owner_start': changed['owner_start'] = '0'
+            elif mutation == 'dead_owner': changed['owner_pid'] = 2147483647
+            elif mutation == 'expired': changed.update(created_at=1, expires_at=2)
+            path.write_bytes(storage.canonical(changed))
+            with self.subTest(mutation=mutation), patch.object(host.os, 'isatty', return_value=False), \
+                 patch.object(host.select, 'select', return_value=([0], [], [])), \
+                 patch.object(host.os, 'read', return_value=b'b'*64+b'\n'), patch.object(host, 'run_owned') as run:
+                with self.assertRaises(ValueError): host.main(['run', 'browser-owned-v1'], 1000)
+                run.assert_not_called()
+        self.assertFalse((self.state/'enrollment-test-consumed').exists())
 
     def test_user_writable_state_and_lock_symlink_are_not_authority(self):
         (self.state/'active.json').chmod(0o666)
