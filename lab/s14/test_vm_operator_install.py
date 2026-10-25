@@ -9,9 +9,10 @@ import stat
 import tempfile
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 
 import vm_operator_install as native
+import vm_operator_host as host
 import vm_release_archive as archive
 import vm_release_storage as storage
 from test_vm_release_contract import fixture
@@ -136,6 +137,113 @@ class NativeLayout(unittest.TestCase):
         run.assert_not_called(); self.assertEqual(marker.read_bytes(), b'preserved')
         with patch.object(native.os, 'geteuid', return_value=1000), self.assertRaises(ValueError):
             native.install_layout(self.host, storage, archive, self.meta, self.files, self.proof)
+
+    def test_preexisting_state_must_already_be_private_and_is_not_repaired_implicitly(self):
+        self.host.STATE.mkdir(mode=0o755)
+        with self.assertRaisesRegex(ValueError, 'existing_private_directory_mode'):
+            native.install_layout(self.host, storage, archive, self.meta, self.files, self.proof)
+        self.assertEqual(stat.S_IMODE(self.host.STATE.stat().st_mode), 0o755)
+        self.assertFalse(self.rule.exists())
+
+
+class NativeAcceptance(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory(); self.root = Path(self.tmp.name)
+        self.state = self.root/'state'; self.state.mkdir(mode=0o700); (self.state/'jobs').mkdir(mode=0o700)
+        (self.root/'releases').mkdir(mode=0o700)
+        self.rules = self.root/'rules'; self.rules.mkdir(mode=0o700); self.rule = self.rules/'rule'; self.rule.write_bytes(b'owned')
+        @contextmanager
+        def directory(path):
+            self.assertTrue(path == self.root or self.root in path.parents)
+            fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            try: yield fd
+            finally: os.close(fd)
+        self.patchers = [patch.object(native.os, 'geteuid', return_value=0), patch.object(host, 'ROOT_UID', os.getuid()),
+                         patch.object(host, 'STATE', self.state), patch.object(host, 'RELEASES', self.root/'releases'),
+                         patch.object(host, 'trusted_directory', directory), patch.object(native, 'RULE_FILE', self.rule),
+                         patch.object(native, 'authorization_probe', return_value={'owned_test_probe': True}),
+                         patch.object(storage, 'verify', return_value=({}, {}))]
+        for p in self.patchers: p.start()
+        self.head = 'c'*40; self.job = 'd'*32
+        self.meta = {'head_sha': self.head, 'owner_uid': 1000}
+        self.installed = {'release_sha': self.head, 'manifest_sha256': 'e'*64}
+        self.outcome = {'result': 'PASS', 'job': self.job, 'recipe': 'browser-owned-v1', 'release_sha': self.head,
+                        'real_samples_executed': 0, 'cases': 9}
+
+    def tearDown(self):
+        for p in reversed(self.patchers): p.stop()
+        self.tmp.cleanup()
+
+    def phase(self, _, meta, folder, phase):
+        if phase == 'run':
+            path = self.state/'jobs'/self.job; path.mkdir(mode=0o700)
+            with host.trusted_directory(path) as fd: host.write_state(fd, 'result.json', self.outcome)
+        elif phase == 'revoke':
+            with host.trusted_directory(self.state) as fd: host.revoke(fd)
+        elif phase == 'restored': self.assertFalse((self.state/'revoked').exists())
+
+    def record(self): return json.loads((self.state/'enrollment-acceptance'/'result.json').read_bytes())
+
+    def test_complete_native_acceptance_checks_protected_job_revoke_and_restore(self):
+        with patch.object(native, 'acceptance_phase', side_effect=self.phase):
+            result = native.accept_installation(host, storage, self.meta, self.installed)
+        self.assertEqual(result['result'], 'PASS'); self.assertEqual(result['cases'], 9)
+        self.assertEqual(result['completed_phases'], ['probe', 'run', 'revoke', 'restored'])
+        self.assertEqual(self.record(), result); self.assertTrue(self.rule.exists())
+        self.assertFalse((self.state/'revoked').exists())
+
+    def test_failed_job_retains_result_and_revokes_rule_without_deleting_sources(self):
+        self.outcome['real_samples_executed'] = False
+        with patch.object(native, 'acceptance_phase', side_effect=self.phase), self.assertRaises(ValueError):
+            native.accept_installation(host, storage, self.meta, self.installed)
+        self.assertEqual(self.record()['result'], 'FAIL'); self.assertFalse(self.rule.exists())
+        self.assertTrue((self.state/'revoked').exists()); self.assertTrue((self.state/'jobs'/self.job/'result.json').exists())
+
+    def test_phase_failure_after_native_restore_reinstates_revocation(self):
+        def failed(*args):
+            self.phase(*args)
+            if args[-1] == 'restored': raise ValueError('owned post-restore failure')
+        with patch.object(native, 'acceptance_phase', side_effect=failed), self.assertRaises(ValueError):
+            native.accept_installation(host, storage, self.meta, self.installed)
+        self.assertTrue((self.state/'revoked').exists()); self.assertFalse(self.rule.exists())
+        self.assertEqual(self.record()['result'], 'FAIL')
+
+    def test_revoked_attempt_must_not_create_another_job(self):
+        def bad(*args):
+            self.phase(*args)
+            if args[-1] == 'revoke': (self.state/'jobs'/('f'*32)).mkdir(mode=0o700)
+        with patch.object(native, 'acceptance_phase', side_effect=bad), self.assertRaises(ValueError):
+            native.accept_installation(host, storage, self.meta, self.installed)
+        self.assertTrue((self.state/'revoked').exists()); self.assertFalse(self.rule.exists())
+
+
+class NativePolkitProbe(unittest.TestCase):
+    def setUp(self):
+        self.child = Mock(pid=os.getpid()); self.child.poll.return_value = None
+        self.host = SimpleNamespace(ENTRY=Path('/usr/local/libexec/paw-vm-operator'))
+
+    def test_fixed_details_describe_live_enrolled_subject_and_never_allow_interaction(self):
+        responses = [SimpleNamespace(returncode=n, stdout=b'', stderr=b'') for n in [0, 1, 2]]
+        with (patch.object(native.os, 'geteuid', return_value=0),
+              patch.object(native.subprocess, 'Popen', return_value=self.child) as child,
+              patch.object(native.subprocess, 'run', side_effect=responses) as checks):
+            result = native.authorization_probe(self.host, {'owner_uid': os.getuid()})
+        self.assertTrue(result['custom_authorized']); self.assertTrue(result['noninteractive'])
+        self.assertEqual(child.call_args.kwargs['user'], os.getuid())
+        for call in checks.call_args_list:
+            argv = call.args[0]; self.assertNotIn('--allow-user-interaction', argv)
+            subject = argv[argv.index('--process')+1].split(',')
+            self.assertEqual(subject[0], str(os.getpid())); self.assertEqual(subject[2], str(os.getuid()))
+            self.assertTrue(subject[1].isdigit()); self.assertIn('--detail', argv)
+        self.child.terminate.assert_called_once(); self.child.wait.assert_called_once()
+
+    def test_generic_allow_or_check_error_is_not_counted_as_denial(self):
+        for code in [0, 127]:
+            responses = [SimpleNamespace(returncode=n, stdout=b'', stderr=b'') for n in [0, code, 1]]
+            with self.subTest(code=code), patch.object(native.os, 'geteuid', return_value=0), \
+                 patch.object(native.subprocess, 'Popen', return_value=self.child), \
+                 patch.object(native.subprocess, 'run', side_effect=responses), self.assertRaises(ValueError):
+                native.authorization_probe(self.host, {'owner_uid': os.getuid()})
 
 
 if __name__ == '__main__': unittest.main()

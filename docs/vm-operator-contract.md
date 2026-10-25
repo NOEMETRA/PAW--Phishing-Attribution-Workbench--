@@ -107,10 +107,42 @@ It is rejected by automatic release admission, which still requires a merged
 project PR, reviewed head and both head/main CI. Native authority is explicit;
 the candidate JSON alone cannot enter the passwordless promoter.
 
-The committed-source bundle builder, digest-checking native launcher and actual
-acceptance orchestrator remain to be implemented before installation. The
-present tests use private owned files with simulated UID checks; they are not
-a claim of actual root installation, polkit behavior or VM acceptance.
+`vm_operator_setup.py` builds the one-hour approval bundle from full-commit
+`ls-tree`/`cat-file` blobs, checking regular modes, object identities, source
+inventory and budgets; uncommitted and untracked workspace changes cannot enter
+it. Enrollment lasts at most30 days. The native launcher passes only the data
+path and full bundle digest to a literal isolated Python bootstrap, which checks
+the complete bounded regular file and installer hash before compiling that
+installer. Root independently binds every approved source to the GitHub tree.
+The GitHub credential is obtained from the existing `gh` provider and passed as
+one stdin pipe frame; it is absent from bundle, argv, environment and logs.
+
+The same native batch now contains the acceptance orchestrator: noninteractive
+polkit checks, actual UID1000 status/refusal calls, one finite nine-case browser
+recipe, protected root job reconciliation, revoke/refusal and native restore.
+Generic shell/Python authorization must deny with1/2, not merely fail with127.
+On this host an unprivileged `pkcheck` with details returns127/NotAuthorized;
+that is not a negative authorization witness. Instead the native administrator
+queries fixed details for an actual dropped-UID child identified by PID, start
+time and UID. These checks never request user interaction. The actual helper
+calls then run as UID1000 with its real supplementary groups and a minimal
+environment. No generic shell/Python command is executed as a negative test.
+
+Native setup is a2100s/512MiB/64tasks/swap0/core0/file64MiB PID1 unit; fixed
+worker and VM budgets remain separate. Acceptance logs are streamed to fresh
+root0600 files. Acceptance failure revokes the helper, removes its new
+passwordless rule and retains immutable sources/protected results; it does not
+delete code under a possibly running bounded job or infer a known VM stop.
+The source tree stays frozen during the native batch.
+
+These implementation tests use private owned files and simulated UID/process
+checks. Actual root installation, polkit behavior and VM acceptance remain
+pending exact-head review, green CI and the one native authentication. No host
+authorization has been installed or accepted yet.
+
+Upstream semantics used by the acceptance checks:
+[pkcheck](https://www.freedesktop.org/software/polkit/docs/latest/pkcheck.1.html)
+and [pkexec](https://www.freedesktop.org/software/polkit/docs/latest/pkexec.1.html).
 
 Review4371671325 identified a path-following ownership race newly reachable
 through the delegated browser recipe. An inert owned-canary reproduction

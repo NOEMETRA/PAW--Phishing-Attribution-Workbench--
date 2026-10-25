@@ -32,6 +32,42 @@ ACTION_ID = 'org.noemetra.paw.vm.operator'
 POLICY_FILE = Path('/usr/share/polkit-1/actions/'+ACTION_ID+'.policy')
 RULE_FILE = Path('/etc/polkit-1/rules.d/49-paw-vm-operator.rules')
 
+# Executed by fixed system Python as the enrolled *unprivileged* account. No
+# arguments select commands/paths/code; phases are native enrollment tests only.
+CLIENT = r'''
+import json,os,subprocess,sys
+ENTRY='/usr/local/libexec/paw-vm-operator'
+def need(value, reason):
+    if not value: raise ValueError(reason)
+def call(argv, expected=0, reason=None):
+    p=subprocess.run(['/usr/bin/pkexec','--disable-internal-agent',ENTRY,*argv],capture_output=True,text=True,timeout=20)
+    need(p.returncode==expected,'enrollment_client_returncode:'+str(argv))
+    need(len(p.stdout)+len(p.stderr)<=65536,'enrollment_client_output_budget')
+    if reason: need(reason in p.stderr,'enrollment_client_refusal_reason')
+    return json.loads(p.stdout) if expected==0 else None
+need(os.getuid()==os.geteuid()==1000,'enrollment_client_not_unprivileged')
+phase=sys.argv[1]
+if phase=='probe':
+    need(call(['status'])['status']=='enrolled','enrollment_initial_status')
+    call(['unknown-command'],expected=1,reason='operator_unknown_command')
+    call(['run','/tmp/untrusted.py'],expected=1,reason='operator_unknown_recipe')
+    for path in [ENTRY,'/usr/local/lib/paw-vm','/var/lib/paw-vm','/opt/paw-vm/releases']:
+        need(not os.access(path,os.W_OK),'enrollment_user_writable_privileged_path')
+    need(not os.access('/var/lib/paw-vm',os.R_OK),'enrollment_user_readable_private_state')
+elif phase=='run':
+    # Stream to the root-owned bounded log, not an unbounded memory buffer.
+    p=subprocess.run(['/usr/bin/pkexec','--disable-internal-agent',ENTRY,'run','browser-owned-v1'],timeout=1860)
+    need(p.returncode==0,'enrollment_owned_job_failed')
+elif phase=='revoke':
+    need(call(['revoke'])['status']=='revoked','enrollment_revoke_failed')
+    need(call(['status'])['status']=='revoked','enrollment_revoked_status')
+    call(['run','browser-owned-v1'],expected=1,reason='operator_revoked')
+elif phase=='restored':
+    need(call(['status'])['status']=='enrolled','enrollment_native_restore_failed')
+else: raise ValueError('enrollment_unknown_phase')
+print(json.dumps({'phase':phase,'result':'PASS','uid':os.getuid()}),flush=True)
+'''
+
 
 def require(value, reason):
     if not value: raise ValueError(reason)
@@ -128,7 +164,8 @@ def install_layout(host, storage, archive, meta, files, proof):
     created_dirs = []; created_files = []; release_created = False
     def ensure(path, mode=0o755):
         try:
-            with host.trusted_directory(path): pass
+            with host.trusted_directory(path) as fd:
+                require(mode != 0o700 or stat.S_IMODE(os.fstat(fd).st_mode) == mode, 'native_existing_private_directory_mode')
         except FileNotFoundError:
             ensure(path.parent)
             with host.trusted_directory(path.parent) as fd: os.mkdir(path.name, mode=mode, dir_fd=fd)
@@ -185,6 +222,114 @@ def install_layout(host, storage, archive, meta, files, proof):
         raise
 
 
+def acceptance_phase(host, meta, folder, phase):
+    require(phase in {'probe', 'run', 'revoke', 'restored'}, 'native_acceptance_fixed_phase')
+    user = pwd.getpwuid(meta['owner_uid'])
+    with host.trusted_directory(folder) as fd:
+        log = os.open(phase+'.log', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=fd)
+    try:
+        result = subprocess.run(['/usr/bin/python3', '-I', '-B', '-c', CLIENT, phase], stdin=subprocess.DEVNULL,
+            stdout=log, stderr=log, cwd='/', user=user.pw_uid, group=user.pw_gid,
+            extra_groups=os.getgrouplist(user.pw_name, user.pw_gid),
+            env={'PATH': '/usr/sbin:/usr/bin:/sbin:/bin', 'HOME': user.pw_dir, 'LANG': 'C.UTF-8'},
+            timeout=1880 if phase == 'run' else 80, check=False)
+        os.fsync(log); require(result.returncode == 0, 'native_acceptance_phase_failed:'+phase)
+    finally: os.close(log)
+
+
+def authorization_probe(host, meta):
+    """Root queries polkit for an actual UID1000 subject, without interaction.
+
+    Recent polkit rejects untrusted callers supplying action details, so a
+    failing unprivileged pkcheck is not evidence of denied generic execution.
+    The native administrator supplies fixed details for a live dropped-UID
+    process; the subsequent entrypoint calls themselves are unprivileged.
+    """
+    require(os.geteuid() == 0, 'native_authorization_probe_root_required')
+    user = pwd.getpwuid(meta['owner_uid'])
+    child = subprocess.Popen(['/usr/bin/python3', '-I', '-B', '-c', 'import time; time.sleep(45)'],
+        stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd='/',
+        user=user.pw_uid, group=user.pw_gid, extra_groups=os.getgrouplist(user.pw_name, user.pw_gid),
+        env={'PATH': '/usr/sbin:/usr/bin:/sbin:/bin', 'HOME': user.pw_dir, 'LANG': 'C.UTF-8'})
+    try:
+        proc = Path('/proc')/str(child.pid)
+        require(proc.stat().st_uid == user.pw_uid and child.poll() is None, 'native_probe_unprivileged_subject')
+        start = (proc/'stat').read_text().rsplit(')', 1)[1].split()[19]
+        subject = str(child.pid)+','+start+','+str(user.pw_uid)
+        def check(action, program):
+            require(child.poll() is None, 'native_probe_subject_exited')
+            result = subprocess.run(['/usr/bin/pkcheck', '--action-id', action, '--process', subject,
+                '--detail', 'program', program, '--detail', 'user', 'root'],
+                capture_output=True, timeout=10, check=False)
+            require(len(result.stdout)+len(result.stderr) <= 65536 and child.poll() is None, 'native_probe_result_or_subject')
+            return result.returncode
+        deadline = time.monotonic()+15
+        while check(ACTION_ID, str(host.ENTRY)) != 0:
+            require(time.monotonic() < deadline, 'native_custom_action_not_authorized'); time.sleep(0.25)
+        denied = {program: check('org.freedesktop.policykit.exec', program) for program in ['/bin/sh', '/usr/bin/python3']}
+        require(all(code in {1, 2} for code in denied.values()), 'native_generic_execution_authorized_or_check_failed')
+        return {'custom_authorized': True, 'generic_denial_codes': denied, 'subject_uid': user.pw_uid,
+                'noninteractive': True, 'query_caller_uid': os.geteuid()}
+    finally:
+        if child.poll() is None: child.terminate()
+        try: child.wait(timeout=5)
+        except subprocess.TimeoutExpired: child.kill(); child.wait(timeout=5)
+
+
+def accept_installation(host, storage, meta, installed):
+    """Same native batch: no-prompt tests, nine owned jobs, revoke/native restore.
+
+    A failed acceptance revokes new work and removes the new passwordless rule,
+    retaining immutable code/results for diagnosis. It never deletes a release
+    from under a possibly running bounded job or infers a known VM stop.
+    """
+    require(os.geteuid() == 0, 'native_acceptance_root_required')
+    folder = host.STATE/'enrollment-acceptance'
+    with host.trusted_directory(host.STATE) as fd: os.mkdir(folder.name, mode=0o700, dir_fd=fd)
+    record = {'schema': 'paw-vm-native-acceptance-v1', 'result': 'FAIL', 'release_sha': meta['head_sha'],
+              'real_samples_executed': 0, 'completed_phases': [], 'native_restore_only': True}
+    try:
+        with host.trusted_directory(host.STATE/'jobs') as fd: before = set(os.listdir(fd))
+        record['authorization'] = authorization_probe(host, meta)
+        acceptance_phase(host, meta, folder, 'probe'); record['completed_phases'].append('probe')
+        acceptance_phase(host, meta, folder, 'run'); record['completed_phases'].append('run')
+        with host.trusted_directory(host.STATE/'jobs') as fd: after = set(os.listdir(fd))
+        new = after-before
+        require(len(new) == 1, 'native_acceptance_one_owned_job_required')
+        job = next(iter(new)); require(re.fullmatch('[0-9a-f]{32}', job), 'native_acceptance_job_identifier')
+        with host.trusted_directory(host.STATE/'jobs'/job) as fd: outcome = host.private_json(fd, 'result.json')
+        require(outcome.get('result') == 'PASS' and outcome.get('job') == job and
+                outcome.get('recipe') == 'browser-owned-v1' and outcome.get('release_sha') == meta['head_sha'] and
+                type(outcome.get('real_samples_executed')) is int and outcome['real_samples_executed'] == 0 and
+                type(outcome.get('cases')) is int and outcome['cases'] == 9 and
+                outcome.get('cleanup_failed') is not True, 'native_acceptance_protected_job_failed')
+        record.update(job=job, cases=9, protected_job_sha256=hashlib.sha256(canonical(outcome)).hexdigest())
+        acceptance_phase(host, meta, folder, 'revoke'); record['completed_phases'].append('revoke')
+        with host.trusted_directory(host.STATE/'jobs') as fd:
+            require(set(os.listdir(fd)) == after, 'native_acceptance_revocation_started_job')
+        with host.trusted_directory(host.RELEASES) as fd:
+            storage.verify(fd, installed['release_sha'], installed['manifest_sha256'])
+        with host.trusted_directory(host.STATE) as fd:
+            require(host.revoked(fd), 'native_acceptance_missing_revoke_marker')
+            # Explicit native enrollment authority, never an unprivileged command.
+            os.unlink('revoked', dir_fd=fd); os.fsync(fd)
+        acceptance_phase(host, meta, folder, 'restored'); record['completed_phases'].append('restored')
+        record['result'] = 'PASS'
+    except BaseException as error:
+        with host.trusted_directory(host.STATE) as fd: host.revoke(fd)
+        with host.trusted_directory(RULE_FILE.parent) as fd:
+            try: os.unlink(RULE_FILE.name, dir_fd=fd); os.fsync(fd)
+            except FileNotFoundError: pass
+        record.update(error=type(error).__name__+':'+str(error), passwordless_rule_removed=True,
+                      accepted_jobs_remain_bounded=True)
+        raise
+    finally:
+        with host.trusted_directory(folder) as fd: host.write_state(fd, 'result.json', record)
+        print(json.dumps({'enrollment_acceptance': record['result'], 'completed_phases': record['completed_phases'],
+                          'real_samples_executed': 0}), flush=True)
+    return record
+
+
 def main():
     require(os.geteuid() == 0, 'native_root_installer_required')
     parser = argparse.ArgumentParser(description=__doc__)
@@ -210,6 +355,7 @@ def main():
         require(fresh == proof, 'native_candidate_changed_before_installation')
         result = install_layout(host, storage, archive, meta, files, proof)
         print(json.dumps(result, sort_keys=True), flush=True)
+        accept_installation(host, storage, meta, result)
 
 
 if __name__ == '__main__': main()

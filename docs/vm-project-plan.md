@@ -104,10 +104,11 @@ the privileged helper and promotion mechanism are not installed or accepted.
 P1–P5 are not complete. Historical PR110 readiness does not authorize these new
 capabilities without their corresponding review, context and runtime acceptance.
 
-The native-only bundle validator/installer is implemented and inert-tested,
-but its committed-source builder, approved launcher and acceptance batch remain
-pending. It has not installed polkit or changed host authorization. Current
-tests:44 release/admission,20 entry/dispatcher/installer and42 browser contracts.
+The native-only bundle validator/installer, committed-source builder,
+digest-approved launcher and native acceptance batch are implemented and
+inert-tested. Actual setup remains pending exact-head review, CI and native
+authentication; no polkit or host authorization has been installed. Current
+tests:44 release/admission,31 entry/dispatcher/installer/setup and42 browser contracts.
 The latest browser count includes four export-race regressions following a
 reproduced review finding; reader exports remain root-owned and read-only.
 
