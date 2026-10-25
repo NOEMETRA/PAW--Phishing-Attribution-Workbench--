@@ -279,3 +279,39 @@ of the actual corrupted line and checks the guest-only console reservation.
 The finite owned matrix also exports its failed current audit automatically,
 so the failure evidence accompanies the summary. Fresh review/CI and a complete
 actual owned retry are still required before I08.
+
+
+## Complete owned runtime matrix and scoped I08 review
+
+The corrected run B on reviewed c7bb95f703bfb953b2d89be13f8353e7aa6de040
+passed all nine owned cases: executed title change, script error, timeout,
+cancellation, output budget, guest memory budget, paused refusal, owner loss
+and protocol loss. Read-only reconciliation of all exported normal/fault audits
+also passed. Known stop times were0.490694–1.000867s; no output was accepted
+for the three injected failures. Every grant replay was refused, a concurrent
+execution lock acquisition was refused, and unknown stop could not publish.
+Final guard/foundation/image/certificate/source checks and absence of
+QEMU/domains/network namespaces passed. The matrix installed no production
+readiness and executed no real sample.
+
+The guest memory test recorded oom2/oom_kill16/oom_group_kill1, pids.current0
+and memory_budget, without corrupting the control channel. This is the intended
+bounded synthetic resource fault, not host OOM. The root controller retained its
+512MiB/swap0/64task limits and had zero OOM events when sampled.
+
+`docs/s14-browser-i08-effective-record.json` captures the exact host, image,
+Chrome binary, software/kernel/CPU controls and101 runtime sources, links the
+review/CI and every measured case/stop, and records the remaining operational
+steps. The89-source image build provenance remains distinct and unchanged.
+The complete benign evidence archive has1074 members and SHA256
+`9edf0ac27a895ec5223affe3ac57c770043868bff7abf9d4b49f5e6770e9e98d`.
+
+This I08 request is scoped to one explicitly approved opaque HTML attachment
+hash in this fixed no-NIC profile on this host. It is not a generic sandbox
+certification. Local file origin, missing network resources and untrusted guest
+observations limit the conclusions; execution and seals establish custody and
+behavior under these conditions, not authenticity or attribution.
+A protected admin readiness receipt and fresh installed PAW→VM→PAW harmless
+one-hash smoke, including host input-media privacy and sealed import/replay
+checks, remain pending. Existing Python contracts are preserved; no stale Python
+readiness is extended by the browser receipt. Real MIME remains held.

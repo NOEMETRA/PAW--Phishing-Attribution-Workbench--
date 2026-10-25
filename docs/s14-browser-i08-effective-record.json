@@ -1,0 +1,546 @@
+{
+  "schema": "paw-s14-browser-i08-effective-record-v1",
+  "captured_at": "2026-10-25T15:22:29.889625+00:00",
+  "scope": "one explicitly root-approved hash of an opaque HTML attachment; fixed local-file Chrome in a fresh no-NIC VM on this host",
+  "requested_disposition": "independent review of measured acceptance for this fixed offline HTML profile; root readiness and installed PAW production-route harmless smoke remain pending",
+  "enabled_by_this_document": false,
+  "actual_real_samples_executed": 0,
+  "effective_context": {
+    "bridge_contract_sha256": "0cf620a342432d0dea5b4a86f2b65cf6a4ee80aafef0692867bfdd447731bb90",
+    "chrome_binary_sha256": "95dc9473b4f904cb3ab0800fc7206081fcae12abc094a088bd741a13f1747b72",
+    "chrome_version": "Google Chrome 156.0.8078.47",
+    "guest_memory_bytes": 1073741824,
+    "image_certificate_sha256": "1fc048c8f3262edfd4f47f9b9ed5d32499336f9ae2483b919dff64dda57a76f5",
+    "image_sha256": "3a84fd10c95ff389f85121e7d45e05c9a11ad00242dd1a782a8e1dde679c53e6",
+    "job_memory_bytes": 536870912,
+    "job_tasks": 256,
+    "platform": {
+      "cpu_signature": {
+        "cpu family": "6",
+        "microcode": "0xf0",
+        "model": "78",
+        "stepping": "3",
+        "vendor_id": "GenuineIntel"
+      },
+      "dpkg_inventory_sha256": "4c4a2167cfbd316bd7923426ef249b25f459dc7181df5fbe55624bb4ffeaed80",
+      "host": {
+        "apparmor_enabled": "Y",
+        "guard_fingerprint": "a25ca5f15e2234c5eec9181c49063fe38faa1283f204a31bbcd10e4a276164cc",
+        "image_sha256": "b3296484e362ba2e713489a5de6225c719d9500962bde25d15f2f21e512c7658",
+        "kernel": "7.0.0-38-generic",
+        "mitigation_cmdline": [
+          "gather_data_sampling=force",
+          "l1tf=full"
+        ],
+        "mitigations": {
+          "gather_data_sampling": "Mitigation: AVX disabled, no microcode",
+          "ghostwrite": "Not affected",
+          "indirect_target_selection": "Not affected",
+          "itlb_multihit": "KVM: Mitigation: Split huge pages",
+          "l1tf": "Mitigation: PTE Inversion; VMX: cache flushes, SMT disabled",
+          "mds": "Mitigation: Clear CPU buffers; SMT disabled",
+          "meltdown": "Mitigation: PTI",
+          "mmio_stale_data": "Mitigation: Clear CPU buffers; SMT disabled",
+          "old_microcode": "Not affected",
+          "reg_file_data_sampling": "Not affected",
+          "retbleed": "Mitigation: IBRS",
+          "spec_rstack_overflow": "Not affected",
+          "spec_store_bypass": "Mitigation: Speculative Store Bypass disabled via prctl",
+          "spectre_v1": "Mitigation: usercopy/swapgs barriers and __user pointer sanitization",
+          "spectre_v2": "Mitigation: IBRS; IBPB: conditional; RSB filling; PBRSB-eIBRS: Not affected; BHI: Not affected",
+          "srbds": "Mitigation: Microcode",
+          "tsa": "Not affected",
+          "tsx_async_abort": "Not affected",
+          "vmscape": "Mitigation: IBPB before exit to userspace"
+        },
+        "packages": {
+          "intel-microcode": "3.20260210.1ubuntu2",
+          "libvirt-daemon-system": "12.0.0-1ubuntu5.6",
+          "qemu-system-x86": "1:10.2.1+ds-1ubuntu3.3"
+        },
+        "slice": {
+          "memory.max": "2147483648",
+          "memory.swap.max": "0",
+          "pids.max": "128"
+        },
+        "smt_active": "0",
+        "source_hashes": {
+          "all-guards.nft": "6a6d29eea601139459fdbfba6ae97ca044c246434361e380cca2cbe46058f5b0",
+          "benign_guest_validation.py": "f6fa54746a2886cb26f8080d4ed0309fa1ee3c42025c7c0281a27eb3fd9597e7",
+          "benign_synthetic.py": "b31cda2cb9f331794e56f590b1e9c1b819914a1314dba6512a1920decbf957c2",
+          "browser_authorization.py": "8aa24c08319d99792b6bbac4c2ea566dcafbb8764ec419e978d582575ba92569",
+          "browser_build_guest.py": "6051c60975de98253cddf5c4252157f698b51c0134d48b990310969d7d062241",
+          "browser_guest.py": "fb0cc75de52a84aa6d44b5ade34a176219b2f2bee64f36c40f9a69308cb644b6",
+          "browser_image.py": "702fec7777ddc662ff53fe0be0a7575ecc82683f22f1aec47478c335460bcc1d",
+          "browser_offline_adapter.py": "b32f4fba06a7ddd0125ceffc27a81c9c5af6f4c1f6c4d21c754a6226f920d807",
+          "browser_offline_matrix.py": "255c74a28f190960041f688215fd0b8e01d0495d510a27d78c4fa644d4a7f49e",
+          "browser_offline_operator.py": "1736411beebdea4ab36c77fd389923e2ad8af18f0d2059362542df5fc255fd4b",
+          "browser_policy.py": "b94b2b538b4b5d84aa865bfef49c96ec17e4109443c3c86a0651aa69c6abe61e",
+          "browser_sandbox.py": "92b29e0b90bfe0942a0dc08b7548c5e83a7a7de6ac343493a368b3feaa08beef",
+          "browser_validation_inputs.py": "b833505d17879d75db9548c2809c0126cb6a4d655973a302add58c4c221b701a",
+          "browser_vm.py": "263f35fe6a64eafa2a259da8aab61fb5303421bf190e92f15256f3f38014ba21",
+          "controlled_guest.py": "291515e56ef8027d9161d8c3bd8a31356b26d6eebc366bd36c38fd69b1432819",
+          "controlled_scope.py": "fc77da7454c64290e506553d01a172967940932bd063a6e673a8994433a145f1",
+          "controlled_uplink.py": "1fdea275e0b49301a54545e0e7e578ed48e2df07d0bb40f16feabbc5122194bc",
+          "fetch_trusted_image.py": "c24bb7c64be4202d3b250502a967cb6de139976858c1ee26a79bd771d26372ad",
+          "fixture_server.py": "98488565fdca21000da6ab3c408d27d390a32c2fa505e2ef64a0927d36ab57f3",
+          "gate_channel.py": "9a121215acf287e94502c59fab6495a367c8544061261108404a56490b3ca411",
+          "gate_guest.py": "143bb8d76b9c26daa6182af23f4ae489d4f5b0fcb8ff860e805737c37d05dc85",
+          "gate_payload.py": "89abb9c940a287b4253d95175989d8a66ace5bd5bbb3788307d50ad08d2f6bd2",
+          "gateway-bridge.nft": "d36c11ca81b2e4065899b35757954816ddc3cb6c40e56796964a9587b29f7686",
+          "gateway-guest.nft": "23146342d12a252010620ba4db9c95595b89a9d623ed2760778a66f950074751",
+          "gateway-host.nft": "f31e0b662fe47b3239012ece4ff8f5174403c57531ed1215bffbe38b04f9cdf5",
+          "gateway-wan.xml": "321fb1d56462604773520bc6a89085d2911dd79982673cd792c0dabfa3adedbd",
+          "granted_offline_adapter.py": "9d8206acd98785704a99a075841e887d6bb4d105144c4241c6686150690fc6a4",
+          "granted_offline_matrix.py": "ce0bce49929480faea6cea38395b0170160b001015411dcb211efb9a16ba7dc0",
+          "guest_agent.py": "694fb076c0ce4ae0bd0ba3d3f59c8d7d848f16e906bfc638e612b1c37f99dadc",
+          "gw_admission.py": "bc56c4b2413dabf8b002986148b7717ffec42e077f464ecddbc6da962157045b",
+          "gw_broker.py": "0d78f510545781e334c83d7d2949f43c725f413185642d411b15536a19dd9de9",
+          "gw_fault_validation.py": "f938c0d3335c954b1cda6bf218b2a82a0aa3100cada395e6d9488f1837d45112",
+          "gw_fixture.py": "eee2503b67ceb6bd94f45c696689634475f5049dd02e7620157a74e5bdf8abdd",
+          "gw_node.py": "94531c0fce4c8075b998b7eeb762174501b470c8523e5fc6cb94487a91d9bb0a",
+          "gw_quarantine.py": "9299307a2e5c9f55ef7ae3e6060484f36beaea6cb1e59bbb5f6b804f80233c8b",
+          "gw_validation.py": "a7cf96959b39e95c0ccbb77789e8e7a2ad0e4544328a6e44c612ae6e96ff2302",
+          "hash_authorization.py": "ae5beaa2e58376ba9048452b18f0976adb706b68c65092e90a50846b57ab62e8",
+          "hash_offline_adapter.py": "cbeddd898f79ccbb6473d543c884b517a18fb9278967fcdef39040b1895769e8",
+          "hash_offline_matrix.py": "5e38bc73efbc5bab610f2218c391a76d1cf0e0d51b93e12974f78aa9ed692c54",
+          "hash_offline_operator.py": "2f8fb5a395a7df7c5f9a4c56a6590eca2fc7c865f52f3f549cda2c810fdc5521",
+          "hash_validation_inputs.py": "2f64e02fa0e9b0b54e3f45711bf214a889eccf29625487820280cd97a42b3de6",
+          "host-guard.nft": "0c212addd823afe0e20ac84ecd1c2889fa9840ebcaf26e4d68294295eab8e279",
+          "host_task_budget_probe.py": "753571ed14ec64de6554fdc0114ac0e431754f6b1a21f0b35b221452761c254c",
+          "hostile_maintenance.py": "337c5cede0901146396fc24b827d269950c6d36ffd2182e856ccef09aff9e1e4",
+          "i08_context.py": "7a5d6552ce360406774abe3308a8fd3e4ad98a299d99b0fee059beda3cc7a0d6",
+          "internal-network.xml": "badc49be42ec76aee6bd2ed7ffda2f1752536216a357fb793b2c6a707af0f488",
+          "libvirtd-guard.conf": "a47dc88211d896beea584701687660259dea9db876d95d6e40a345a6b9feb2bd",
+          "machine-paws14.slice": "c33ebd73a1b9c98c1cacd9047a6c3077a08912e741f615aee38d91a8c9566f9e",
+          "networkless_synthetic.py": "2b796fc8f4dfc787d6ef15e701f6530a1505112f23dd258caa030244ccc1271e",
+          "offline_candidate.py": "6c623b2f44488017328623485da34c1bd06b2d972fcf807b1634002d6462d24b",
+          "offline_input.py": "06dd99094b94d49464046de8f3248ae8d92b4d657ce15bfebed96c2867f73509",
+          "offline_input_guest.py": "0fd7ba4143562842b12647f5714d8b6635ce86caacab5bcaeaf70935eb168e67",
+          "offline_input_matrix.py": "845205e530e9c5d565ae48f41fe777ce1303fa75a020b79e0ed5741d8b321158",
+          "one_use_authorization.py": "df7457af63e63200a265ebd23a20b73ec55758fb3b182842c2be0c02f616c682",
+          "owned_grant_fixtures.py": "3d102f1815f70fac430142ffb70650608a01d8d642d99d12e9847b33c91a9ce0",
+          "paused-probe.xml": "dd96c01ad72f7b194c177942d90f74144fcd81886f509ca47f1a05c6d3a76d24",
+          "paw-s14-guard.service": "6d3e883e6b19d444a5aa1bffe5982b3667591eab860368fce34b9e21858586d7",
+          "paw_browser_bridge.py": "4720c7415dce2fbdb5210a77edd4f666452a19f1837bb20f71d57fe1c1744f1d",
+          "paw_hash_bridge.py": "a6aa22242d6ca72dd2ca33b51858dfff95e6eba8eaa1ebd314f65e30b511ecdc",
+          "paw_synthetic_bridge.py": "e945ebcb57e4de7275461109305b7a9a106ef4b904a1c6339d34a05b4fb0d9ef",
+          "prepare_uplink.py": "fba92df0e7e7574e40b937fcbe124e15fb36288933f2a8b63f4b5f5151a0c44c",
+          "synthetic_gate.py": "9a46b17245511dda5266cee55fa4dcf4c64990c9e9ad40600b09c2fb17411f0e",
+          "test_browser_contract.py": "e5b104cd8dc9d8aa546c47ae6701d7696f5b0bac63f22478e7666e167820a135",
+          "test_browser_image.py": "c1a503b185805cf8514c7302c93301fdd809c0729f0423c72e9905c55eae591d",
+          "test_browser_inputs.py": "fac72b7aaa0efad9c3d3631dbc31823113592aec14d5facfe17e532a994fe1bc",
+          "test_browser_lifecycle.py": "d7480178e74376b34edeae19041cc1238ed2b2996918aaddb4842a5e80a996b7",
+          "test_browser_readiness.py": "edaaaa25ecb80ed8bb33f9f401743786814ede015ae8883fbd46dacb7128823d",
+          "test_browser_sandbox.py": "aa98da2e5c13bc13e99484ab1472a802b37fc3736d3f66e78912fa09210fa390",
+          "test_controlled_uplink.py": "c2bbfa1b7c3046dd127d4a299585503c126b70a763b8c18cfe51b0eb62552583",
+          "test_gate_channel.py": "b253fe5871ed66c00c27dba98b4846290fb917b0b90427b0cdf8a0698dd713f9",
+          "test_gate_partial_startup.py": "39e162460e1fa358ec4de012f233422156ded0b293e3a8fe46fcaf13c2a9d622",
+          "test_gate_reconciliation.py": "a2ffd48edb417f9fd5ec16071b970db2961d2d6a6e265460391566c2a3437466",
+          "test_gate_stdio.py": "3e5b4ff30cf5ff03fb4f8bd4c907dec8295bca1cff88473ba77613389c69d89a",
+          "test_granted_evidence.py": "b99725c1c406b90f70e88a4ea5f9a1d269846946d354ed60b3db77896e44d3fc",
+          "test_gw_contracts.py": "371704d7fe0667ef13ede819c3a5bbfec98fc118b54908f9d2dd29edff10f800",
+          "test_hash_authorization.py": "4670e4f742370c91f1d1434ceeffd6b9cd249dbf7e80ac621954dd7383677d72",
+          "test_hash_evidence.py": "44125622147c7e2c9c052a60be6f9739a873bedc97dd8899f486dc96cfa35eef",
+          "test_input_media_privacy.py": "abeb24b7b2741e936f866e55cc002a5aeafea92e3b5bade7da6f623a7a996246",
+          "test_networkless_synthetic.py": "46ed796ba6142083399d09034f9462e093463db22907cfc6235f63295da779e8",
+          "test_offline_candidate.py": "58476bb48d928f2eee20163897b121858135c2a57a02665ed4f90caa6a7b1ee7",
+          "test_offline_input.py": "1eccaa4fda1187f89357b615603ec5a14944f5c4b54505b760ca737ed99283e0",
+          "test_offline_input_evidence.py": "6a65d4ef35ef70394d0db7fa04232ed2389acfe02f74a1357f3657bb1bb450b4",
+          "test_offline_input_guest.py": "6d09ed3c2470cf9d83a80ed905edbec29ed9d9846282fafe43169ea495447ebc",
+          "test_one_use_authorization.py": "79fd69c654b2a3adfb453cd73389b3ed3846165f754ce6c5fcb939c60f4b2a9f",
+          "test_uplink_policy.py": "ad287cbfc3b137d02e84a7ce09bd728129417d4dd12ccfbc722a846430da5c1c",
+          "test_uplink_vm_evidence.py": "1e9694f306a94b00adf1e320052841c2103d01b3a88aa71b268ee4b862ffc449",
+          "uplink_guest_probe.py": "719468b9487437fe7a92363db379badc7adfbfba1dc728d0c33d1c2232dc1fa3",
+          "uplink_policy.py": "07ece6595a65194783108359620f3f150002bb0877d1c3154ba509db5634adc8",
+          "validate_uplink_namespace.py": "f7de77a81f1c49b127edd32116b97906a11044f42338331e7d3813c8108d6336",
+          "validate_uplink_vm.py": "b50e53c79d5856df6a4bdae0514b76824df7b3e50ec17c0c1a581c6e366a0428",
+          "verify_benign_evidence.py": "87cd9da9e993813eae8bc31e94019f27422cd4040c506be8b0e27a9fd1bba104",
+          "verify_browser_offline.py": "b3d8f6c52e674e6dd9e2d69b76c846378b021cd69df095d444daa69c920790d5",
+          "verify_controlled_uplink.py": "30131b875ee1c72d747f5fcc7fec5ec091d551503986d85554e525a0afa76a2a",
+          "verify_gateway_evidence.py": "43ba0547dd5133e08d03a9f95cb39e60758c8970d4de240317f58117a91d104f",
+          "verify_gateway_reboot.py": "ab74cddbf086928255aa3b23835ac1728933c9e47ae554f5d9f84460147b2c67",
+          "verify_granted_offline.py": "430019a9894ff9c15f1a7e2a41cc6906571b6593759344d10d7f92706048b24d",
+          "verify_hash_offline.py": "0db19c886401459667c9123fa299b24e67f66c2c4ddc866d5942331e14f925c6",
+          "verify_offline_input.py": "29ede3e7102a59e471e7d096956586812bae44464e3b4372cdd24c6e9eb5315d",
+          "verify_synthetic_gate.py": "ce4ed42b1aa1754698d00a4073b4abee4fabb4f729f98fd423c63dada6529cb5",
+          "verify_uplink_evidence.py": "cea40346c77ea7526c175146cdb7de006f573760e3d95a209982f776ec81d569",
+          "verify_uplink_vm_evidence.py": "4b9611c445d6593c60a1dfcfa7f187a8f31e0619984696ea8621351f3214cfbb"
+        }
+      },
+      "host_identity_sha256": "84ee514016ccb458919b3cc3c12a5d4ee925aaeba287b1cb7f858d7b1ef7f575",
+      "ksm_run": "1",
+      "qemu_binary_sha256": "fa552a45c337a88fe71e1e1af9ebace875f30e88685a6986d9406c92efaf44cb",
+      "qemu_components": {
+        "qemu-system-common": "1:10.2.1+ds-1ubuntu3.3",
+        "qemu-system-data": "1:10.2.1+ds-1ubuntu3.3",
+        "qemu-system-gui": "1:10.2.1+ds-1ubuntu3.3",
+        "qemu-system-modules-opengl": "1:10.2.1+ds-1ubuntu3.3",
+        "qemu-system-modules-spice": "1:10.2.1+ds-1ubuntu3.3",
+        "qemu-system-x86": "1:10.2.1+ds-1ubuntu3.3",
+        "qemu-utils": "1:10.2.1+ds-1ubuntu3.3"
+      }
+    },
+    "qemu_limits": {
+      "cpu.max": "50000 100000",
+      "memory.max": "1610612736",
+      "memory.swap.max": "0",
+      "pids.max": "64"
+    }
+  },
+  "context_sha256": "247a5f77b06a2e021245ae1ff20fa1fa1460dc4f93e0f1b189c16d832bce8f57",
+  "image_preparation": {
+    "result": "PASS",
+    "reviewed_head": "1f893c66ca470a11e6c1e73438462d1d7613da7c",
+    "review_receipt": "6397879404",
+    "ci_runs": [
+      40194524013,
+      40194523974
+    ],
+    "build_sources_count": 89,
+    "runtime_sources_count": 101,
+    "foundation_sha256": "b3296484e362ba2e713489a5de6225c719d9500962bde25d15f2f21e512c7658",
+    "browser_image_sha256": "3a84fd10c95ff389f85121e7d45e05c9a11ad00242dd1a782a8e1dde679c53e6",
+    "certificate_sha256": "1fc048c8f3262edfd4f47f9b9ed5d32499336f9ae2483b919dff64dda57a76f5",
+    "trust": "locally derived protected image; vendor-verified input packages; not remote attestation"
+  },
+  "runtime_review": {
+    "head": "c7bb95f703bfb953b2d89be13f8353e7aa6de040",
+    "receipt": "6399210421",
+    "ci_runs": [
+      40204686986,
+      40204686987
+    ],
+    "ci_jobs": 7,
+    "local_inert_lab_tests": 38,
+    "installed_package_sources": 99,
+    "installed_wheel_sha256": "c030fa3682eafb89a939eed28122ae5b44a4d7e2ef4715c4b981e56ef3f8ebcb"
+  },
+  "actual_owned_matrix": {
+    "result": "PASS",
+    "cases": [
+      {
+        "case": "positive",
+        "verification": {
+          "jobs": 1,
+          "meaning": "local execution/custody; no malware or attribution verdict",
+          "mode": "validation",
+          "real_connections": 0,
+          "result": "PASS",
+          "sources": 101
+        },
+        "request_id": "2ea38129a43d498884376d7069c5e5bc",
+        "global_replay_refused": true,
+        "stop_seconds": [
+          0.9999113919911906
+        ],
+        "execution_status": [
+          "completed"
+        ],
+        "witness": {
+          "guest_admission": {
+            "job_limits": {
+              "memory.max": "536870912",
+              "memory.swap.max": "0",
+              "pids.max": "256"
+            },
+            "job_sha256": "b4af86fb7bb9f922b0f45db53493cbde0968dfcb7e5ba51b96f9324b1b524d5e",
+            "pid": 717,
+            "prior_marker_absent": true,
+            "source_sha256": "02ab06eaf96284bdd6e17a00b9a4e16387e9fde3c0c6bba72127fd90ff1f2eb6",
+            "started": true
+          },
+          "vm_uuid": "00696a03-9bf5-427f-b845-798a235cd7cd"
+        }
+      },
+      {
+        "case": "script-error",
+        "verification": {
+          "jobs": 1,
+          "meaning": "local execution/custody; no malware or attribution verdict",
+          "mode": "validation",
+          "real_connections": 0,
+          "result": "PASS",
+          "sources": 101
+        },
+        "request_id": "bfed376672de4c2388e1057f04a41a12",
+        "global_replay_refused": true,
+        "stop_seconds": [
+          0.9999967300100252
+        ],
+        "execution_status": [
+          "completed"
+        ],
+        "witness": {
+          "guest_admission": {
+            "job_limits": {
+              "memory.max": "536870912",
+              "memory.swap.max": "0",
+              "pids.max": "256"
+            },
+            "job_sha256": "605f0da00f9933d57b0c3927ad2972da65afbd0e5f1da4b9da4888a062c75480",
+            "pid": 719,
+            "prior_marker_absent": true,
+            "source_sha256": "02aafd19b73bac7b83d12d9fd234401262c0fee525701fd69108cfe279706ed7",
+            "started": true
+          },
+          "vm_uuid": "e9bf4a3a-9d78-4f66-8e14-1abd4732be9e"
+        }
+      },
+      {
+        "case": "timeout",
+        "verification": {
+          "jobs": 1,
+          "meaning": "local execution/custody; no malware or attribution verdict",
+          "mode": "validation",
+          "real_connections": 0,
+          "result": "PASS",
+          "sources": 101
+        },
+        "request_id": "44cca13a6df1487cad8b1107eb169438",
+        "global_replay_refused": true,
+        "stop_seconds": [
+          1.000159162998898
+        ],
+        "execution_status": [
+          "timeout"
+        ],
+        "witness": {
+          "guest_admission": {
+            "job_limits": {
+              "memory.max": "536870912",
+              "memory.swap.max": "0",
+              "pids.max": "256"
+            },
+            "job_sha256": "7e5a8d514286d7b2b0064391d2e58219f7c56f66d0b8afd6a9a3207599b2b80e",
+            "pid": 717,
+            "prior_marker_absent": true,
+            "source_sha256": "76c0376eadd585db21b901b1dd751201ae4d83d94ca4f8d5e3218f84a10624bb",
+            "started": true
+          },
+          "vm_uuid": "828a92d7-a126-403e-bdc2-de8b27c5ac6a"
+        }
+      },
+      {
+        "case": "cancel",
+        "verification": {
+          "jobs": 1,
+          "meaning": "local execution/custody; no malware or attribution verdict",
+          "mode": "validation",
+          "real_connections": 0,
+          "result": "PASS",
+          "sources": 101
+        },
+        "request_id": "3552fa09cbcb40939cf470d1910da66d",
+        "global_replay_refused": true,
+        "stop_seconds": [
+          1.0005118240078446
+        ],
+        "execution_status": [
+          "cancelled"
+        ],
+        "witness": {
+          "guest_admission": {
+            "job_limits": {
+              "memory.max": "536870912",
+              "memory.swap.max": "0",
+              "pids.max": "256"
+            },
+            "job_sha256": "0be1b4efd4c487f712d9cc6ea3d28d83d3c7a58c6aeaac903a1c2ba7b67a6f32",
+            "pid": 721,
+            "prior_marker_absent": true,
+            "source_sha256": "49ce648652e86ef9e582cdadfa3125f5661fcfd0922c847a641470d46ff1e16c",
+            "started": true
+          },
+          "vm_uuid": "98d1c2d5-220c-430b-ac2d-f8120850e592"
+        }
+      },
+      {
+        "case": "overflow",
+        "verification": {
+          "jobs": 1,
+          "meaning": "local execution/custody; no malware or attribution verdict",
+          "mode": "validation",
+          "real_connections": 0,
+          "result": "PASS",
+          "sources": 101
+        },
+        "request_id": "a3c45d8723fc4fcc8aba390fdbd4f371",
+        "global_replay_refused": true,
+        "stop_seconds": [
+          1.000436140995589
+        ],
+        "execution_status": [
+          "output_budget"
+        ],
+        "witness": {
+          "guest_admission": {
+            "job_limits": {
+              "memory.max": "536870912",
+              "memory.swap.max": "0",
+              "pids.max": "256"
+            },
+            "job_sha256": "b85b677ff98d77c2ec3581d996c7c9118d9659264dae423059d699cb428954c6",
+            "pid": 725,
+            "prior_marker_absent": true,
+            "source_sha256": "f2e840cb01ef7f217198fcad048d32b1177e9d54a2e4256403a3da5e630ccd69",
+            "started": true
+          },
+          "vm_uuid": "454009f5-12cf-4de5-b063-1a75bca17335"
+        }
+      },
+      {
+        "case": "memory",
+        "verification": {
+          "jobs": 1,
+          "meaning": "local execution/custody; no malware or attribution verdict",
+          "mode": "validation",
+          "real_connections": 0,
+          "result": "PASS",
+          "sources": 101
+        },
+        "request_id": "7fe35ddb73174ab89d239ea319b2cdc1",
+        "global_replay_refused": true,
+        "stop_seconds": [
+          1.0008674260025145
+        ],
+        "execution_status": [
+          "memory_budget"
+        ],
+        "witness": {
+          "guest_admission": {
+            "job_limits": {
+              "memory.max": "536870912",
+              "memory.swap.max": "0",
+              "pids.max": "256"
+            },
+            "job_sha256": "49b319ed4aecbf27a689c610243da52ae7e2a615fcc4d94ec1317ba6ef018bff",
+            "pid": 726,
+            "prior_marker_absent": true,
+            "source_sha256": "61f1a87a1126c5575197b41cdef35dbc7b457aaa682e3f1cfde88ee7fc273017",
+            "started": true
+          },
+          "vm_uuid": "90d41526-1284-408f-b819-15bd60d8b8ef"
+        }
+      },
+      {
+        "case": "paused-refusal",
+        "verification": {
+          "case": "paused-refusal",
+          "result": "PASS",
+          "scope": "failed owned browser execution; known stop and no output"
+        },
+        "request_id": "379efdac918f4f6cae7ef58d2b0339e1",
+        "global_replay_refused": true,
+        "stop_seconds": [
+          0.5871507720003137
+        ],
+        "execution_status": [],
+        "witness": {
+          "fault_at": 79157.421901335,
+          "fault_stop_seconds": 0.5923079930071253,
+          "paused_before_refusal": true,
+          "vm_uuid": "e6469cfe-b83c-4ac6-b17d-0f001b10e5e7"
+        }
+      },
+      {
+        "case": "owner-loss",
+        "verification": {
+          "case": "owner-loss",
+          "result": "PASS",
+          "scope": "failed owned browser execution; known stop and no output"
+        },
+        "request_id": "e257f39192374af1bc27daccbe683e13",
+        "global_replay_refused": true,
+        "stop_seconds": [
+          0.49069386499468237
+        ],
+        "execution_status": [],
+        "witness": {
+          "fault_at": 79228.79299231,
+          "fault_stop_seconds": 0.5391927960008616,
+          "guest_admission": {
+            "job_limits": {
+              "memory.max": "536870912",
+              "memory.swap.max": "0",
+              "pids.max": "256"
+            },
+            "job_sha256": "88c88fa88566a9978b69d4136ca643c5ca3cb3197bbffe75912085b62238f0c7",
+            "pid": 718,
+            "prior_marker_absent": true,
+            "source_sha256": "7aabe77269093f793d17c71963bcc1cd0c720f138315d676936d6de2c57285cb",
+            "started": true
+          },
+          "owner_pid": 222527,
+          "owner_returncode": -9,
+          "vm_uuid": "b88e0dd7-ecce-4c03-ab99-2d0a964bd779"
+        }
+      },
+      {
+        "case": "protocol-loss",
+        "verification": {
+          "case": "protocol-loss",
+          "result": "PASS",
+          "scope": "failed owned browser execution; known stop and no output"
+        },
+        "request_id": "00fd944a306444d3a9b14767a259f228",
+        "global_replay_refused": true,
+        "stop_seconds": [
+          0.53468365300796
+        ],
+        "execution_status": [],
+        "witness": {
+          "fault_at": 79301.412729903,
+          "fault_stop_seconds": 1.076230888007558,
+          "guest_admission": {
+            "job_limits": {
+              "memory.max": "536870912",
+              "memory.swap.max": "0",
+              "pids.max": "256"
+            },
+            "job_sha256": "2a5a16a7365974285ab2a90162777896e7156ddbfc1aaece0736f1a426ed044e",
+            "pid": 720,
+            "prior_marker_absent": true,
+            "source_sha256": "7aabe77269093f793d17c71963bcc1cd0c720f138315d676936d6de2c57285cb",
+            "started": true
+          },
+          "serial_closed": true,
+          "vm_uuid": "4930beee-28f0-47e6-ac54-540e0fc42eb7"
+        }
+      }
+    ],
+    "live_busy_lock_refused": true,
+    "unknown_stop_publication_refused": true,
+    "independent_export_reconciliation": "PASS9/9",
+    "final_cleanup": {
+      "no_qemu": true,
+      "no_domains": true,
+      "no_network_namespaces": true,
+      "guards_unchanged": true,
+      "foundation_image_certificate_unchanged": true
+    },
+    "archive": "S14-browser-matrice-B-evidenze.zip",
+    "archive_sha256": "9edf0ac27a895ec5223affe3ac57c770043868bff7abf9d4b49f5e6770e9e98d"
+  },
+  "corrected_reproduced_faults": [
+    "PID128 insufficient for Chrome; fixed256 based on measured refusals, no increase to RAM",
+    "rewritten Linux renderer argv and startup seccomp transition observational compatibility",
+    "bounded successful diagnostic transport within unchanged channel limits",
+    "guest OOM printk interleaving with serial JSON; guest console reservation, kernel ring and OOM counters retained",
+    "root/QEMU-only private input media; unchanged shared Python descriptor used by browser runtime"
+  ],
+  "readiness_requirements": [
+    "exact reviewed host/image/source context and coherent software maintenance",
+    "protected local admin receipt, at most24h, with reviewed commit and all7 successful CI jobs",
+    "single approved hash and one-use grant; no automatic issuer or root HTTP endpoint",
+    "unchanged context, definite external stop, closed matching owner, writers stopped before opaque export"
+  ],
+  "residual_limits": [
+    "same physical PC: fixed KVM/browser profile; not a generic assurance against hypervisor/kernel/Chrome escapes",
+    "opaque HTML only,512KiB; guest has no NIC, network resources and realistic Internet behavior unavailable",
+    "local file origin differs from a mail client or HTTPS origin; no credentials, forms or external links exercised",
+    "guest output is untrusted bounded evidence and never a benign/malicious or attribution verdict",
+    "no new authorization for Python, ELF, PE, other interpreters, browser egress, arbitrary host commands or other PCs",
+    "full installed PAW case handoff/privacy/replay/import smoke and protected root readiness pending; real email remains held"
+  ]
+}
