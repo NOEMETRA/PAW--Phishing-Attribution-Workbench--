@@ -147,3 +147,13 @@ must then independently pass title execution and every renderer sandbox check
 before normal shutdown/publication can proceed. Both probe process groups are
 externally confirmed empty inside the guest and their temporary profiles removed
 between trials. No arbitrary input, sandbox bypass or unlimited budget is added.
+
+Review reproduced a mixed-counter calibration defect before any trial of this
+change: PID refusal plus `oom 0` and `oom_kill 1` was incorrectly tolerated.
+The [kernel counter contract](https://docs.kernel.org/admin-guide/cgroup-v2.html#memory-interface-files)
+distinguishes cgroup OOM attempts from kills by an OOM killer. Calibration now
+requires present, zero `oom`, `oom_kill` and `oom_group_kill` counters; missing
+or nonzero counters refuse. The final probe also requires zero PID refusals
+and zero OOM counters even if Chrome returned zero and produced the owned title.
+Mixed/global/group OOM and missing-counter regressions are inert; no runtime
+acceptance is inferred from them.

@@ -44,16 +44,22 @@ def descriptor():
 class BrowserImage(unittest.TestCase):
     def test_pid_calibration_never_accepts_failure_and_final_probe_requires_full_sandbox(self):
         sandbox={k:True for k in ['renderer_seen','renderer_nnp','renderer_seccomp','all_uids_nonroot','renderer_pid_namespace']}
-        events={'pids.events':'max 1','memory.events':'oom 0\noom_kill 0'}
+        events={'pids.events':'max 1','memory.events':'oom 0\noom_kill 0\noom_group_kill 0'}
         calibration=probe_evidence(-9,b'',b'owned thread refusal',sandbox,events,128,True)
         self.assertFalse(calibration['accepted']);self.assertTrue(calibration['calibration_only'])
         with self.assertRaises(ValueError):probe_evidence(-9,b'',b'owned refusal',sandbox,events,JOB_TASKS)
         with self.assertRaises(ValueError):probe_evidence(-9,b'',b'other failure',sandbox,{**events,'pids.events':'max 0'},128,True)
         with self.assertRaises(ValueError):probe_evidence(-9,b'',b'oom',sandbox,{**events,'memory.events':'oom 1\noom_kill 1'},128,True)
+        for memory in ['oom 0\noom_kill 1\noom_group_kill 0', 'oom 0\noom_kill 0\noom_group_kill 1', 'oom 0']:
+            with self.subTest(memory=memory),self.assertRaises(ValueError):
+                probe_evidence(-9,b'',b'mixed PID and guest-wide OOM',sandbox,{**events,'memory.events':memory},128,True)
         dom=b'<title>PAW-BROWSER-PROBE</title>'
-        good=probe_evidence(0,dom,b'',sandbox,events,JOB_TASKS);self.assertTrue(good['accepted'])
-        with self.assertRaises(ValueError):probe_evidence(0,dom,b'',{**sandbox,'renderer_seccomp':False},events,JOB_TASKS)
-        with self.assertRaises(ValueError):probe_evidence(0,b'<title>before</title><script>document.title="PAW-BROWSER-PROBE"</script>',b'',sandbox,events,JOB_TASKS)
+        clean={**events,'pids.events':'max 0'}
+        good=probe_evidence(0,dom,b'',sandbox,clean,JOB_TASKS);self.assertTrue(good['accepted'])
+        with self.assertRaises(ValueError):probe_evidence(0,dom,b'',sandbox,events,JOB_TASKS)
+        with self.assertRaises(ValueError):probe_evidence(0,dom,b'',sandbox,{**clean,'memory.events':'oom 0\noom_kill 1\noom_group_kill 0'},JOB_TASKS)
+        with self.assertRaises(ValueError):probe_evidence(0,dom,b'',{**sandbox,'renderer_seccomp':False},clean,JOB_TASKS)
+        with self.assertRaises(ValueError):probe_evidence(0,b'<title>before</title><script>document.title="PAW-BROWSER-PROBE"</script>',b'',sandbox,clean,JOB_TASKS)
 
     def test_offline_upgrade_archives_are_cached_verified_absolute_and_removals_forbidden(self):
         with tempfile.TemporaryDirectory() as folder:

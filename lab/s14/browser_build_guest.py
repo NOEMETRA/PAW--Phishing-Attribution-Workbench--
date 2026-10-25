@@ -44,9 +44,11 @@ def probe_evidence(returncode, dom, error, observed, events, tasks, calibration=
     require(tasks in {128, JOB_TASKS} and (not calibration or tasks == 128), 'owned_probe_task_budget')
     pid_events = dict(row.split() for row in events['pids.events'].splitlines())
     memory_events = dict(row.split() for row in events['memory.events'].splitlines())
-    okay = returncode == 0 and len(dom) <= 65536 and b'<title>PAW-BROWSER-PROBE</title>' in dom and all(observed.values())
+    no_oom = all(key in memory_events and int(memory_events[key]) == 0 for key in ['oom', 'oom_kill', 'oom_group_kill'])
+    no_pid_refusal = int(pid_events.get('max', '0')) == 0
+    okay = returncode == 0 and len(dom) <= 65536 and b'<title>PAW-BROWSER-PROBE</title>' in dom and all(observed.values()) and no_oom and no_pid_refusal
     diagnostics = {'returncode': returncode, 'dom_bytes': len(dom), 'tasks': tasks, 'events': events, 'sandbox': dict(observed)}
-    measured_pid_refusal = int(pid_events.get('max', '0')) > 0 and int(memory_events.get('oom', '0')) == 0
+    measured_pid_refusal = not no_pid_refusal and no_oom
     if not okay and calibration and measured_pid_refusal:
         return {'accepted': False, 'calibration_only': True, 'diagnostics': diagnostics}
     require(okay, 'owned_browser_probe_failed:' + json.dumps(diagnostics, separators=(',', ':')) + ':' + error.decode('utf-8', 'replace')[-1800:])
