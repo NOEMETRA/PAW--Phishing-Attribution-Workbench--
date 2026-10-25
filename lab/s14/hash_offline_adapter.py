@@ -1,5 +1,7 @@
 """Hash-authorized offline Python execution; no source catalogue in this path."""
 import time
+import os
+import pwd
 import shutil
 from pathlib import Path
 import xml.etree.ElementTree as ET
@@ -10,6 +12,19 @@ from granted_offline_adapter import GrantedGate
 from one_use_authorization import execution_lock
 from benign_guest_validation import BASE
 import hash_authorization as authority
+
+
+def protect_input_folder(node):
+    """Only QEMU's dedicated group may traverse private source/seed media."""
+    require(os.geteuid()==0,'root_input_media_protection_required')
+    folder=node['folder'];require(folder.is_dir() and not folder.is_symlink(),'input_media_directory')
+    group=pwd.getpwnam('libvirt-qemu').pw_gid
+    os.chown(folder,0,group);folder.chmod(0o750)
+    for path in folder.iterdir():
+        require(path.is_file() and not path.is_symlink(),'input_media_regular_files')
+        if path==node['overlay']:continue
+        os.chown(path,0,group if path.name=='seed.iso' else 0)
+        path.chmod(0o440 if path.name=='seed.iso' else 0o600)
 
 
 class HashGate(GrantedGate):
@@ -26,7 +41,7 @@ class HashGate(GrantedGate):
         for child in list(devices):
             if child.tag=='controller' and child.get('type')=='usb':devices.remove(child)
         ET.SubElement(devices,'controller',{'type':'usb','model':'none'})
-        node['xml'].write_bytes(ET.tostring(xml));return node
+        node['xml'].write_bytes(ET.tostring(xml));protect_input_folder(node);return node
 
     def validate_runtime(self,runtime):
         super().validate_runtime(runtime)

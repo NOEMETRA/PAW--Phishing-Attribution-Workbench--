@@ -229,16 +229,18 @@ For help: paw help <command>
         p_lab_import.add_argument('--request', required=True, help='Previously prepared local request.json')
         p_lab_import.add_argument('--output', required=True, help='New result container outside the case')
 
-        p_offline = sub.add_parser('lab-offline', help='Prepare/import one hash-approved offline Python attachment; never launches a guest')
+        p_offline = sub.add_parser('lab-offline', help='Prepare/import one hash-approved offline attachment; never launches a guest')
         offline_actions = p_offline.add_subparsers(dest='lab_action', required=True)
         offline_prepare = offline_actions.add_parser('prepare')
         offline_prepare.add_argument('--case', required=True)
         offline_prepare.add_argument('--attachment-path', required=True, help='Exact sealed attachments.json evidence_path')
         offline_prepare.add_argument('--output', required=True)
+        offline_prepare.add_argument('--profile', choices=['python', 'html'], default='python', help='Explicit offline input profile (default: python)')
         offline_import = offline_actions.add_parser('import')
         offline_import.add_argument('--case', required=True)
         offline_import.add_argument('--request', required=True)
         offline_import.add_argument('--output', required=True)
+        offline_import.add_argument('--profile', choices=['python', 'html'], default='python', help='Profile used to prepare the request (default: python)')
 
         p_query = sub.add_parser("query", help="Query recent cases by indicator")
         p_query.add_argument("--by", choices=["ip", "domain", "asn", "org"], required=True, help="Query by indicator type")
@@ -370,7 +372,10 @@ For help: paw help <command>
             print(json.dumps(value, indent=2))
 
         elif args.cmd == 'lab-offline':
-            from .core.offline_bridge import prepare, import_result
+            if args.profile == 'html':
+                from .core.browser_bridge import prepare, import_result
+            else:
+                from .core.offline_bridge import prepare, import_result
             value = (prepare(args.case, args.attachment_path, args.output) if args.lab_action == 'prepare' else
                      import_result(args.case, args.request, args.output))
             print(json.dumps(value, indent=2))
