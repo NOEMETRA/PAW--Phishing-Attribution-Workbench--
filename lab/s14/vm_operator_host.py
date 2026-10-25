@@ -137,6 +137,17 @@ def enrollment_test_consumed(fd):
     return True
 
 
+def native_test_live(grant):
+    require(grant['created_at'] <= time.time() < grant['expires_at'] <= grant['created_at']+60,
+            'operator_native_test_identity_or_lease')
+    proc = Path('/proc')/str(grant['owner_pid'])
+    try:
+        fields = (proc/'stat').read_text().rsplit(')', 1)[1].split()
+        alive = proc.stat().st_uid == ROOT_UID and fields[0] not in {'Z', 'X'} and fields[19] == grant['owner_start']
+    except (OSError, IndexError): alive = False
+    require(alive, 'operator_native_test_owner_lost')
+
+
 def consume_enrollment_test(fd, current, recipe):
     """Native-armable one-use browser test, never ordinary delegated authority.
 
@@ -154,23 +165,22 @@ def consume_enrollment_test(fd, current, recipe):
             grant['recipe'] == recipe and storage.hex64(grant['token_sha256']) and
             contract.positive(grant['owner_pid']) and grant['owner_pid'] > 1 and
             type(grant['owner_start']) is str and grant['owner_start'].isdigit() and
-            type(grant['created_at']) is int and type(grant['expires_at']) is int and
-            grant['created_at'] <= time.time() < grant['expires_at'] <= grant['created_at']+60,
+            type(grant['created_at']) is int and type(grant['expires_at']) is int,
             'operator_native_test_identity_or_lease')
-    proc = Path('/proc')/str(grant['owner_pid'])
-    try:
-        fields = (proc/'stat').read_text().rsplit(')', 1)[1].split()
-        alive = proc.stat().st_uid == ROOT_UID and fields[0] not in {'Z', 'X'} and fields[19] == grant['owner_start']
-    except (OSError, IndexError): alive = False
-    require(alive, 'operator_native_test_owner_lost')
+    native_test_live(grant)
     require(not os.isatty(0) and select.select([0], [], [], 5)[0], 'operator_native_test_pipe_required')
     raw = os.read(0, 66)
     require(len(raw) == 65 and raw[-1:] == b'\n' and re.fullmatch(b'[0-9a-f]{64}', raw[:-1]) and
             hashlib.sha256(raw[:-1]).hexdigest() == grant['token_sha256'], 'operator_native_test_authorization_required')
+    # Waiting for a pipe frame is not admission: observe owner/lease again
+    # immediately before, and after, durable one-use consumption.
+    native_test_live(grant)
+    require(not revoked(fd), 'operator_revoked_before_native_test')
     marker = os.open('enrollment-test-consumed', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=fd)
     try: os.write(marker, b'Native browser acceptance test consumed.\n'); os.fsync(marker)
     finally: os.close(marker)
     os.fsync(fd)
+    native_test_live(grant)
 
 
 def promote(fd, installed, current, number):

@@ -168,6 +168,16 @@ any cleanup/receipt, and verifies ordinary run remains denied. Further tests
 cover receipt failure/identity, dead/reused owner, expiry, wrong capability and
 durable one-use consumption. No root or VM is involved in these regressions.
 
+Review4371861898 reproduced native-owner loss while waiting for the capability
+pipe: the earlier pre-wait liveness observation still allowed admission. Two
+regressions failed before correction (real owner terminated/reaped during wait,
+and lease expiry during wait). Owner/start identity and admission clock are now
+re-observed after authenticating the frame, immediately before consumption and
+after its fsync. Lost/expired pre-admission authority refuses; post-consumption
+loss refuses without launching and leaves the attempt consumed. Already
+admitted jobs keep their separate lifetime/known-stop contract; these checks
+do not claim an atomic guarantee about a native process's future survival.
+
 Review4371784558 reproduced another immutable-snapshot failure without a VM:
 the browser owner `--help` import path generated18 `.pyc` files because a new
 `python -I` interpreter does not inherit its parent's `-B`. The actual owner

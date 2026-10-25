@@ -4,6 +4,8 @@ import copy
 import json
 import os
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import time
 from types import SimpleNamespace
@@ -118,6 +120,36 @@ class InstalledOperator(unittest.TestCase):
                  patch.object(host.os, 'read', return_value=b'b'*64+b'\n'), patch.object(host, 'run_owned') as run:
                 with self.assertRaises(ValueError): host.main(['run', 'browser-owned-v1'], 1000)
                 run.assert_not_called()
+        self.assertFalse((self.state/'enrollment-test-consumed').exists())
+
+    def test_native_owner_loss_during_capability_wait_refuses_before_consumption(self):
+        value, token, path = self.native_test()
+        owner = subprocess.Popen([sys.executable, '-I', '-B', '-c', 'import time; time.sleep(20)'])
+        try:
+            value.update(owner_pid=owner.pid, owner_start=Path('/proc', str(owner.pid), 'stat').read_text().rsplit(')', 1)[1].split()[19])
+            path.write_bytes(storage.canonical(value))
+            def loses_owner(*args):
+                owner.terminate(); owner.wait(timeout=5); return ([0], [], [])
+            with patch.object(host.os, 'isatty', return_value=False), patch.object(host.select, 'select', side_effect=loses_owner), \
+                 patch.object(host.os, 'read', return_value=token+b'\n'), patch.object(host, 'run_owned') as run:
+                with self.assertRaisesRegex(ValueError, 'native_test_owner_lost'): host.main(['run', 'browser-owned-v1'], 1000)
+                run.assert_not_called()
+            self.assertFalse((self.state/'enrollment-test-consumed').exists())
+        finally:
+            if owner.poll() is None: owner.terminate()
+            owner.wait(timeout=5)
+
+    def test_native_test_expiry_during_capability_wait_refuses_before_consumption(self):
+        value, token, _ = self.native_test(); expired = False
+        def clock(): return value['created_at']+(61 if expired else 1)
+        def lease_expires(*args):
+            nonlocal expired
+            expired = True; return ([0], [], [])
+        with patch.object(host.time, 'time', side_effect=clock), patch.object(host.os, 'isatty', return_value=False), \
+             patch.object(host.select, 'select', side_effect=lease_expires), patch.object(host.os, 'read', return_value=token+b'\n'), \
+             patch.object(host, 'run_owned') as run:
+            with self.assertRaisesRegex(ValueError, 'native_test_identity_or_lease'): host.main(['run', 'browser-owned-v1'], 1000)
+            run.assert_not_called()
         self.assertFalse((self.state/'enrollment-test-consumed').exists())
 
     def test_user_writable_state_and_lock_symlink_are_not_authority(self):
