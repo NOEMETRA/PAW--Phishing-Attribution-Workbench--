@@ -95,3 +95,17 @@ owner-triggered destruction. CI's symlink refusal test also substitutes the QEMU
 account lookup, so inert tests require no host libvirt account or provisioning.
 The original failed CI and review remain historical; new exact-head review/CI
 and actual preparation/runtime evidence are still required.
+
+## First local preparation attempts
+
+The first native service refused historical root:root0775 image/run directories
+before creating a VM. The administrator tightened only those two fixed paths to
+0755; the strict authority-storage predicate was retained. The second attempt
+started a real1GiB no-NIC KVM guest with the declared1536MiB/64task/CPU50%/zero
+swap QEMU controls, AppArmor enforce, seccomp and memory merging disabled.
+Guest APT installation failed before the Chrome probe; the controller confirmed
+external stop in0.9992s, no remaining QEMU/domain/namespace, unchanged foundation
+hash and host guard, and no published browser image. This is a failed preparation,
+not browser acceptance. The next diagnostic change reports only the last3000
+bytes and exit status of the trusted guest installation log through the existing
+bounded channel. No host guest-filesystem mount or real attachment is involved.

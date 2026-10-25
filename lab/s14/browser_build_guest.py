@@ -88,6 +88,15 @@ def probe():
     return observed
 
 
+def installation_failure(path, returncode):
+    """Bounded trusted-package diagnostics; never dump a whole guest file."""
+    with path.open('rb') as stream:
+        stream.seek(0, os.SEEK_END)
+        stream.seek(max(0, stream.tell() - 3000))
+        tail = stream.read(3000).decode('utf-8', 'replace')
+    return 'guest_offline_package_install_failed:exit=' + str(returncode) + ':' + tail
+
+
 def provision():
     global USED
     require(not USED and os.geteuid() == 0 and sorted(os.listdir('/sys/class/net')) == ['lo'], 'trusted_build_only_no_nic')
@@ -111,7 +120,8 @@ def provision():
     with Path('/var/log/paw-browser-install.log').open('wb') as log:
         result = subprocess.run(['/usr/bin/apt-get', '--no-download', '--no-install-recommends', '--assume-yes', 'install', *paths],
                                 env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT, timeout=600)
-    require(result.returncode == 0, 'guest_offline_package_install_failed')
+    if result.returncode != 0:
+        raise ValueError(installation_failure(Path('/var/log/paw-browser-install.log'), result.returncode))
     profile = Path('/etc/apparmor.d/chrome')
     require(profile.is_file(), 'official_chrome_apparmor_profile_missing')
     subprocess.run(['/usr/sbin/apparmor_parser', '-r', str(profile)], check=True, timeout=30)

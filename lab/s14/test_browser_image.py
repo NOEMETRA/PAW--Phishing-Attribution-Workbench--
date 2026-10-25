@@ -10,6 +10,7 @@ import xml.etree.ElementTree as ET
 
 from browser_image import validate_packages, copy_approved, GOOGLE_PRIMARY, validate_builder_shutdown
 from browser_policy import chrome_arguments, JOB_MEMORY, JOB_TASKS, MAX_HTML
+from browser_build_guest import installation_failure
 from browser_vm import validate_xml, LIMITS, FILE_CAP, LIFETIME, HERE, validate_owner_config, scope_root
 from owned_grant_fixtures import CPU_DISABLED
 from offline_candidate import canonical
@@ -39,6 +40,16 @@ def descriptor():
 
 
 class BrowserImage(unittest.TestCase):
+    def test_failed_offline_install_reports_only_bounded_log_tail_and_exit(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'owned-install.log'
+            path.write_bytes(b'OMITTED-PREFIX' + b'x'*10000 + b'\nE: owned missing dependency\n')
+            message=installation_failure(path,100)
+            self.assertTrue(message.startswith('guest_offline_package_install_failed:exit=100:'))
+            self.assertTrue(message.endswith('E: owned missing dependency\n'))
+            self.assertNotIn('OMITTED-PREFIX',message)
+            self.assertLess(len(message),3100)
+
     def test_canonical_administratively_approved_manifest_and_exact_digest_required(self):
         raw=canonical(manifest()); self.assertEqual(len(validate_packages(raw, hashlib.sha256(raw).hexdigest())), 2)
         with self.assertRaisesRegex(ValueError, 'approved_package_manifest_digest'): validate_packages(raw, '0'*64)
