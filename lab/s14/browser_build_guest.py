@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from browser_policy import chrome_arguments, JOB_MEMORY, JOB_TASKS
 
 MOUNT = Path('/mnt/paw-browser-packages')
+CACHE = Path('/var/cache/apt/archives')
 GROUP = Path('/sys/fs/cgroup/paw-browser-image-probe')
 USED = False
 
@@ -97,6 +98,26 @@ def installation_failure(path, returncode):
     return 'guest_offline_package_install_failed:exit=' + str(returncode) + ':' + tail
 
 
+def cached_package(path, item):
+    """Give APT an already verified absolute archive, including for upgrades."""
+    CACHE.mkdir(parents=True, exist_ok=True)
+    target = CACHE / item['file']
+    require(CACHE.is_absolute() and path.is_absolute() and Path(item['file']).name == item['file'], 'absolute_guest_package_cache')
+    if not target.exists() and not target.is_symlink():
+        with path.open('rb') as source, target.open('xb') as output:
+            shutil.copyfileobj(source, output, length=1024**2)
+    require(target.is_file() and not target.is_symlink() and target.stat().st_size == item['bytes'] and
+            digest(target) == item['sha256'], 'cached_package_digest')
+    target.chmod(0o444)
+    return str(target)
+
+
+def installation_command(paths):
+    require(paths and all(Path(p).is_absolute() and Path(p).parent == CACHE for p in paths), 'absolute_install_archives')
+    return ['/usr/bin/apt-get', '--no-download', '--no-remove', '--no-install-recommends', '--assume-yes',
+            '-o', 'Dir::Cache::archives=' + str(CACHE) + '/', 'install', *paths]
+
+
 def provision():
     global USED
     require(not USED and os.geteuid() == 0 and sorted(os.listdir('/sys/class/net')) == ['lo'], 'trusted_build_only_no_nic')
@@ -114,11 +135,11 @@ def provision():
                 type(item['file']) is str and re.fullmatch(r'[A-Za-z0-9+_.%:~=-]{1,200}\.deb', item['file']), 'build_package_name')
         path = MOUNT / 'packages' / item['file']
         require(path.is_file() and not path.is_symlink() and path.stat().st_size == item['bytes'] and digest(path) == item['sha256'], 'build_package_digest')
-        paths.append(str(path))
+        paths.append(cached_package(path, item))
     require({v.name for v in (MOUNT / 'packages').iterdir()} == {v['file'] for v in packages}, 'build_package_inventory')
     env = dict(os.environ, DEBIAN_FRONTEND='noninteractive', NEEDRESTART_MODE='l', LC_ALL='C')
     with Path('/var/log/paw-browser-install.log').open('wb') as log:
-        result = subprocess.run(['/usr/bin/apt-get', '--no-download', '--no-install-recommends', '--assume-yes', 'install', *paths],
+        result = subprocess.run(installation_command(paths),
                                 env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT, timeout=600)
     if result.returncode != 0:
         raise ValueError(installation_failure(Path('/var/log/paw-browser-install.log'), result.returncode))

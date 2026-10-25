@@ -6,11 +6,13 @@ import os
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 import xml.etree.ElementTree as ET
 
 from browser_image import validate_packages, copy_approved, GOOGLE_PRIMARY, validate_builder_shutdown
 from browser_policy import chrome_arguments, JOB_MEMORY, JOB_TASKS, MAX_HTML
-from browser_build_guest import installation_failure
+from browser_build_guest import installation_failure, cached_package, installation_command
+import browser_build_guest
 from browser_vm import validate_xml, LIMITS, FILE_CAP, LIFETIME, HERE, validate_owner_config, scope_root
 from owned_grant_fixtures import CPU_DISABLED
 from offline_candidate import canonical
@@ -40,6 +42,22 @@ def descriptor():
 
 
 class BrowserImage(unittest.TestCase):
+    def test_offline_upgrade_archives_are_cached_verified_absolute_and_removals_forbidden(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder); source=root/'owned.deb'; source.write_bytes(b'own')
+            item={'file':'owned.deb','bytes':3,'sha256':hashlib.sha256(b'own').hexdigest()}
+            with patch.object(browser_build_guest,'CACHE',root/'cache'):
+                target=cached_package(source,item); self.assertEqual(Path(target).read_bytes(),b'own')
+                self.assertEqual(Path(target).stat().st_mode&0o777,0o444)
+                self.assertEqual(cached_package(source,item),target)
+                command=installation_command([target]); self.assertIn('--no-download',command); self.assertIn('--no-remove',command)
+                self.assertEqual(command[-1],str(root/'cache/owned.deb'))
+                with self.assertRaises(ValueError):installation_command(['owned.deb'])
+                with self.assertRaises(ValueError):installation_command([str(source)])
+                with self.assertRaises(ValueError):cached_package(source,{**item,'sha256':'0'*64})
+                link=root/'cache/link.deb';link.symlink_to(source)
+                with self.assertRaises(ValueError):cached_package(source,{**item,'file':'link.deb'})
+
     def test_failed_offline_install_reports_only_bounded_log_tail_and_exit(self):
         with tempfile.TemporaryDirectory() as folder:
             path=Path(folder)/'owned-install.log'

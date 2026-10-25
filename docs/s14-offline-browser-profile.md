@@ -109,3 +109,22 @@ hash and host guard, and no published browser image. This is a failed preparatio
 not browser acceptance. The next diagnostic change reports only the last3000
 bytes and exit status of the trusted guest installation log through the existing
 bounded channel. No host guest-filesystem mount or real attachment is involved.
+
+The diagnostic repeat reproduced the cause: APT removed six guest packages
+before failing with `Pathname to install is not absolute` for the local
+ca-certificates upgrade. Its plan also upgraded GLib from2.80.0-6ubuntu3.9 to
+3.10 without the matching `gir1.2-glib-2.0` companion. The signed Noble index
+declares an exact GLib dependency for that GIR package; the missing candidate
+caused the GIR/Python-GI/apport/cloud-minimal removal chain. The replacement
+manifest adds only that matching package (198 total); signatures, seven signed
+index hashes and all198 blobs were independently reconciled, with no host
+package changes. Historical197-package manifests and failed overlays remain
+unchanged. The canonical replacement manifest SHA256 is
+`ea06c2f2b01c0f8537ccd92820e2e114a7f523d1d355daa1cc91d6683b8e1f83`.
+
+Preparation now copies and rechecks each approved archive into the guest's
+fixed absolute APT cache before invoking APT, retains `--no-download`, and adds
+`--no-remove`. Relative/mismatched cached paths and altered/symlinked cache
+entries are refused in inert regression tests. The actual replacement guest
+installation and Chrome sandbox probe are still pending review/CI and a new
+native preparation run; no image or browser input has been accepted yet.
