@@ -164,7 +164,7 @@ def provision():
     calibration = probe(tasks=128, calibration=True)
     try: observed = probe()
     except ValueError as error:
-        prior = {'accepted': calibration['accepted'], 'diagnostics': calibration['diagnostics']}
+        prior = {'accepted': calibration['accepted'], 'events': calibration['diagnostics']['events']}
         raise ValueError('calibration_128=' + json.dumps(prior, separators=(',', ':')) + ';final=' + str(error)) from error
     observed['calibration_128'] = calibration
     info = {'schema': 'paw-browser-image-guest-v1', 'chrome_version': version, 'chrome_binary_sha256': digest(binary),

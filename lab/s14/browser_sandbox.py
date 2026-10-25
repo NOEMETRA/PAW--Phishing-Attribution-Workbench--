@@ -7,7 +7,7 @@ class RendererWitness:
     def __init__(self):
         self.renderers = {}; self.nonroot = True
 
-    def add(self, identity, command, *, uids, nnp, seccomp, pid_namespace):
+    def add(self, identity, command, *, uids, nnp, seccomp, pid_namespace, process=None):
         nonroot = bool(uids) and all(type(v) is int and v > 0 for v in uids)
         self.nonroot &= nonroot
         if b'--type=renderer' not in command.split(b'\0'): return
@@ -16,6 +16,7 @@ class RendererWitness:
             self.renderers[identity] = {'modes': set(), 'last_mode': None, 'nnp_all': True,
                 'filtered_seen': False, 'regressed': False, 'last_namespace': False, 'unsafe_filtered': False}
         row = self.renderers[identity]
+        row['process'] = process
         row['modes'].add(seccomp); row['last_mode'] = seccomp; row['nnp_all'] &= nnp == 1
         row['regressed'] |= row['filtered_seen'] and seccomp != 2
         row['filtered_seen'] |= seccomp == 2; row['last_namespace'] = pid_namespace is True
@@ -34,7 +35,9 @@ class RendererWitness:
             except (FileNotFoundError, ProcessLookupError): continue
             if before != after: continue
             self.add(pid+':'+before, command, uids=[int(v) for v in status['Uid'].split()],
-                     nnp=int(status['NoNewPrivs']), seccomp=int(status['Seccomp']), pid_namespace=namespace)
+                     nnp=int(status['NoNewPrivs']), seccomp=int(status['Seccomp']), pid_namespace=namespace,
+                     process={'name': status['Name'].strip(), 'ppid': int(status['PPid']),
+                              'namespace_pids': [int(v) for v in status['NSpid'].split()], 'state': status['State'].strip()})
 
     def flags(self):
         rows = list(self.renderers.values())
