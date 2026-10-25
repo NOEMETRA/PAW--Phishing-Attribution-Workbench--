@@ -1,8 +1,9 @@
 # Credential-free VM operator: P0 implementation contract
 
-This is the narrow administrator boundary for the P0–P5 plan. The current draft
-is installed on the validation host but its first native acceptance failed;
-ordinary authority remains unaccepted. It stores no Ubuntu password, installs no generic
+This is the narrow administrator boundary for the P0–P5 plan. The installed
+runtime passed native recovery and all nine owned acceptance cases on
+25 October2026; merged/main ordinary promotion remains to be demonstrated.
+It stores no Ubuntu password, installs no generic
 NOPASSWD sudo and does not authorize root execution of workspace scripts.
 
 ## Fixed installed paths and trust
@@ -212,8 +213,9 @@ The old repeated64MiB JavaScript allocation could spend its deadline reclaiming
 without an OOM kill. The new owned probe makes one retained1GiB typed allocation
 and writes one byte per page. This changes only the synthetic input; production
 512MiB memory/15s deadline/QEMU/aggregate limits and the strict oom_kill witness
-remain unchanged. Whether this injection succeeds is pending the next actual
-matrix; a timeout is still FAIL, and prior9/9 evidence is not substituted.
+remain unchanged. The new full matrix subsequently produced15 guest oom_kill
+events and passed this case. A timeout remains FAIL; prior9/9 evidence was not
+substituted for the new runtime's actual execution.
 
 Native bundle v2 explicitly binds `repair_from` to the previous full release
 and manifest digest; v1 data remains decodable for historical evidence. Repair
@@ -232,7 +234,29 @@ closed during mutation. Only after installed status self-check does this native
 batch rearm a fresh one-use acceptance context and recreate the same narrow
 rule. Failure retains history and snapshots and leaves revocation/rule removal.
 It cannot turn the previous failed run into PASS or resume a consumed grant.
-The full nine-case retest and replay/revoke/restore checks are still required.
+The full nine-case retest and replay/revoke/restore checks subsequently passed;
+the separate post-merge ordinary-promotion demonstration remains required.
+
+## Native recovery acceptance,25 October2026
+
+Exact runtime `7b476c86509b83303759f66adc34109a4d5fe90e` passed the native batch
+at22:44CET. All nine scenarios and the protected receipt/revoke/restore/final
+status checks passed. Independent UID1000 reconciliation of the root-owned
+read-only reader exports verified source/image/context bindings, one-use
+consumption, actual no-NIC XML, all six normal/resource outcomes and all three
+fault witnesses. Maximum VM stop was1.001519s; guest memory evidence contains
+oom1/oom_kill15/oom_group_kill1. No QEMU/domain/netns remained.
+
+A background UID1000 call to the installed fixed entrypoint, with stdin closed,
+returned `enrolled`, `lease_valid=true` and `enrollment_complete=true` without
+administrator interaction. The1242-member local evidence archive
+`S14-VM-operatore-P0-collaudo-PASS-C.zip` has SHA256
+`2570a294e51ac496f4af41f19d1486f43fdf38b945b9633e956f46715af55fbc`.
+Its runtime manifest is
+`24bfd6bb01b281ac33cc1beac5a584de10b9387baa28c328ad557043f27f52dc`.
+This is benign operator enrollment acceptance; production grants/I08 remain
+disabled and the complete P0–P5 project is not closed. See the
+[phase disposition](vm-project-plan.md#current-disposition) for consolidation.
 
 Upstream semantics used by the acceptance checks:
 [pkcheck](https://www.freedesktop.org/software/polkit/docs/latest/pkcheck.1.html)

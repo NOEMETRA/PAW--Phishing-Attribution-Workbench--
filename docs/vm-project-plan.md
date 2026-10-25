@@ -99,25 +99,42 @@ their current scoped isolation gate even after unattended benign acceptance.
 
 ## Current disposition
 
-P0 is being implemented on `codex/vm-project-automation`. The heartbeat exists;
-the helper was installed but its first native acceptance failed at memory-fault
-injection (five preceding cases PASS). Ordinary run/promotion remain blocked
-by incomplete enrollment; no VM/domain/netns remains. Native recovery and a new
-complete matrix are pending review/CI and native authentication.
-P1–P5 are not complete. Historical PR110 readiness does not authorize these new
-capabilities without their corresponding review, context and runtime acceptance.
+P0 native acceptance completed on25 October2026 at22:44CET on reviewed runtime
+`7b476c86509b83303759f66adc34109a4d5fe90e`. The first failed installation and
+five preceding successes remain preserved; native recovery retained its old
+snapshot, failed receipt and consumed grant in protected history. A fresh
+one-use admission then passed all nine owned HTML scenarios: normal execution,
+script error, timeout, cancellation, output overflow, memory, paused refusal,
+owner loss and protocol loss. Memory produced15 guest `oom_kill` events with
+the unchanged512MiB/15s limits; maximum measured VM stop was1.001519s.
+Replay, busy-lock refusal, unknown-stop publication refusal, revoke/refusal and
+native restore all passed. Zero real samples/connections were recorded; no
+production grant or I08 real-source readiness was enabled.
 
-The native-only bundle validator/installer, committed-source builder,
-digest-approved launcher and native acceptance batch are implemented and
-inert-tested. Actual setup remains pending exact-head review, CI and native
-authentication. The first native install/probe passed but matrix acceptance
-failed; no ordinary operator authority or production readiness is accepted.
-Current tests:44 release/admission,46 entry/dispatcher/installer/setup and44 browser contracts.
-The latest browser count includes four export-race regressions following a
-reproduced review finding; reader exports remain root-owned and read-only.
+Independent UID1000 reconciliation verified every case with the existing
+custody/fault verifier, exact source copies, no-NIC XML and root-owned read-only
+reader evidence. The fixed installed helper now reports `enrolled`, a valid
+lease and `enrollment_complete=true` from a background call with stdin closed
+and no password. No QEMU/domain/netns remains. Native terminal authentication
+was used once for recovery; ordinary finite operations use the narrow helper.
+
+The1242-member `S14-VM-operatore-P0-collaudo-PASS-C.zip` evidence archive has
+SHA256 `2570a294e51ac496f4af41f19d1486f43fdf38b945b9633e956f46715af55fbc`.
+Runtime manifest SHA256 is
+`24bfd6bb01b281ac33cc1beac5a584de10b9387baa28c328ad557043f27f52dc`.
+Current inert checks remain136:44 release/admission/archive,46 operator/setup,
+44 browser and2 private-input tests. This documentation-only consolidation
+preserves all219 selected runtime source files.
+
+P0 still needs final exact-head review/CI, merge/main CI and actual ordinary
+passwordless promotion before phase closure. P1–P5 remain incomplete. Bounded
+P1/P2 prototypes outside Git have owned unit/CLI/fault evidence but are not
+installed PAW features or phase acceptance. Historical PR110 readiness does not
+authorize new real inputs or profiles without their corresponding context,
+review and runtime acceptance.
 
 
-### P0 implementation evidence, current draft
+### Historical P0 implementation evidence
 
 The first P0 draft contains strict pure release admission and immutable snapshot
 verification, plus a bounded read-only GitHub adapter.33 new inert tests pass;
@@ -137,15 +154,15 @@ failed latest CI, redirects, arbitrary queries and mutations refuse.
 
 The caller's GitHub credential is used only in process memory for fixed HTTPS
 read queries; it is not an Ubuntu administrator password and is never saved or
-included in evidence. The future installed dispatcher must acquire proofs
+included in evidence. The then-pending dispatcher had to acquire proofs
 itself with the fixed client, sanitize its environment, validate fixed root
 ancestors and hold the deployment/execution locks. Accepting a local proof file
 or an injected client is not an implementation of that authority boundary.
 
-P0 remains open: bounded remote archive acquisition/installation, the fixed
-polkit entrypoint, actual no-prompt owned work, failure/revocation and source
-freezing acceptance are still required. No host privilege configuration was
-installed by those inert tests; see the separate failed native attempt above.
+That early draft did not establish archive installation, the fixed polkit
+entrypoint or actual no-prompt owned work/revocation/source freezing. No host
+privilege configuration was installed by those inert tests. The subsequent
+failed native attempt and successful recovery are distinguished above.
 
 Next P0 draft adds bounded archive/manual snapshot staging and fixed installed
 entrypoint/dispatcher/owned-worker code, with inert tests. Real public archive
