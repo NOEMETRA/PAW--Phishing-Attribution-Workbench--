@@ -11,8 +11,10 @@ import xml.etree.ElementTree as ET
 
 from browser_image import validate_packages, copy_approved, GOOGLE_PRIMARY, validate_builder_shutdown
 from browser_policy import chrome_arguments, JOB_MEMORY, JOB_TASKS, MAX_HTML
-from browser_build_guest import installation_failure, cached_package, installation_command, probe_evidence
+from browser_build_guest import installation_failure, cached_package, installation_command, probe_evidence, transport_probe
 import browser_build_guest
+from browser_sandbox import RendererWitness
+from gate_channel import validate_frame
 from browser_vm import validate_xml, LIMITS, FILE_CAP, LIFETIME, HERE, validate_owner_config, scope_root
 from owned_grant_fixtures import CPU_DISABLED
 from offline_candidate import canonical
@@ -42,6 +44,22 @@ def descriptor():
 
 
 class BrowserImage(unittest.TestCase):
+    def test_successful_diagnostic_tree_fits_unchanged_control_limits_as_opaque_text(self):
+        witness=RendererWitness()
+        witness.add('100:200',b'chrome\0--type=renderer\0',uids=[65534]*4,nnp=1,seccomp=2,pid_namespace=True,
+                    process={'name':'chrome','ppid':50,'namespace_pids':[100,12,1],'state':'S'})
+        events={'pids.events':'max 0','memory.events':'oom 0\noom_kill 0\noom_group_kill 0'}
+        value=probe_evidence(0,b'<title>PAW-BROWSER-PROBE</title>',b'',witness.flags(),events,JOB_TASKS,
+                             renderer_states=witness.diagnostics())
+        value['calibration_128']={'accepted':False,'diagnostics':value['diagnostics']}
+        with self.assertRaisesRegex(ValueError,'frame_complexity'):validate_frame({'id':1,'ok':True,'data':{'probe':value}})
+        compact=transport_probe(value);frame={'id':1,'ok':True,'data':{'probe':compact}}
+        self.assertEqual(validate_frame(frame),frame)
+        self.assertEqual(json.loads(compact['diagnostics_json']),value['diagnostics'])
+        self.assertEqual(json.loads(compact['calibration_128_json']),value['calibration_128'])
+        self.assertTrue(compact['renderer_seccomp']);self.assertEqual(compact['title'],'PAW-BROWSER-PROBE')
+        with self.assertRaisesRegex(ValueError,'probe_audit_text_budget'):transport_probe({'diagnostics':{'oversize':'x'*16385}})
+
     def test_pid_calibration_never_accepts_failure_and_final_probe_requires_full_sandbox(self):
         sandbox={k:True for k in ['renderer_seen','renderer_nnp','renderer_seccomp','all_uids_nonroot','renderer_pid_namespace']}
         events={'pids.events':'max 1','memory.events':'oom 0\noom_kill 0\noom_group_kill 0'}

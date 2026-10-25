@@ -191,3 +191,22 @@ not match) and refusing unparseable renderer titles or oversized command lines.
 Bounded marker diagnostics preserve argv shape even for nonmatching candidates.
 The next actual trace must still establish every renderer's seccomp witness;
 this compatibility fix itself does not establish that the filter was active.
+
+The next real trace did establish the owned title and all five observed
+renderers' final seccomp2/NNP/nonroot/PID-namespace conditions. It recorded a
+0→2 startup transition and the packed argv form, confirming both observer
+compatibility defects. Kernel6.8.0-147 and all198 installed package versions
+matched; the final probe had no PID/OOM events. Preparation nevertheless
+failed closed: the detailed success reply exceeded the existing control
+channel's depth/node complexity contract. No image was published and the VM
+was stopped externally rather than promoted without its shutdown receipt.
+
+The diagnostic and128-task-calibration trees now travel as explicit opaque
+`diagnostics_json`/`calibration_128_json` audit strings, each bounded to16KiB.
+They are not decoded into privileged control or executable instructions.
+Typed acceptance flags and title remain flat and unchanged; the60k overall
+response budget and channel depth8/node512 limits remain enforced. An inert
+regression rejects the original nested response, accepts its compact form
+through the unchanged validator and proves diagnostic content preservation.
+The actual captured success frame also passes this read-only replay. Image
+publication still awaits a fresh complete run and verified graceful shutdown.

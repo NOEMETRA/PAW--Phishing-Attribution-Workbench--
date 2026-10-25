@@ -58,6 +58,17 @@ def probe_evidence(returncode, dom, error, observed, events, tasks, calibration=
             'dom_sha256': hashlib.sha256(dom).hexdigest(), 'source_executed': 'owned script only', 'diagnostics': diagnostics}
 
 
+def transport_probe(value):
+    """Keep diagnostic trees as bounded opaque audit text, never decoded control."""
+    result = dict(value)
+    for name in ['diagnostics', 'calibration_128']:
+        if name not in result: continue
+        encoded = json.dumps(result.pop(name), sort_keys=True, separators=(',', ':'), ensure_ascii=True, allow_nan=False)
+        require(len(encoded) <= 16384, 'probe_audit_text_budget')
+        result[name + '_json'] = encoded
+    return result
+
+
 def probe(*, tasks=JOB_TASKS, calibration=False):
     """Only an owned title-changing script; no real page or external URL."""
     root = Path('/run/paw-browser-image-probe'); root.mkdir(mode=0o700); os.chown(root, 65534, 65534)
@@ -167,6 +178,7 @@ def provision():
         prior = {'accepted': calibration['accepted'], 'events': calibration['diagnostics']['events']}
         raise ValueError('calibration_128=' + json.dumps(prior, separators=(',', ':')) + ';final=' + str(error)) from error
     observed['calibration_128'] = calibration
+    observed = transport_probe(observed)
     info = {'schema': 'paw-browser-image-guest-v1', 'chrome_version': version, 'chrome_binary_sha256': digest(binary),
             'kernel_release': os.uname().release, 'inventory_sha256': hashlib.sha256(inventory).hexdigest(),
             'inventory_text': inventory.decode(), 'approved_packages': len(packages), 'probe': observed,
