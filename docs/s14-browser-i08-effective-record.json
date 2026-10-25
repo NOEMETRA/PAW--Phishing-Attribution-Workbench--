@@ -2,7 +2,7 @@
   "schema": "paw-s14-browser-i08-effective-record-v1",
   "captured_at": "2026-10-25T15:22:29.889625+00:00",
   "scope": "one explicitly root-approved hash of an opaque HTML attachment; fixed local-file Chrome in a fresh no-NIC VM on this host",
-  "requested_disposition": "independent review of measured acceptance for this fixed offline HTML profile; root readiness and installed PAW production-route harmless smoke remain pending",
+  "requested_disposition": "scoped local offline HTML readiness accepted after evidence review,7/7CI and actual installed owned PAW production-route smoke; final PR consolidation pending",
   "enabled_by_this_document": false,
   "actual_real_samples_executed": 0,
   "effective_context": {
@@ -541,6 +541,53 @@
     "local file origin differs from a mail client or HTTPS origin; no credentials, forms or external links exercised",
     "guest output is untrusted bounded evidence and never a benign/malicious or attribution verdict",
     "no new authorization for Python, ELF, PE, other interpreters, browser egress, arbitrary host commands or other PCs",
-    "full installed PAW case handoff/privacy/replay/import smoke and protected root readiness pending; real email remains held"
-  ]
+    "No real sample has been analyzed/executed in this benign acceptance; each real HTML source still needs fresh explicit root hash approval. Final PR review/CI/merge/main verification remains separate."
+  ],
+  "readiness_review": {
+    "head": "577cb3fd775c75425793025188a407757572e6d7",
+    "review_url": "https://github.com/NOEMETRA/PAW--Phishing-Attribution-Workbench--/pull/110#issuecomment-6399489745",
+    "ci_runs": [
+      40206674508,
+      40206674576
+    ],
+    "ci_jobs": 7
+  },
+  "protected_readiness": {
+    "sha256": "8fb6fc1a71d2c9af8bf10b46fd367e2f4739904ea8ee6da6712e92e2e69daa0f",
+    "context_sha256": "247a5f77b06a2e021245ae1ff20fa1fa1460dc4f93e0f1b189c16d832bce8f57",
+    "created_at": 1792942260,
+    "expires_at": 1793028660,
+    "scope": "root explicit single-hash offline HTML grants on this exact context; no grant auto-issuance"
+  },
+  "actual_owned_paw_smoke": {
+    "result": "PASS",
+    "request_id": "03cdff13b48e405c9fb44119a9ddfed3",
+    "source_sha256": "dd044048ea99421368edbf469cce9a8aa4d6a6447dbd430648723033925e6252",
+    "execution_status": "completed",
+    "stop_seconds": 1.0005373349995352,
+    "independent_verification": {
+      "result": "PASS",
+      "jobs": 1,
+      "sources": 101,
+      "mode": "sample-analysis",
+      "meaning": "local execution/custody; no malware or attribution verdict",
+      "real_connections": 0
+    },
+    "protected_root_matrix_rechecked": 9,
+    "global_replay_refused": true,
+    "producer_replay_refused": true,
+    "private_media_read_denied": true,
+    "protected_export_write_denied": [
+      "receipt.json",
+      "artifact-00.bin",
+      "request.json"
+    ],
+    "sealed_sidecar_and_zip_exact": true,
+    "repeat_import_refused": true,
+    "wrong_case_refused": true,
+    "original_case_files_unchanged": 35,
+    "original_score_unchanged": true,
+    "archive": "S14-browser-PAW-I08-smoke-evidenze.zip",
+    "archive_sha256": "85f83c3145b3042b063e98b005f3a8730382f036fce8ec0ac276b05939009693"
+  }
 }

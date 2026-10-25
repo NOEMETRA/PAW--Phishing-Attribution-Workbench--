@@ -315,3 +315,37 @@ A protected admin readiness receipt and fresh installed PAW→VM→PAW harmless
 one-hash smoke, including host input-media privacy and sealed import/replay
 checks, remain pending. Existing Python contracts are preserved; no stale Python
 readiness is extended by the browser receipt. Real MIME remains held.
+
+
+## Scoped operational acceptance
+
+After review6399489745 of the effective record on577cb3fd775c75425793025188a407757572e6d7
+and7/7 successful CI jobs, native admin batch rechecked all nine original
+root-protected audits. It installed a24-hour context-bound browser readiness
+receipt and exactly one policy/grant for a fresh owned HTML attachment prepared
+by the actual installed PAW wheel. No other source hash was admitted.
+
+The reviewed root production bridge executed that attachment in a fresh no-NIC
+VM, independently reconciled it and published a root0:readerGID750/440 export.
+The owned JavaScript changed the expected title; stop was1.000537s. Both direct
+ledger replay and another producer invocation were refused. A UID1000 child
+with the real user's groups could not read seed ISO, plaintext cloud-init,
+HTML input ISO or protected readiness. The unchanged shared HashGate descriptor
+privacy helper was exercised through the browser subclass; no additional Python
+readiness or broader Python execution authorization was inferred.
+
+The installed unprivileged CLI imported a separate sealed sidecar and produced
+an exact-byte ZIP, verified both seals, refused repeat import and the wrong
+sealed-case reference, and could not open any protected export file for writing.
+All35 original case files and original score remained byte-identical. Final
+QEMU/domain/netns absence, guards, foundation/image/certificate and source
+freeze passed. The223-member benign acceptance archive SHA256 is
+`85f83c3145b3042b063e98b005f3a8730382f036fce8ec0ac276b05939009693`.
+
+Measured readiness is accepted for the fixed local, single-hash, no-NIC HTML
+profile only. It is a local administrative assertion, not remote attestation
+or universal hostile-code safety. No real email/HTML was used in acceptance;
+each real attachment still needs explicit fresh hash approval. Final PR review,
+CI/merge/main verification are the remaining consolidation steps before the
+held real email analysis. Original custody/scoring contracts and earlier audit
+records remain intact.
