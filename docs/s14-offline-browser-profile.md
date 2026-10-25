@@ -56,7 +56,7 @@ Known external stop remains mandatory; the existing12s stop bound is unchanged.
 
 Image preparation has a separate bounded1200s lifetime and2GiB per-file cap to
 install trusted packages. Runtime proposes360s maximum VM life,256MiB overlay
-cap, and a512MiB/128-task guest browser job. These values require actual harmless
+cap, and a512MiB/256-task guest browser job. These values require actual harmless
 validation; the image preparation phase is not evidence for runtime fault or
 untrusted-input acceptance. The no-NIC image masks guest network wait-online,
 SSH and automatic APT timers; no host service, Wi-Fi or firewall rule is changed.
@@ -128,3 +128,22 @@ fixed absolute APT cache before invoking APT, retains `--no-download`, and adds
 entries are refused in inert regression tests. The actual replacement guest
 installation and Chrome sandbox probe are still pending review/CI and a new
 native preparation run; no image or browser input has been accepted yet.
+
+The corrected198-package installation completed and its installed versions were
+checked in the next real guest. The owned Chrome probe then failed with renderer
+`pthread_create` refusals at the proposed128-task job ceiling. No image was
+published; the external stop took1.0092s and the host base/guards remained intact.
+This identifies a real thread-creation failure, but its resource cause must be
+measured rather than inferred from the stderr message alone.
+
+The next preparation proposes a256-task ceiling only for the guest Chrome
+cgroup. Guest RAM1GiB, browser RAM512MiB, QEMU1536MiB/64tasks/CPU50%, host
+aggregate2GiB/128tasks and zero swap stay fixed. It first calibrates the owned
+probe at128 tasks and records effective limits, PID/memory event counters and
+peaks. A failing calibration is tolerated solely as diagnostic data if the PID
+controller actually refused tasks and no guest OOM occurred; it is never an
+accepted browser result. Other failures stop preparation. A fresh256-task probe
+must then independently pass title execution and every renderer sandbox check
+before normal shutdown/publication can proceed. Both probe process groups are
+externally confirmed empty inside the guest and their temporary profiles removed
+between trials. No arbitrary input, sandbox bypass or unlimited budget is added.

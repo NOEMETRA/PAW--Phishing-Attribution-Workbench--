@@ -11,7 +11,7 @@ import xml.etree.ElementTree as ET
 
 from browser_image import validate_packages, copy_approved, GOOGLE_PRIMARY, validate_builder_shutdown
 from browser_policy import chrome_arguments, JOB_MEMORY, JOB_TASKS, MAX_HTML
-from browser_build_guest import installation_failure, cached_package, installation_command
+from browser_build_guest import installation_failure, cached_package, installation_command, probe_evidence
 import browser_build_guest
 from browser_vm import validate_xml, LIMITS, FILE_CAP, LIFETIME, HERE, validate_owner_config, scope_root
 from owned_grant_fixtures import CPU_DISABLED
@@ -42,6 +42,19 @@ def descriptor():
 
 
 class BrowserImage(unittest.TestCase):
+    def test_pid_calibration_never_accepts_failure_and_final_probe_requires_full_sandbox(self):
+        sandbox={k:True for k in ['renderer_seen','renderer_nnp','renderer_seccomp','all_uids_nonroot','renderer_pid_namespace']}
+        events={'pids.events':'max 1','memory.events':'oom 0\noom_kill 0'}
+        calibration=probe_evidence(-9,b'',b'owned thread refusal',sandbox,events,128,True)
+        self.assertFalse(calibration['accepted']);self.assertTrue(calibration['calibration_only'])
+        with self.assertRaises(ValueError):probe_evidence(-9,b'',b'owned refusal',sandbox,events,JOB_TASKS)
+        with self.assertRaises(ValueError):probe_evidence(-9,b'',b'other failure',sandbox,{**events,'pids.events':'max 0'},128,True)
+        with self.assertRaises(ValueError):probe_evidence(-9,b'',b'oom',sandbox,{**events,'memory.events':'oom 1\noom_kill 1'},128,True)
+        dom=b'<title>PAW-BROWSER-PROBE</title>'
+        good=probe_evidence(0,dom,b'',sandbox,events,JOB_TASKS);self.assertTrue(good['accepted'])
+        with self.assertRaises(ValueError):probe_evidence(0,dom,b'',{**sandbox,'renderer_seccomp':False},events,JOB_TASKS)
+        with self.assertRaises(ValueError):probe_evidence(0,b'<title>before</title><script>document.title="PAW-BROWSER-PROBE"</script>',b'',sandbox,events,JOB_TASKS)
+
     def test_offline_upgrade_archives_are_cached_verified_absolute_and_removals_forbidden(self):
         with tempfile.TemporaryDirectory() as folder:
             root=Path(folder); source=root/'owned.deb'; source.write_bytes(b'own')
@@ -153,7 +166,7 @@ class BrowserImage(unittest.TestCase):
                                            '--ignore-certificate-errors','--remote-debugging-port')) for v in args))
         for value in ['https://fixture.invalid/',Path('relative.html'),Path('/mnt/../outside')]:
             with self.subTest(value=value),self.assertRaises(ValueError):chrome_arguments(value,Path('/run/profile'))
-        self.assertEqual((JOB_MEMORY,JOB_TASKS,MAX_HTML),(536870912,128,524288))
+        self.assertEqual((JOB_MEMORY,JOB_TASKS,MAX_HTML),(536870912,256,524288))
         self.assertEqual(LIMITS,{'memory.max':'1610612736','memory.swap.max':'0','pids.max':'64','cpu.max':'50000 100000'})
         self.assertEqual(FILE_CAP['job'],268435456);self.assertLessEqual(LIFETIME['job'],360)
 

@@ -39,14 +39,29 @@ def emit(value):
     print('PAW14 ' + encoded, flush=True)
 
 
-def probe():
+def probe_evidence(returncode, dom, error, observed, events, tasks, calibration=False):
+    """The128-task calibration can report a measured PID refusal, never accept it."""
+    require(tasks in {128, JOB_TASKS} and (not calibration or tasks == 128), 'owned_probe_task_budget')
+    pid_events = dict(row.split() for row in events['pids.events'].splitlines())
+    memory_events = dict(row.split() for row in events['memory.events'].splitlines())
+    okay = returncode == 0 and len(dom) <= 65536 and b'<title>PAW-BROWSER-PROBE</title>' in dom and all(observed.values())
+    diagnostics = {'returncode': returncode, 'dom_bytes': len(dom), 'tasks': tasks, 'events': events, 'sandbox': dict(observed)}
+    measured_pid_refusal = int(pid_events.get('max', '0')) > 0 and int(memory_events.get('oom', '0')) == 0
+    if not okay and calibration and measured_pid_refusal:
+        return {'accepted': False, 'calibration_only': True, 'diagnostics': diagnostics}
+    require(okay, 'owned_browser_probe_failed:' + json.dumps(diagnostics, separators=(',', ':')) + ':' + error.decode('utf-8', 'replace')[-1800:])
+    return {**observed, 'accepted': True, 'title': 'PAW-BROWSER-PROBE',
+            'dom_sha256': hashlib.sha256(dom).hexdigest(), 'source_executed': 'owned script only', 'diagnostics': diagnostics}
+
+
+def probe(*, tasks=JOB_TASKS, calibration=False):
     """Only an owned title-changing script; no real page or external URL."""
     root = Path('/run/paw-browser-image-probe'); root.mkdir(mode=0o700); os.chown(root, 65534, 65534)
     html = root / 'owned.html'; html.write_text('<!doctype html><title>before</title><script>document.title="PAW-BROWSER-PROBE";</script>')
     html.chmod(0o444)
     Path('/sys/fs/cgroup/cgroup.subtree_control').write_text('+cpu +memory +pids')
     GROUP.mkdir()
-    for k, v in {'memory.max': str(JOB_MEMORY), 'memory.swap.max': '0', 'pids.max': str(JOB_TASKS), 'memory.oom.group': '1'}.items():
+    for k, v in {'memory.max': str(JOB_MEMORY), 'memory.swap.max': '0', 'pids.max': str(tasks), 'memory.oom.group': '1'}.items():
         (GROUP / k).write_text(v)
     def admission():
         (GROUP / 'cgroup.procs').write_text(str(os.getpid()))
@@ -81,12 +96,12 @@ def probe():
             while (GROUP / 'pids.current').read_text().strip() != '0' and time.monotonic() < end: time.sleep(.02)
             require((GROUP / 'pids.current').read_text().strip() == '0', 'probe_writers_alive')
     dom = (root / 'stdout').read_bytes(); error = (root / 'stderr').read_bytes()[-4096:]
-    require(child.returncode == 0 and len(dom) <= 65536 and b'<title>PAW-BROWSER-PROBE</title>' in dom,
-            'owned_browser_probe_failed:' + error.decode('utf-8', 'replace'))
-    require(all(observed.values()), 'chrome_renderer_sandbox_not_observed')
-    observed.update(title='PAW-BROWSER-PROBE', dom_sha256=hashlib.sha256(dom).hexdigest(), source_executed='owned script only')
-    GROUP.rmdir(); shutil.rmtree(root)
-    return observed
+    events = {name: (GROUP / name).read_text().strip() for name in
+              ['pids.events', 'pids.peak', 'pids.current', 'memory.events', 'memory.peak', 'memory.max', 'memory.swap.max', 'pids.max']}
+    require(events['pids.current'] == '0' and events['pids.max'] == str(tasks) and
+            events['memory.max'] == str(JOB_MEMORY) and events['memory.swap.max'] == '0', 'owned_probe_effective_limits')
+    try: return probe_evidence(child.returncode, dom, error, observed, events, tasks, calibration)
+    finally: GROUP.rmdir(); shutil.rmtree(root)
 
 
 def installation_failure(path, returncode):
@@ -153,7 +168,9 @@ def provision():
     require(all(installed.get(v['package']) == [v['version'], v['architecture']] for v in packages), 'installed_package_version_mismatch')
     binary = Path('/opt/google/chrome/chrome')
     version = subprocess.check_output([str(binary), '--version'], text=True, timeout=15).strip()
+    calibration = probe(tasks=128, calibration=True)
     observed = probe()
+    observed['calibration_128'] = calibration
     info = {'schema': 'paw-browser-image-guest-v1', 'chrome_version': version, 'chrome_binary_sha256': digest(binary),
             'kernel_release': os.uname().release, 'inventory_sha256': hashlib.sha256(inventory).hexdigest(),
             'inventory_text': inventory.decode(), 'approved_packages': len(packages), 'probe': observed,

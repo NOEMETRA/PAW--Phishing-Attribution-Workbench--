@@ -2,7 +2,7 @@
 from pathlib import Path
 
 JOB_MEMORY = 512 * 1024**2
-JOB_TASKS = 128
+JOB_TASKS = 256
 MAX_HTML = 512 * 1024
 MAX_DOM = 256 * 1024
 MAX_NETLOG = 1024**2
