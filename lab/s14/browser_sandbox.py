@@ -1,16 +1,39 @@
 """Per-identity renderer observations; startup samples are retained, not hidden."""
 import os
 from pathlib import Path
+import shlex
+
+
+def renderer_command(command):
+    if type(command) is not bytes or len(command) > 32768: raise ValueError('renderer_command_budget')
+    args = [v for v in command.split(b'\0') if v]
+    if b'--type=renderer' in args[1:]: return True
+    # Linux exposes rewritten argv storage too. Chrome can pack its process
+    # title into argv[0]; parse its quoting without executing any shell syntax.
+    if args and len(args[0].split()) > 1:
+        try: packed = shlex.split(args[0].decode('utf-8'))
+        except (ValueError, UnicodeDecodeError):
+            if b'--type=renderer' in command: raise ValueError('unparseable_renderer_process_title')
+            return False
+        return '--type=renderer' in packed[1:]
+    return False
 
 
 class RendererWitness:
     def __init__(self):
-        self.renderers = {}; self.nonroot = True
+        self.renderers = {}; self.nonroot = True; self.markers = {}
 
     def add(self, identity, command, *, uids, nnp, seccomp, pid_namespace, process=None):
         nonroot = bool(uids) and all(type(v) is int and v > 0 for v in uids)
         self.nonroot &= nonroot
-        if b'--type=renderer' not in command.split(b'\0'): return
+        matched = renderer_command(command)
+        if b'--type=renderer' in command:
+            if identity not in self.markers and len(self.markers) >= 64: raise ValueError('renderer_marker_budget')
+            offset = command.index(b'--type=renderer')
+            self.markers[identity] = {'identity': identity, 'matched': matched, 'process': process,
+                'argc': len([v for v in command.split(b'\0') if v]),
+                'type_context': command[max(0,offset-40):offset+100].decode('utf-8','replace')}
+        if not matched: return
         if identity not in self.renderers:
             if len(self.renderers) >= 64: raise ValueError('renderer_identity_budget')
             self.renderers[identity] = {'modes': set(), 'last_mode': None, 'nnp_all': True,
@@ -29,7 +52,7 @@ class RendererWitness:
             try:
                 before = (root/'stat').read_text().rsplit(')', 1)[1].split()[19]
                 status = dict(line.split(':', 1) for line in (root/'status').read_text().splitlines() if ':' in line)
-                command = (root/'cmdline').read_bytes()
+                with (root/'cmdline').open('rb') as stream: command = stream.read(32769)
                 namespace = os.readlink(root/'ns/pid') != os.readlink('/proc/1/ns/pid')
                 after = (root/'stat').read_text().rsplit(')', 1)[1].split()[19]
             except (FileNotFoundError, ProcessLookupError): continue
@@ -49,3 +72,6 @@ class RendererWitness:
     def details(self):
         return [{'identity': key, **{k: sorted(v) if isinstance(v, set) else v for k, v in row.items()}}
                 for key, row in sorted(self.renderers.items())]
+
+    def diagnostics(self):
+        return {'renderers': self.details(), 'type_markers': [v for k,v in sorted(self.markers.items())]}

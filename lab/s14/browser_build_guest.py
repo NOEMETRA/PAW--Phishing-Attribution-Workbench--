@@ -93,7 +93,7 @@ def probe(*, tasks=JOB_TASKS, calibration=False):
               ['pids.events', 'pids.peak', 'pids.current', 'memory.events', 'memory.peak', 'memory.max', 'memory.swap.max', 'pids.max']}
     require(events['pids.current'] == '0' and events['pids.max'] == str(tasks) and
             events['memory.max'] == str(JOB_MEMORY) and events['memory.swap.max'] == '0', 'owned_probe_effective_limits')
-    try: return probe_evidence(child.returncode, dom, error, witness.flags(), events, tasks, calibration, witness.details())
+    try: return probe_evidence(child.returncode, dom, error, witness.flags(), events, tasks, calibration, witness.diagnostics())
     finally: GROUP.rmdir(); shutil.rmtree(root)
 
 

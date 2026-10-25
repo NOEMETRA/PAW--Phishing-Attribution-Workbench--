@@ -177,3 +177,17 @@ preparation and the future runtime profile. A new actual trace must distinguish
 a startup observation artifact from a renderer that never becomes filtered;
 the latter still refuses. No Chrome sandbox switch, host/guest sysctl or
 acceptance requirement is disabled by this measurement change.
+
+The subsequent actual run measured the128-task refusal directly (`max 3`,
+peak128, no OOM). At256, Chrome produced the expected executed title, exit0,
+peak140 tasks and199421952 memory bytes without resource refusals, but the new
+exact-NUL observer found no renderer identities, so publication was refused.
+The command-line recognizer missed a valid Linux rewritten-process-title form:
+an inert packed `chrome --type=renderer ...` sample reproduces the miss.
+[Linux documents that argv storage can be rewritten](https://man7.org/linux/man-pages/man5/proc_pid_cmdline.5.html).
+Recognition now supports both normal NUL-separated arguments and quoted packed
+argv0 titles, retaining exact argument boundaries (annotations/type suffixes do
+not match) and refusing unparseable renderer titles or oversized command lines.
+Bounded marker diagnostics preserve argv shape even for nonmatching candidates.
+The next actual trace must still establish every renderer's seccomp witness;
+this compatibility fix itself does not establish that the filter was active.
