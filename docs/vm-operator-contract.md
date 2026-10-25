@@ -94,9 +94,34 @@ not mislabeled an automatic merged/main release. Required initial evidence is:
    now-merged phase via the protected entrypoint. Source changes require their
    corresponding maintained context; no automatic real-source/I08 grant issuer.
 
-The native installer and its acceptance orchestrator remain to be implemented.
-The present tests use private owned files with simulated UID checks; they are
-not a claim of actual root installation, polkit behavior or VM acceptance.
+The native installer now validates a short-lived digest-approved bundle,
+copies approved bootstrap modules into a root-private temporary directory,
+independently rechecks the native candidate and exact Git source tree, and
+installs fixed paths transactionally. Permission is published only after the
+installed status self-check. Existing installations refuse; failures roll back
+only newly created artifacts, including a stage that failed after rename.
+
+The distinct `paw-vm-native-candidate-v1` proof permits an unmerged exact reviewed
+head with its seven head jobs only for this native-admin initial enrollment.
+It is rejected by automatic release admission, which still requires a merged
+project PR, reviewed head and both head/main CI. Native authority is explicit;
+the candidate JSON alone cannot enter the passwordless promoter.
+
+The committed-source bundle builder, digest-checking native launcher and actual
+acceptance orchestrator remain to be implemented before installation. The
+present tests use private owned files with simulated UID checks; they are not
+a claim of actual root installation, polkit behavior or VM acceptance.
+
+Review4371671325 identified a path-following ownership race newly reachable
+through the delegated browser recipe. An inert owned-canary reproduction
+confirmed the legacy handoff follows a substituted child symlink. Publication
+now retains root ownership, changes descriptor-pinned inodes without following
+links, rejects writable/linked/special entries and keeps the top directory0700
+until all changes finish. Final directories are0750 and files0440 for the
+reader group; no privileged path operation follows publication. Four inert
+regressions cover substitution, visibility ordering and refusal cases. This
+correction covers the browser recipe currently delegated; other recipes still
+refuse and need their own acceptance before implementation/delegation.
 
 ## Measured development evidence
 

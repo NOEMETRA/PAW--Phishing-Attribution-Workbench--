@@ -108,15 +108,21 @@ def release(proof, enrolled, caller_uid, now=None):
             sha(review['resolved_head_sha']) and review['resolved_head_sha'] == proof['head_sha'] and
             review['decision'] == 'no_findings' and type(review['open_threads']) is int and
             review['open_threads'] == 0, 'operator_exact_head_clear_review')
-    require(type(proof['ci']) is list and len(proof['ci']) == 4, 'operator_four_required_workflow_runs')
+    run_ids = ci_runs(proof['ci'], enrolled, {'pull_request': proof['head_sha'], 'push': proof['merge_sha']})
+    return {'repository': REPOSITORY, 'head_sha': proof['head_sha'], 'release_sha': proof['merge_sha'],
+            'pull_request': pr['number'], 'review_receipt': review['receipt_id'], 'ci_runs': run_ids}
+
+
+def ci_runs(runs, enrolled, targets):
+    require(type(runs) is list and len(runs) == len(WORKFLOWS)*len(targets), 'operator_required_workflow_runs')
     seen = set(); run_ids = set()
-    for run in proof['ci']:
+    for run in runs:
         shape(run, {'run_id', 'run_attempt', 'workflow_path', 'workflow_id', 'head_sha', 'event',
                     'status', 'conclusion', 'jobs'}, 'operator_ci_shape')
         path = run['workflow_path']
-        require(type(path) is str and path in WORKFLOWS and type(run['event']) is str and run['event'] in {'pull_request', 'push'},
+        require(type(path) is str and path in WORKFLOWS and type(run['event']) is str and run['event'] in targets,
                 'operator_ci_workflow_or_event')
-        target = proof['head_sha'] if run['event'] == 'pull_request' else proof['merge_sha']
+        target = targets[run['event']]
         key = (path, run['event'])
         require(positive(run['run_id']) and positive(run['run_attempt']) and run['run_id'] not in run_ids and key not in seen and
                 type(run['workflow_id']) is int and run['workflow_id'] == enrolled['workflows'][path]['workflow_id'] and
@@ -131,7 +137,27 @@ def release(proof, enrolled, caller_uid, now=None):
         require(len(set(names)) == len(names) and set(names) == set(enrolled['workflows'][path]['jobs']),
                 'operator_required_job_names')
         seen.add(key); run_ids.add(run['run_id'])
-    require(seen == {(path, event) for path in WORKFLOWS for event in ['pull_request', 'push']},
+    require(seen == {(path, event) for path in WORKFLOWS for event in targets},
             'operator_head_and_main_workflows')
-    return {'repository': REPOSITORY, 'head_sha': proof['head_sha'], 'release_sha': proof['merge_sha'],
-            'pull_request': pr['number'], 'review_receipt': review['receipt_id'], 'ci_runs': sorted(run_ids)}
+    return sorted(run_ids)
+
+
+def native_candidate(proof, enrolled, caller_uid, expected_head, now=None):
+    """Not automatic authority: initial native admin enrollment only."""
+    policy(enrolled, now)
+    require(type(caller_uid) is int and caller_uid == enrolled['owner_uid'] and sha(expected_head), 'operator_native_caller')
+    shape(proof, {'schema', 'repository', 'pull_request', 'head_sha', 'merge_sha', 'review', 'ci',
+                  'native_admin_required'}, 'operator_native_candidate_shape')
+    require(proof['schema'] == 'paw-vm-native-candidate-v1' and proof['native_admin_required'] is True and
+            proof['repository'] == REPOSITORY and proof['head_sha'] == expected_head == proof['merge_sha'],
+            'operator_native_candidate_identity')
+    pr = proof['pull_request']; shape(pr, {'number', 'merged', 'base', 'head_repository'}, 'operator_native_pr_shape')
+    require(positive(pr['number']) and pr['number'] <= 999999999 and type(pr['merged']) is bool and
+            pr['base'] == 'main' and pr['head_repository'] == REPOSITORY, 'operator_native_project_pr')
+    review = proof['review']
+    shape(review, {'receipt_id', 'actor_id', 'actor_login', 'resolved_head_sha', 'decision', 'open_threads'}, 'operator_review_shape')
+    require(positive(review['receipt_id']) and type(review['actor_id']) is int and review['actor_id'] == enrolled['reviewer_id'] and
+            review['actor_login'] == REVIEWER and review['resolved_head_sha'] == expected_head and
+            review['decision'] == 'no_findings' and type(review['open_threads']) is int and review['open_threads'] == 0,
+            'operator_native_clear_review')
+    ci_runs(proof['ci'], enrolled, {'pull_request': expected_head}); return proof

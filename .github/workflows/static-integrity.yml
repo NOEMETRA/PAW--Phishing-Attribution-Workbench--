@@ -48,7 +48,7 @@ jobs:
       - name: Verify inert VM release authority and immutable snapshot boundary
         run: |
           python -B -m unittest discover -s lab/s14 -p 'test_vm_release*.py' -v
-          python -B -m unittest discover -s lab/s14 -p 'test_vm_operator.py' -v
+          python -B -m unittest discover -s lab/s14 -p 'test_vm_operator*.py' -v
       - name: Check public metadata and safety wording
         run: python -m unittest discover -s tests -p 'test_static_contracts.py' -v
       - name: Verify Python requirement and sources in the actual built wheel

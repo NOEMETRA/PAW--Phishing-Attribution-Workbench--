@@ -66,6 +66,16 @@ class GitHubProof(unittest.TestCase):
         self.assertEqual(remote.collect(self.client, 111, self.policy), self.proof)
         self.assertEqual(self.client.queries, 2)
 
+    def test_native_candidate_requires_admin_and_cannot_enter_automatic_contract(self):
+        pr = self.client.repo['pullRequest']; pr.update(merged=False, mergeCommit=None)
+        proof = remote.collect_candidate(self.client, 111, self.policy, self.proof['head_sha'])
+        self.assertEqual(proof['schema'], 'paw-vm-native-candidate-v1')
+        self.assertTrue(proof['native_admin_required']); self.assertEqual(len(proof['ci']), 2)
+        contract.native_candidate(proof, self.policy, 1000, self.proof['head_sha'])
+        with self.assertRaises(ValueError): contract.release(proof, self.policy, 1000)
+        with self.assertRaises(ValueError): remote.collect(self.client, 111, self.policy)
+        with self.assertRaises(ValueError): remote.collect_candidate(FakeGitHub(self.policy, self.proof), 111, self.policy, 'e'*40)
+
     def test_other_actor_ref_shadow_resolution_history_or_latest_ci_refuse(self):
         for option in ['actor', 'history', 'queued', 'stale', 'skipped', 'changed']:
             self.client = FakeGitHub(self.policy, self.proof); self.client.options.add(option)

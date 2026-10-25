@@ -11,7 +11,7 @@ import time
 import urllib.error
 import urllib.request
 
-from vm_release_contract import REPOSITORY, REVIEWER, WORKFLOWS, policy, release, require, sha, positive, decode, shape
+from vm_release_contract import REPOSITORY, REVIEWER, WORKFLOWS, policy, release, native_candidate, require, sha, positive, decode, shape
 
 API = 'https://api.github.com'
 BASE = '/repos/' + REPOSITORY
@@ -135,23 +135,27 @@ def ci_run(client, path, enrolled, head, event):
             'jobs': [{k: row.get(k) for k in ['name', 'status', 'conclusion']} for row in rows]}
 
 
-def collect(client, number, enrolled):
-    """The installed caller must supply its own client and root-enrolled policy."""
+def _collect(client, number, enrolled, native_head=None):
     policy(enrolled); require(positive(number) and number <= 999999999, 'github_pr_number')
+    require(native_head is None or sha(native_head), 'github_native_full_head')
     response = client.query(number); require(not response.get('errors'), 'github_graphql_errors')
     repo = response.get('data', {}).get('repository')
     require(type(repo) is dict and repo.get('nameWithOwner') == REPOSITORY and repo.get('isPrivate') is False,
             'github_enrolled_public_repository')
     pr = repo.get('pullRequest'); main = repo.get('defaultBranchRef')
-    require(type(pr) is dict and pr.get('number') == number and pr.get('merged') is True and
+    require(type(pr) is dict and pr.get('number') == number and type(pr.get('merged')) is bool and
+            (native_head is not None or pr['merged'] is True) and
             pr.get('baseRefName') == 'main' and pr.get('headRepository', {}).get('nameWithOwner') == REPOSITORY and
             type(main) is dict and main.get('name') == 'main', 'github_merged_enrolled_pr')
-    head = pr.get('headRefOid'); merge = pr.get('mergeCommit', {}).get('oid'); main_sha = main.get('target', {}).get('oid')
+    head = pr.get('headRefOid'); merge = head if native_head is not None else pr.get('mergeCommit', {}).get('oid')
+    main_sha = main.get('target', {}).get('oid')
     require(all(sha(v) for v in [head, merge, main_sha]), 'github_full_commit_identity')
-    parents = pr['mergeCommit'].get('parents', {}).get('nodes')
-    require(type(parents) is list and len(parents) == 2 and
-            all(type(v) is dict and sha(v.get('oid')) for v in parents) and
-            head in {v['oid'] for v in parents}, 'github_merge_parent_binding')
+    if native_head is None:
+        parents = pr['mergeCommit'].get('parents', {}).get('nodes')
+        require(type(parents) is list and len(parents) == 2 and
+                all(type(v) is dict and sha(v.get('oid')) for v in parents) and
+                head in {v['oid'] for v in parents}, 'github_merge_parent_binding')
+    else: require(head == native_head, 'github_native_candidate_head_changed')
     threads = pr.get('reviewThreads', {})
     require(threads.get('pageInfo', {}).get('hasNextPage') is False and type(threads.get('nodes')) is list and
             len(threads['nodes']) <= 100 and all(v.get('isResolved') is True for v in threads['nodes']),
@@ -175,22 +179,36 @@ def collect(client, number, enrolled):
             receipt.get('user', {}).get('id') == enrolled['reviewer_id'] and
             receipt.get('user', {}).get('login') == REVIEWER, 'github_review_actor_and_pr')
     require(review_state(receipt['body'], head) is not None, 'github_authenticated_full_head_review')
-    ancestry(client, enrolled['anchor_sha'], merge); ancestry(client, merge, main_sha)
-    proof = {'schema': 'paw-vm-release-proof-v1', 'repository': REPOSITORY,
-        'pull_request': {'number': number, 'merged': True, 'base': 'main', 'head_repository': REPOSITORY},
-        'head_sha': head, 'merge_sha': merge, 'main_sha': main_sha, 'anchor_sha': enrolled['anchor_sha'],
-        'anchor_is_ancestor': True, 'merge_is_main_ancestor': True,
+    targets = [('pull_request', head)] if native_head is not None else [('pull_request', head), ('push', merge)]
+    proof = {'repository': REPOSITORY,
+        'pull_request': {'number': number, 'merged': pr['merged'], 'base': 'main', 'head_repository': REPOSITORY},
+        'head_sha': head, 'merge_sha': merge,
         'review': {'receipt_id': ident, 'actor_id': enrolled['reviewer_id'], 'actor_login': REVIEWER,
                    'resolved_head_sha': head, 'decision': 'no_findings', 'open_threads': 0},
-        'ci': [ci_run(client, path, enrolled, sha_value, event) for event, sha_value in
-               [('pull_request', head), ('push', merge)] for path in WORKFLOWS]}
+        'ci': [ci_run(client, path, enrolled, sha_value, event) for event, sha_value in targets for path in WORKFLOWS]}
+    if native_head is None:
+        ancestry(client, enrolled['anchor_sha'], merge); ancestry(client, merge, main_sha)
+        proof.update(schema='paw-vm-release-proof-v1', main_sha=main_sha, anchor_sha=enrolled['anchor_sha'],
+                     anchor_is_ancestor=True, merge_is_main_ancestor=True)
+    else: proof.update(schema='paw-vm-native-candidate-v1', native_admin_required=True)
     # Reject a changed PR/main observation instead of mixing two releases.
     fresh = client.query(number)
     require(not fresh.get('errors'), 'github_final_graphql_errors')
     final = fresh.get('data', {}).get('repository', {})
     require(final.get('pullRequest') == pr and final.get('defaultBranchRef') == main and
             final.get('nameWithOwner') == REPOSITORY, 'github_proof_changed_during_collection')
-    observed_ci = [ci_run(client, path, enrolled, sha_value, event) for event, sha_value in
-                   [('pull_request', head), ('push', merge)] for path in WORKFLOWS]
+    observed_ci = [ci_run(client, path, enrolled, sha_value, event) for event, sha_value in targets for path in WORKFLOWS]
     require(observed_ci == proof['ci'], 'github_ci_changed_during_collection')
-    release(proof, enrolled, enrolled['owner_uid']); return proof
+    if native_head is None: release(proof, enrolled, enrolled['owner_uid'])
+    else: native_candidate(proof, enrolled, enrolled['owner_uid'], native_head)
+    return proof
+
+
+def collect(client, number, enrolled):
+    """Automatic authority always requires merged ancestry and head/main CI."""
+    return _collect(client, number, enrolled)
+
+
+def collect_candidate(client, number, enrolled, expected_head):
+    """Native administrator enrollment only; never the passwordless promoter."""
+    require(sha(expected_head), 'github_native_full_head'); return _collect(client, number, enrolled, expected_head)
