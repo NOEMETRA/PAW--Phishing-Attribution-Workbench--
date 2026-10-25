@@ -15,6 +15,7 @@ import tty
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from browser_policy import chrome_arguments, JOB_MEMORY, JOB_TASKS
+from browser_sandbox import RendererWitness
 
 MOUNT = Path('/mnt/paw-browser-packages')
 CACHE = Path('/var/cache/apt/archives')
@@ -39,7 +40,7 @@ def emit(value):
     print('PAW14 ' + encoded, flush=True)
 
 
-def probe_evidence(returncode, dom, error, observed, events, tasks, calibration=False):
+def probe_evidence(returncode, dom, error, observed, events, tasks, calibration=False, renderer_states=None):
     """The128-task calibration can report a measured PID refusal, never accept it."""
     require(tasks in {128, JOB_TASKS} and (not calibration or tasks == 128), 'owned_probe_task_budget')
     pid_events = dict(row.split() for row in events['pids.events'].splitlines())
@@ -47,7 +48,8 @@ def probe_evidence(returncode, dom, error, observed, events, tasks, calibration=
     no_oom = all(key in memory_events and int(memory_events[key]) == 0 for key in ['oom', 'oom_kill', 'oom_group_kill'])
     no_pid_refusal = int(pid_events.get('max', '0')) == 0
     okay = returncode == 0 and len(dom) <= 65536 and b'<title>PAW-BROWSER-PROBE</title>' in dom and all(observed.values()) and no_oom and no_pid_refusal
-    diagnostics = {'returncode': returncode, 'dom_bytes': len(dom), 'tasks': tasks, 'events': events, 'sandbox': dict(observed)}
+    diagnostics = {'returncode': returncode, 'dom_bytes': len(dom), 'title_match': b'<title>PAW-BROWSER-PROBE</title>' in dom,
+                   'tasks': tasks, 'events': events, 'sandbox': dict(observed), 'renderer_states': renderer_states}
     measured_pid_refusal = not no_pid_refusal and no_oom
     if not okay and calibration and measured_pid_refusal:
         return {'accepted': False, 'calibration_only': True, 'diagnostics': diagnostics}
@@ -72,25 +74,14 @@ def probe(*, tasks=JOB_TASKS, calibration=False):
         os.setgroups([]); os.setgid(65534); os.setuid(65534)
         require(ctypes.CDLL(None).prctl(38, 1, 0, 0, 0) == 0, 'probe_nnp')
     args = chrome_arguments(html, root / 'profile')
-    observed = {'renderer_seen': False, 'renderer_nnp': True, 'renderer_seccomp': True, 'all_uids_nonroot': True, 'renderer_pid_namespace': False}
+    witness = RendererWitness()
     env = {'PATH': '/usr/bin:/bin', 'HOME': str(root), 'LANG': 'C.UTF-8', 'XDG_CONFIG_HOME': str(root), 'XDG_CACHE_HOME': str(root)}
     with (root / 'stdout').open('wb') as stdout, (root / 'stderr').open('wb') as stderr:
         child = subprocess.Popen(args, stdin=subprocess.DEVNULL, stdout=stdout, stderr=stderr, env=env, preexec_fn=admission, start_new_session=True)
         deadline = time.monotonic() + 35
         try:
             while child.poll() is None and time.monotonic() < deadline:
-                for pid in (GROUP / 'cgroup.procs').read_text().split():
-                    try:
-                        status = Path('/proc', pid, 'status').read_text()
-                        command = Path('/proc', pid, 'cmdline').read_bytes()
-                    except (FileNotFoundError, ProcessLookupError): continue
-                    observed['all_uids_nonroot'] &= all(int(v) != 0 for v in next(v for v in status.splitlines() if v.startswith('Uid:')).split()[1:])
-                    if b'--type=renderer' in command:
-                        observed['renderer_seen'] = True
-                        observed['renderer_nnp'] &= 'NoNewPrivs:\t1' in status
-                        observed['renderer_seccomp'] &= 'Seccomp:\t2' in status
-                        try: observed['renderer_pid_namespace'] |= os.readlink('/proc/'+pid+'/ns/pid') != os.readlink('/proc/1/ns/pid')
-                        except (FileNotFoundError, ProcessLookupError): pass
+                witness.observe(GROUP)
                 time.sleep(.02)
         finally:
             (GROUP / 'cgroup.kill').write_text('1'); child.wait(timeout=3)
@@ -102,7 +93,7 @@ def probe(*, tasks=JOB_TASKS, calibration=False):
               ['pids.events', 'pids.peak', 'pids.current', 'memory.events', 'memory.peak', 'memory.max', 'memory.swap.max', 'pids.max']}
     require(events['pids.current'] == '0' and events['pids.max'] == str(tasks) and
             events['memory.max'] == str(JOB_MEMORY) and events['memory.swap.max'] == '0', 'owned_probe_effective_limits')
-    try: return probe_evidence(child.returncode, dom, error, observed, events, tasks, calibration)
+    try: return probe_evidence(child.returncode, dom, error, witness.flags(), events, tasks, calibration, witness.details())
     finally: GROUP.rmdir(); shutil.rmtree(root)
 
 
@@ -171,7 +162,10 @@ def provision():
     binary = Path('/opt/google/chrome/chrome')
     version = subprocess.check_output([str(binary), '--version'], text=True, timeout=15).strip()
     calibration = probe(tasks=128, calibration=True)
-    observed = probe()
+    try: observed = probe()
+    except ValueError as error:
+        prior = {'accepted': calibration['accepted'], 'diagnostics': calibration['diagnostics']}
+        raise ValueError('calibration_128=' + json.dumps(prior, separators=(',', ':')) + ';final=' + str(error)) from error
     observed['calibration_128'] = calibration
     info = {'schema': 'paw-browser-image-guest-v1', 'chrome_version': version, 'chrome_binary_sha256': digest(binary),
             'kernel_release': os.uname().release, 'inventory_sha256': hashlib.sha256(inventory).hexdigest(),

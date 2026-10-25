@@ -157,3 +157,23 @@ or nonzero counters refuse. The final probe also requires zero PID refusals
 and zero OOM counters even if Chrome returned zero and produced the owned title.
 Mixed/global/group OOM and missing-counter regressions are inert; no runtime
 acceptance is inferred from them.
+
+The first actual128/256 calibration reached a256-task peak of141 and a browser
+memory peak of206344192 bytes, with no PID refusals or OOM events at256. Chrome
+returned zero and emitted140 DOM bytes, but the aggregate renderer-seccomp flag
+was false, so preparation correctly refused publication and stopped the VM
+in0.9966s. Other recorded flags were nonroot UID, NNP and separate PID namespace.
+These facts do not establish that the seccomp filter was active.
+
+The old observer permanently combined every startup sample with boolean AND;
+an inert0→2 sequence therefore stayed false even after filtering was observed.
+The replacement records each renderer by PID/start-time identity and exact
+argv token. Every observed renderer must itself reach and end at seccomp2,
+with NNP, nonroot IDs and its PID namespace; regressions and unsafe filtered
+snapshots remain permanent refusals. One filtered renderer cannot lend its
+witness to another renderer or a reused PID. Startup modes are retained in the
+diagnostics, identity tracking is bounded, and the same helper is seeded for
+preparation and the future runtime profile. A new actual trace must distinguish
+a startup observation artifact from a renderer that never becomes filtered;
+the latter still refuses. No Chrome sandbox switch, host/guest sysctl or
+acceptance requirement is disabled by this measurement change.

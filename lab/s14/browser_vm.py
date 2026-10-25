@@ -166,6 +166,7 @@ class BrowserVM(HashGate):
         config_name = '/etc/paw-browser-build.json' if self.phase == 'build' else '/etc/paw-browser-job.json'
         files = [('/usr/local/lib/paw-s14/' + worker, (HERE / worker).read_bytes()),
                  ('/usr/local/lib/paw-s14/browser_policy.py', (HERE / 'browser_policy.py').read_bytes()),
+                 ('/usr/local/lib/paw-s14/browser_sandbox.py', (HERE / 'browser_sandbox.py').read_bytes()),
                  (config_name, json.dumps(self.seed_config).encode()), ('/etc/systemd/system/paw-browser.service', service.encode())]
         cloud = {'package_update': False, 'package_upgrade': False, 'ssh_pwauth': False,
                  'write_files': [{'path': p, 'encoding': 'b64', 'content': base64.b64encode(b).decode(), 'permissions': '0644'} for p, b in files],
