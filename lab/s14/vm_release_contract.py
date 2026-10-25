@@ -55,6 +55,7 @@ def decode(raw):
 def command(argv):
     require(type(argv) is list and all(type(v) is str for v in argv), 'operator_arguments')
     if argv == ['status']: return 'status', None
+    if argv == ['revoke']: return 'revoke', None
     if len(argv) == 2 and argv[0] == 'promote':
         require(re.fullmatch('[1-9][0-9]{0,8}', argv[1]) is not None, 'operator_pull_request_number')
         return 'promote', int(argv[1])
@@ -110,14 +111,14 @@ def release(proof, enrolled, caller_uid, now=None):
     require(type(proof['ci']) is list and len(proof['ci']) == 4, 'operator_four_required_workflow_runs')
     seen = set(); run_ids = set()
     for run in proof['ci']:
-        shape(run, {'run_id', 'workflow_path', 'workflow_id', 'head_sha', 'event',
+        shape(run, {'run_id', 'run_attempt', 'workflow_path', 'workflow_id', 'head_sha', 'event',
                     'status', 'conclusion', 'jobs'}, 'operator_ci_shape')
         path = run['workflow_path']
         require(type(path) is str and path in WORKFLOWS and type(run['event']) is str and run['event'] in {'pull_request', 'push'},
                 'operator_ci_workflow_or_event')
         target = proof['head_sha'] if run['event'] == 'pull_request' else proof['merge_sha']
         key = (path, run['event'])
-        require(positive(run['run_id']) and run['run_id'] not in run_ids and key not in seen and
+        require(positive(run['run_id']) and positive(run['run_attempt']) and run['run_id'] not in run_ids and key not in seen and
                 type(run['workflow_id']) is int and run['workflow_id'] == enrolled['workflows'][path]['workflow_id'] and
                 run['head_sha'] == target and run['status'] == 'completed' and run['conclusion'] == 'success',
                 'operator_exact_head_successful_ci')

@@ -28,6 +28,8 @@ class FakeGitHub:
     def query(self, number):
         self.queries += 1; repo = copy.deepcopy(self.repo)
         if self.queries == 2 and 'changed' in self.options: repo['pullRequest']['headRefOid'] = 'e'*40
+        if self.queries == 2 and 'ci_changed' in self.options: self.options.add('queued')
+        if self.queries == 2 and 'ci_rerun' in self.options: self.options.add('rerun')
         return {'data': {'repository': repo}}
 
     def get(self, path, *, missing=False):
@@ -42,6 +44,7 @@ class FakeGitHub:
             event = 'push' if 'event=push' in path else 'pull_request'
             run, = [v for v in self.proof['ci'] if v['workflow_id'] == workflow and v['event'] == event]
             row = copy.deepcopy(run); row.update(id=row['run_id'], path=row['workflow_path'])
+            row['run_attempt'] = 2 if 'rerun' in self.options else 1
             if 'queued' in self.options: row['status'] = 'in_progress'
             if 'stale' in self.options: row['head_sha'] = 'e'*40
             return {'workflow_runs': [row]}
@@ -73,6 +76,11 @@ class GitHubProof(unittest.TestCase):
             client = FakeGitHub(self.policy, self.proof); threads = client.repo['pullRequest']['reviewThreads']
             if mutation == 'open': threads['nodes'][0]['isResolved'] = False
             else: threads['pageInfo']['hasNextPage'] = True
+            with self.subTest(mutation=mutation), self.assertRaises(ValueError): remote.collect(client, 111, self.policy)
+
+    def test_ci_requeued_or_rerun_during_final_graphql_observation_refuses(self):
+        for mutation in ['ci_changed', 'ci_rerun']:
+            client = FakeGitHub(self.policy, self.proof); client.options.add(mutation)
             with self.subTest(mutation=mutation), self.assertRaises(ValueError): remote.collect(client, 111, self.policy)
 
     def test_missing_foreign_or_unfinished_receipt_refuses(self):

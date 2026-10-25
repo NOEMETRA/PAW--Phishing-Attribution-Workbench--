@@ -54,7 +54,7 @@ class GitHubClient:
         else: require(payload is None, 'github_mutation_refused')
         self.requests += 1
         remaining = self.deadline-time.monotonic()
-        require(self.requests <= 32 and remaining > 0, 'github_request_budget')
+        require(self.requests <= 48 and remaining > 0, 'github_request_budget')
         data = None if payload is None else json.dumps(payload, separators=(',', ':')).encode()
         request = urllib.request.Request(API+path, data=data, headers={
             'Authorization': 'Bearer '+self._token, 'Accept': 'application/vnd.github+json',
@@ -125,12 +125,12 @@ def ci_run(client, path, enrolled, head, event):
     require(run.get('head_sha') == head and run.get('event') == event and
             type(run.get('workflow_id')) is int and run['workflow_id'] == workflow and
             run.get('path') == path and run.get('status') == 'completed' and
-            run.get('conclusion') == 'success', 'github_latest_exact_head_green_run')
-    jobs = client.get(BASE+f"/actions/runs/{run['id']}/jobs?filter=latest&per_page=100")
+            run.get('conclusion') == 'success' and positive(run.get('run_attempt')), 'github_latest_exact_head_green_run')
+    jobs = client.get(BASE+f"/actions/runs/{run['id']}/attempts/{run['run_attempt']}/jobs?per_page=100")
     rows = jobs.get('jobs')
     require(type(jobs.get('total_count')) is int and type(rows) is list and
             len(rows) == jobs['total_count'] == WORKFLOWS[path], 'github_complete_required_jobs')
-    return {'run_id': run['id'], 'workflow_path': path, 'workflow_id': workflow, 'head_sha': head,
+    return {'run_id': run['id'], 'run_attempt': run['run_attempt'], 'workflow_path': path, 'workflow_id': workflow, 'head_sha': head,
             'event': event, 'status': run['status'], 'conclusion': run['conclusion'],
             'jobs': [{k: row.get(k) for k in ['name', 'status', 'conclusion']} for row in rows]}
 
@@ -190,4 +190,7 @@ def collect(client, number, enrolled):
     final = fresh.get('data', {}).get('repository', {})
     require(final.get('pullRequest') == pr and final.get('defaultBranchRef') == main and
             final.get('nameWithOwner') == REPOSITORY, 'github_proof_changed_during_collection')
+    observed_ci = [ci_run(client, path, enrolled, sha_value, event) for event, sha_value in
+                   [('pull_request', head), ('push', merge)] for path in WORKFLOWS]
+    require(observed_ci == proof['ci'], 'github_ci_changed_during_collection')
     release(proof, enrolled, enrolled['owner_uid']); return proof

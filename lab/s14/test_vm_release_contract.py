@@ -20,7 +20,7 @@ def fixture():
                         'resolved_head_sha': 'b'*40, 'decision': 'no_findings', 'open_threads': 0}, 'ci': []}
     for event, sha in [('pull_request', proof['head_sha']), ('push', proof['merge_sha'])]:
         for path, value in workflows.items():
-            proof['ci'].append({'run_id': len(proof['ci'])+1, 'workflow_path': path,
+            proof['ci'].append({'run_id': len(proof['ci'])+1, 'run_attempt': 1, 'workflow_path': path,
                 'workflow_id': value['workflow_id'], 'event': event, 'head_sha': sha,
                 'status': 'completed', 'conclusion': 'success',
                 'jobs': [{'name': name, 'status': 'completed', 'conclusion': 'success'} for name in value['jobs']]})
@@ -65,7 +65,8 @@ class ReleaseContract(unittest.TestCase):
 
     def test_ci_from_previous_head_or_other_workflow_refuses(self):
         for key, value in [('head_sha', 'e'*40), ('workflow_id', 999), ('workflow_id', True),
-                           ('workflow_path', 'user/workflow.yml'), ('event', 'pull_request_target'), ('event', [])]:
+                           ('workflow_path', 'user/workflow.yml'), ('event', 'pull_request_target'), ('event', []),
+                           ('run_attempt', True), ('run_attempt', 0)]:
             changed = copy.deepcopy(self.proof); changed['ci'][0][key] = value
             with self.subTest(key=key), self.assertRaises(ValueError): self.admit(changed)
 
@@ -120,6 +121,7 @@ class ReleaseContract(unittest.TestCase):
 
     def test_command_arguments_have_no_general_execution_or_input_path(self):
         self.assertEqual(contract.command(['status']), ('status', None))
+        self.assertEqual(contract.command(['revoke']), ('revoke', None))
         self.assertEqual(contract.command(['promote', '111']), ('promote', 111))
         for name in contract.RECIPES: self.assertEqual(contract.command(['run', name]), ('run', name))
         for value in [[], ['sh'], ['run', '/tmp/user.py'], ['run', 'browser-owned-v1', '--url', 'x'],

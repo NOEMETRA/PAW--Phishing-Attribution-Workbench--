@@ -134,3 +134,11 @@ P0 remains open: bounded remote archive acquisition/installation, the fixed
 polkit entrypoint, actual no-prompt owned work, failure/revocation and source
 freezing acceptance are still required. No host privilege configuration has
 been installed by these tests.
+
+Next P0 draft adds bounded archive/manual snapshot staging and fixed installed
+entrypoint/dispatcher/owned-worker code, with inert tests. Real public archive
+bytes were checked against the independent API Git tree without staging or
+execution. The [operator contract](vm-operator-contract.md) details installed
+paths, finite commands, native bootstrap, residual work and the reproduced
+CI-stability review correction. These additions do not mean polkit is installed
+or native runtime acceptance has passed; the installer is still required.
