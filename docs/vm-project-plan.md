@@ -108,7 +108,7 @@ The native-only bundle validator/installer, committed-source builder,
 digest-approved launcher and native acceptance batch are implemented and
 inert-tested. Actual setup remains pending exact-head review, CI and native
 authentication; no polkit or host authorization has been installed. Current
-tests:44 release/admission,33 entry/dispatcher/installer/setup and42 browser contracts.
+tests:44 release/admission,33 entry/dispatcher/installer/setup and43 browser contracts.
 The latest browser count includes four export-race regressions following a
 reproduced review finding; reader exports remain root-owned and read-only.
 

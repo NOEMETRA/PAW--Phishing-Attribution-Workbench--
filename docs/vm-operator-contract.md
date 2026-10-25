@@ -141,6 +141,15 @@ Both now enter the failure boundary, which removes the rule before attempting
 revocation storage. A preexisting acceptance directory is never overwritten;
 final proof persistence is inside acceptance, so its failure cannot report PASS.
 
+Review4371784558 reproduced another immutable-snapshot failure without a VM:
+the browser owner `--help` import path generated18 `.pyc` files because a new
+`python -I` interpreter does not inherit its parent's `-B`. The actual owner
+command now passes `-B` explicitly. A real subprocess regression imports the
+owner from a private copy of all committed Python sources and verifies the
+exact source inventory/hashes remain unchanged, with no `__pycache__` entries.
+The native client, installed worker and browser matrix already pass `-B`;
+the fixed entrypoint disables bytecode before importing protected modules.
+
 These implementation tests use private owned files and simulated UID/process
 checks. Actual root installation, polkit behavior and VM acceptance remain
 pending exact-head review, green CI and the one native authentication. No host
