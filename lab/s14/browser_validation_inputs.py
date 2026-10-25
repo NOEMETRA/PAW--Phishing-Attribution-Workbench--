@@ -22,7 +22,10 @@ def make(nonce):
         'timeout': b'<title>owned-timeout</title><script>for(;;){}</script>',
         'cancel': b'<title>owned-cancel</title><script>for(;;){}</script>',
         'overflow': b'<title>owned-output</title><body><script>document.body.textContent="X".repeat(300000)</script>',
-        'memory': b'<title>owned-memory</title><script>const a=[];for(;;){a.push(new Uint8Array(64*1024*1024).fill(7));}</script>',
+        # One retained allocation larger than the unchanged512MiB job cgroup,
+        # with a store to every page. Repeated64MiB fill allocations can spend
+        # the15s deadline reclaiming without ever producing an OOM kill.
+        'memory': b'<title>owned-memory</title><script>const a=new Uint8Array(1024*1024*1024);for(let i=0;i<a.length;i+=4096){a[i]=7;}for(;;){}</script>',
         'paused-refusal': positive,
         **{case: b'<title>owned-fault-loop</title><script>for(;;){}</script>' for case in ['owner-loss', 'protocol-loss']},
     }

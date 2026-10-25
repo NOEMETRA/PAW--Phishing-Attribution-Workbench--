@@ -70,5 +70,12 @@ class SetupBundle(unittest.TestCase):
         self.assertEqual(argv[-3:], [setup.LOADER, '/owned/approval.json', 'a'*64])
         self.assertFalse(any('token' in arg.lower() or 'password' in arg.lower() for arg in argv))
 
+    def test_repair_request_is_digest_bound_data_not_a_root_path_or_command(self):
+        previous = {'release_sha': 'a'*40, 'manifest_sha256': 'b'*64}
+        raw, digest = setup.build(self.repo, self.head, 111, 100, repair_from=previous)
+        meta, _ = native.bundle(raw, digest, 100)
+        self.assertEqual(meta['schema'], 'paw-vm-native-bundle-v2'); self.assertEqual(meta['repair_from'], previous)
+        self.assertEqual(meta['policy']['anchor_sha'], self.head)
+
 
 if __name__ == '__main__': unittest.main()

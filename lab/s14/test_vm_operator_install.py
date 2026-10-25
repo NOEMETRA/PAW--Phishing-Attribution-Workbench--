@@ -79,8 +79,22 @@ class NativeBundle(unittest.TestCase):
         with self.assertRaises(ValueError): native.polkit_configuration('user";evil', Path('/usr/local/libexec/paw-vm-operator'))
         with self.assertRaises(ValueError): native.polkit_configuration('linux-dac', Path('/bin/sh'))
 
+    def test_versioned_repair_bundle_requires_exact_previous_snapshot_identity(self):
+        value, _, _ = approved(); value.update(schema='paw-vm-native-bundle-v2',
+            repair_from={'release_sha': 'a'*40, 'manifest_sha256': 'b'*64})
+        meta, _ = self.admit(value); self.assertEqual(meta['repair_from'], value['repair_from'])
+        for mutation in ['short', 'same', 'path', 'extra']:
+            changed = copy.deepcopy(value)
+            if mutation == 'short': changed['repair_from']['manifest_sha256'] = 'b'*10
+            elif mutation == 'same': changed['repair_from']['release_sha'] = changed['head_sha']
+            elif mutation == 'path': changed['repair_from']['release_sha'] = '../root'
+            else: changed['repair_from']['state_path'] = '/tmp/user-state'
+            with self.subTest(mutation=mutation), self.assertRaises(ValueError): self.admit(changed)
+        value['schema'] = 'paw-vm-native-bundle-v1'
+        with self.assertRaises(ValueError): self.admit(value)
 
-class NativeLayout(unittest.TestCase):
+
+class _NativeLayoutFixture(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(); self.root = Path(self.tmp.name)
         self.host = SimpleNamespace(ENTRY=self.root/'libexec'/'entry', STATIC=self.root/'static',
@@ -106,6 +120,9 @@ class NativeLayout(unittest.TestCase):
     def tearDown(self):
         for p in reversed(self.patchers): p.stop()
         self.tmp.cleanup()
+
+
+class NativeLayout(_NativeLayoutFixture):
 
     def test_policy_is_published_only_after_installed_status_check(self):
         def selfcheck(*args, **kwargs):
@@ -147,6 +164,73 @@ class NativeLayout(unittest.TestCase):
             native.install_layout(self.host, storage, archive, self.meta, self.files, self.proof)
         self.assertEqual(stat.S_IMODE(self.host.STATE.stat().st_mode), 0o755)
         self.assertFalse(self.rule.exists())
+
+
+class NativeRepair(_NativeLayoutFixture):
+    def setUp(self):
+        super().setUp()
+        for name in ['private_json', 'active', 'operation_lock', 'revoke', 'revoked', 'write_state']:
+            setattr(self.host, name, getattr(host, name))
+        for item in [patch.object(host, 'ROOT_UID', os.getuid()), patch.object(native, 'ROOT_UID', os.getuid()),
+                     patch.object(native, 'require_idle')]:
+            item.start(); self.patchers.append(item)
+        self.meta['policy']['anchor_sha'] = self.meta['head_sha']
+        with patch.object(native.subprocess, 'run', return_value=SimpleNamespace(returncode=0, stdout='{"status":"enrollment_incomplete"}')):
+            installed = native.install_layout(self.host, storage, archive, self.meta, self.files, self.proof)
+        self.previous = {'release_sha': installed['release_sha'], 'manifest_sha256': installed['manifest_sha256']}
+        accepted = self.host.STATE/'enrollment-acceptance'; accepted.mkdir(mode=0o700)
+        self.failure = {'schema': 'paw-vm-native-acceptance-v1', 'result': 'FAIL', 'release_sha': self.previous['release_sha'],
+                        'completed_phases': ['probe'], 'real_samples_executed': 0}
+        path = accepted/'result.json'; path.write_bytes(native.canonical(self.failure)); path.chmod(0o600)
+        with self.host.trusted_directory(self.host.STATE) as fd: host.revoke(fd)
+        self.old_files = dict(self.files)
+        self.meta.update(head_sha='d'*40, repair_from=self.previous)
+        self.meta['policy']['anchor_sha'] = self.meta['head_sha']
+        self.proof = copy.deepcopy(self.proof); self.proof.update(head_sha=self.meta['head_sha'], merge_sha=self.meta['head_sha'])
+        self.files['lab/s14/browser_validation_inputs.py'] = b'# reviewed new owned fixture\n'
+
+    def repair(self, result=None):
+        result = result or SimpleNamespace(returncode=0, stdout='{"status":"revoked","enrollment_complete":false}')
+        with patch.object(native.subprocess, 'run', return_value=result):
+            return native.repair_layout(self.host, storage, archive, __import__('vm_release_contract'), self.meta, self.files, self.proof)
+
+    def test_failed_enrollment_recovery_preserves_history_static_code_and_old_snapshot(self):
+        result = self.repair(); self.assertEqual(result['result'], 'REPAIRED_NOT_RUNTIME_ACCEPTED')
+        history = Path(result['history'])
+        self.assertEqual(json.loads((history/'enrollment-acceptance/result.json').read_bytes()), self.failure)
+        self.assertTrue((history/'revoked').exists()); self.assertFalse((self.host.STATE/'revoked').exists())
+        self.assertFalse((self.host.STATE/'enrollment-acceptance').exists())
+        self.assertEqual(json.loads((self.host.STATE/'active.json').read_bytes())['release_sha'], self.meta['head_sha'])
+        self.assertEqual(json.loads((self.host.STATE/'policy.json').read_bytes())['anchor_sha'], self.meta['head_sha'])
+        self.assertTrue((self.host.RELEASES/self.previous['release_sha']).is_dir())
+        for name in native.MODULES:
+            self.assertEqual((self.host.STATIC/name).read_bytes(), self.old_files['lab/s14/'+name])
+        self.assertTrue(self.rule.exists()); native.require_idle.assert_called_with('paw-vm-enroll-'+self.meta['head_sha'][:12]+'.service')
+
+    def test_wrong_previous_snapshot_or_static_upgrade_refuses_before_changes(self):
+        saved = self.meta['repair_from']; self.meta['repair_from'] = saved | {'manifest_sha256': '0'*64}
+        with self.assertRaisesRegex(ValueError, 'previous_identity'): self.repair()
+        self.meta['repair_from'] = saved; self.files['lab/s14/vm_operator_host.py'] += b'# boundary upgrade\n'
+        with self.assertRaisesRegex(ValueError, 'static_upgrade'): self.repair()
+        self.assertEqual(json.loads((self.host.STATE/'active.json').read_bytes())['release_sha'], self.previous['release_sha'])
+        self.assertTrue(self.rule.exists())
+
+    def test_completed_or_live_old_enrollment_is_not_repaired(self):
+        receipt = self.host.STATE/'enrollment-acceptance/result.json'; completed = dict(self.failure, result='PASS')
+        receipt.write_bytes(native.canonical(completed))
+        with self.assertRaisesRegex(ValueError, 'only_failed_or_incomplete'): self.repair()
+        receipt.write_bytes(native.canonical(self.failure))
+        grant = {'owner_pid': os.getpid(), 'owner_start': Path('/proc/self/stat').read_text().rsplit(')', 1)[1].split()[19]}
+        p = self.host.STATE/'enrollment-test.json'; p.write_bytes(native.canonical(grant)); p.chmod(0o600)
+        with self.assertRaisesRegex(ValueError, 'previous_owner_active'): self.repair()
+
+    def test_repair_failure_keeps_revocation_and_history_without_deleting_snapshots(self):
+        with self.assertRaisesRegex(ValueError, 'incomplete_selfcheck'): self.repair(SimpleNamespace(returncode=1))
+        self.assertFalse(self.rule.exists()); self.assertTrue((self.host.STATE/'revoked').exists())
+        self.assertTrue((self.host.RELEASES/self.previous['release_sha']).is_dir())
+        self.assertTrue((self.host.RELEASES/self.meta['head_sha']).is_dir())
+        histories = list((self.host.STATE/'enrollment-history').iterdir()); self.assertEqual(len(histories), 1)
+        self.assertEqual(json.loads((histories[0]/'enrollment-acceptance/result.json').read_bytes()), self.failure)
 
 
 class NativeAcceptance(unittest.TestCase):
@@ -300,6 +384,23 @@ class NativePolkitProbe(unittest.TestCase):
                  patch.object(native.subprocess, 'Popen', return_value=self.child), \
                  patch.object(native.subprocess, 'run', side_effect=responses), self.assertRaises(ValueError):
                 native.authorization_probe(self.host, {'owner_uid': os.getuid()})
+
+
+class RepairIdleProbe(unittest.TestCase):
+    def test_only_own_PID1_enrollment_unit_may_be_active(self):
+        unit = 'paw-vm-enroll-'+'a'*12+'.service'
+        for other in ['', 'paw-vm-enroll-'+'b'*12+'.service active running old', 'paw-vm-owned-'+'c'*32+'.service active running owned']:
+            def output(argv, **kwargs):
+                if 'show' in argv: return str(os.getpid())+'\n'
+                if 'list-units' in argv: return unit+' active running self\n'+other
+                return ''
+            with self.subTest(other=other), patch.object(native.subprocess, 'check_output', side_effect=output), \
+                 patch.object(native.subprocess, 'run', return_value=SimpleNamespace(returncode=1)):
+                if other:
+                    with self.assertRaisesRegex(ValueError, 'live_job_or_residual'): native.require_idle(unit)
+                else: native.require_idle(unit)
+        with patch.object(native.subprocess, 'check_output', return_value='0\n'), self.assertRaisesRegex(ValueError, 'PID1_main_process'):
+            native.require_idle(unit)
 
 
 if __name__ == '__main__': unittest.main()

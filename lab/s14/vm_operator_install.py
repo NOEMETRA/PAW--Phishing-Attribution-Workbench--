@@ -31,6 +31,7 @@ MAX_BUNDLE = 2*MAX_TOTAL + 2*1024**2
 ACTION_ID = 'org.noemetra.paw.vm.operator'
 POLICY_FILE = Path('/usr/share/polkit-1/actions/'+ACTION_ID+'.policy')
 RULE_FILE = Path('/etc/polkit-1/rules.d/49-paw-vm-operator.rules')
+ROOT_UID = 0
 
 # Executed by fixed system Python as the enrolled *unprivileged* account. No
 # arguments select commands/paths/code; phases are native enrollment tests only.
@@ -103,8 +104,11 @@ def bundle(raw, expected_sha256, now=None):
         return result
     try: value = json.loads(raw, object_pairs_hook=pairs)
     except (UnicodeError, RecursionError, json.JSONDecodeError): raise ValueError('native_bundle_json') from None
-    require(type(value) is dict and set(value) == {'schema', 'repository', 'owner_uid', 'head_sha', 'pull_request',
-            'created_at', 'expires_at', 'policy', 'files'} and value['schema'] == 'paw-vm-native-bundle-v1' and
+    base_fields = {'schema', 'repository', 'owner_uid', 'head_sha', 'pull_request',
+                   'created_at', 'expires_at', 'policy', 'files'}
+    require(type(value) is dict and
+            ((value.get('schema') == 'paw-vm-native-bundle-v1' and set(value) == base_fields) or
+             (value.get('schema') == 'paw-vm-native-bundle-v2' and set(value) == base_fields | {'repair_from'})) and
             value['repository'] == REPOSITORY and type(value['owner_uid']) is int and value['owner_uid'] == 1000 and
             type(value['head_sha']) is str and re.fullmatch('[0-9a-f]{40}', value['head_sha']) and
             type(value['pull_request']) is int and 0 < value['pull_request'] <= 999999999, 'native_bundle_identity')
@@ -112,6 +116,12 @@ def bundle(raw, expected_sha256, now=None):
     require(type(value['created_at']) is int and type(value['expires_at']) is int and
             value['created_at'] <= now < value['expires_at'] <= value['created_at']+3600,
             'native_bundle_lease')
+    if value.get('repair_from') is not None:
+        previous = value['repair_from']
+        require(type(previous) is dict and set(previous) == {'release_sha', 'manifest_sha256'} and
+                type(previous['release_sha']) is str and re.fullmatch('[0-9a-f]{40}', previous['release_sha']) and
+                type(previous['manifest_sha256']) is str and re.fullmatch('[0-9a-f]{64}', previous['manifest_sha256']) and
+                previous['release_sha'] != value['head_sha'], 'native_repair_previous_identity')
     require(type(value['policy']) is dict and type(value['files']) is dict and 1 <= len(value['files']) <= 2048,
             'native_bundle_inventory')
     files = {}; total = 0
@@ -226,6 +236,157 @@ def install_layout(host, storage, archive, meta, files, proof):
             try: path.rmdir()
             except OSError: pass
         raise
+
+
+def protected_file(host, path, mode, maximum=1024**2):
+    with host.trusted_directory(path.parent) as fd:
+        handle = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=fd)
+    try:
+        before = os.fstat(handle)
+        require(stat.S_ISREG(before.st_mode) and before.st_uid == ROOT_UID and before.st_nlink == 1 and
+                stat.S_IMODE(before.st_mode) == mode and before.st_size <= maximum, 'native_repair_protected_file')
+        with os.fdopen(handle, 'rb', closefd=False) as stream: raw = stream.read(maximum+1)
+        after = os.fstat(handle)
+        require(len(raw) == before.st_size == after.st_size and before.st_mtime_ns == after.st_mtime_ns and
+                before.st_ctime_ns == after.st_ctime_ns, 'native_repair_protected_file_changed')
+        return raw
+    finally: os.close(handle)
+
+
+def root_create(host, path, raw, mode=0o600):
+    with host.trusted_directory(path.parent) as fd:
+        handle = os.open(path.name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=fd)
+        try:
+            with os.fdopen(handle, 'wb', closefd=False) as stream: stream.write(raw); stream.flush(); os.fsync(handle)
+            os.fchmod(handle, mode); os.fsync(handle)
+        finally: os.close(handle)
+        os.fsync(fd)
+
+
+def native_replace(host, path, value):
+    require(path.parent == host.STATE and path.name in {'policy.json', 'active.json'}, 'native_repair_fixed_state')
+    temporary = path.with_name('.native-state-'+os.urandom(16).hex())
+    root_create(host, temporary, canonical(value))
+    with host.trusted_directory(host.STATE) as fd:
+        try: os.replace(temporary.name, path.name, src_dir_fd=fd, dst_dir_fd=fd); os.fsync(fd)
+        finally:
+            try: os.unlink(temporary.name, dir_fd=fd)
+            except FileNotFoundError: pass
+
+
+def require_idle(current_unit):
+    require(type(current_unit) is str and re.fullmatch('paw-vm-enroll-[0-9a-f]{12}\\.service', current_unit),
+            'native_repair_fixed_unit')
+    main = subprocess.check_output(['/usr/bin/systemctl', 'show', current_unit, '--property=MainPID', '--value'], text=True, timeout=10)
+    require(main.strip() == str(os.getpid()), 'native_repair_PID1_main_process_required')
+    qemu = subprocess.run(['/usr/bin/pgrep', '-f', '^/usr/bin/qemu-system'], capture_output=True, timeout=10)
+    domains = subprocess.check_output(['/usr/bin/virsh', '--readonly', '-c', 'qemu:///system', 'list', '--all', '--name'], text=True, timeout=15)
+    namespaces = subprocess.check_output(['/usr/sbin/ip', 'netns', 'list'], text=True, timeout=10)
+    units = subprocess.check_output(['/usr/bin/systemctl', 'list-units', '--type=service', '--state=activating,active,deactivating',
+                                     '--no-legend', '--no-pager', '--plain', 'paw-vm-owned-*', 'paw-vm-enroll-*'], text=True, timeout=10)
+    other = [line.split()[0] for line in units.splitlines() if line.strip() and line.split()[0] != current_unit]
+    require(qemu.returncode == 1 and not domains.strip() and not namespaces.strip() and not other,
+            'native_repair_live_job_or_residual')
+
+
+def repair_layout(host, storage, archive, contract, meta, files, proof):
+    """Native-only recovery of failed/incomplete enrollment, not self-promotion.
+
+    Static boundary upgrades are deliberately excluded: installed entry/modules
+    must exactly match this newly reviewed bundle. Preserve old snapshots and
+    all authority/log files; ordinary authority remains incomplete throughout.
+    """
+    require(os.geteuid() == 0 and meta.get('repair_from') is not None, 'native_explicit_repair_required')
+    previous = meta['repair_from']; current_unit = 'paw-vm-enroll-'+meta['head_sha'][:12]+'.service'; require_idle(current_unit)
+    expected_bootstrap = {'schema': 'paw-vm-bootstrap-v1', 'owner_uid': meta['owner_uid'],
+        'entry_sha256': hashlib.sha256(files[ENTRY_SOURCE]).hexdigest(),
+        'modules': {name: hashlib.sha256(files['lab/s14/'+name]).hexdigest() for name in MODULES}}
+    require(protected_file(host, host.STATE/'bootstrap.json', 0o600, 16384) == canonical(expected_bootstrap),
+            'native_repair_static_upgrade_requires_separate_enrollment')
+    require(hashlib.sha256(protected_file(host, host.ENTRY, 0o755)).hexdigest() == expected_bootstrap['entry_sha256'],
+            'native_repair_entry_changed')
+    with host.trusted_directory(host.STATIC) as fd: require(set(os.listdir(fd)) == MODULES, 'native_repair_static_inventory')
+    for name in MODULES:
+        require(hashlib.sha256(protected_file(host, host.STATIC/name, 0o444)).hexdigest() == expected_bootstrap['modules'][name],
+                'native_repair_static_module_changed')
+    username = pwd.getpwuid(meta['owner_uid']).pw_name
+    policy_data, rule_data = polkit_configuration(username, host.ENTRY)
+    require(protected_file(host, POLICY_FILE, 0o644) == policy_data, 'native_repair_action_changed')
+    with host.trusted_directory(host.STATE) as fd, host.operation_lock(fd):
+        current = host.active(host.private_json(fd, 'active.json')); old_policy = host.private_json(fd, 'policy.json')
+        contract.policy(old_policy, now=old_policy.get('created_at'))
+        require(current['release_sha'] == previous['release_sha'] and current['manifest_sha256'] == previous['manifest_sha256'] and
+                current['pull_request'] == meta['pull_request'] and old_policy['anchor_sha'] == previous['release_sha'] and
+                all(old_policy[k] == meta['policy'][k] for k in ['repository', 'owner_uid', 'reviewer_login', 'reviewer_id', 'workflows']),
+                'native_repair_protected_previous_identity')
+        try:
+            with host.trusted_directory(host.STATE/'enrollment-acceptance') as accepted:
+                prior = host.private_json(accepted, 'result.json')
+        except FileNotFoundError: prior = None
+        require(prior is None or (prior.get('schema') == 'paw-vm-native-acceptance-v1' and prior.get('result') == 'FAIL' and
+                prior.get('release_sha') == previous['release_sha'] and type(prior.get('real_samples_executed')) is int and
+                prior['real_samples_executed'] == 0), 'native_repair_only_failed_or_incomplete_enrollment')
+        try: old_grant = host.private_json(fd, 'enrollment-test.json')
+        except FileNotFoundError: old_grant = None
+        if old_grant is not None:
+            pid = old_grant.get('owner_pid'); start = old_grant.get('owner_start')
+            require(type(pid) is int and pid > 1 and type(start) is str and start.isdigit(), 'native_repair_prior_owner_shape')
+            proc = Path('/proc')/str(pid)
+            try:
+                fields = (proc/'stat').read_text().rsplit(')', 1)[1].split()
+                alive = proc.stat().st_uid == ROOT_UID and fields[0] not in {'Z', 'X'} and fields[19] == start
+            except (OSError, IndexError): alive = False
+            require(not alive, 'native_repair_previous_owner_active')
+        with host.trusted_directory(host.RELEASES) as releases:
+            storage.verify(releases, previous['release_sha'], previous['manifest_sha256'])
+        # Remove delegated permission first. Repaired ordinary authority cannot
+        # exist until the new protected acceptance receipt has been written.
+        if RULE_FILE.exists() or RULE_FILE.is_symlink():
+            require(protected_file(host, RULE_FILE, 0o644) == rule_data, 'native_repair_rule_changed')
+            with host.trusted_directory(RULE_FILE.parent) as rules: os.unlink(RULE_FILE.name, dir_fd=rules); os.fsync(rules)
+        host.revoke(fd)
+        try:
+            history_root = host.STATE/'enrollment-history'
+            try: os.mkdir(history_root.name, mode=0o700, dir_fd=fd)
+            except FileExistsError: pass
+            with host.trusted_directory(history_root) as histories:
+                name = 'repair-'+os.urandom(16).hex(); os.mkdir(name, mode=0o700, dir_fd=histories)
+            history = history_root/name
+            for name, raw in [('policy.json', canonical(old_policy)), ('active.json', canonical(current)),
+                              ('bootstrap.json', canonical(expected_bootstrap))]: root_create(host, history/name, raw)
+            with host.trusted_directory(history) as saved:
+                for name in ['enrollment-acceptance', 'enrollment-test.json', 'enrollment-test-consumed']:
+                    try: info = os.stat(name, dir_fd=fd, follow_symlinks=False)
+                    except FileNotFoundError: continue
+                    require(info.st_uid == ROOT_UID and info.st_mode & 0o022 == 0 and
+                            ((name == 'enrollment-acceptance' and stat.S_ISDIR(info.st_mode)) or
+                             (name != 'enrollment-acceptance' and stat.S_ISREG(info.st_mode) and info.st_nlink == 1)),
+                            'native_repair_history_artifact')
+                    os.rename(name, name, src_dir_fd=fd, dst_dir_fd=saved)
+                os.fsync(saved); os.fsync(fd)
+            require_idle(current_unit)
+            with host.trusted_directory(host.RELEASES) as releases:
+                digest = archive.stage(releases, proof, files); storage.verify(releases, meta['head_sha'], digest)
+            active = {'schema': 'paw-vm-active-v1', 'release_sha': meta['head_sha'], 'manifest_sha256': digest,
+                      'pull_request': meta['pull_request']}
+            native_replace(host, host.STATE/'policy.json', meta['policy']); host.write_state(fd, 'active.json', active)
+            result = subprocess.run([str(host.ENTRY), 'status'], capture_output=True, text=True, timeout=20,
+                env={'PKEXEC_UID': str(meta['owner_uid']), 'PATH': '/usr/sbin:/usr/bin:/sbin:/bin', 'HOME': '/root', 'LANG': 'C.UTF-8'})
+            require(result.returncode == 0 and json.loads(result.stdout)['status'] == 'revoked' and
+                    json.loads(result.stdout)['enrollment_complete'] is False, 'native_repair_incomplete_selfcheck')
+            require(host.revoked(fd), 'native_repair_revoke_marker')
+            # Only this native batch may restore the incomplete test context.
+            with host.trusted_directory(history) as saved:
+                os.rename('revoked', 'revoked', src_dir_fd=fd, dst_dir_fd=saved); os.fsync(saved); os.fsync(fd)
+            root_create(host, RULE_FILE, rule_data, 0o644)
+            return {'result': 'REPAIRED_NOT_RUNTIME_ACCEPTED', 'release_sha': meta['head_sha'],
+                    'manifest_sha256': digest, 'owner_uid': meta['owner_uid'], 'history': str(history)}
+        except BaseException:
+            with host.trusted_directory(RULE_FILE.parent) as rules:
+                try: os.unlink(RULE_FILE.name, dir_fd=rules); os.fsync(rules)
+                except FileNotFoundError: pass
+            host.revoke(fd)
+            raise
 
 
 def acceptance_phase(host, meta, folder, phase, nonce=None):
@@ -387,7 +548,8 @@ def main():
         archive.verify_git_tree(client, proof, files)
         fresh = remote.collect_candidate(client, meta['pull_request'], meta['policy'], meta['head_sha'])
         require(fresh == proof, 'native_candidate_changed_before_installation')
-        result = install_layout(host, storage, archive, meta, files, proof)
+        if meta.get('repair_from') is None: result = install_layout(host, storage, archive, meta, files, proof)
+        else: result = repair_layout(host, storage, archive, contract, meta, files, proof)
         print(json.dumps(result, sort_keys=True), flush=True)
         accept_installation(host, storage, meta, result)
 

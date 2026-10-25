@@ -28,5 +28,12 @@ class OwnedInputs(unittest.TestCase):
             else:value['scope']='real source accepted'
             with self.subTest(mutation=mutation),self.assertRaises(ValueError):inputs.parse(inputs.canonical(value))
 
+    def test_old_timing_sensitive_memory_probe_is_not_admitted_as_the_new_probe(self):
+        value=json.loads(inputs.make('c'*16));memory=next(v for v in value['inputs'] if v['case']=='memory')
+        old=b'<title>owned-memory</title><script>const a=[];for(;;){a.push(new Uint8Array(64*1024*1024).fill(7));}</script>'
+        self.assertNotEqual(bytes.fromhex(memory['source_hex']),old)
+        memory.update(source_hex=old.hex(),source_sha256=inputs.digest(old))
+        with self.assertRaisesRegex(ValueError,'exact_generated_bytes'):inputs.parse(inputs.canonical(value))
+
 
 if __name__=='__main__':unittest.main()

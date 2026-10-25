@@ -1,7 +1,8 @@
 # Credential-free VM operator: P0 implementation contract
 
 This is the narrow administrator boundary for the P0–P5 plan. The current draft
-is not installed or accepted. It stores no Ubuntu password, installs no generic
+is installed on the validation host but its first native acceptance failed;
+ordinary authority remains unaccepted. It stores no Ubuntu password, installs no generic
 NOPASSWD sudo and does not authorize root execution of workspace scripts.
 
 ## Fixed installed paths and trust
@@ -188,9 +189,50 @@ The native client, installed worker and browser matrix already pass `-B`;
 the fixed entrypoint disables bytecode before importing protected modules.
 
 These implementation tests use private owned files and simulated UID/process
-checks. Actual root installation, polkit behavior and VM acceptance remain
-pending exact-head review, green CI and the one native authentication. No host
-authorization has been installed or accepted yet.
+checks. They do not substitute for the separate measured native disposition.
+
+## Measured native attempt and recovery
+
+Native21c988 installation and UID1000 probe succeeded after one Ubuntu
+authentication. The delegated recipe passed positive, script-error, timeout,
+cancel and overflow. The memory case instead reached the unchanged15s timeout
+with guest memory.max hits172 and zero oom/oom_kill/oom_group_kill. The matrix
+correctly failed instead of claiming an OOM witness; the final three fault
+scenarios were not run. The failed VM had known stop1.000091s, no live writers,
+unchanged host/base/browser/source context and no real connections. Independent
+post-run checks found no QEMU, domains or network namespaces. Native acceptance
+removed its rule/revoked new work; its durable receipt is FAIL, not readiness.
+The host static operator remains installed and initial enrollment is incomplete.
+
+The836-member failure archive has SHA256
+`e8a3c872833a10559fa1076182cd50ac5d2541f0a2055c35007dd28b3f908fab`.
+The exported root-owned reader tree is evidence, not privileged authority.
+
+The old repeated64MiB JavaScript allocation could spend its deadline reclaiming
+without an OOM kill. The new owned probe makes one retained1GiB typed allocation
+and writes one byte per page. This changes only the synthetic input; production
+512MiB memory/15s deadline/QEMU/aggregate limits and the strict oom_kill witness
+remain unchanged. Whether this injection succeeds is pending the next actual
+matrix; a timeout is still FAIL, and prior9/9 evidence is not substituted.
+
+Native bundle v2 explicitly binds `repair_from` to the previous full release
+and manifest digest; v1 data remains decodable for historical evidence. Repair
+is never exposed by the passwordless entrypoint. It requires fresh exact-head
+review/CI/Git source proof and native admin authentication. It verifies previous
+protected state, prior snapshot, unchanged static bootstrap/entry/module bytes,
+failed/incomplete acceptance and a dead prior native owner. Accepted enrollment
+or a static boundary upgrade refuses this path. No QEMU/domain/netns/owned job
+or other enrollment service may be active; the current native PID must be the
+main process of its fixed PID1 unit. These are re-observed before staging.
+
+Recovery removes delegated permission first, preserves old snapshots and moves
+prior acceptance logs/one-use authority into root-private history, then updates
+only native policy and the active snapshot. Revocation and incomplete state stay
+closed during mutation. Only after installed status self-check does this native
+batch rearm a fresh one-use acceptance context and recreate the same narrow
+rule. Failure retains history and snapshots and leaves revocation/rule removal.
+It cannot turn the previous failed run into PASS or resume a consumed grant.
+The full nine-case retest and replay/revoke/restore checks are still required.
 
 Upstream semantics used by the acceptance checks:
 [pkcheck](https://www.freedesktop.org/software/polkit/docs/latest/pkcheck.1.html)

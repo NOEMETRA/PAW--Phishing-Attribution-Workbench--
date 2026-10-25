@@ -100,15 +100,19 @@ their current scoped isolation gate even after unattended benign acceptance.
 ## Current disposition
 
 P0 is being implemented on `codex/vm-project-automation`. The heartbeat exists;
-the privileged helper and promotion mechanism are not installed or accepted.
+the helper was installed but its first native acceptance failed at memory-fault
+injection (five preceding cases PASS). Ordinary run/promotion remain blocked
+by incomplete enrollment; no VM/domain/netns remains. Native recovery and a new
+complete matrix are pending review/CI and native authentication.
 P1–P5 are not complete. Historical PR110 readiness does not authorize these new
 capabilities without their corresponding review, context and runtime acceptance.
 
 The native-only bundle validator/installer, committed-source builder,
 digest-approved launcher and native acceptance batch are implemented and
 inert-tested. Actual setup remains pending exact-head review, CI and native
-authentication; no polkit or host authorization has been installed. Current
-tests:44 release/admission,39 entry/dispatcher/installer/setup and43 browser contracts.
+authentication. The first native install/probe passed but matrix acceptance
+failed; no ordinary operator authority or production readiness is accepted.
+Current tests:44 release/admission,46 entry/dispatcher/installer/setup and44 browser contracts.
 The latest browser count includes four export-race regressions following a
 reproduced review finding; reader exports remain root-owned and read-only.
 
@@ -140,13 +144,14 @@ or an injected client is not an implementation of that authority boundary.
 
 P0 remains open: bounded remote archive acquisition/installation, the fixed
 polkit entrypoint, actual no-prompt owned work, failure/revocation and source
-freezing acceptance are still required. No host privilege configuration has
-been installed by these tests.
+freezing acceptance are still required. No host privilege configuration was
+installed by those inert tests; see the separate failed native attempt above.
 
 Next P0 draft adds bounded archive/manual snapshot staging and fixed installed
 entrypoint/dispatcher/owned-worker code, with inert tests. Real public archive
 bytes were checked against the independent API Git tree without staging or
 execution. The [operator contract](vm-operator-contract.md) details installed
 paths, finite commands, native bootstrap, residual work and the reproduced
-CI-stability review correction. These additions do not mean polkit is installed
-or native runtime acceptance has passed; the installer is still required.
+CI-stability review correction. This earlier draft evidence alone did not
+establish installation or acceptance; the subsequent native attempt is recorded
+above and failed closed at the memory-fault witness.

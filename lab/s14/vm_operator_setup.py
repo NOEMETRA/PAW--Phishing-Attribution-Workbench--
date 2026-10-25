@@ -94,12 +94,13 @@ def enrollment_policy(head, now):
     return contract.policy(value, now)
 
 
-def build(repository, head, number, now=None):
+def build(repository, head, number, now=None, repair_from=None):
     contract.require(type(number) is int and 0 < number <= 999999999, 'setup_project_pr_number')
     now = int(time.time()) if now is None else now
     files = committed_sources(repository, head)
-    value = {'schema': 'paw-vm-native-bundle-v1', 'repository': native.REPOSITORY, 'owner_uid': 1000,
+    value = {'schema': 'paw-vm-native-bundle-v2', 'repository': native.REPOSITORY, 'owner_uid': 1000,
              'head_sha': head, 'pull_request': number, 'created_at': now, 'expires_at': now+3600,
+             'repair_from': repair_from,
              'policy': enrollment_policy(head, now), 'files': {name: {'bytes': len(data),
                  'sha256': hashlib.sha256(data).hexdigest(), 'data_hex': data.hex()} for name, data in files.items()}}
     raw = native.canonical(value); digest = hashlib.sha256(raw).hexdigest()
@@ -123,8 +124,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--repository', type=Path, required=True); parser.add_argument('--head', required=True)
     parser.add_argument('--pr', type=int, required=True); parser.add_argument('--bundle', type=Path, required=True)
+    parser.add_argument('--repair-release'); parser.add_argument('--repair-manifest')
     parser.add_argument('--launch', action='store_true'); args = parser.parse_args()
-    raw, digest = build(args.repository, args.head, args.pr)
+    contract.require((args.repair_release is None) == (args.repair_manifest is None), 'setup_repair_pair_required')
+    repair = None if args.repair_release is None else {'release_sha': args.repair_release, 'manifest_sha256': args.repair_manifest}
+    raw, digest = build(args.repository, args.head, args.pr, repair_from=repair)
     with args.bundle.open('xb') as stream: stream.write(raw)
     args.bundle.chmod(0o400)
     print(json.dumps({'head': args.head, 'bundle_sha256': digest, 'bytes': len(raw),
