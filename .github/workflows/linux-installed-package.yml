@@ -63,6 +63,13 @@ jobs:
             "$RUNNER_TEMP/paw-installed/bin/python" -B \
             "$GITHUB_WORKSPACE/tests/integration_offline_bridge_real.py" \
             --root-fixture --output "$RUNNER_TEMP/paw-installed-results/case-bridge"
+      - name: Verify installed HTML profile custody and refusal without KVM or Chrome
+        working-directory: ${{ runner.temp }}
+        run: |
+          env -u PYTHONPATH -u PYTHONHOME PYTHONNOUSERSITE=1 \
+            "$RUNNER_TEMP/paw-installed/bin/python" -B \
+            "$GITHUB_WORKSPACE/tests/integration_browser_bridge_real.py" \
+            --root-fixture --output "$RUNNER_TEMP/paw-installed-results/browser-bridge"
       - name: Retain bounded installed-package logs
         if: always()
         uses: actions/upload-artifact@v4

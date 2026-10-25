@@ -210,3 +210,52 @@ regression rejects the original nested response, accepts its compact form
 through the unchanged validator and proves diagnostic content preservation.
 The actual captured success frame also passes this read-only replay. Image
 publication still awaits a fresh complete run and verified graceful shutdown.
+
+
+## Trusted image preparation accepted; runtime acceptance remains open
+
+The complete H run on reviewed commit1f893c66ca470a11e6c1e73438462d1d7613da7c
+passed after all seven CI jobs and review receipt6397879404. All198 approved
+packages installed in the no-NIC guest; the owned JavaScript probe passed the
+per-renderer sandbox and resource checks. The owner recorded the matching
+libvirt guest-shutdown event and closed connection. External absence was
+confirmed, with stop accounting0.293328s. Guards, foundation, source freeze
+and canary were unchanged; no QEMU/domain/network-namespace remained.
+The root-owned image is0444, SHA256
+`3a84fd10c95ff389f85121e7d45e05c9a11ad00242dd1a782a8e1dde679c53e6`;
+its root0400 certificate SHA256 is
+`1fc048c8f3262edfd4f47f9b9ed5d32499336f9ae2483b919dff64dda57a76f5`.
+This is a locally derived image, not vendor-signed attestation.
+
+The separate runtime now proposed here accepts opaque HTML attachments only
+through explicit `paw lab-offline prepare --profile html`, retaining the
+existing default Python profile. It binds exact bytes/hash to an unchanged
+sealed case, uses a separate root browser policy/grant/consumption namespace,
+and shares the existing global execution lock. Production mode requires a
+fresh protected I08 receipt bound to the actual host/image/source context and
+exactly one approved source hash. The unprivileged CLI cannot issue grants,
+start privileged jobs or install readiness.
+
+Each execution uses a fresh overlay, no NIC or sharing, one fixed local-file
+Chrome command with its sandbox retained, UID65534/NNP, guest512MiB/256tasks,
+QEMU1536MiB/64tasks/CPU50%/swap0 and aggregate2GiB/128tasks/swap0. Root input
+media are private to root/QEMU, and the plaintext ISO staging tree is removed.
+Known external stop, matching owner result and unchanged context are required
+before opaque bounded output publication. Import creates a separate sealed
+sidecar; original MIME, original score and original case remain unchanged.
+Guest output is untrusted evidence, never host-rendered HTML or a risk verdict.
+
+Inert tests cover opaque framing, policy/readiness binding, durable one-use,
+resource admission, owner/protocol/output faults, no publication on uncertain
+stop and sealed-case custody. CI additionally exercises the installed HTML CLI
+with inert protected receipts, without KVM/Chrome. The finite owned acceptance
+matrix adds actual JS title change, script error, timeout, cancel, output/memory
+budgets, paused refusal and owner/protocol loss, plus replay/busy/unknown-stop
+checks. Its validation policy does not install production readiness.
+
+**Still required:** exact-head runtime review/CI, actual finite owned matrix,
+existing Python private-media regression, effective scoped I08 and a fresh
+installed PAW→root→VM→PAW one-hash harmless smoke. No real email or attachment
+has been analyzed or executed, and no real network access is enabled by the
+image preparation result. Private real specimens are excluded from commits
+and public evidence archives.
