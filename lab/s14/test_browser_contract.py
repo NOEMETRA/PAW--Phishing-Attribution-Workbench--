@@ -71,6 +71,18 @@ class Contract(unittest.TestCase):
         with patch.object(guest, 'DONE', completed), patch.object(guest, 'ACTIVE', object()):
             self.assertIs(guest.poll(), completed); self.assertIs(guest.finish('cancelled'), completed)
 
+    def test_oom_kernel_console_text_cannot_be_accepted_as_a_response(self):
+        # Actual owned memory trial: printk appended inside the serial JSON line.
+        line = '{"id":105,"ok":true,"data":{"done":false}}[   55.002277] Memory cgroup out of memory'
+        with self.assertRaises(json.JSONDecodeError): json.loads(line)
+        # Reserve only the guest console; retain its other printk parameters.
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)/'printk'; path.write_text('7\t4\t1\t7\n')
+            with patch.object(guest, 'Path', return_value=path): guest.reserve_control_console()
+            self.assertEqual(path.read_text().split(), ['0', '4', '1', '7'])
+            path.write_text('unexpected')
+            with patch.object(guest, 'Path', return_value=path), self.assertRaises(ValueError): guest.reserve_control_console()
+
 
 class Authority(unittest.TestCase):
     def context(self):

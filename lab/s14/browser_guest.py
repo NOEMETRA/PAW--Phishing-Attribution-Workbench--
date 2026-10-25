@@ -164,7 +164,17 @@ def poll():
     return {'done': False}
 
 
+def reserve_control_console():
+    """Keep guest printk in its ring buffer, off the broker's serial wire."""
+    path = Path('/proc/sys/kernel/printk')
+    levels = path.read_text().split()
+    require(len(levels) == 4 and all(v.isdecimal() for v in levels), 'browser_console_levels')
+    path.write_text('0 ' + ' '.join(levels[1:]) + '\n')
+    require(path.read_text().split() == ['0', *levels[1:]], 'browser_console_not_reserved')
+
+
 def main():
+    reserve_control_console()
     os.chmod('/dev/ttyS0', 0o600); tty.setraw(sys.stdin.fileno())
     require(sorted(os.listdir('/sys/class/net')) == ['lo'], 'browser_network_present')
     emit({'ready': True, 'network_interfaces': ['lo']})

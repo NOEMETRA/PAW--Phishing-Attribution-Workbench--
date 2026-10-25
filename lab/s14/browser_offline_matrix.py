@@ -87,6 +87,7 @@ def main():
                'runs': [], 'actual_real_samples_executed': 0, 'i08_accepted': False, 'production_grants_enabled': False}
     try:
         for entry in inputs['inputs']:
+            audit = None
             case = entry['case']; raw = frame(entry, inputs['nonce']); candidate = json.loads(raw)
             grant = auth.issue(raw, policy_raw, context); witness = {}; original = operator.BrowserVM
             class AcceptanceVM(BrowserVM):
@@ -148,12 +149,16 @@ def main():
         require(len(summary['runs']) == len(CASES) and summary.get('live_busy_lock_refused') is True and
                 auth.capture() == context, 'owned_browser_final_context_or_inventory')
         summary.update(result='PASS', unknown_stop_publication_refused=True)
-    except Exception as error: summary.update(result='FAIL', error=str(error), traceback=traceback.format_exc())
+    except Exception as error:
+        summary.update(result='FAIL', error=str(error), traceback=traceback.format_exc(), failed_case=case,
+                       failed_audit=str(audit) if audit is not None else None)
     finally:
         (output/'results.json').write_bytes(auth.canonical(summary))
         args.export.mkdir(parents=True, mode=0o700, exist_ok=False)
         shutil.copytree(output, args.export/'matrix')
         for run in summary['runs']: shutil.copytree(run['audit'], args.export/run['case'])
+        if summary.get('failed_audit') is not None:
+            shutil.copytree(summary['failed_audit'], args.export/('failed-'+summary['failed_case']))
         for path in [args.export, *args.export.rglob('*')]: os.chown(path, 1000, 1000)
     print(json.dumps({'result': summary['result'], 'export': str(args.export), 'actual_real_samples_executed': 0}), flush=True)
     require(summary['result'] == 'PASS', 'owned_browser_acceptance_failed')

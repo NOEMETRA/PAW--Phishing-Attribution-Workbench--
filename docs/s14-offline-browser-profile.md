@@ -259,3 +259,23 @@ installed PAW→root→VM→PAW one-hash harmless smoke. No real email or attach
 has been analyzed or executed, and no real network access is enabled by the
 image preparation result. Private real specimens are excluded from commits
 and public evidence archives.
+
+
+The first actual owned runtime matrix passed positive JavaScript, script-error,
+timeout, cancellation and output overflow. It then failed on memory exhaustion:
+the kernel correctly killed Chrome in its512MiB cgroup, but its printk OOM text
+was interleaved with a PAW14 JSON reply on ttyS0. The unchanged host parser
+rejected the corrupted line (Extra data), stopped the VM and published no
+accepted result for that case. Guards/foundation/browser image/certificate
+remained unchanged, no QEMU/domain/netns remained. The three later fault cases
+were not run; this is a matrix FAIL, not a completed acceptance.
+
+Before readiness, the trusted guest broker now reserves its serial console by
+setting only the guest's console printk level to0 and checking the write.
+Other printk parameters and the kernel ring buffer remain intact; cgroup OOM
+counters still determine the memory-budget outcome. No host sysctl, resource
+limit, JSON parser or frame budget changes. An inert regression retains rejection
+of the actual corrupted line and checks the guest-only console reservation.
+The finite owned matrix also exports its failed current audit automatically,
+so the failure evidence accompanies the summary. Fresh review/CI and a complete
+actual owned retry are still required before I08.
