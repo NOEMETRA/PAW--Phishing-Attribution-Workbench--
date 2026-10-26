@@ -32,6 +32,9 @@ New `case-source-<uuid>` cases contain a manifest/job binding, execution status,
 exact bytes and observation report, followed by the existing seal and ZIP.
 Cancellation/abnormal termination retain honest partial accounting only after
 the supervisor confirms tree shutdown. Verify/export guards block live writers.
+The dedicated worker sets umask0077 before writing any artifacts, so ZIPs and
+their temporary files are owner-only even in a pre-existing traversable case
+store. Existing store permissions and original input permissions are preserved.
 
 The local API adds `POST /api/sources/upload` and `POST /api/sources/inspect` with
 `{"file_path":"<returned upload path>"}`. Uploads use private generated names;

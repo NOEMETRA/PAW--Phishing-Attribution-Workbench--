@@ -12,6 +12,9 @@ from paw.core.network_policy import offline_policy
 
 
 def main():
+    # This dedicated process must create private artifacts from the first byte,
+    # even with an existing shared case store and a permissive caller umask.
+    os.umask(0o077)
     parser = argparse.ArgumentParser(); parser.add_argument('request'); parser.add_argument('result')
     args = parser.parse_args(); request = json.loads(Path(args.request).read_bytes()); result = {'status': 'failed'}
     try:

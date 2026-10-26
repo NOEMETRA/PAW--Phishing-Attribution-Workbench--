@@ -55,6 +55,26 @@ class SourceJobBridge(unittest.TestCase):
             self.assertTrue(verify_case(case))
             with self.assertRaisesRegex(RuntimeError, 'shutdown not confirmed'): require_stopped_case(case)
 
+    @unittest.skipUnless(os.name == 'posix', 'POSIX file permission contract')
+    def test_private_source_zip_in_existing_traversable_case_store(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            folder = Path(temporary); folder.chmod(0o755)
+            source = folder/'private.bin'; raw = b'owned private bytes'; source.write_bytes(raw); source.chmod(0o600)
+            workspace = folder/'workspace'; workspace.mkdir(mode=0o755)
+            cases = workspace/'cases'; cases.mkdir(mode=0o755)
+            result = subprocess.run([sys.executable, '-P', '-B', '-m', 'paw', 'inspect-source', str(source),
+                                     '--workdir', str(workspace)], cwd=folder,
+                                    env=dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[1])),
+                                    preexec_fn=lambda: os.umask(0), capture_output=True, text=True, timeout=40)
+            self.assertEqual(result.returncode, 0, result.stdout+result.stderr)
+            value = json.loads(result.stdout); case = cases/value['worker']['case_id']
+            archive = Path(value['worker']['zip'])
+            self.assertEqual(archive.stat().st_mode & 0o777, 0o600, 'ZIP widened private source access')
+            self.assertEqual(case.stat().st_mode & 0o777, 0o700)
+            self.assertEqual(cases.stat().st_mode & 0o777, 0o755, 'Existing store permissions changed')
+            self.assertEqual(source.stat().st_mode & 0o777, 0o600)
+            self.assertEqual(source.read_bytes(), raw); self.assertTrue(value['supervisor']['tree_stopped'])
+
     @unittest.skipUnless(os.name == 'posix', 'POSIX owned process suspension')
     def test_actual_cli_cancel_guards_sealed_case_until_worker_tree_stops(self):
         with tempfile.TemporaryDirectory() as temporary:
