@@ -160,6 +160,8 @@ jobs:
           python -B tests/integration_representation_bridge_real.py --output "$RUNNER_TEMP/paw-forensic-selection.json"
       - name: Verify finite runtime restart refusals without administrative actions
         run: python -B -m unittest discover -s tests -p 'test_vm_runtime_revalidation.py' -v
+      - name: Verify separate representation authority with inert privileged boundaries
+        run: python -B -m unittest discover -s tests -p 'test_representation_authorization.py' -v
       - name: Verify source paths and native runtime admission before I/O
         run: python -m unittest discover -s tests -p 'test_input_admission.py' -v
       - name: Verify real malformed EML, input refusals and CLI/HTTP accounting

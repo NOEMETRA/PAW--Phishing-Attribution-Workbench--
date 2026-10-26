@@ -137,6 +137,21 @@ daemon and aggregate slice are inactive after reboot, then representation-scoped
 one-use authority and actual owned adapter/I08 acceptance. No privileged
 snapshot or service was changed by the client increment or inert preparation.
 
+The maintained runtime prerequisite subsequently passed on reviewed/promoted
+PR117 main `a6712a0c6fd872dc81ca4db3599df60b0b5a5fa3`, with clear exact-head
+review and7/7head/main checks. Actual job `97c17c15f99c4652a70c6e525fb76285`
+restored the two inactive services in8312ms, without password or VM. Protected
+reader evidence and independent cgroup/read-only libvirt checks confirmed
+unchanged rules/routes, zero domains/active networks and existing budgets.
+No I08 or grant was enabled. The archive SHA256 is
+`fb8a14436b6f302e998035b0177cee04fe3b43147460bdaf4d588cb7c317de23`.
+The initial prestart failure and reproduced caller-normalizer fix are retained
+in [the runtime contract](vm-runtime-revalidation.md). The daemon can idle-exit
+and reactivate through its local socket; future guest work must still validate
+its maintained context. P3 now advances to the separately scoped
+[representation authority](representation-authority-contract.md), then actual
+adapters/verifiers, owned matrices and I08. P3–P5 remain open.
+
 P0 closed on26 October2026 after the owner-authorized same-head review retry
 completed clear on `e63ab29a10f2a5b8c561c1fc0ea370b60ec893f6`, all seven required
 head checks and all prior threads were clear, and PR111 merged as
