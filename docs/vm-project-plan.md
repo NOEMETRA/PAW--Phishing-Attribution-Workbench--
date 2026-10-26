@@ -1,0 +1,174 @@
+# PAW VM project: executable plan and closure contract
+
+Owner instruction,25 October2026: advance both forensic analysis of malformed
+sources and additional isolated execution profiles, using PR/review/CI, and
+check progress every10 minutes until the finite VM project is accepted.
+All work stays on this Linux PC. This plan supersedes the earlier VM deferral
+for these explicitly authorized increments; consolidated engine audits remain
+closed unless a defect is reproduced.
+
+## Starting point
+
+PR110 merged as `bbf7f643b6f415c4df961660c0f5bf7585eb5c71` after exact-head
+review and7/7CI, with main7/7CI. The fixed no-NIC HTML profile passed nine owned
+normal/fault scenarios and actual installed PAW→root→VM→PAW custody/privacy smoke.
+Python is a separate existing profile. Neither readiness nor an HTTP success
+means generic hostile-code safety. Real malformed MIME is currently preserved
+and partially analyzed; ambiguous attachment bytes cannot enter the existing
+HTML bridge. This is the concrete investigative need for the next capability.
+
+## Automation and authority
+
+The current chat heartbeat `paw-vm-review-e-avanzamento` is active every10 minutes.
+PC and desktop app must remain running for local work. Scheduler delivery is
+not proof that a job finished or authorization to bypass a gate. State lives
+outside the checkout in `work/s14-local/vm-project-state.json`, relative to the
+shared task workspace. Each continuation reads that state and this plan first.
+No concurrent checkout mutation or change to frozen sources during a root run.
+
+Administrator automation must not store a login password, consume a password
+from chat, install generic passwordless sudo, or execute user-writable workspace
+scripts as root. A one-time native admin installation is needed only after its
+implementation is reviewed/tested. The mechanism uses a specific polkit action,
+fixed root-owned entrypoint, explicit user identity and immutable root snapshots.
+Authorization in polkit is not argument validation: the entrypoint validates
+every command and value itself; `command_line` is not a security boundary.
+
+Automatic promotion is a distinct privileged operation: independently verify
+repository identity, immutable full commit, completed review, required exact-head
+CI, merged/main state and a bounded release manifest. User-supplied local JSON
+claiming that review passed is not authority. Automatic promotion requires the
+bot's authenticated structured review state with a full40-character commit and
+clear code/security disposition. A shortened prose receipt is insufficient.
+Trust in GitHub/repository governance and the configured reviewer remains an
+explicit deployment assumption, not remote attestation. Installation/update and
+revocation must be auditable and fail closed on missing or stale proof.
+
+Only finite named benign recipes may run unattended. They generate owned inputs
+inside the reviewed snapshot; callers cannot choose host commands, paths,
+interpreters, URLs, arbitrary systemd properties or arbitrary source bytes.
+The existing global one-job lock, known external stop, root private input media,
+resource budgets, image/context checks and opaque publication remain mandatory.
+No automatic real-source grant issuance, egress or new real specimen execution.
+Source-changing releases need their own maintained context and readiness.
+
+## Ordered phases
+
+| Phase | Deliverable | Required acceptance |
+| --- | --- | --- |
+| P0 | Credential-free narrow operator, immutable releases and independently gated promotion; review heartbeat and durable work journal. | Inert privilege/confused-deputy tests; root snapshot cannot be modified by the caller; generic pkexec/shell/workspace execution stays unauthorized; one native installation; no-prompt status and finite owned job; tampered/stale/foreign proofs, concurrent run, unknown recipe and revocation refuse. No password stored. |
+| P1 | Bounded acquisition/inspection of any local regular byte source, independent of extension or text decoding. | Preserve exact bytes/hashes, unsupported/empty/binary input gets structured coverage, no lossy coercion or execution; finite input/output/CPU/memory limits; source-change/FIFO/network-path/error checks; actual source and installed CLI/export. Specialized interpretation is explicit, not promised for every format. |
+| P2 | Forensic representation graph for malformed MIME/HTML. | Original wire, parser-selected bytes and explicitly derived candidates have separate identities, parent hashes, transformation version/parameters, errors and omissions. Handle a finite tested set of invalid Base64/QP, charset, duplicate-header/boundary and truncated-HTML cases. Never silently replace the original or label a recovered candidate authentic. Budgets bound expansion, count/depth and aggregate work. |
+| P3 | PAW handoff for an explicitly selected forensic representation. | New versioned binding includes parent case/source, representation/derivation and exact executed bytes. Existing bridge contracts stay strict. Separate hash grant and no-NIC execution; untrusted output imported into a sealed sidecar, original score/MIME/case unchanged. Actual harmless variants, wrong-parent/digest/replay/unknown-stop/refusal tests and scoped I08. |
+| P4 | Finite additional Linux execution profiles: POSIX shell and native x86-64 ELF; standalone JavaScript only through an explicit tested browser representation. | Separate trusted interpreter/ABI/profile and opaque ingress; nonroot guest process, reset/no NIC/no sharing, wall/CPU/memory/tasks/output/file budgets, tree termination and one-use authority. Owned normal/error/loop/fork/output/memory/owner/protocol tests per profile; no host ldd/interpreter/archive extraction or execution. No privilege or budget expansion inferred from available host RAM. |
+| P5 | Installed PAW integration, maintained operational acceptance and final consolidation. | Full source/installed CLI handoff and sealed exports for every supported profile; batch/cancel/crash/recovery/replay/cleanup; immutable reviewed versions, current scoped readiness, rollback/revoke and restart/no-prompt checks. All phase PRs merged with required review and green head/main CI; honest PASS/FAIL/unsupported matrix and saved evidence. |
+
+The declared execution set for this project's closure is existing Python and
+HTML plus the P4 Linux profiles. Windows PE/Office execution, arbitrary other
+interpreters/architectures, unrestricted archives, real egress, UI completion,
+classifier calibration and universal escape resistance are separate future
+projects. Such inputs remain acquirable as bounded bytes with explicit missing
+interpretation/execution coverage; they are not mislabeled analyzed or safe.
+Windows execution would additionally need a trusted/licensed guest image and
+independently validated resources/isolation. These exclusions are not hidden
+successes or a claim to support all possible software.
+
+## PR and continuation protocol
+
+1. Reconstruct actual state, take the next unclosed phase and reproduce the
+   concrete boundary on owned inputs. Use a dedicated branch and coherent PR.
+2. Implement only that increment. Preserve scoring, originals, evidence and
+   existing supported/unavailable contracts. Do not publish real mail in GitHub.
+3. Run meaningful unit/integration/installed checks. Request Codex review of the
+   exact head. Every10 minutes check review and CI; queued review is not approval.
+4. Reproduce actionable findings, fix only confirmed defects and request fresh
+   review/CI for changed code. Never auto-resolve a finding without evidence.
+5. Native root installation or finite privileged acceptance requires a concrete
+   reviewed plan and green required checks. Use the installed limited operator
+   when its trust/scope covers the action; do not invent broader authorization.
+6. Merge only after phase criteria, review and all required checks pass. Verify
+   main CI and immutable source equivalence; update evidence and work state.
+7. Continue with the next phase. At actual P0–P5 closure, write the final matrix,
+   disable the heartbeat and complete the goal. No completion merely because a
+   turn ends, an input is unsupported, a CI job is queued, or work is difficult.
+
+Native authentication, unavailable trusted images, external review/service
+outages and resource limits must be reported accurately. Never infer approval
+from elapsed time. Real samples keep explicit source/hash authorization and
+their current scoped isolation gate even after unattended benign acceptance.
+
+## Current disposition
+
+P0 native acceptance completed on25 October2026 at22:44CET on reviewed runtime
+`7b476c86509b83303759f66adc34109a4d5fe90e`. The first failed installation and
+five preceding successes remain preserved; native recovery retained its old
+snapshot, failed receipt and consumed grant in protected history. A fresh
+one-use admission then passed all nine owned HTML scenarios: normal execution,
+script error, timeout, cancellation, output overflow, memory, paused refusal,
+owner loss and protocol loss. Memory produced15 guest `oom_kill` events with
+the unchanged512MiB/15s limits; maximum measured VM stop was1.001519s.
+Replay, busy-lock refusal, unknown-stop publication refusal, revoke/refusal and
+native restore all passed. Zero real samples/connections were recorded; no
+production grant or I08 real-source readiness was enabled.
+
+Independent UID1000 reconciliation verified every case with the existing
+custody/fault verifier, exact source copies, no-NIC XML and root-owned read-only
+reader evidence. The fixed installed helper now reports `enrolled`, a valid
+lease and `enrollment_complete=true` from a background call with stdin closed
+and no password. No QEMU/domain/netns remains. Native terminal authentication
+was used once for recovery; ordinary finite operations use the narrow helper.
+
+The1242-member `S14-VM-operatore-P0-collaudo-PASS-C.zip` evidence archive has
+SHA256 `2570a294e51ac496f4af41f19d1486f43fdf38b945b9633e956f46715af55fbc`.
+Runtime manifest SHA256 is
+`24bfd6bb01b281ac33cc1beac5a584de10b9387baa28c328ad557043f27f52dc`.
+Current inert checks remain136:44 release/admission/archive,46 operator/setup,
+44 browser and2 private-input tests. This documentation-only consolidation
+preserves all219 selected runtime source files.
+
+P0 still needs final exact-head review/CI, merge/main CI and actual ordinary
+passwordless promotion before phase closure. P1–P5 remain incomplete. Bounded
+P1/P2 prototypes outside Git have owned unit/CLI/fault evidence but are not
+installed PAW features or phase acceptance. Historical PR110 readiness does not
+authorize new real inputs or profiles without their corresponding context,
+review and runtime acceptance.
+
+
+### Historical P0 implementation evidence
+
+The first P0 draft contains strict pure release admission and immutable snapshot
+verification, plus a bounded read-only GitHub adapter.33 new inert tests pass;
+the existing38 browser and2 input-media privacy tests also passed after adding
+the initial contract/storage modules. Early review6400146782 found no major
+issues on12e5253; it does not cover the later adapter until fresh review/CI.
+
+An actual read-only collection for PR110 verified the full reviewed df103af
+head, merge bbf7f643, all resolved review threads and four exact head/main
+workflow runs, using13 API requests. Nothing was installed/promoted/executed.
+The first collection failed closed because GraphQL Bot.login omits REST's
+`[bot]` suffix. The adapter now checks GraphQL Bot identity plus REST's enrolled
+numeric actor ID. Automatic proof uses the bot's structured full-commit state;
+legacy abbreviated prose alone cannot authorize promotion. Pending/findings
+security review, changed observations, incomplete thread enumeration, queued or
+failed latest CI, redirects, arbitrary queries and mutations refuse.
+
+The caller's GitHub credential is used only in process memory for fixed HTTPS
+read queries; it is not an Ubuntu administrator password and is never saved or
+included in evidence. The then-pending dispatcher had to acquire proofs
+itself with the fixed client, sanitize its environment, validate fixed root
+ancestors and hold the deployment/execution locks. Accepting a local proof file
+or an injected client is not an implementation of that authority boundary.
+
+That early draft did not establish archive installation, the fixed polkit
+entrypoint or actual no-prompt owned work/revocation/source freezing. No host
+privilege configuration was installed by those inert tests. The subsequent
+failed native attempt and successful recovery are distinguished above.
+
+Next P0 draft adds bounded archive/manual snapshot staging and fixed installed
+entrypoint/dispatcher/owned-worker code, with inert tests. Real public archive
+bytes were checked against the independent API Git tree without staging or
+execution. The [operator contract](vm-operator-contract.md) details installed
+paths, finite commands, native bootstrap, residual work and the reproduced
+CI-stability review correction. This earlier draft evidence alone did not
+establish installation or acceptance; the subsequent native attempt is recorded
+above and failed closed at the memory-fault witness.

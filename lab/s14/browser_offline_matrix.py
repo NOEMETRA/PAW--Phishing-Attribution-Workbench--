@@ -21,6 +21,7 @@ from verify_browser_offline import verify_single
 from verify_granted_offline import regular
 from verify_synthetic_gate import verify_sources, REQUIRED_SOURCES
 from gw_quarantine import publish
+from reader_export import publish_reader_tree
 
 require = auth.require
 FAULTS = {'paused-refusal', 'owner-loss', 'protocol-loss'}
@@ -159,7 +160,7 @@ def main():
         for run in summary['runs']: shutil.copytree(run['audit'], args.export/run['case'])
         if summary.get('failed_audit') is not None:
             shutil.copytree(summary['failed_audit'], args.export/('failed-'+summary['failed_case']))
-        for path in [args.export, *args.export.rglob('*')]: os.chown(path, 1000, 1000)
+        publish_reader_tree(args.export)
     print(json.dumps({'result': summary['result'], 'export': str(args.export), 'actual_real_samples_executed': 0}), flush=True)
     require(summary['result'] == 'PASS', 'owned_browser_acceptance_failed')
 

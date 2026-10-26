@@ -32,6 +32,12 @@ def require(value, reason):
     if not value: raise ValueError(reason)
 
 
+def owner_command(config_path):
+    # -I ignores Python environment settings; the parent's -B is not inherited
+    # by a new interpreter. Keep immutable host snapshots free of .pyc writes.
+    return ['/usr/bin/python3', '-I', '-B', str(Path(__file__).resolve()), '--owner', str(config_path)]
+
+
 def validate_xml(root):
     require(not any(root.findall('devices/' + name) for name in ['interface', 'filesystem', 'hostdev', 'vsock', 'graphics']), 'browser_device_exposure')
     require(all((root.find(tag).get('unit'), root.findtext(tag)) in {('MiB', '1024'), ('KiB', '1048576')} for tag in ['memory', 'currentMemory']), 'browser_guest_memory')
@@ -218,7 +224,7 @@ class BrowserVM(HashGate):
                   'guard': guard_fingerprint(), 'qemu_sha256': self.hash_context['qemu_binary_sha256'], 'xml': str(node['xml']),
                   'control': str(self._control_path), 'ready': str(ready), 'result': str(self.output / (label + '-owner-result.json'))}
         path = self.output / (label + '-owner.json'); atomic(path, config)
-        child = self.spawn(['/usr/bin/python3', '-I', str(Path(__file__).resolve()), '--owner', str(path)], label + '-owner')
+        child = self.spawn(owner_command(path), label + '-owner')
         vm = {'node': node, 'owner': child, 'control': self._control_path, 'label': label, 'owner_result_path': config['result']}; self.active_vm = vm
         vm['actual'] = self.wait_file(ready, 35); vm['fsize_limit'] = FILE_CAP[self.phase]
         runtime = ET.fromstring(self.connection.lookupByUUIDString(node['uuid']).XMLDesc(0)); validate_xml(runtime)
