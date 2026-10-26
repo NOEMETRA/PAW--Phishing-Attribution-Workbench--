@@ -18,6 +18,43 @@ class MimeViews(unittest.TestCase):
                 self.assertEqual(graph.payload(wire), raw[params['start']:params['end']])
         return graph, report
 
+    def test_structured_charset_repairs_are_partial_without_changing_parser_choice(self):
+        for header in [b'Content-Type: text/html; charset=us-ascii; charset=utf-8',
+                       b'Content-Type: text/html; charset="us-ascii']:
+            raw = header+b'\r\n\r\n<p>owned</p>'
+            graph, report = self.build(raw); row = report['parts'][0]
+            self.assertEqual(report['status'], 'partial')
+            self.assertIn('structured_declaration_defects', row['issues'])
+            self.assertIn('InvalidHeaderDefect', row['declarations'][0]['structured_defects'])
+            self.assertFalse(graph.nodes[row['parser_selected_node']]['complete_transform'])
+            self.assertEqual(graph.payload(row['parser_selected_node']), b'<p>owned</p>')
+            text = row['selected_text_node']
+            self.assertEqual(graph.nodes[text]['transform']['parameters']['input_charset'], 'us-ascii')
+
+    def test_structured_multipart_declaration_defect_reaches_child_context(self):
+        raw = (b'Content-Type: multipart/mixed; boundary=x; boundary=y\r\n\r\n'
+               b'--x\r\nContent-Type: text/html\r\n\r\n<p>owned</p>\r\n--x--\r\n')
+        graph, report = self.build(raw); parent, child = report['parts']
+        self.assertIn('structured_declaration_defects', parent['issues'])
+        self.assertEqual(child['partial_ancestor_paths'], ['0'])
+        self.assertIn('partial_ancestor_context', child['issues'])
+        self.assertFalse(graph.nodes[child['parser_selected_node']]['complete_transform'])
+        self.assertEqual(graph.payload(child['parser_selected_node']), b'<p>owned</p>')
+
+    def test_structured_defect_inventory_is_bounded_with_explicit_overflow(self):
+        from email.errors import InvalidHeaderDefect
+        from email.policy import EmailPolicy
+        from unittest.mock import patch
+        class Defective(str):
+            defects = tuple(InvalidHeaderDefect('owned') for _ in range(40))
+        with patch.object(EmailPolicy, 'header_fetch_parse', lambda self, name, value: Defective(value)):
+            graph, report = self.build(b'Content-Type: text/html\r\n\r\n<p>owned</p>')
+        declaration = report['parts'][0]['declarations'][0]
+        self.assertEqual(declaration['structured_defect_count'], 40)
+        self.assertEqual(len(declaration['structured_defects']), 16)
+        self.assertEqual(declaration['structured_defects_omitted'], 24)
+        self.assertEqual(report['status'], 'partial')
+
     def test_recovered_html_text_keeps_candidate_parent_and_partial_ancestry(self):
         raw = b'Content-Type: text/html; charset=us-ascii\r\nContent-Transfer-Encoding: base64\r\n\r\nPGI+b3duZWQ8L2I+Z'
         graph, report = self.build(raw); row = report['parts'][0]

@@ -25,6 +25,11 @@ records duplicate declarations, selection/context defects, Python parser
 version and the exact selected payload's byte-source label. Non-ASCII raw
 declaration octets use bounded labelled hex, preserving their digest without
 unpaired Unicode surrogates or replacement text in the HTTP response.
+Structured MIME-header defects are observed separately through the same parser
+policy for bounded raw declarations. The first16 defect type names, total count
+and omitted count are retained; skipped/failed parsing stays explicit. A known
+parameter repair/ignored duplicate marks the part and descendant context partial
+without changing the parser's selected parameters or bytes.
 
 Finite alternative transformations include strict standard Base64 with recorded
 SP/HT/CR/LF removal, explicit missing-padding addition where possible, and only
@@ -73,8 +78,8 @@ real egress are outside P2. P3 must separately bind an explicitly selected view
 to its source/parent case, exact bytes and one-use authority; existing strict
 bridges remain unchanged. Development/acceptance uses owned harmless fixtures.
 
-Local Linux/Python3.14 acceptance on26 October2026 passed29 pure module tests,
-20 actual CLI/HTTP cases in source mode and20 using the installed wheel, plus
+Local Linux/Python3.14 acceptance on26 October2026 passed32 pure module tests,
+26 actual CLI/HTTP cases in source mode and26 using the installed wheel, plus
 three CLI refusals per mode. Both modes passed real cancellation, narrowed-stage
 deadline and worker-loss checks with exact originals, blocked live readers and
 known-stop partial seals. Existing P1 source/installed eight-case checks, four

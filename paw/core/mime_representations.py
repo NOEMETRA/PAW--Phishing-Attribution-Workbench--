@@ -77,10 +77,22 @@ def declarations(part, limits):
             fields.append({'index': index, 'name': name.lower(), 'status': 'octets_unavailable'}); continue
         row = {'index': index, 'name': name.lower(), 'bytes': len(octets),
                'sha256': hashlib.sha256(octets).hexdigest(), 'source': 'parser_raw_value_not_wire_span'}
-        if len(octets) > limits.declaration_bytes: row['status'] = 'value_budget'
-        elif not octets.isascii():
-            row.update(status='non_ascii_octets', value_hex=octets.hex(), value_encoding='hex_original_parser_octets')
-        else: row.update(status='captured', value=octets.decode('ascii', 'strict'))
+        if len(octets) > limits.declaration_bytes:
+            row.update(status='value_budget', structured_defects_status='omitted_value_budget')
+        else:
+            if not octets.isascii():
+                row.update(status='non_ascii_octets', value_hex=octets.hex(), value_encoding='hex_original_parser_octets')
+            else: row.update(status='captured', value=octets.decode('ascii', 'strict'))
+            try:
+                # Observe this bounded raw declaration through the same policy;
+                # keep the message and its selected-first parameters unchanged.
+                header = part.policy.header_fetch_parse(name, value)
+                defects = getattr(header, 'defects', ())
+                row.update(structured_defects_status='captured', structured_defect_count=len(defects),
+                           structured_defects=[type(d).__name__ for d in defects[:16]],
+                           structured_defects_omitted=max(0, len(defects)-16))
+            except Exception as error:
+                row.update(structured_defects_status='unavailable', structured_defects_error=type(error).__name__)
         fields.append(row)
     return fields, omitted
 
@@ -117,6 +129,10 @@ def populate_mime_graph(graph, limits=MimeViewLimits()):
         if row['selected_content_type'] is None: row['issues'].append('selected_content_type_budget')
         if omitted: row['issues'].append('header_field_budget')
         if any(field['status'] != 'captured' for field in fields): row['issues'].append('declaration_unavailable')
+        if any(field.get('structured_defects_status') != 'captured' for field in fields):
+            row['issues'].append('structured_declaration_defects_unavailable')
+        if any(field.get('structured_defect_count', 0) for field in fields):
+            row['issues'].append('structured_declaration_defects')
         if any(sum(field['name'] == name for field in fields) > 1 for name in DECLARATIONS):
             row['issues'].append('duplicate_declarations_first_parser_selection')
         if inherited: row['issues'].append('partial_ancestor_context')

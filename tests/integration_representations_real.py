@@ -28,6 +28,9 @@ FIXTURES = [
     ('open-boundary', b'Content-Type: multipart/mixed; boundary=x\n\n--x\nContent-Type: text/html\n\n<p>owned', 'mime'),
     ('nonascii-header', b'Content-Type: text/html; x=\xff\r\n\r\n<p>owned</p>', 'mime'),
     ('recovered-html', b'Content-Type: text/html; charset=us-ascii\r\nContent-Transfer-Encoding: base64\r\n\r\nPGI+b3duZWQ8L2I+Z', 'mime'),
+    ('duplicate-charset', b'Content-Type: text/html; charset=us-ascii; charset=utf-8\r\n\r\n<p>owned</p>', 'mime'),
+    ('broken-charset-quote', b'Content-Type: text/html; charset="us-ascii\r\n\r\n<p>owned</p>', 'mime'),
+    ('duplicate-boundary', b'Content-Type: multipart/mixed; boundary=x; boundary=y\r\n\r\n--x\r\nContent-Type: text/html\r\n\r\n<p>owned</p>\r\n--x--\r\n', 'mime'),
 ]
 
 
@@ -62,6 +65,9 @@ def verify_source_case(case, raw):
     assert len(record['nodes']) <= 64 and record['representation_bytes'] <= 24*1024**2
     assert record['work_bytes'] <= 64*1024**2
     execution = json.loads((case/'execution.json').read_bytes())
+    if any(marker in raw for marker in (b'charset=us-ascii; charset=utf-8', b'charset="us-ascii', b'boundary=x; boundary=y')):
+        assert reports['mime']['status'] == execution['coverage'] == 'partial'
+        assert 'structured_declaration_defects' in reports['mime']['parts'][0]['issues']
     if raw.endswith(b'PGI+b3duZWQ8L2I+Z'):
         recovered = [view for view in reports['html'] if view['view_role'] == 'derived_candidate']
         assert len(recovered) == 1 and recovered[0]['start_tags'] == 1 and recovered[0]['end_tags'] == 1
