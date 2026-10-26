@@ -147,6 +147,13 @@ jobs:
           python -B -m unittest discover -s tests -p 'test_source_inspection.py' -v
           python -B -m unittest discover -s tests -p 'test_source_runtime.py' -v
           python -B tests/integration_source_inspection_real.py
+      - name: Verify explicit forensic representations and actual owned faults
+        run: |
+          python -B -m unittest discover -s tests -p 'test_representation_graph.py' -v
+          python -B -m unittest discover -s tests -p 'test_mime_representations.py' -v
+          python -B -m unittest discover -s tests -p 'test_html_representation_observer.py' -v
+          python -B tests/integration_representations_real.py
+          python -B tests/integration_representation_faults_real.py --output "$RUNNER_TEMP/paw-forensic-faults"
       - name: Verify source paths and native runtime admission before I/O
         run: python -m unittest discover -s tests -p 'test_input_admission.py' -v
       - name: Verify real malformed EML, input refusals and CLI/HTTP accounting

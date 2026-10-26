@@ -77,6 +77,17 @@ jobs:
             "$RUNNER_TEMP/paw-installed/bin/python" -P -B \
             "$GITHUB_WORKSPACE/tests/integration_source_inspection_real.py" \
             --installed --output "$RUNNER_TEMP/paw-installed-results/source-inspection.json"
+      - name: Verify installed forensic graph custody and actual owned process faults
+        working-directory: ${{ runner.temp }}
+        run: |
+          env -u PYTHONPATH -u PYTHONHOME PYTHONNOUSERSITE=1 \
+            "$RUNNER_TEMP/paw-installed/bin/python" -P -B \
+            "$GITHUB_WORKSPACE/tests/integration_representations_real.py" \
+            --installed --output "$RUNNER_TEMP/paw-installed-results/representations.json"
+          env -u PYTHONPATH -u PYTHONHOME PYTHONNOUSERSITE=1 \
+            "$RUNNER_TEMP/paw-installed/bin/python" -P -B \
+            "$GITHUB_WORKSPACE/tests/integration_representation_faults_real.py" \
+            --installed --output "$RUNNER_TEMP/paw-installed-results/forensic-faults"
       - name: Retain bounded installed-package logs
         if: always()
         uses: actions/upload-artifact@v4

@@ -171,6 +171,11 @@ For help: paw help <command>
         )
         sub = parser.add_subparsers(dest="cmd", required=True)
 
+        p_representations = sub.add_parser('inspect-representations', help='Explicit bounded MIME/HTML byte representations; never execution')
+        p_representations.add_argument('source', help='Local regular file, maximum8MiB')
+        p_representations.add_argument('--interpretation', required=True, choices=['mime', 'html-utf8'])
+        p_representations.add_argument('--workdir', type=Path, default=Path.cwd())
+
         p_source = sub.add_parser('inspect-source', help='Preserve and inspect bounded local bytes without interpretation or execution')
         p_source.add_argument('source', help='Local regular file; default maximum16MiB, empty/binary inputs supported')
         p_source.add_argument('--workdir', type=Path, default=Path.cwd(), help='Evidence workspace')
@@ -318,7 +323,14 @@ For help: paw help <command>
             key_evidence = load_key_file(args.dkim_keys) if args.dkim_keys else None
 
         # Handle new commands
-        if args.cmd == 'inspect-source':
+        if args.cmd == 'inspect-representations':
+            from .core.representation_jobs import inspect_representations
+            value = inspect_representations(args.source, args.workdir, args.interpretation)
+            code = value.pop('returncode')
+            print(json.dumps(value, allow_nan=False))
+            if code: raise SystemExit(code)
+
+        elif args.cmd == 'inspect-source':
             from .core.source_jobs import inspect_source
             value = inspect_source(args.source, args.workdir)
             code = value.pop('returncode')

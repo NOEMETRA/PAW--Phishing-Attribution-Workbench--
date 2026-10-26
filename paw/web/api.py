@@ -210,6 +210,34 @@ class SourceInspectionRequest(BaseModel):
     file_path: str
     model_config = {'extra': 'forbid'}
 
+class RepresentationRequest(SourceInspectionRequest):
+    interpretation: Literal['mime', 'html-utf8']
+
+@app.post('/api/sources/representations')
+async def inspect_uploaded_representations(request: RepresentationRequest, background_tasks: BackgroundTasks):
+    from dataclasses import asdict
+    from ..core.source_inspection import admit_path
+    from ..core.representation_jobs import REPRESENTATION_RUN_LIMITS
+    if os.name != 'posix': raise HTTPException(501, 'Forensic job requires POSIX resource controls')
+    if len(_cancel_events) >= 32: raise HTTPException(429, 'Analysis queue is full')
+    try: path = admit_path(request.file_path)
+    except ValueError as exc: raise HTTPException(400, str(exc)) from exc
+    path = path if path.is_absolute() else DATA_DIR / path
+    if path.is_symlink(): raise HTTPException(400, 'Linked sources unavailable')
+    path = contained(UPLOAD_DIR, path)
+    if not path.is_file(): raise HTTPException(404, 'Uploaded source not found')
+    identifier = 'analysis_' + uuid.uuid4().hex
+    limits = RuntimeOptions(**asdict(REPRESENTATION_RUN_LIMITS))
+    job = {'status': 'queued', 'kind': 'forensic_representations', 'file': str(path),
+           'filename': path.name, 'no_egress': True, 'assessment_status': 'not_evaluated',
+           'interpretation': request.interpretation, 'queued_at': now(),
+           'queued_monotonic': time.monotonic(), 'progress': None, 'limits': limits.model_dump()}
+    analysis_queue[identifier] = job
+    _cancel_events[identifier] = asyncio.Event()
+    save(JOBS_DIR/(identifier+'.json'), job)
+    background_tasks.add_task(run_analysis, identifier, path, None, {}, limits)
+    return {'status': 'queued', 'analysis_id': identifier, 'kind': job['kind']}
+
 @app.post('/api/sources/upload')
 async def upload_source(file: UploadFile = File(...)):
     """Opaque bytes, including empty/binary; no MIME or extension admission."""
@@ -321,11 +349,15 @@ async def run_analysis(analysis_id, path, profile, options, limits):
         request = JOBS_DIR / (analysis_id + '.request.json')
         result_path = JOBS_DIR / (analysis_id + '.result.json')
         source_job = job.get('kind') == 'source_byte_observation'
+        representation_job = job.get('kind') == 'forensic_representations'
         if source_job:
             from dataclasses import asdict
             from ..core.source_inspection import SourceLimits
             save(request, {'source': str(path), 'case_id': 'case-source-'+analysis_id[9:],
                            'analysis_job': analysis_id, 'source_limits': asdict(SourceLimits())})
+        elif representation_job:
+            save(request, {'source': str(path), 'case_id': 'case-forensic-'+analysis_id[9:],
+                           'analysis_job': analysis_id, 'interpretation': job['interpretation']})
         else:
             save(request, dict(options, file_path=str(path), profile=profile,
                 no_egress=options.get('no_egress', True)))
@@ -337,7 +369,8 @@ async def run_analysis(analysis_id, path, profile, options, limits):
             env['PYTHONPATH'] = str(Path(__file__).resolve().parents[2])
             env['PAW_ANALYSIS_ID'] = analysis_id
             # DATA_DIR holds evidence, not trusted Python modules/dependencies.
-            worker_module = 'paw.web.source_worker' if source_job else 'paw.web.worker'
+            worker_module = ('paw.web.source_worker' if source_job else
+                             'paw.web.representation_worker' if representation_job else 'paw.web.worker')
             outcome = await supervise([sys.executable, '-P', '-B', '-X', 'utf8', '-m', worker_module, str(request), str(result_path)],
                 cwd=DATA_DIR, control=control, env=env,
                 limits=RunLimits(**dict(limits.model_dump(),wall_seconds=max(.001,limits.wall_seconds-(time.monotonic()-job['queued_monotonic'])))),
@@ -476,6 +509,14 @@ async def list_cases(limit: int = 20, offset: int = 0):
             continue
         errors = {}
         manifest = artifact(path, errors, budget=budget) or {}
+        if manifest.get('case_kind') == 'forensic_representations':
+            execution = artifact(path.parent/'execution.json', errors, budget=budget) or {}
+            cases.append({'case_id': path.parent.name, 'case_kind': 'forensic_representations',
+                          'created_at': manifest.get('created_utc'), 'status': status,
+                          'source': manifest.get('source'), 'representation_root': manifest.get('representation_root'),
+                          'coverage': execution.get('coverage'), 'assessment_status': 'not_evaluated',
+                          'artifact_errors': errors})
+            continue
         if manifest.get('case_kind') == 'opaque_source_inspection':
             observation = artifact(path.parent/'report/source-inspection.json', errors, budget=budget) or {}
             cases.append({'case_id': path.parent.name, 'case_kind': 'opaque_source_inspection',
@@ -497,6 +538,19 @@ async def get_case_detail(case_id: str):
     directory = case_path(case_id)
     result = {'case_id':case_id, 'status':await require_stable_case(directory)}
     budget = ReadBudget()
+    if case_id.startswith('case-forensic-'):
+        errors = result.setdefault('artifact_errors', {})
+        manifest = artifact(directory/'manifest.json', errors, budget=budget) or {}
+        if manifest.get('case_kind') != 'forensic_representations':
+            raise HTTPException(400, 'Forensic case manifest unavailable or unsupported')
+        result.update(case_kind='forensic_representations', manifest=manifest,
+                      representations=artifact(directory/'report/representations.json', errors, budget=budget),
+                      interpretations=artifact(directory/'report/interpretations.json', errors, budget=budget),
+                      execution=artifact(directory/'execution.json', errors, budget=budget),
+                      assessment_status='not_evaluated')
+        if result.get('execution') and result['status'] != 'completed':
+            result['execution'] = dict(result['execution'], recorded_status=result['execution'].get('status'), status=result['status'])
+        return result
     if case_id.startswith('case-source-'):
         errors = result.setdefault('artifact_errors', {})
         manifest = artifact(directory/'manifest.json', errors, budget=budget) or {}
