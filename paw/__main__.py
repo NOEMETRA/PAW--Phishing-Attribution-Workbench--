@@ -171,6 +171,10 @@ For help: paw help <command>
         )
         sub = parser.add_subparsers(dest="cmd", required=True)
 
+        p_source = sub.add_parser('inspect-source', help='Preserve and inspect bounded local bytes without interpretation or execution')
+        p_source.add_argument('source', help='Local regular file; default maximum16MiB, empty/binary inputs supported')
+        p_source.add_argument('--workdir', type=Path, default=Path.cwd(), help='Evidence workspace')
+
         # ANALYZE command (new main command)
         p_analyze = sub.add_parser("analyze", help="Analyze email(s) and generate attribution report")
         p_analyze.add_argument("email", help="Path to .eml file or directory")
@@ -314,7 +318,14 @@ For help: paw help <command>
             key_evidence = load_key_file(args.dkim_keys) if args.dkim_keys else None
 
         # Handle new commands
-        if args.cmd == "analyze":
+        if args.cmd == 'inspect-source':
+            from .core.source_jobs import inspect_source
+            value = inspect_source(args.source, args.workdir)
+            code = value.pop('returncode')
+            print(json.dumps(value, allow_nan=False))
+            if code: raise SystemExit(code)
+
+        elif args.cmd == "analyze":
             # Convert analyze to trace call
             if not os.path.exists(args.email):
                 handle_error("file_not_found", args.email)
