@@ -126,6 +126,17 @@ No root snapshot or VM changed. P3–P5 remain open. P3 starts with the
 [explicit selection client contract](forensic-selection-contract.md); separate
 root authority, no-NIC runtime and scoped I08 acceptance remain required.
 
+P3 client increment PR115 merged as
+`a17be7b51331deb376632e7df41bb349e1e2f619`, after exact-head clear review on
+`34338578043737139efdb3c573e5483b1b942929` and7/7head checks. Main passed7/7
+checks and its tree is identical.20 new boundary tests and28 bridge regressions,
+six source/six clean installed CLI cases and17 refusals per mode passed.
+The new client grants no execution; P3 remains open. Next is the separately
+reviewed [maintained runtime recipe](vm-runtime-revalidation.md), because the
+daemon and aggregate slice are inactive after reboot, then representation-scoped
+one-use authority and actual owned adapter/I08 acceptance. No privileged
+snapshot or service was changed by the client increment or inert preparation.
+
 P0 closed on26 October2026 after the owner-authorized same-head review retry
 completed clear on `e63ab29a10f2a5b8c561c1fc0ea370b60ec893f6`, all seven required
 head checks and all prior threads were clear, and PR111 merged as
