@@ -109,9 +109,22 @@ passing after it in a pre-existing0755 case store. Source and installed CLI/API
 acceptance, original/hash/ZIP/known-stop checks and P1 privacy evidence remain
 preserved. The closure archive SHA256 is
 `335f4ae32a1d32a3b4fcdd907794d91ec4e739b7a014a92cd33fc286a11c1ee2`.
-No root snapshot, guest readiness, score or real input changed. P2 integration
-is now in development; P2–P5 remain open. See the
+No root snapshot, guest readiness, score or real input changed. See the
 [forensic representation contract](forensic-representations-contract.md).
+
+P2 closed on26 October2026 after PR114 merged as
+`f22580a21e057f1efb0c2b40c0475cf44d8444fd`. Exact head
+`9634c7e18afcd7a4469596df94f9355516e43665` had a completed clear review and
+seven green required checks; main also passed all seven and has the identical
+source tree. The review's structured-header defect was reproduced on duplicate
+charset/unterminated declarations and fixed without changing parser choice.
+32 module tests,26 source plus26 installed CLI/HTTP cases and three actual
+owned lifecycle faults per mode passed, preserving original bytes, private ZIPs
+and externally known stop. The closure archive SHA256 is
+`56a06609a38316b03599a9db1a2991bb88b0f5104592c8ee785ecbc719421002`.
+No root snapshot or VM changed. P3–P5 remain open. P3 starts with the
+[explicit selection client contract](forensic-selection-contract.md); separate
+root authority, no-NIC runtime and scoped I08 acceptance remain required.
 
 P0 closed on26 October2026 after the owner-authorized same-head review retry
 completed clear on `e63ab29a10f2a5b8c561c1fc0ea370b60ec893f6`, all seven required
@@ -162,9 +175,10 @@ preserves all219 selected runtime source files.
 
 At that25 October checkpoint P0 still needed final exact-head review/CI,
 merge/main CI and ordinary passwordless promotion; those completed above.
-At that earlier checkpoint P1–P5 were incomplete. P1 completed above. Bounded
-P1/P2 prototypes outside Git have owned unit/CLI/fault evidence but are not
-installed PAW features or phase acceptance. Historical PR110 readiness does not
+At that earlier checkpoint P1–P5 were incomplete. P1/P2 completed above. The
+then-external bounded P1/P2 prototypes were not installed features or phase
+acceptance; their later integration/acceptance is recorded above.
+Historical PR110 readiness does not
 authorize new real inputs or profiles without their corresponding context,
 review and runtime acceptance.
 
