@@ -125,7 +125,9 @@ def snapshot():
 
 def network_state():
     # Read-only observation; no Wi-Fi, forwarding, bridge, route or filter write.
-    from benign_guest_validation import canonical
+    # This observation covers the whole ruleset, including scalar set elements
+    # and map/range lists. Reuse the established whole-ruleset normalizer.
+    from gw_validation import canonical
     rules = json.loads(subprocess.check_output(['/usr/sbin/nft', '-j', 'list', 'ruleset'], timeout=10))
     interfaces = sorted(path.name for path in Path('/sys/class/net').iterdir())
     routes = json.loads(subprocess.check_output(['/usr/sbin/ip', '-j', 'route'], timeout=10))
