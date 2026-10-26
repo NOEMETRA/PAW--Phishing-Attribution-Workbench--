@@ -32,7 +32,13 @@ def main():
     command(['run', args.recipe])
     require(len(args.job) == 32 and all(v in '0123456789abcdef' for v in args.job), 'operator_job_identifier')
     require(os.geteuid() == 0 and Path('/proc/self/attr/current').read_text().strip() == 'unconfined', 'root_PID1_owned_worker')
-    # Additional recipes must be implemented and reviewed in later releases.
+    if args.recipe == 'vm-acceptance-v1':
+        # Restore only the reviewed finite runtime prerequisites. This recipe
+        # starts no guest and does not install representation readiness/grants.
+        from vm_runtime_revalidation import run_owned
+        run_owned(args.job, HERE.parents[1].name)
+        return
+    # Additional execution recipes must be implemented and reviewed later.
     require(args.recipe == 'browser-owned-v1', 'operator_recipe_not_implemented')
     from browser_validation_inputs import make
     import browser_authorization as auth
