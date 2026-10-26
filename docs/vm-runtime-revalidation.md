@@ -53,7 +53,7 @@ protected-state decoder's scalar contract. Root-owned reader evidence is publish
 descriptor-based exporter as750 directories/440 files for the enrolled owner;
 ownership remains root. The caller cannot mint a PASS using workspace JSON.
 
-21 inert tests replace every administrative command, libvirt interaction and
+24 inert tests replace every administrative command, libvirt interaction and
 privileged storage operation. They cover refusals, exact finite commands,
 idempotence, guard reobservation, failed starts, private exports and failed or
 out-of-scope results. An actual temporary-file write/read through the protected
@@ -65,3 +65,16 @@ and one real invocation of this no-guest recipe with independent readback.
 P3 remains open for its separate representation authority, adapter, scoped I08
 and benign no-NIC execution/PAW sidecar matrix. New runtime tests live outside
 the privileged lab inventory; its existing128-source cap is preserved.
+
+The first actual invocation of reviewed PR116 on26 October, job
+`e9944b8f17424a27a70c9664483c06b1`, failed before either service started. The
+enrolled operator required no password and remained usable; the worker was
+terminal and both units remained inactive. The new runtime caller had selected
+the guard-specific normalizer for the entire nft ruleset. Three owned-data
+regressions reproduced two integer-list `TypeError` failures and one lost
+meaningful scalar value. The caller now uses the existing whole-ruleset
+normalizer from `gw_validation`; both established normalizers and the guard
+predicate remain unchanged. Tests retain set integers, map pairs/ranges and
+scalar metadata spellings, ignore only existing volatile fields and detect
+actual rule changes. The corrected runtime still needs exact review/head/main
+CI, immutable promotion and a new real no-guest invocation before acceptance.

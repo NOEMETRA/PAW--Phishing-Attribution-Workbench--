@@ -2,6 +2,7 @@
 import copy
 from contextlib import nullcontext
 import hashlib
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -21,6 +22,37 @@ GOOD = {'guard': 'a'*64, 'guard_service': {'LoadState': 'loaded', 'ActiveState':
 
 
 class Runtime(unittest.TestCase):
+    def network_snapshot(self, rules):
+        def output(argv, **kwargs):
+            if argv[0] == '/usr/sbin/nft': return json.dumps(rules).encode()
+            self.assertEqual(argv, ['/usr/sbin/ip', '-j', 'route']); return b'[]'
+        with mock.patch.object(runtime.subprocess, 'check_output', side_effect=output), \
+             mock.patch.object(Path, 'iterdir', side_effect=lambda: iter([Path('/sys/class/net/lo')])):
+            return runtime.network_state()
+
+    def test_full_ruleset_scalar_lists_ranges_and_map_pairs_are_observed(self):
+        rules = {'nftables': [{'metainfo': {'version': 'owned'}}, {'set': {
+            'family': 'inet', 'table': 'owned', 'name': 'ports', 'type': 'inet_service',
+            'elem': [80, 443, {'range': [1000, 1010]}]}}, {'map': {'elem': [['tcp', 80], ['udp', 53]]}}]}
+        value = self.network_snapshot(rules)
+        self.assertEqual(len(value['nft_sha256']), 64)
+        self.assertEqual(value['interfaces'], ['lo']); self.assertEqual(value['routes'], [])
+
+    def test_full_ruleset_volatile_fields_ignore_only_counters_handles_and_metadata(self):
+        rules = {'nftables': [{'metainfo': {'version': 'owned'}}, {'rule': {'handle': 7,
+                 'expr': [{'counter': {'packets': 1, 'bytes': 64}}, {'match': {'right': [80, 443]}}]}}]}
+        other = copy.deepcopy(rules); other['nftables'][0]['metainfo']['version'] = 'other'
+        other['nftables'][1]['rule']['handle'] = 88
+        other['nftables'][1]['rule']['expr'][0]['counter']['packets'] = 999
+        self.assertEqual(self.network_snapshot(rules), self.network_snapshot(other))
+        other['nftables'][1]['rule']['expr'][1]['match']['right'] = [80, 444]
+        self.assertNotEqual(self.network_snapshot(rules)['nft_sha256'], self.network_snapshot(other)['nft_sha256'])
+
+    def test_full_ruleset_scalar_metadata_spelling_is_preserved(self):
+        rules = {'nftables': [{'set': {'elem': ['lo', 'metainfo']}}]}
+        other = {'nftables': [{'set': {'elem': ['lo']}}]}
+        self.assertNotEqual(self.network_snapshot(rules)['nft_sha256'], self.network_snapshot(other)['nft_sha256'])
+
     def test_fixed_observation_passes(self):
         self.assertEqual(runtime.validate_snapshot(copy.deepcopy(GOOD)), GOOD)
 
