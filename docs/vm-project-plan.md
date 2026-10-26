@@ -99,6 +99,20 @@ their current scoped isolation gate even after unattended benign acceptance.
 
 ## Current disposition
 
+P1 closed on26 October2026 after PR112 merged as
+`172f0f2db5cc59a5a28bbb042475dccef1491b2b` and the reproduced private-ZIP
+follow-up PR113 merged as `d8fb865ae8164026b69d39cf0419482e1dd870e7`.
+Both exact heads had completed clear reviews and7required checks; both main
+commits passed7checks. The dedicated source worker sets0077 before writing,
+with a real regression failing before correction under caller umask000 and
+passing after it in a pre-existing0755 case store. Source and installed CLI/API
+acceptance, original/hash/ZIP/known-stop checks and P1 privacy evidence remain
+preserved. The closure archive SHA256 is
+`335f4ae32a1d32a3b4fcdd907794d91ec4e739b7a014a92cd33fc286a11c1ee2`.
+No root snapshot, guest readiness, score or real input changed. P2 integration
+is now in development; P2–P5 remain open. See the
+[forensic representation contract](forensic-representations-contract.md).
+
 P0 closed on26 October2026 after the owner-authorized same-head review retry
 completed clear on `e63ab29a10f2a5b8c561c1fc0ea370b60ec893f6`, all seven required
 head checks and all prior threads were clear, and PR111 merged as
@@ -114,8 +128,8 @@ No new VM or real input was run. Libvirt service/socket are currently inactive:
 domain enumeration is unavailable, no QEMU/netns was observed, and maintained
 VM restart/runtime readiness remains to be checked before further guest work.
 This does not invalidate the independently completed immutable promotion, nor
-does promotion confer guest readiness. P1 integration is the next increment;
-P1–P5 remain open. See [the byte inspection contract](source-inspection-contract.md).
+does promotion confer guest readiness. At that P0 checkpoint, P1 integration
+was next and P1–P5 remained open. See [the byte inspection contract](source-inspection-contract.md).
 
 The following25 October records retain their historical scope and ordering.
 
@@ -148,7 +162,7 @@ preserves all219 selected runtime source files.
 
 At that25 October checkpoint P0 still needed final exact-head review/CI,
 merge/main CI and ordinary passwordless promotion; those completed above.
-P1–P5 remain incomplete. Bounded
+At that earlier checkpoint P1–P5 were incomplete. P1 completed above. Bounded
 P1/P2 prototypes outside Git have owned unit/CLI/fault evidence but are not
 installed PAW features or phase acceptance. Historical PR110 readiness does not
 authorize new real inputs or profiles without their corresponding context,
