@@ -176,7 +176,8 @@ def revalidate():
                 'units_before': old, 'started_units': started, 'inactive_defined_networks': inventory,
                 'platform_context_sha256': fs.digest(browser.canonical(host)),
                 'browser_context_sha256': fs.digest(browser.canonical(html)),
-                'seconds': time.monotonic()-began, 'vm_started': False, 'real_samples_executed': 0,
+                'elapsed_milliseconds': int((time.monotonic()-began)*1000),
+                'vm_started': False, 'real_samples_executed': 0,
                 'production_grants_enabled': False, 'i08_installed': False}
 
 

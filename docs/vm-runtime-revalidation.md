@@ -48,14 +48,17 @@ inventory. There is no VM execution or general isolation acceptance here.
 
 A successful protected result binds job, recipe, immutable release, effective
 observations and context hashes, with zero executed samples and no readiness
-installed. Root-owned reader evidence is published through the existing
+installed. Elapsed time uses integer milliseconds, compatible with the existing
+protected-state decoder's scalar contract. Root-owned reader evidence is published through the existing
 descriptor-based exporter as750 directories/440 files for the enrolled owner;
 ownership remains root. The caller cannot mint a PASS using workspace JSON.
 
-20 inert tests replace every administrative command, libvirt interaction and
+21 inert tests replace every administrative command, libvirt interaction and
 privileged storage operation. They cover refusals, exact finite commands,
 idempotence, guard reobservation, failed starts, private exports and failed or
-out-of-scope results. Existing90 operator/release and44 browser regressions
+out-of-scope results. An actual temporary-file write/read through the protected
+dispatcher decoder failed with `operator_proof_scalar` before the duration fix
+and passes with integer milliseconds. Existing90 operator/release and44 browser regressions
 also pass. These tests do not establish actual restart acceptance: that still
 requires completed exact-head review, green head/main CI, immutable promotion
 and one real invocation of this no-guest recipe with independent readback.

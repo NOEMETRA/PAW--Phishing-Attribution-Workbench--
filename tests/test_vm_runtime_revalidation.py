@@ -2,9 +2,11 @@
 import copy
 from contextlib import nullcontext
 import hashlib
+import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest import mock
@@ -132,6 +134,24 @@ class Runtime(unittest.TestCase):
         self.assertEqual(commands, [['/usr/bin/systemctl', 'start', unit] for unit in runtime.UNITS])
         self.assertEqual(result['before'], result['after']); connection.close.assert_called_once()
         self.assertFalse(result['i08_installed']); self.assertFalse(result['production_grants_enabled'])
+
+    def test_actual_runtime_record_roundtrips_through_protected_state_decoder(self):
+        import vm_operator_host as host
+        value, _, _ = self.exercise()
+        record = {'result': 'PASS', 'job': 'a'*32, 'recipe': 'vm-acceptance-v1',
+                  'release_sha': 'b'*40, 'real_samples_executed': 0, 'runtime': value}
+        with tempfile.TemporaryDirectory() as directory:
+            fd = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                host.write_state(fd, 'result.json', record)
+                # Ordinary temporary files substitute only the required owner;
+                # serialization, scalar/depth limits, mode and I/O are real.
+                with mock.patch.object(host, 'ROOT_UID', os.getuid()):
+                    actual = host.private_json(fd, 'result.json')
+            finally: os.close(fd)
+        self.assertEqual(actual, record)
+        self.assertIs(type(actual['runtime']['elapsed_milliseconds']), int)
+        self.assertGreaterEqual(actual['runtime']['elapsed_milliseconds'], 0)
 
     def test_already_active_units_do_not_restart(self):
         result, commands, _ = self.exercise(active=True)
