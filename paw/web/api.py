@@ -47,6 +47,13 @@ async def local_boundary(request: Request, call_next):
     origin = request.headers.get('origin')
     if origin and origin != str(request.base_url).rstrip('/'):
         return JSONResponse({'detail':'Same-origin requests required'}, status_code=403)
+    if request.method == 'POST' and request.url.path == '/api/sources/upload':
+        length = request.headers.get('content-length', '')
+        # Bound the multipart envelope before FastAPI spools/parses any body.
+        if request.headers.get('transfer-encoding') or not length.isascii() or not length.isdecimal():
+            return JSONResponse({'detail': 'Fixed Content-Length required for source upload'}, status_code=411)
+        if len(length) > 10 or int(length) > 16*1024**2+65536:
+            return JSONResponse({'detail': 'Source multipart envelope exceeds budget'}, status_code=413)
     response = await call_next(request)
     response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
     response.headers['X-Content-Type-Options'] = 'nosniff'
@@ -199,6 +206,51 @@ class CaseQuery(BaseModel):
     query_type: Literal['ip', 'domain', 'asn']
     value: str
 
+class SourceInspectionRequest(BaseModel):
+    file_path: str
+    model_config = {'extra': 'forbid'}
+
+@app.post('/api/sources/upload')
+async def upload_source(file: UploadFile = File(...)):
+    """Opaque bytes, including empty/binary; no MIME or extension admission."""
+    path = UPLOAD_DIR / (uuid.uuid4().hex + '.source')
+    size = 0
+    try:
+        with os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), 'wb') as stream:
+            while chunk := await file.read(65536):
+                size += len(chunk)
+                if size > 16*1024**2: raise HTTPException(413, 'Source exceeds16MiB')
+                stream.write(chunk)
+    except Exception:
+        path.unlink(missing_ok=True)
+        raise
+    return {'status': 'success', 'filename': path.name, 'path': str(path), 'size': size,
+            'coverage': 'opaque bytes only; no interpretation or execution'}
+
+@app.post('/api/sources/inspect')
+async def inspect_uploaded_source(request: SourceInspectionRequest, background_tasks: BackgroundTasks):
+    from dataclasses import asdict
+    from ..core.source_inspection import admit_path
+    from ..core.source_jobs import SOURCE_RUN_LIMITS
+    if len(_cancel_events) >= 32: raise HTTPException(429, 'Analysis queue is full')
+    try: path = admit_path(request.file_path)
+    except ValueError as exc: raise HTTPException(400, str(exc)) from exc
+    path = path if path.is_absolute() else DATA_DIR / path
+    if path.is_symlink(): raise HTTPException(400, 'Linked sources unavailable')
+    path = contained(UPLOAD_DIR, path)
+    if not path.is_file(): raise HTTPException(404, 'Uploaded source not found')
+    identifier = 'analysis_' + uuid.uuid4().hex
+    limits = RuntimeOptions(**asdict(SOURCE_RUN_LIMITS))
+    job = {'status': 'queued', 'kind': 'source_byte_observation', 'file': str(path),
+           'filename': path.name, 'no_egress': True, 'assessment_status': 'not_evaluated',
+           'queued_at': now(), 'queued_monotonic': time.monotonic(), 'progress': None,
+           'limits': limits.model_dump()}
+    analysis_queue[identifier] = job
+    _cancel_events[identifier] = asyncio.Event()
+    save(JOBS_DIR/(identifier+'.json'), job)
+    background_tasks.add_task(run_analysis, identifier, path, None, {}, limits)
+    return {'status': 'queued', 'analysis_id': identifier, 'kind': job['kind']}
+
 @app.get('/', include_in_schema=False)
 async def workspace():
     return FileResponse(STATIC_DIR/'index.html')
@@ -268,8 +320,15 @@ async def run_analysis(analysis_id, path, profile, options, limits):
             return
         request = JOBS_DIR / (analysis_id + '.request.json')
         result_path = JOBS_DIR / (analysis_id + '.result.json')
-        save(request, dict(options, file_path=str(path), profile=profile,
-            no_egress=options.get('no_egress', True)))
+        source_job = job.get('kind') == 'source_byte_observation'
+        if source_job:
+            from dataclasses import asdict
+            from ..core.source_inspection import SourceLimits
+            save(request, {'source': str(path), 'case_id': 'case-source-'+analysis_id[9:],
+                           'analysis_job': analysis_id, 'source_limits': asdict(SourceLimits())})
+        else:
+            save(request, dict(options, file_path=str(path), profile=profile,
+                no_egress=options.get('no_egress', True)))
         control = JOBS_DIR / analysis_id
         try:
             job.update(status='running', started_at=now())
@@ -278,7 +337,8 @@ async def run_analysis(analysis_id, path, profile, options, limits):
             env['PYTHONPATH'] = str(Path(__file__).resolve().parents[2])
             env['PAW_ANALYSIS_ID'] = analysis_id
             # DATA_DIR holds evidence, not trusted Python modules/dependencies.
-            outcome = await supervise([sys.executable, '-P', '-X', 'utf8', '-m', 'paw.web.worker', str(request), str(result_path)],
+            worker_module = 'paw.web.source_worker' if source_job else 'paw.web.worker'
+            outcome = await supervise([sys.executable, '-P', '-B', '-X', 'utf8', '-m', worker_module, str(request), str(result_path)],
                 cwd=DATA_DIR, control=control, env=env,
                 limits=RunLimits(**dict(limits.model_dump(),wall_seconds=max(.001,limits.wall_seconds-(time.monotonic()-job['queued_monotonic'])))),
                 cancel=_cancel_events[analysis_id])
@@ -416,6 +476,13 @@ async def list_cases(limit: int = 20, offset: int = 0):
             continue
         errors = {}
         manifest = artifact(path, errors, budget=budget) or {}
+        if manifest.get('case_kind') == 'opaque_source_inspection':
+            observation = artifact(path.parent/'report/source-inspection.json', errors, budget=budget) or {}
+            cases.append({'case_id': path.parent.name, 'case_kind': 'opaque_source_inspection',
+                          'created_at': manifest.get('created_utc'), 'status': status,
+                          'source': manifest.get('source'), 'coverage': observation.get('coverage'),
+                          'assessment_status': 'not_evaluated', 'artifact_errors': errors})
+            continue
         headers = artifact(path.parent/'headers.json', errors, budget=budget) or {}
         summary = (artifact(score, errors, budget=budget) or {}) if score.exists() and status == 'completed' else {}
         cases.append({'case_id':path.parent.name, 'created_at':manifest.get('created_utc'),
@@ -430,6 +497,18 @@ async def get_case_detail(case_id: str):
     directory = case_path(case_id)
     result = {'case_id':case_id, 'status':await require_stable_case(directory)}
     budget = ReadBudget()
+    if case_id.startswith('case-source-'):
+        errors = result.setdefault('artifact_errors', {})
+        manifest = artifact(directory/'manifest.json', errors, budget=budget) or {}
+        if manifest.get('case_kind') != 'opaque_source_inspection':
+            raise HTTPException(400, 'Source case manifest unavailable or unsupported')
+        result.update(case_kind='opaque_source_inspection', manifest=manifest,
+                      source_inspection=artifact(directory/'report/source-inspection.json', errors, budget=budget),
+                      execution=artifact(directory/'execution.json', errors, budget=budget),
+                      assessment_status='not_evaluated')
+        if result.get('execution') and result['status'] != 'completed':
+            result['execution'] = dict(result['execution'], recorded_status=result['execution'].get('status'), status=result['status'])
+        return result
     headers = artifact(directory/'headers.json', result.setdefault('artifact_errors', {}), budget=budget) or {}
     result['email'] = {key:headers.get(key) for key in ('subject','from','to','date')}
     files = {'manifest':'manifest.json','score':'report/score.json','origin':'origin.json',

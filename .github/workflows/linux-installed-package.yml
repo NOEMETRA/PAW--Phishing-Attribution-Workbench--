@@ -70,6 +70,13 @@ jobs:
             "$RUNNER_TEMP/paw-installed/bin/python" -B \
             "$GITHUB_WORKSPACE/tests/integration_browser_bridge_real.py" \
             --root-fixture --output "$RUNNER_TEMP/paw-installed-results/browser-bridge"
+      - name: Verify installed opaque byte CLI and HTTP custody without interpretation
+        working-directory: ${{ runner.temp }}
+        run: |
+          env -u PYTHONPATH -u PYTHONHOME PYTHONNOUSERSITE=1 \
+            "$RUNNER_TEMP/paw-installed/bin/python" -P -B \
+            "$GITHUB_WORKSPACE/tests/integration_source_inspection_real.py" \
+            --installed --output "$RUNNER_TEMP/paw-installed-results/source-inspection.json"
       - name: Retain bounded installed-package logs
         if: always()
         uses: actions/upload-artifact@v4
