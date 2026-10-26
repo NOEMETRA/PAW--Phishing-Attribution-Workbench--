@@ -60,6 +60,7 @@ def main():
     results = []
     with validation_directory() as temporary:
         root = Path(temporary); workspace = root/'workspace'; workspace.mkdir()
+        (workspace/'cases').mkdir(mode=0o755)
         canary = root/'never-created'
         fixtures = [b'', bytes(range(256)),
                     ('from pathlib import Path\nPath('+repr(str(canary))+').touch()\n').encode(),
@@ -74,6 +75,7 @@ def main():
             assert value['supervisor']['tree_stopped'] is True
             assert (case/'source.bin').read_bytes() == raw == source.read_bytes()
             assert not (case/'report/score.json').exists() and verify_case(case)
+            if os.name == 'posix': assert Path(value['worker']['zip']).stat().st_mode & 0o777 == 0o600
             execution = json.loads((case/'execution.json').read_text())
             assert execution['limits']['address_space_bytes'] == 256*1024**2 if os.name == 'posix' else True
             assert execution['limits']['cpu_seconds'] == 10 if os.name == 'posix' else True
@@ -141,6 +143,7 @@ def main():
                     assert not {'score', 'email', 'assessment_view'} & detail.keys()
                     assert detail['source_inspection']['coverage']['format_interpretation'] == 'not_performed'
                     assert (case/'source.bin').read_bytes() == raw
+                    if os.name == 'posix': assert Path(job['zip']).stat().st_mode & 0o777 == 0o600
                     assert not detail['artifact_errors'], detail
                     assert post('/api/cases/'+case.name+'/verify', {})['integrity'] == 'verified'
                     results.append({'path': 'HTTP', 'bytes': len(raw), 'sha256': hashlib.sha256(raw).hexdigest()})
