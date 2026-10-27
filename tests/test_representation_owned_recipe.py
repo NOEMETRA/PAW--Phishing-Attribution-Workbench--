@@ -146,6 +146,103 @@ class Recipe(unittest.TestCase):
 
 
 class Diagnostics(unittest.TestCase):
+    def historical(self, mutation=None):
+        identifier = 'fe3d0adb0130410eb510f8143451a036'; nonce = '5cce69249b3e4fb6'
+        source = next(v['selected'] for v in p.fixtures(nonce) if v['name'] == 'python-selected')
+        request = {'candidate': {'request_id': identifier, 'profile': p.adapter.PYTHON,
+            'created_at': 1, 'source': {'data_hex': source.hex(), 'sha256': p.auth.digest(source)}}}
+        raw = p.auth.canonical(request)
+        files = {'lab/s14/gate_channel.py': {'bytes': 1, 'sha256': 'a'*64}}
+        policy = {'context': {'profile': p.adapter.PYTHON,
+            'runtime_sources_sha256': p.auth.digest(p.auth.storage.canonical(files))},
+            'mode': 'owned-validation', 'readiness_sha256': None,
+            'approved_requests': [{'request_sha256': p.auth.digest(raw), 'source_sha256': p.auth.digest(source)}],
+            'owned_manifest_sha256': p.auth.digest(p.auth.canonical({'nonce': nonce, 'slot': 'positive',
+                'profile': p.adapter.PYTHON, 'request_sha256': p.auth.digest(raw)}))}
+        report = {'result': 'FAIL', 'scope': p.auth.SCOPE, 'real_connections': 0, 'error': 'guest_channel_deadline',
+            'traceback': '  File "/private/gate_channel.py", line 72, in take\nTimeoutError: private',
+            'writers_stopped': True, 'host_restored': True}
+        if mutation == 'source': request['candidate']['source']['data_hex'] = b'changed'.hex()
+        if mutation == 'mode': policy['mode'] = 'explicit-source-analysis'
+        if mutation == 'context': policy['context']['runtime_sources_sha256'] = 'f'*64
+        if mutation == 'policy': policy['owned_manifest_sha256'] = 'f'*64
+        if mutation == 'report': report['result'] = 'PASS'
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory); audit = root/'audit'; audit.mkdir()
+            copied = audit/'authority-copy'/identifier; copied.mkdir(parents=True)
+            for target, data in [(audit/'policy.json', p.auth.canonical(policy)),
+                (audit/'results.json', p.auth.canonical(report)),
+                (copied/'request.json', raw),
+                (audit/('rep-python-'+identifier+'-serial.log'), b'Linux version\nprivate opaque output\ncloud-init')]:
+                target.write_bytes(data); target.chmod(0o400)
+            @contextmanager
+            def anchor(path):
+                # Substitute only fixed Root ancestors; no caller-selected path.
+                expected = p.audit_path(identifier)
+                if path == p.RELEASES: selected = root
+                else:
+                    self.assertTrue(path == expected or path == expected/'authority-copy'/identifier)
+                    selected = audit/path.relative_to(expected)
+                fd = os.open(selected, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+                try: yield fd
+                finally: os.close(fd)
+            with mock.patch.object(p, 'root_only'), mock.patch.object(p.auth.fs, 'root_directory', anchor), \
+                 mock.patch.object(p.auth.fs, 'OWNER_UID', os.getuid()), \
+                 mock.patch.object(p.auth.storage, 'verify', return_value=({'files': files}, {})) as verified, \
+                 mock.patch.object(p.auth.contract, 'validate_request', return_value=request):
+                result = p.previous_owned_failure()
+                self.assertEqual(verified.call_args.args[1:], ('9877cdd9eaedbd5d6ade1c85c2769747ff7fedc0',
+                    '350e9cb3937ef497a1ad601e3001d4b87e71e9df81b2263b2d71f3d805c4d169'))
+                return result
+
+    def test_fixed_historical_reader_restricts_snapshot_request_fixture_and_validation_policy(self):
+        value = self.historical()
+        self.assertEqual(value['diagnostics']['error']['error_code'], 'guest_channel_deadline')
+        self.assertEqual(value['serial_flags']['linux_boot'], True); self.assertEqual(value['serial_flags']['cloud_init'], True)
+        self.assertFalse(value['vm_started']); self.assertFalse(value['i08_installed']); self.assertEqual(value['real_source_grants_issued'], 0)
+        self.assertNotIn('private', json.dumps(value)); self.assertLess(len(json.dumps(value)), 4096)
+        for mutation in ['source', 'mode', 'context', 'policy', 'report']:
+            with self.subTest(mutation=mutation), self.assertRaises(ValueError): self.historical(mutation)
+
+    def test_historical_reader_requires_root_before_opening_any_path(self):
+        with mock.patch.object(p.os, 'geteuid', return_value=1000), \
+             mock.patch.object(p.auth.fs, 'root_directory') as opened, self.assertRaises(ValueError):
+            p.previous_owned_failure()
+        opened.assert_not_called()
+
+    def test_nested_known_reason_survives_without_private_suffix(self):
+        value = p.failure_diagnostic(ValueError('owned_representation_execution_failed:positive:guest_channel_deadline:private bytes'))
+        self.assertEqual(value['error_code'], 'owned_representation_execution_failed')
+        self.assertEqual(value['causes'], ['guest_channel_deadline'])
+        self.assertNotIn('private', json.dumps(value)); self.assertNotIn('positive', json.dumps(value))
+
+    def test_stored_trace_reports_only_known_module_locations_and_finite_codes(self):
+        report = {'result': 'FAIL', 'scope': p.auth.SCOPE, 'real_connections': 0,
+            'error': 'guest_channel_deadline:private payload', 'writers_stopped': True, 'host_restored': True,
+            'traceback': 'Traceback (most recent call last):\n  File "/private/gate_channel.py", line 72, in take\n'
+                         '  File "/private/secret.py", line 4, in private\nTimeoutError: private exception'}
+        value = p.stored_failure_diagnostic(report, {'gate_channel.py'})
+        self.assertEqual(value['error_type'], 'TimeoutError')
+        self.assertEqual(value['diagnostics']['error']['error_code'], 'guest_channel_deadline')
+        self.assertEqual(value['locations'], [{'module': 'gate_channel.py', 'line': 72}])
+        self.assertTrue(value['writers_stopped_attested']); self.assertEqual(value['source_result'], 'FAIL')
+        self.assertNotIn('private', json.dumps(value)); self.assertNotIn('secret', json.dumps(value))
+
+    def test_stored_failure_shape_budgets_and_success_refuse(self):
+        report = {'result': 'FAIL', 'scope': p.auth.SCOPE, 'real_connections': 0}
+        for field, changed in [('result', 'PASS'), ('scope', 'other'), ('real_connections', False),
+                               ('error', 'x'*65537), ('traceback', 'x'*65537)]:
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                p.stored_failure_diagnostic(dict(report, **{field: changed}), {'gate_channel.py'})
+
+    def test_stored_trace_does_not_evaluate_or_print_unknown_exception_or_paths(self):
+        trace = '\n'.join('  File "/private/gate_channel.py", line 72, in take' for _ in range(20))
+        value = p.stored_failure_diagnostic({'result': 'FAIL', 'scope': p.auth.SCOPE, 'real_connections': 0,
+            'error': 'secret_identifier', 'traceback': trace+'\nsecret_exception: private'}, {'gate_channel.py'})
+        self.assertEqual(value['error_type'], 'Exception'); self.assertEqual(len(value['locations']), 6)
+        self.assertLess(len(json.dumps(value)), 2048); self.assertNotIn('private', json.dumps(value))
+        self.assertNotIn('secret', json.dumps(value))
+
     def test_actual_deep_exception_reports_bounded_module_locations_without_paths(self):
         def fail(depth):
             if depth: return fail(depth-1)

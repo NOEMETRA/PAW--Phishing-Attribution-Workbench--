@@ -194,7 +194,7 @@ def execute(raw, policy_raw, *, cancel=False, _owned_fault=None, _witness=None, 
         run = (adapter.run_python if profile == adapter.PYTHON else adapter.run_html)(gate, raw, policy_raw, cancel=cancel)
         gate.report.update(result='PASS', runs=[run])
     except Exception as error:
-        gate.report.update(result='FAIL', error=str(error), traceback=traceback.format_exc())
+        gate.report.update(result='FAIL', error=str(error), traceback=traceback.format_exc(), diagnostic=failure_diagnostic(error))
     finally:
         try:
             if gate.active_vm is not None: gate.stop(gate.active_vm)
@@ -206,7 +206,7 @@ def execute(raw, policy_raw, *, cancel=False, _owned_fault=None, _witness=None, 
             gate.report.update(host_before=before, host_after=after, host_restored=True, base_unchanged=True,
                 host_canary_unchanged=True, source_freeze_unchanged=True, writers_stopped=True)
             if profile == adapter.HTML: gate.report['browser_image_unchanged'] = True
-        except Exception as error: gate.report.update(result='FAIL', cleanup_error=str(error))
+        except Exception as error: gate.report.update(result='FAIL', cleanup_error=str(error), cleanup_diagnostic=failure_diagnostic(error))
         gate.connection.close(); save_results(output, gate.report)
     if gate.report['result'] == 'PASS':
         try:
@@ -214,7 +214,7 @@ def execute(raw, policy_raw, *, cancel=False, _owned_fault=None, _witness=None, 
             with auth.fs.root_directory(output) as fd:
                 auth.fs.exclusive(fd, 'independent-verification.json', auth.canonical(verified))
         except Exception as error:
-            gate.report.update(result='FAIL', verification_error=str(error)); save_results(output, gate.report)
+            gate.report.update(result='FAIL', verification_error=str(error), verification_diagnostic=failure_diagnostic(error)); save_results(output, gate.report)
     return gate.report, output
 
 
@@ -519,7 +519,9 @@ DIAGNOSTIC_CODES = frozenset({
     'representation_producer_host_not_restored', 'runtime_root_PID1_only', 'runtime_foreign_work_or_autostart',
     'runtime_host_network_changed', 'runtime_final_state_changed', 'runtime_unit_state',
     'runtime_fixed_unit_not_active', 'runtime_unreviewed_daemon_command', 'runtime_guard_dependency_changed',
-    'hash_context_shape', 'maintenance_binding', 'qemu_maintenance_baseline'})
+    'hash_context_shape', 'maintenance_binding', 'qemu_maintenance_baseline',
+    'guest_channel_deadline', 'guest_channel_failed', 'unexpected_readiness',
+    'missing_readiness', 'host_job_deadline', 'guest_admission_binding', 'reset_marker_survived'})
 
 
 def failure_diagnostic(error):
@@ -536,7 +538,78 @@ def failure_diagnostic(error):
     kind = type(error).__name__
     if kind not in {'ValueError', 'TypeError', 'KeyError', 'AssertionError', 'FileNotFoundError', 'PermissionError',
                     'OSError', 'TimeoutExpired', 'TimeoutError', 'ProcessLookupError', 'CalledProcessError'}: kind = 'Exception'
-    return {'error_type': kind, 'error_code': code, 'errno': number, 'locations': locations}
+    causes = [part for part in str(error).split(':', 8)[1:8] if part in DIAGNOSTIC_CODES][:4]
+    return {'error_type': kind, 'error_code': code, 'errno': number, 'locations': locations, 'causes': causes}
+
+
+def stored_failure_diagnostic(report, modules):
+    """Read data, never evaluate a traceback or publish raw error/guest bytes."""
+    require(type(report) is dict and report.get('result') == 'FAIL' and report.get('scope') == auth.SCOPE and
+            type(report.get('real_connections')) is int and report['real_connections'] == 0,
+            'owned_historical_failure_scope')
+    diagnostics = {}
+    for field in ['error', 'verification_error', 'cleanup_error']:
+        text = report.get(field)
+        if text is None: continue
+        require(type(text) is str and len(text) <= 65536, 'owned_historical_error_budget')
+        diagnostics[field] = failure_diagnostic(ValueError(text))
+    trace = report.get('traceback', '')
+    require(type(trace) is str and len(trace) <= 65536, 'owned_historical_trace_budget')
+    locations = []
+    for filename, line in re.findall(r'  File "([^"\n]{1,4096})", line ([0-9]{1,7})', trace):
+        name = Path(filename).name
+        if name in modules and re.fullmatch(r'[A-Za-z0-9_.-]{1,96}\.py', name) and 0 < int(line) <= 1000000:
+            locations.append({'module': name, 'line': int(line)})
+    kinds = {'ValueError', 'TypeError', 'KeyError', 'AssertionError', 'FileNotFoundError', 'PermissionError',
+             'OSError', 'TimeoutExpired', 'TimeoutError', 'ProcessLookupError', 'CalledProcessError'}
+    kind = trace.splitlines()[-1].split(':', 1)[0] if trace.splitlines() else ''
+    return {'source_result': 'FAIL', 'diagnostics': diagnostics, 'error_type': kind if kind in kinds else 'Exception',
+            'locations': locations[-6:], 'writers_stopped_attested': report.get('writers_stopped') is True,
+            'host_restored_attested': report.get('host_restored') is True}
+
+
+def previous_owned_failure():
+    """One fixed historical owned attempt, exposed only as bounded diagnostics.
+
+    No caller supplies a job, path, source, traceback or output selector. This
+    function neither executes a guest nor issues/consumes/restores authority.
+    """
+    root_only()
+    release = '9877cdd9eaedbd5d6ade1c85c2769747ff7fedc0'
+    identifier = 'fe3d0adb0130410eb510f8143451a036'; nonce = '5cce69249b3e4fb6'
+    with auth.fs.root_directory(RELEASES) as fd:
+        manifest, _ = auth.storage.verify(fd, release,
+            '350e9cb3937ef497a1ad601e3001d4b87e71e9df81b2263b2d71f3d805c4d169')
+    folder = audit_path(identifier)
+    with auth.fs.root_directory(folder) as fd:
+        policy_raw = auth.fs.read(fd, 'policy.json', 256*1024)
+        report_raw = auth.fs.read(fd, 'results.json', 2*1024**2)
+        serial = auth.fs.read(fd, 'rep-python-'+identifier+'-serial.log', 1024**2)
+    policy = auth.decode(policy_raw); context = policy['context']
+    require(context['profile'] == adapter.PYTHON and context['runtime_sources_sha256'] ==
+            auth.digest(auth.storage.canonical(manifest['files'])), 'owned_historical_snapshot_binding')
+    with auth.fs.root_directory(folder/'authority-copy'/identifier) as fd:
+        raw = auth.fs.read(fd, 'request.json', auth.contract.REQUEST_LIMIT)
+    request = auth.contract.validate_request(raw, auth.decode(raw)['candidate']['created_at'])
+    candidate = request['candidate']
+    require(candidate['request_id'] == identifier and candidate['profile'] == adapter.PYTHON and
+            bytes.fromhex(candidate['source']['data_hex']) == next(v['selected'] for v in fixtures(nonce)
+                if v['name'] == 'python-selected'), 'owned_historical_fixture_binding')
+    require(policy['mode'] == 'owned-validation' and policy['readiness_sha256'] is None and
+            policy['approved_requests'] == [{'request_sha256': auth.digest(raw), 'source_sha256': candidate['source']['sha256']}] and
+            policy['owned_manifest_sha256'] == auth.digest(auth.canonical({'nonce': nonce, 'slot': 'positive',
+                'profile': adapter.PYTHON, 'request_sha256': auth.digest(raw)})), 'owned_historical_validation_policy')
+    report = auth.decode(report_raw, 2*1024**2)
+    modules = {Path(name).name for name in manifest['files'] if name.endswith('.py')}
+    result = stored_failure_diagnostic(report, modules)
+    markers = {'linux_boot': b'Linux version', 'cloud_init': b'cloud-init', 'traceback': b'Traceback (most recent call last)',
+               'service_failure': b'Failed to start', 'emergency': b'emergency mode',
+               'kernel_panic': b'Kernel panic', 'oom': b'Out of memory'}
+    result.update(scope='fixed historical owned failure diagnostic only; no acceptance or execution authority',
+        request_id=identifier, release_sha=release, report_sha256=auth.digest(report_raw), serial_sha256=auth.digest(serial),
+        serial_flags={key: marker in serial for key, marker in markers.items()},
+        vm_started=False, i08_installed=False, real_source_grants_issued=0)
+    return result
 
 
 def run_owned(job, release):
@@ -585,6 +658,8 @@ def run_owned(job, release):
                     else: raise ValueError('owned_representation_changed_request_admitted')
                 witness = {}; report, audit = execute(raw, policy_raw, _owned_fault=slot if slot in FAULTS else None,
                     _witness=witness, _owned_probe=slot == 'positive')
+                record['backend_diagnostics'] = {key: report[key] for key in
+                    ['diagnostic', 'cleanup_diagnostic', 'verification_diagnostic'] if key in report}
                 if slot in FAULTS: verified = verify_fault(audit, raw, slot, witness)
                 else:
                     require(report['result'] == 'PASS', 'owned_representation_execution_failed:'+slot+':'+report.get('error', '')+report.get('verification_error', ''))
@@ -657,5 +732,6 @@ def run_owned(job, release):
             record['new_readiness_revoked'] = True
         with auth.fs.root_directory(folder) as fd: write_state(fd, 'result.json', record)
     print(json.dumps({'result': record['result'], 'job': job, 'profile': selected,
-                      'diagnostic': record.get('diagnostic'), 'real_samples_executed': 0}), flush=True)
+                      'diagnostic': record.get('diagnostic'), 'backend_diagnostics': record.get('backend_diagnostics'),
+                      'real_samples_executed': 0}), flush=True)
     require(record['result'] == 'PASS', 'owned_representation_recipe_failed')

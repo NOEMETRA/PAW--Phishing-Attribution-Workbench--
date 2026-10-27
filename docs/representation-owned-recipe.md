@@ -175,3 +175,36 @@ The correction still requires its own completed exact-head review, green
 head/main CI, source/installed package equality, immutable promotion and fresh
 owned acceptance. P3 remains open; it cannot close on these CLI tests, and P4
 must wait for the complete P3 matrices and scoped I08.
+
+## First guest attempt and bounded failure diagnosis
+
+PR124 main `9877cdd9eaedbd5d6ade1c85c2769747ff7fedc0` passed clear full-head
+review, seven head/main checks, identical trees and immutable promotion without
+a password. The fixed installed client was updated with the matching wheel;
+all108 Python sources and its dependency check passed. Fresh owned job
+`ccec225bc95f4f4ca2f89927cc33adbb` completed both source/installed preparation
+and the first source request. Its first actual Python VM cycle then failed.
+The public diagnostic retained only `owned_representation_execution_failed`,
+omitting the nested backend error already stored privately. The `extractor`
+domain suffix is also used for Python execution VMs; it does not establish that
+input execution completed or that failure occurred during evidence extraction.
+No execution success or exact fault cause is claimed before protected readback.
+
+The sequence stopped before later vectors/HTML. Terminal readback confirmed no
+service/cgroup, QEMU, domain, active network or namespace before unfreezing
+sources. The failed audit, consumed request and old snapshot are retained.
+During the run, a readonly XML observation saw one domain with no interfaces,
+shared filesystems or host devices; this observation alone is not acceptance.
+
+The bounded diagnostic now retains at most four nested reason tokens from its
+finite allowlist. Raw errors, paths, guest output and unknown tokens remain
+private. Future backend execution, cleanup and verification exceptions also
+retain the same bounded structured diagnostic before their wrapper reports
+failure; private traceback/raw error storage is unchanged. A negative-before ordinary test reproduces loss of a known nested
+reason; positive tests cover this path and stored traceback sanitization.
+The next no-guest diagnostic operation is described in
+[runtime revalidation](vm-runtime-revalidation.md). It reads only this one fixed
+historical owned audit after checking its fixed immutable snapshot, request,
+fixture and validation-policy bindings. It cannot authorize a retry or readiness.
+Guest diagnosis/correction and new actual P3 acceptance remain required; P3–P5
+stay open.

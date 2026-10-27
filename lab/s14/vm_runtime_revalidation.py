@@ -267,6 +267,8 @@ def run_owned(job, release):
                 record['runtime']['production_grants_enabled'] is False and record['runtime']['i08_installed'] is False,
                 'runtime_owned_scope')
         record['runtime']['maintenance'] = refresh_maintenance()
+        from representation_producer import previous_owned_failure
+        record['runtime']['previous_owned_failure'] = previous_owned_failure()
         target = Path('/var/lib/paw-vm-exports')/job
         with fs.root_directory(target.parent): pass
         target.mkdir(mode=0o700)
