@@ -11,6 +11,10 @@ import time
 HERE = Path(__file__).resolve().parent
 UNITS = ('machine-paws14.slice', 'libvirtd.service')
 SLICE = {'MemoryMax': '2147483648', 'MemorySwapMax': '0', 'TasksMax': '128'}
+MAINTENANCE_PREVIOUS = '4ab64d87b191dd6ea2879fae0f9e5f12eb255a8fe83062d34f577c2d8d7b1e44'
+INVENTORY_PREVIOUS = '4c4a2167cfbd316bd7923426ef249b25f459dc7181df5fbe55624bb4ffeaed80'
+INVENTORY_BROTLI = 'e214bcd487744333146303190396743973b1ad9755112c182b0bf7aa255c2ef3'
+BROTLI_PACKAGES = {b'libbrotli1:amd64', b'python3-brotli'}
 
 
 def require(value, reason):
@@ -183,6 +187,67 @@ def revalidate():
                 'production_grants_enabled': False, 'i08_installed': False}
 
 
+def maintenance_transition(previous, context, inventory):
+    """One reviewed inventory delta, never a generic maintenance reattestation."""
+    import hash_authorization as platform
+    require(platform.digest(previous) == MAINTENANCE_PREVIOUS, 'runtime_previous_maintenance_digest')
+    require(type(inventory) is bytes and len(inventory) <= 2*1024**2, 'runtime_inventory_budget')
+    rows = inventory.splitlines()
+    require(0 < len(rows) <= 65536 and all(row.count(b'\t') == 1 for row in rows), 'runtime_inventory_shape')
+    names = [row.split(b'\t', 1)[0] for row in rows]
+    require(len(set(names)) == len(names), 'runtime_inventory_duplicates')
+    current = platform.digest(b'\n'.join(sorted(rows))+b'\n')
+    require(current == context['dpkg_inventory_sha256'] and current in {INVENTORY_PREVIOUS, INVENTORY_BROTLI},
+            'runtime_unreviewed_inventory')
+    old_context = dict(context, dpkg_inventory_sha256=INVENTORY_PREVIOUS)
+    # The old protected receipt must still match every non-inventory platform,
+    # host, image and vendor field through the unchanged real validator.
+    record = platform.validate_maintenance(previous, old_context)
+    if current == INVENTORY_PREVIOUS: return previous
+    changed = set(); restored = []
+    for row in rows:
+        name, version = row.split(b'\t')
+        if name in BROTLI_PACKAGES:
+            require(version == b'1.2.0-3ubuntu0.1', 'runtime_brotli_version')
+            changed.add(name); row = name+b'\t1.2.0-3build1'
+        restored.append(row)
+    require(changed == BROTLI_PACKAGES and platform.digest(b'\n'.join(sorted(restored))+b'\n') == INVENTORY_PREVIOUS,
+            'runtime_inventory_delta')
+    record['dpkg_inventory_sha256'] = current
+    record['review_notes'] = ('Exact reviewed Brotli-only inventory transition; prior protected maintenance and '
+        'unchanged hypervisor/image/host bindings retained. No I08, grant or real specimen authorization.')
+    raw = platform.canonical(record); platform.validate_maintenance(raw, context)
+    return raw
+
+
+def refresh_maintenance():
+    """Fixed no-guest recipe only: append one exact reviewed maintenance record."""
+    require(os.geteuid() == 0, 'runtime_root_maintenance_required')
+    import hash_authorization as platform
+    fs = platform.fs
+    with fs.execution_lock():
+        before = snapshot(); network_before = network_state()
+        require(not Path('/var/run/reboot-required').exists(), 'runtime_maintenance_reboot_required')
+        require(subprocess.check_output(['/usr/bin/dpkg', '--audit'], timeout=15) == b'', 'runtime_package_audit')
+        context = platform.capture(); platform.validate_context(context)
+        with platform.store() as fd:
+            previous = fs.read(fd, 'maintenance-'+MAINTENANCE_PREVIOUS+'.json', 65536)
+        inventory = subprocess.check_output(['/usr/bin/dpkg-query', '-W', '-f=${binary:Package}\t${Version}\n'], timeout=15)
+        raw = maintenance_transition(previous, context, inventory)
+        require(platform.canonical(platform.capture()) == platform.canonical(context) and
+                snapshot() == before and network_state() == network_before and
+                not Path('/var/run/reboot-required').exists(), 'runtime_maintenance_context_changed')
+        name = 'maintenance-'+platform.digest(raw)+'.json'
+        with platform.store() as fd:
+            try: fs.exclusive(fd, name, raw)
+            except FileExistsError: require(fs.read(fd, name, 65536) == raw, 'runtime_existing_maintenance_changed')
+        # No policy, grant, readiness or old record is rewritten. Future callers
+        # still validate this receipt against their independently captured context.
+        return {'result': 'PASS', 'previous_sha256': platform.digest(previous), 'maintenance_sha256': platform.digest(raw),
+                'inventory_sha256': context['dpkg_inventory_sha256'], 'changed': raw != previous,
+                'i08_installed': False, 'production_grants_enabled': False, 'vm_started': False}
+
+
 def run_owned(job, release):
     """Fixed recipe entry; root job directory was created by the enrolled helper."""
     require(os.geteuid() == 0 and type(job) is str and re.fullmatch('[0-9a-f]{32}', job) and
@@ -201,6 +266,7 @@ def run_owned(job, release):
                 type(record['runtime']['real_samples_executed']) is int and record['runtime']['real_samples_executed'] == 0 and
                 record['runtime']['production_grants_enabled'] is False and record['runtime']['i08_installed'] is False,
                 'runtime_owned_scope')
+        record['runtime']['maintenance'] = refresh_maintenance()
         target = Path('/var/lib/paw-vm-exports')/job
         with fs.root_directory(target.parent): pass
         target.mkdir(mode=0o700)
