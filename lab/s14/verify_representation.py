@@ -23,12 +23,30 @@ from hostile_maintenance import SIGNER
 require = auth.require
 
 
+def open_directory(root):
+    """Pin every anchor component, including ancestors owned by the client.
+
+    Offline copies need not be Root-owned, but an intermediate symlink must
+    never redirect a privileged caller beyond the supplied directory tree.
+    """
+    path = Path(root).absolute()
+    require('..' not in path.parts, 'representation_audit_anchor_traversal')
+    fd = os.open('/', os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        for part in path.parts[1:]:
+            child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+            os.close(fd); fd = child
+        return fd
+    except BaseException:
+        os.close(fd); raise
+
+
 def read(root, relative, maximum):
     path = PurePosixPath(relative)
     require(not path.is_absolute() and path.as_posix() == relative and
             all(re.fullmatch('[A-Za-z0-9_.-]{1,128}', p) and p not in {'.', '..'} for p in path.parts),
             'representation_audit_relative_path')
-    fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    fd = open_directory(root)
     try:
         for part in path.parts[:-1]:
             child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
@@ -54,7 +72,7 @@ def inventory(root):
             else:
                 require(stat.S_ISREG(info.st_mode) and info.st_nlink == 1, 'representation_snapshot_regular_unlinked')
                 result.add(relative)
-    fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    fd = open_directory(root)
     try: walk(fd)
     finally: os.close(fd)
     return result

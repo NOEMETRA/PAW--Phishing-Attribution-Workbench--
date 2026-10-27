@@ -94,3 +94,11 @@ inventory. Scoring, originals and consolidated bridge/audit contracts remain
 unchanged. The serialized test fixture's grant/consume clock now follows policy
 creation, correcting a reproduced second-boundary fixture race without changing
 the actual authority's lease checks.
+
+The caller-owned case path also reproduced an intermediate-anchor symlink
+followed by both read and inventory helpers despite their final-component
+`O_NOFOLLOW`. A synthetic ordinary-UID regression fails for both operations
+before the fix. Both helpers now pin every absolute anchor component through
+no-follow directory descriptors before reading/enumerating descendants; normal
+regular case trees retain their behavior. No Root or private host data was used
+for this reproduction.

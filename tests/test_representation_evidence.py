@@ -170,6 +170,18 @@ class Evidence(unittest.TestCase):
         for name in ['../policy.json', '/etc/passwd', 'a//b', './policy.json']:
             with self.subTest(name=name), self.assertRaises(ValueError): verify.read(root, name, 1024)
 
+    def test_caller_case_anchor_rejects_intermediate_symlinks(self):
+        target = self.root/'anchor-target'; target.mkdir()
+        case = target/'case'; case.mkdir(); (case/'source.bin').write_bytes(b'owned inert probe')
+        link = self.root/'anchor-link'; link.symlink_to(target, target_is_directory=True)
+        # The final case directory itself is regular. O_NOFOLLOW on only that
+        # final component previously still followed its caller-owned ancestor.
+        for name, operation in [('read', lambda: verify.read(link/'case', 'source.bin', 1024)),
+                                ('inventory', lambda: verify.inventory(link/'case'))]:
+            with self.subTest(operation=name), self.assertRaises(OSError): operation()
+        self.assertEqual(verify.read(case, 'source.bin', 1024), b'owned inert probe')
+        self.assertEqual(verify.inventory(case), {'source.bin'})
+
     def test_source_copies_are_bounded_regular_and_exact_inventory(self):
         for mutation in ['oversize', 'empty-directory', 'hardlink']:
             root, _, _ = self.fixture(); source = root/'sources/representation_adapter.py'
