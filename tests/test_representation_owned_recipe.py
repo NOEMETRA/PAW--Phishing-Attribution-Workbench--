@@ -8,6 +8,7 @@ from contextlib import contextmanager, ExitStack, redirect_stdout
 import json
 import io
 import os
+import shutil
 from pathlib import Path
 import sys
 import tempfile
@@ -152,7 +153,8 @@ class Diagnostics(unittest.TestCase):
         request = {'candidate': {'request_id': identifier, 'profile': p.adapter.PYTHON,
             'created_at': 1, 'source': {'data_hex': source.hex(), 'sha256': p.auth.digest(source)}}}
         raw = p.auth.canonical(request)
-        files = {'lab/s14/gate_channel.py': {'bytes': 1, 'sha256': 'a'*64}}
+        code = b'# owned snapshot bytes; never executed\n'
+        files = {'lab/s14/gate_channel.py': {'bytes': len(code), 'sha256': p.auth.digest(code)}}
         policy = {'context': {'profile': p.adapter.PYTHON,
             'runtime_sources_sha256': p.auth.digest(p.auth.storage.canonical(files))},
             'mode': 'owned-validation', 'readiness_sha256': None,
@@ -175,25 +177,42 @@ class Diagnostics(unittest.TestCase):
                 (copied/'request.json', raw),
                 (audit/('rep-python-'+identifier+'-serial.log'), b'Linux version\nprivate opaque output\ncloud-init')]:
                 target.write_bytes(data); target.chmod(0o400)
+            release = '9877cdd9eaedbd5d6ade1c85c2769747ff7fedc0'
+            snapshot = audit/'runtime-snapshot'; (snapshot/'lab/s14').mkdir(parents=True)
+            (snapshot/'lab/s14/gate_channel.py').write_bytes(code)
+            proof = p.auth.storage.canonical({'repository': p.auth.storage.REPOSITORY, 'head_sha': 'b'*40, 'merge_sha': release})
+            manifest = p.auth.storage.canonical({'schema': 'paw-vm-root-snapshot-v1', 'repository': p.auth.storage.REPOSITORY,
+                'head_sha': 'b'*40, 'release_sha': release, 'proof_sha256': p.auth.digest(proof), 'files': files})
+            (snapshot/'release.json').write_bytes(manifest); (snapshot/'proof.json').write_bytes(proof)
+            deployed = root/'deployed'; shutil.copytree(snapshot, deployed)
+            cache = deployed/'lab/s14/__pycache__'; cache.mkdir()
+            (cache/'gate_channel.cpython-314.pyc').write_bytes(b'opaque cache, not executed')
+            if mutation == 'copy-source': (snapshot/'lab/s14/gate_channel.py').write_bytes(b'changed')
+            if mutation == 'copy-extra': (snapshot/'unexpected.pyc').write_bytes(b'changed')
+            if mutation == 'manifest': (snapshot/'release.json').write_bytes(manifest+b' ')
+            if mutation == 'copy-proof': (snapshot/'proof.json').write_bytes(b'changed')
+            if mutation == 'deployment-foreign': (deployed/'secret-name.txt').write_bytes(b'not read')
+            for tree in [snapshot, deployed]:
+                tree.chmod(0o700)
+                for leaf in tree.rglob('*'): leaf.chmod(0o700 if leaf.is_dir() else 0o400)
             @contextmanager
             def anchor(path):
                 # Substitute only fixed Root ancestors; no caller-selected path.
                 expected = p.audit_path(identifier)
-                if path == p.RELEASES: selected = root
+                if path == p.RELEASES/release: selected = deployed
                 else:
-                    self.assertTrue(path == expected or path == expected/'authority-copy'/identifier)
+                    self.assertTrue(path in {expected, expected/'authority-copy'/identifier, expected/'runtime-snapshot'})
                     selected = audit/path.relative_to(expected)
                 fd = os.open(selected, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
                 try: yield fd
                 finally: os.close(fd)
             with mock.patch.object(p, 'root_only'), mock.patch.object(p.auth.fs, 'root_directory', anchor), \
+                 mock.patch.object(p, 'audit_path', return_value=audit), \
                  mock.patch.object(p.auth.fs, 'OWNER_UID', os.getuid()), \
-                 mock.patch.object(p.auth.storage, 'verify', return_value=({'files': files}, {})) as verified, \
+                 mock.patch.object(p.auth.storage, 'ROOT_UID', os.getuid()), \
+                 mock.patch.object(p, 'HISTORICAL_MANIFEST_SHA256', p.auth.digest(manifest)), \
                  mock.patch.object(p.auth.contract, 'validate_request', return_value=request):
-                result = p.previous_owned_failure()
-                self.assertEqual(verified.call_args.args[1:], ('9877cdd9eaedbd5d6ade1c85c2769747ff7fedc0',
-                    '350e9cb3937ef497a1ad601e3001d4b87e71e9df81b2263b2d71f3d805c4d169'))
-                return result
+                return p.previous_owned_failure()
 
     def test_fixed_historical_reader_restricts_snapshot_request_fixture_and_validation_policy(self):
         value = self.historical()
@@ -201,8 +220,17 @@ class Diagnostics(unittest.TestCase):
         self.assertEqual(value['serial_flags']['linux_boot'], True); self.assertEqual(value['serial_flags']['cloud_init'], True)
         self.assertFalse(value['vm_started']); self.assertFalse(value['i08_installed']); self.assertEqual(value['real_source_grants_issued'], 0)
         self.assertNotIn('private', json.dumps(value)); self.assertLess(len(json.dumps(value)), 4096)
-        for mutation in ['source', 'mode', 'context', 'policy', 'report']:
+        self.assertEqual(value['historical_deployment_inventory'], {'matches_manifest': False,
+            'extra_entries': 2, 'missing_entries': 0, 'extra_only_python_bytecode': True})
+        for mutation in ['source', 'mode', 'context', 'policy', 'report', 'copy-source', 'copy-extra', 'manifest', 'copy-proof']:
             with self.subTest(mutation=mutation), self.assertRaises(ValueError): self.historical(mutation)
+
+    def test_historical_deployment_metadata_never_exports_foreign_names_or_authorizes_dirty_tree(self):
+        value = self.historical('deployment-foreign')
+        self.assertFalse(value['historical_deployment_inventory']['matches_manifest'])
+        self.assertFalse(value['historical_deployment_inventory']['extra_only_python_bytecode'])
+        self.assertNotIn('secret-name', json.dumps(value)); self.assertEqual(value['source_result'], 'FAIL')
+        self.assertFalse(value['vm_started']); self.assertFalse(value['i08_installed'])
 
     def test_historical_reader_requires_root_before_opening_any_path(self):
         with mock.patch.object(p.os, 'geteuid', return_value=1000), \

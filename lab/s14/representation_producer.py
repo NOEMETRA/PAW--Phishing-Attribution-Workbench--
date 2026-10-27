@@ -28,6 +28,7 @@ from verify_representation import verify_snapshot, verify_fault, FAULTS
 CONTROL = Path('/var/lib/paw-s14/control')
 STATE = Path('/var/lib/paw-vm')
 RELEASES = Path('/opt/paw-vm/releases')
+HISTORICAL_MANIFEST_SHA256 = '350e9cb3937ef497a1ad601e3001d4b87e71e9df81b2263b2d71f3d805c4d169'
 require = auth.require
 
 
@@ -577,15 +578,24 @@ def previous_owned_failure():
     root_only()
     release = '9877cdd9eaedbd5d6ade1c85c2769747ff7fedc0'
     identifier = 'fe3d0adb0130410eb510f8143451a036'; nonce = '5cce69249b3e4fb6'
-    with auth.fs.root_directory(RELEASES) as fd:
-        manifest, _ = auth.storage.verify(fd, release,
-            '350e9cb3937ef497a1ad601e3001d4b87e71e9df81b2263b2d71f3d805c4d169')
     folder = audit_path(identifier)
     with auth.fs.root_directory(folder) as fd:
         policy_raw = auth.fs.read(fd, 'policy.json', 256*1024)
         report_raw = auth.fs.read(fd, 'results.json', 2*1024**2)
         serial = auth.fs.read(fd, 'rep-python-'+identifier+'-serial.log', 1024**2)
     policy = auth.decode(policy_raw); context = policy['context']
+    # The preserved pre-guest snapshot is a separate Root-private copy. Verify
+    # its exact fixed manifest, protected inventory, proof and every source byte.
+    # Never relax deployment verification or delete evidence from the old tree.
+    with auth.fs.root_directory(folder/'runtime-snapshot') as fd:
+        raw_manifest = auth.fs.read(fd, 'release.json', auth.storage.MAX_MANIFEST)
+        require(auth.digest(raw_manifest) == HISTORICAL_MANIFEST_SHA256, 'owned_historical_manifest_digest')
+        manifest = auth.storage.manifest(raw_manifest, release)
+        parents = {'/'.join(auth.storage.source_path(name)[:n])+'/' for name in manifest['files']
+                   for n in range(1, len(auth.storage.source_path(name)))}
+        expected = set(manifest['files']) | parents | {'release.json', 'proof.json'}
+        require(auth.storage.inventory(fd) == expected, 'owned_historical_copy_inventory')
+    verify_snapshot(folder, context)
     require(context['profile'] == adapter.PYTHON and context['runtime_sources_sha256'] ==
             auth.digest(auth.storage.canonical(manifest['files'])), 'owned_historical_snapshot_binding')
     with auth.fs.root_directory(folder/'authority-copy'/identifier) as fd:
@@ -602,6 +612,19 @@ def previous_owned_failure():
     report = auth.decode(report_raw, 2*1024**2)
     modules = {Path(name).name for name in manifest['files'] if name.endswith('.py')}
     result = stored_failure_diagnostic(report, modules)
+    # Metadata only: a dirty historical deployment is still inadmissible. This
+    # comparison is not a verification exception, rollback or execution grant.
+    with auth.fs.root_directory(RELEASES/release) as fd: deployed = auth.storage.inventory(fd)
+    extras = deployed-expected
+    def bytecode(name):
+        parts = name.rstrip('/').split('/')
+        if name.endswith('/') and parts[-1] == '__pycache__': return '/'.join(parts[:-1])+'/' in parents
+        if len(parts) < 2 or parts[-2] != '__pycache__': return False
+        match = re.fullmatch(r'([A-Za-z_][A-Za-z0-9_]*)\.cpython-[0-9]{2,3}(?:\.opt-[0-9])?\.pyc', parts[-1])
+        return match is not None and '/'.join(parts[:-2]+[match[1]+'.py']) in manifest['files']
+    result['historical_deployment_inventory'] = {'matches_manifest': deployed == expected,
+        'extra_entries': len(extras), 'missing_entries': len(expected-deployed),
+        'extra_only_python_bytecode': bool(extras) and all(bytecode(name) for name in extras)}
     markers = {'linux_boot': b'Linux version', 'cloud_init': b'cloud-init', 'traceback': b'Traceback (most recent call last)',
                'service_failure': b'Failed to start', 'emergency': b'emergency mode',
                'kernel_panic': b'Kernel panic', 'oom': b'Out of memory'}
