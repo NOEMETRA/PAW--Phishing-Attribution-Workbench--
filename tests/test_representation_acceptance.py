@@ -76,6 +76,40 @@ class Acceptance(unittest.TestCase):
             good['runs'][0]['outcome'].update(status=status, returncode=code)
             with self.subTest(status=status, code=code), self.assertRaises(ValueError): p.owned_success(good, 'python', '0'*16)
 
+    def test_promoted_proof_retains_its_authenticated_previous_active_anchor(self):
+        state = self.root/'state'; state.mkdir(mode=0o700); releases = self.root/'releases'; releases.mkdir(mode=0o700)
+        policy, proof = release_fixture(); now = int(time.time()); policy.update(created_at=now-10, expires_at=now+3600)
+        # The installed policy keeps its original native enrollment anchor.
+        # The fixed promoter authenticates against the previous active release,
+        # then binds that complete proof to the new protected manifest/state.
+        original_anchor = policy['anchor_sha']; proof['anchor_sha'] = '4'*40
+        for name, value in [('policy.json', policy), ('active.json', {'release_sha': proof['merge_sha'], 'manifest_sha256': '1'*64})]:
+            target = state/name; target.write_bytes(p.auth.canonical(value)); target.chmod(0o400)
+        @contextmanager
+        def anchor(path):
+            fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
+            try: yield fd
+            finally: os.close(fd)
+        with self.boundary(), mock.patch.object(p, 'STATE', state), mock.patch.object(p, 'RELEASES', releases), \
+             mock.patch.object(p.auth, 'HERE', releases/proof['merge_sha']/'lab/s14'), \
+             mock.patch.object(p.auth.fs, 'root_directory', anchor), \
+             mock.patch.object(p.auth.storage, 'verify', return_value=({'head_sha': proof['head_sha']}, proof)):
+            raw = p.new_readiness(self.context, self.validation)
+            self.assertEqual(p.auth.decode(raw)['reviewed_head'], proof['head_sha'])
+            self.assertEqual(policy['anchor_sha'], original_anchor)
+            proof['anchor_is_ancestor'] = False
+            with self.assertRaises(ValueError): p.new_readiness(self.context, self.validation)
+            proof['anchor_is_ancestor'] = True; proof['review']['actor_id'] += 1
+            with self.assertRaises(ValueError): p.new_readiness(self.context, self.validation)
+            proof['review']['actor_id'] -= 1
+            # Rebinding the promoted proof cannot hide a malformed original
+            # enrollment policy, even though its anchor is historical now.
+            policy['anchor_sha'] = 'invalid'
+            target = state/'policy.json'; target.chmod(0o600)
+            target.write_bytes(p.auth.canonical(policy)); target.chmod(0o400)
+            with self.assertRaisesRegex(ValueError, 'operator_policy_identity'):
+                p.new_readiness(self.context, self.validation)
+
     def test_full_merged_review_head_and_main_proof_required_for_readiness(self):
         state = self.root/'state'; state.mkdir(mode=0o700); releases = self.root/'releases'; releases.mkdir(mode=0o700)
         policy, proof = release_fixture(); now = int(time.time()); policy.update(created_at=now-10, expires_at=now+3600)

@@ -102,3 +102,40 @@ before the fix. Both helpers now pin every absolute anchor component through
 no-follow directory descriptors before reading/enumerating descendants; normal
 regular case trees retain their behavior. No Root or private host data was used
 for this reproduction.
+
+## First promoted attempt and reproduced history refusal
+
+PR121 main `b288b32f89842633a8b976414f2937d24ce68380` passed clear exact-head
+review and seven head/main checks, with identical trees, and was independently
+promoted without a password. First owned job
+`0f033b5509bb4ab8ae00ab632e13af8a` failed before profile selection; no client or
+VM branch was reached. Its result/terminal evidence is preserved outside the
+checkout. Independent read-only checks found no active owned/client service,
+Root operator/worker, QEMU, domain, active libvirt network or namespace before
+releasing the source freeze. This was a failed acceptance, not a VM PASS.
+
+The runtime proof check incorrectly compared a promoted proof's authenticated
+previous-active anchor to the unchanged original native-enrollment anchor.
+An ordinary-UID acquisition of the actual current PR121 proof reproduced
+`operator_release_history`: the proof passes with its promotion policy and
+fails with the original policy. A physical-storage-substituted regression also
+fails before correction while using the real release validator.
+
+After verifying the protected active state, physical immutable snapshot and
+manifest-bound proof, runtime now revalidates the original enrollment policy,
+then checks the full merged proof with its stored promotion anchor. That anchor
+comes only from the verified Root proof previously authenticated by the fixed
+promoter; caller JSON never supplies it. Owner, reviewer, live lease, workflow
+IDs/job names, exact clear head, head/main CI and ancestry flags remain required.
+A changed actor, false ancestry, malformed original enrollment policy, failed
+CI or native candidate still refuses. No policy, static privilege configuration,
+original snapshot or failed job is rewritten by this correction.
+
+The failed attempt also exposed that ordinary operator output omitted the
+underlying error available in private Root state. It now emits only a finite
+allowlist of reason codes (otherwise `non_code_failure`), bounded exception
+kind/errno and at most six module-basename/line locations. Raw exception text,
+full paths, opaque output and full traceback remain private. This lets subsequent
+owned refusals be diagnosed without another administrative authentication.
+New code still requires exact review/head+main CI, immutable promotion and fresh
+owned acceptance; it does not turn the first failed attempt into a success.
