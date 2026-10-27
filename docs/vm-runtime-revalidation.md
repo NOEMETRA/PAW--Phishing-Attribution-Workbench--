@@ -137,8 +137,9 @@ After the PR124 guest attempt stopped with an uninformative outer reason,
 `fe3d0adb0130410eb510f8143451a036` from owned job
 `ccec225bc95f4f4ca2f89927cc33adbb`. No caller supplies an ID, path, source,
 command or output selector. The function requires Root, physically verifies
-the prior release `9877cdd9eaedbd5d6ade1c85c2769747ff7fedc0` against its fixed
-manifest hash, and requires the protected audit's matching snapshot inventory,
+the preserved pre-guest audit copy of prior release
+`9877cdd9eaedbd5d6ade1c85c2769747ff7fedc0` against its fixed manifest hash,
+exact protected inventory, proof and every source byte, and requires matching
 Python profile, exact immutable-generated harmless fixture bytes, request hash
 and `owned-validation` policy/manifest with no readiness. This readback does not
 revalidate historical data as current execution authority or change a ledger.
@@ -157,3 +158,31 @@ idempotent. No package, guard, route, policy, grant, historical audit or source
 snapshot is rewritten. This addition still requires clear exact-head review,
 green head/main CI and immutable promotion before one actual no-guest readback.
 Future privileged guest work must wait for diagnosis of this preserved failure.
+
+PR125 main `2dd987b35ba924ec690d28ed08fd7eadd9bc32c6` passed clear exact-head
+review and seven head/main checks, identical trees and immutable promotion
+without a password. Its first no-guest diagnostic job
+`648c6906981349a7ad69d7f6f2f0e512` refused `snapshot_exact_inventory` while
+checking the historical deployment tree. No guest started, no diagnostic was
+published, and terminal service/cgroup/libvirt/QEMU/netns readback was empty.
+
+The Python gate's owner interpreter omitted `-B`. An actual harmless isolated
+child importing a sibling module creates `__pycache__` even when source files
+are0444; matching the service's0077 umask reproduces the exact immutable
+inventory refusal. Isolated `-I` ignores `PYTHONDONTWRITEBYTECODE`, so the fixed
+owner command now includes explicit `-B`. Its real-process regression checks
+the complete snapshot before and after the child with the existing verifier;
+the old invocation fails and the corrected invocation retains exact bytes and
+inventory. Browser ownership already used `-B` and is unchanged.
+
+The diagnostic now verifies the complete Root-private audit copy made before
+guest startup, retaining the same pinned manifest hash and all inventory,
+proof/source and fixture/policy checks. No cache is excluded from any accepted
+inventory and no historical file is deleted. The historical deployment tree
+is separately inventoried for diagnostic counts only: missing/extra counts,
+inventory equality and whether every extra is bytecode for a manifest module.
+No extra path or content is published; a dirty tree stays inadmissible for
+execution/rollback. The actual protected extras are not claimed to be bytecode
+until this metadata is read. Unknown original guest failure and P3 acceptance
+remain pending. New readback still requires this correction's own review/CI,
+immutable promotion and one fresh no-guest job.

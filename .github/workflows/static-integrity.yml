@@ -161,7 +161,9 @@ jobs:
           python -B -m unittest discover -s tests -p 'test_representation_bridge.py' -v
           python -B tests/integration_representation_bridge_real.py --output "$RUNNER_TEMP/paw-forensic-selection.json"
       - name: Verify finite runtime restart refusals without administrative actions
-        run: python -B -m unittest discover -s tests -p 'test_vm_runtime_revalidation.py' -v
+        run: |
+          python -B -m unittest discover -s tests -p 'test_vm_runtime_revalidation.py' -v
+          python -B -m unittest discover -s tests -p 'test_python_owner_snapshot.py' -v
       - name: Verify separate representation authority with inert privileged boundaries
         run: python -B -m unittest discover -s tests -p 'test_representation_authorization.py' -v
       - name: Verify representation adapters and opaque evidence without VM or root actions

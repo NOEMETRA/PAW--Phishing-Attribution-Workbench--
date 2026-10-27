@@ -35,6 +35,12 @@ def observe_cpu_quota(actual):
     actual['limits']['cpu.max'] = value
 
 
+def owner_command(config):
+    # Isolated mode ignores PYTHONDONTWRITEBYTECODE. The fixed owner imports
+    # from this Root snapshot, so -B must be explicit in the child interpreter.
+    return ['/usr/bin/python3', '-I', '-B', str(Path(__file__).resolve()), '--owner', str(config)]
+
+
 class Gate(Matrix):
     snapshot_host = Validation.snapshot_host
     def validate_runtime(self, runtime):
@@ -77,7 +83,7 @@ class Gate(Matrix):
         config = {'parent_pid': os.getpid(), 'guard_fingerprint': guard_fingerprint(), 'xml': str(node['xml']),
                   'ready': str(ready), 'control': str(control), 'result': str(self.output / (label + '-owner-result.json')), 'health': []}
         path = self.output / (label + '-owner.json'); atomic(path, config)
-        child = self.spawn(['/usr/bin/python3', '-I', str(Path(__file__).resolve()), '--owner', str(path)], label + '-owner')
+        child = self.spawn(owner_command(path), label + '-owner')
         vm = {'node': node, 'owner': child, 'control': control, 'label': label}; self.active_vm = vm
         actual = self.wait_file(ready, 30); vm['actual'] = actual
         self.run(['/usr/bin/systemctl', 'set-property', '--runtime', Path(actual['scope']).name, 'CPUQuota=50%'])
