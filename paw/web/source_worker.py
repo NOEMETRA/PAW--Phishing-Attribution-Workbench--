@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 import sys
 
-from paw.core.runtime import wait_for_gate, mark_stage, atomic_json
+from paw.core.runtime import wait_for_gate, mark_stage, atomic_json, tighten_posix_limit
 from paw.core.network_policy import offline_policy
 
 
@@ -19,15 +19,13 @@ def main():
     args = parser.parse_args(); request = json.loads(Path(args.request).read_bytes()); result = {'status': 'failed'}
     try:
         wait_for_gate()
-        effective_memory = None
+        effective_memory = effective_cpu = effective_file = None
         if os.name == 'posix':
             import resource
-            _, hard_memory = resource.getrlimit(resource.RLIMIT_AS)
-            effective_memory = min(256*1024**2, hard_memory) if hard_memory != resource.RLIM_INFINITY else 256*1024**2
-            resource.setrlimit(resource.RLIMIT_AS, (effective_memory, effective_memory))
-            resource.setrlimit(resource.RLIMIT_CPU, (10, 11))
-            resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
-            resource.setrlimit(resource.RLIMIT_FSIZE, (65*1024**2, 65*1024**2))
+            effective_memory, _ = tighten_posix_limit(resource.RLIMIT_AS, 256*1024**2)
+            effective_cpu, _ = tighten_posix_limit(resource.RLIMIT_CPU, 10, 11)
+            tighten_posix_limit(resource.RLIMIT_CORE, 0)
+            effective_file, _ = tighten_posix_limit(resource.RLIMIT_FSIZE, 65*1024**2)
         with offline_policy(True):
             from ..core import source_inspection as module
             limits = module.SourceLimits(**request['source_limits'])
@@ -54,8 +52,8 @@ def main():
             if (case/'source.bin').read_bytes() != captured.raw: raise ValueError('source_case_copy_changed')
             atomic_json(case/'execution.json', {'status': 'completed', 'analysis_kind': 'source_byte_observation',
                         'sample_execution': 'not_performed', 'assessment_status': 'not_evaluated', 'no_egress': True,
-                        'limits': {'source': asdict(limits), 'cpu_seconds': 10 if os.name == 'posix' else None,
-                                   'address_space_bytes': effective_memory,
+                        'limits': {'source': asdict(limits), 'cpu_seconds': effective_cpu,
+                                   'address_space_bytes': effective_memory, 'file_bytes': effective_file,
                                    'process_bounds': 'supervised_worker' if os.environ.get('PAW_START_GATE') else 'direct_posix_limits_only',
                                    'network_isolation': 'application_policy_only'}})
             mark_stage('source_sealing', identifier)

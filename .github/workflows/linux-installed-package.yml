@@ -88,6 +88,12 @@ jobs:
             "$RUNNER_TEMP/paw-installed/bin/python" -P -B \
             "$GITHUB_WORKSPACE/tests/integration_representation_faults_real.py" \
             --installed --output "$RUNNER_TEMP/paw-installed-results/forensic-faults"
+      - name: Verify installed workers retain inherited CPU memory and file ceilings
+        working-directory: ${{ runner.temp }}
+        run: |
+          env -u PYTHONPATH -u PYTHONHOME PYTHONNOUSERSITE=1 PAW_TEST_INHERITED_INSTALLED=1 \
+            "$RUNNER_TEMP/paw-installed/bin/python" -P -B \
+            "$GITHUB_WORKSPACE/tests/test_inherited_worker_limits.py" -v
       - name: Verify installed explicit forensic selection custody without VM execution
         working-directory: ${{ runner.temp }}
         run: |

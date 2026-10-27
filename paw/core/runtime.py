@@ -53,6 +53,20 @@ def atomic_json(path, value):
         temporary.unlink(missing_ok=True)
 
 
+def tighten_posix_limit(kind, soft, hard=None):
+    """Apply a finite ceiling without increasing inherited soft or hard limits."""
+    import resource
+    hard = soft if hard is None else hard
+    if type(soft) is not int or type(hard) is not int or not 0 <= soft <= hard:
+        raise ValueError('Invalid finite process ceiling')
+    inherited_soft, inherited_hard = resource.getrlimit(kind)
+    effective_hard = hard if inherited_hard == resource.RLIM_INFINITY else min(hard, inherited_hard)
+    effective_soft = min(soft, effective_hard)
+    if inherited_soft != resource.RLIM_INFINITY: effective_soft = min(effective_soft, inherited_soft)
+    resource.setrlimit(kind, (effective_soft, effective_hard))
+    return effective_soft, effective_hard
+
+
 def wait_for_gate():
     """Workers do not import analysis modules or spawn children until contained."""
     gate = os.environ.get('PAW_START_GATE')
@@ -64,7 +78,7 @@ def wait_for_gate():
     if os.name != 'nt':
         import resource
         memory = int(os.environ['PAW_MEMORY_BYTES'])
-        resource.setrlimit(resource.RLIMIT_AS, (memory, memory))
+        tighten_posix_limit(resource.RLIMIT_AS, memory)
 
 
 class WindowsJob:
