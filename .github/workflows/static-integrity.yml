@@ -168,6 +168,16 @@ jobs:
           python -B -m unittest discover -s tests -p 'test_representation_evidence.py' -v
           python -B -m unittest discover -s tests -p 'test_representation_producer.py' -v
           python -I -B lab/s14/representation_owned_inputs.py --workspace "$RUNNER_TEMP/paw-owned-representation-preparation" --nonce 0123456789abcdef --source-tree .
+      - name: Verify finite owned recipe and dropped client boundaries without Root or VM
+        run: |
+          python -B -m unittest discover -s tests -p 'test_representation_faults.py' -v
+          python -B -m unittest discover -s tests -p 'test_representation_fault_injection.py' -v
+          python -B -m unittest discover -s tests -p 'test_representation_client_control.py' -v
+          python -B -m unittest discover -s tests -p 'test_representation_client_runner.py' -v
+          python -B -m unittest discover -s tests -p 'test_representation_client_phases.py' -v
+          python -B -m unittest discover -s tests -p 'test_representation_owned_recipe.py' -v
+          python -B -m unittest discover -s tests -p 'test_representation_acceptance.py' -v
+          python -I -B lab/s14/representation_owned_inputs.py --workspace "$RUNNER_TEMP/paw-owned-representation-preparation" --nonce 0123456789abcdef --source-tree . --profile python --phase request --slot owner-loss
       - name: Verify source paths and native runtime admission before I/O
         run: python -m unittest discover -s tests -p 'test_input_admission.py' -v
       - name: Verify real malformed EML, input refusals and CLI/HTTP accounting

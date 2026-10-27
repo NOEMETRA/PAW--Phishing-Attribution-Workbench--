@@ -170,6 +170,14 @@ grant, readiness or actual VM was activated. The next
 adds separately reviewed libraries; actual owned recipes/matrices and scoped
 I08 remain required before P3 closure.
 
+The producer/client increment PR120 subsequently merged as
+`76975b7de828d068a7d2455cba18ddfe718e2699`, after a clear full-head review on
+`2a8e76845ed09f20f9e7d8173deafa717d97cb47` and7/7head checks. Main passed7/7
+with the identical tree.231 related tests and six source/six installed actual
+owned client preparations passed, without Root activation or a VM. The next
+[finite owned recipe](representation-owned-recipe.md) must complete actual
+Root/no-NIC normal/fault/PAW acceptance and scoped I08 before P3 closes.
+
 P0 closed on26 October2026 after the owner-authorized same-head review retry
 completed clear on `e63ab29a10f2a5b8c561c1fc0ea370b60ec893f6`, all seven required
 head checks and all prior threads were clear, and PR111 merged as

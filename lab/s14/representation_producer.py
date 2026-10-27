@@ -1,14 +1,18 @@
-"""Root representation execution/publication library; no CLI or recipe.
+"""Root representation custody and finite owned acceptance; no arbitrary CLI.
 
-Existing installed grants only; no issuance/readiness installation or ordinary
-user-selected Root command. Actual owned recipe/I08 acceptance is separate.
+Existing protected grants serve custody; the reserved recipe independently
+restricts new authority to immutable-generated owned bytes and scoped I08.
 """
 import argparse
 import os
 from pathlib import Path
+import re
+import json
+import stat
 import subprocess
 import time
 import traceback
+import uuid
 
 import representation_authorization as auth
 import representation_adapter as adapter
@@ -17,6 +21,9 @@ from browser_offline_adapter import input_media
 from benign_guest_validation import BASE, digest
 from verify_representation import read, verify_single
 from reader_export import publish_reader_tree
+from representation_owned_inputs import identity as client_identity
+from representation_owned_inputs import fixtures, validate_owned
+from verify_representation import verify_snapshot, verify_fault, FAULTS
 
 CONTROL = Path('/var/lib/paw-s14/control')
 STATE = Path('/var/lib/paw-vm')
@@ -99,23 +106,78 @@ def image_proof(profile, context):
     return 'image-provenance.json', raw
 
 
-def execute(raw, policy_raw, *, cancel=False):
+def owned_fault_gate(profile, case, witness):
+    require(profile in {adapter.PYTHON, adapter.HTML} and case in FAULTS and type(witness) is dict, 'owned_representation_fixed_fault')
+    parent = adapter.HashGate if profile == adapter.PYTHON else adapter.BrowserVM
+    class OwnedFaultGate(parent):
+        def start(self, label, boot=True):
+            vm = super().start(label, boot=case != 'paused-refusal')
+            witness.update(schema='paw-s14-representation-fault-v1', case=case, vm_uuid=vm['node']['uuid'])
+            if case == 'paused-refusal':
+                witness['paused_before_refusal'] = self.connection.lookupByUUIDString(vm['node']['uuid']).state()[0] == self.libvirt.VIR_DOMAIN_PAUSED
+                witness['_fault_at'] = time.monotonic(); raise ValueError(FAULTS[case])
+            channel = vm['channel']; original = channel.call
+            def observed(operation, **kwargs):
+                if operation == 'poll':
+                    witness['_fault_at'] = time.monotonic()
+                    if case == 'owner-loss':
+                        from benign_guest_validation import process_identity
+                        witness['owner_pid'] = vm['owner'].pid; witness['owner_identity'] = process_identity(vm['owner'].pid)
+                        vm['owner'].kill(); vm['owner'].wait(timeout=3); witness['owner_returncode'] = vm['owner'].returncode
+                    else:
+                        channel.serial.close(); channel.serial.close = channel.serial.log.close
+                        witness['serial_closed'] = True
+                    raise ValueError(FAULTS[case])
+                value = original(operation, **kwargs)
+                if operation == 'start': witness.update(guest_admission=value, admitted_at=int(time.time()))
+                if operation == 'inspect': witness['guest_inspection'] = value
+                return value
+            channel.call = observed
+            return vm
+        def stop(self, vm, kill=False):
+            value = super().stop(vm, kill=kill)
+            if '_fault_at' in witness: witness['fault_stop_seconds'] = time.monotonic()-witness.pop('_fault_at')
+            return value
+    return OwnedFaultGate
+
+
+def owned_probe_gate(profile, witness):
+    require(profile in {adapter.PYTHON, adapter.HTML} and type(witness) is dict, 'owned_representation_fixed_probe')
+    parent = adapter.HashGate if profile == adapter.PYTHON else adapter.BrowserVM
+    class OwnedProbe(parent):
+        def start(self, label, boot=True):
+            vm = super().start(label, boot=boot)
+            try:
+                with auth.fs.execution_lock(): raise ValueError('owned_representation_busy_lock_not_exclusive')
+            except BlockingIOError: witness['live_busy_lock_refused'] = True
+            return vm
+    return OwnedProbe
+
+
+def execute(raw, policy_raw, *, cancel=False, _owned_fault=None, _witness=None, _owned_probe=False):
     root_only(); summary = auth.inspect(raw); profile = summary['profile']; identifier = summary['request_id']
     context = auth.capture(profile); _, checked, request, source = auth.load_bound(raw, policy_raw, context)
     require(checked == summary, 'representation_producer_request_changed')
     policy, ready = auth.installed(policy_raw, context)
+    require(_owned_fault is None or policy['mode'] == 'owned-validation' and _owned_fault in FAULTS and
+            type(_witness) is dict, 'representation_owned_fault_policy')
+    gate_class = None if _owned_fault is None else owned_fault_gate(profile, _owned_fault, _witness)
+    require(type(_owned_probe) is bool and not (_owned_probe and _owned_fault is not None), 'representation_owned_probe_shape')
+    if _owned_probe:
+        require(policy['mode'] == 'owned-validation' and type(_witness) is dict, 'representation_owned_probe_policy')
+        gate_class = owned_probe_gate(profile, _witness)
     output = audit_path(identifier)
     with auth.fs.root_directory(CONTROL): pass
     current = adapter.job(request); job_sha = auth.digest(auth.canonical(current))
     image = None
     if profile == adapter.HTML:
         image = input_media(source, identifier)
-        gate = adapter.BrowserVM(argparse.Namespace(output=output), phase='job', media=image,
+        gate = (gate_class or adapter.BrowserVM)(argparse.Namespace(output=output), phase='job', media=image,
             seed_config={'source_sha256': summary['source_sha256'], 'source_bytes': len(source),
                          'job_sha256': job_sha, 'request_id': identifier})
     else:
         require(profile == adapter.PYTHON, 'representation_producer_profile')
-        gate = adapter.HashGate(argparse.Namespace(output=output)); gate.active_vm = None
+        gate = (gate_class or adapter.HashGate)(argparse.Namespace(output=output)); gate.active_vm = None
     gate.report.update(runs=[], vms=[], real_connections=0, scope=auth.SCOPE)
     before = None; canary = os.urandom(32)
     try:
@@ -202,3 +264,357 @@ def publish(raw):
             auth.fs.exclusive(fd, item['stored_as'], blob)
     publish_reader_tree(destination)
     return {'request_id': identifier, 'result': 'PASS', 'export': str(destination), 'receipt_sha256': auth.digest(receipt_raw)}
+
+
+CLIENT_PYTHON = Path('/home/linux-dac/Documents/Codex/2026-10-23/riprendiamo-paw-sul-nuovo-pc-linux/work/s14-local/p3-installed/venv/bin/python')
+CLIENTS = Path('/var/lib/paw-vm-clients')
+READERS = Path('/var/lib/paw-vm-exports')
+PHASES = {'prepare', 'request', 'import'}
+SLOTS = {'positive', 'prefix', 'qp', 'paused-refusal', 'owner-loss', 'protocol-loss', 'smoke'}
+
+
+def client_command(job, nonce, profile, mode, phase, *, slot=None):
+    require(type(job) is str and re.fullmatch('[0-9a-f]{32}', job) and
+            type(nonce) is str and re.fullmatch('[0-9a-f]{16}', nonce), 'owned_client_identifier')
+    require(type(profile) is str and profile in {'python', 'html'} and type(mode) is str and mode in {'source', 'installed'} and
+            type(phase) is str and phase in PHASES, 'owned_client_finite_phase')
+    require((phase == 'prepare' and slot is None) or (phase != 'prepare' and type(slot) is str and slot in SLOTS),
+            'owned_client_finite_slot')
+    tag = profile+'-'+mode+'-'+phase+('' if slot is None else '-'+slot)
+    unit = 'paw-vm-client-'+job+'-'+tag; parent = 'paw-vm-owned-'+job+'.service'
+    reader = READERS/(job+'-client-source'); code = reader/'runtime-snapshot'; workspace = CLIENTS/job/(profile+'-'+mode)
+    gate = reader/('go-'+tag+'.json')
+    argv = ['/usr/bin/systemd-run', '--quiet', '--wait', '--pipe', '--collect', '--unit='+unit,
+        '--property=Type=exec', '--property=RuntimeMaxSec=180', '--property=TimeoutStopSec=5',
+        '--property=KillMode=control-group', '--property=MemoryMax=256M', '--property=MemorySwapMax=0',
+        '--property=TasksMax=32', '--property=CPUQuota=50%', '--property=LimitCORE=0',
+        '--property=LimitFSIZE=8388608', '--property=UMask=0077', '--property=IPAddressDeny=any',
+        '--property=Slice=machine-paws14.slice', '--property=BindsTo='+parent, '--property=After='+parent,
+        '--property=PrivateNetwork=yes', '--property=PrivateTmp=yes', '--property=ProtectSystem=strict',
+        '--property=ProtectHome=read-only', '--property=ProtectControlGroups=yes',
+        '--property=ReadWritePaths='+str(CLIENTS/job),
+        '--property=InaccessiblePaths=/run/user /run/libvirt /run/dbus /run/systemd/private',
+        '--property=NoNewPrivileges=yes', '--property=WorkingDirectory='+str(CLIENTS/job),
+        '/usr/bin/env', '-i', 'PATH=/usr/bin:/bin', 'HOME=/nonexistent', 'LANG=C.UTF-8', 'PYTHONDONTWRITEBYTECODE=1',
+        '/usr/bin/setpriv', '--reuid=1000', '--regid=1000', '--clear-groups', '--inh-caps=-all',
+        '--ambient-caps=-all', '--bounding-set=-all', '--no-new-privs',
+        str(CLIENT_PYTHON), '-I', '-B', str(code/'lab/s14/representation_owned_inputs.py'),
+        '--workspace', str(workspace), '--nonce', nonce, '--profile', profile, '--phase', phase,
+        '--gate-file', str(gate), '--gate-tag', tag]
+    if mode == 'source': argv += ['--source-tree', str(code)]
+    if slot is not None: argv += ['--slot', slot]
+    return {'unit': unit+'.service', 'parent_unit': parent, 'reader': reader, 'code': code, 'workspace': workspace,
+            'gate': gate, 'tag': tag, 'argv': argv,
+            'environment': {'PATH': '/usr/bin:/bin', 'HOME': '/nonexistent', 'LANG': 'C.UTF-8',
+                            'PYTHONDONTWRITEBYTECODE': '1'}}
+
+
+def stage_client(job, context):
+    root_only(); spec = client_command(job, '0'*16, 'python', 'source', 'prepare')
+    with auth.fs.root_directory(CLIENTS.parent) as parent:
+        try: os.mkdir(CLIENTS.name, mode=0o751, dir_fd=parent)
+        except FileExistsError: pass
+    with auth.fs.root_directory(CLIENTS) as parent:
+        require(os.fstat(parent).st_mode & 0o777 == 0o751, 'owned_client_parent_mode')
+        os.mkdir(job, mode=0o700, dir_fd=parent)
+        fd = os.open(job, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent)
+        try: os.fchown(fd, 1000, 1000); os.fchmod(fd, 0o700)
+        finally: os.close(fd)
+        os.fsync(parent)
+    with auth.fs.root_directory(READERS) as parent: os.mkdir(spec['reader'].name, mode=0o700, dir_fd=parent)
+    copy_runtime(spec['reader'], context); verify_snapshot(spec['reader'], context)
+    publish_reader_tree(spec['reader'])
+    return spec['reader']
+
+
+def client_properties(unit):
+    result = subprocess.run(['/usr/bin/systemctl', 'show', unit,
+        '--property=LoadState,ActiveState,SubState,MainPID,ControlGroup,ExecMainStatus,Slice'],
+        capture_output=True, text=True, timeout=10)
+    require(len(result.stdout)+len(result.stderr) <= 65536, 'owned_client_unit_property_budget')
+    values = dict(line.split('=', 1) for line in result.stdout.splitlines() if '=' in line)
+    require(result.returncode == 0 or result.returncode == 1 and values.get('LoadState') == 'not-found',
+            'owned_client_unit_properties')
+    return values
+
+
+def client_process(pid):
+    from benign_guest_validation import process_identity
+    identity = process_identity(pid); require(identity is not None, 'owned_client_missing_process')
+    status = Path('/proc', str(pid), 'status').read_text()
+    proof = client_identity(status)
+    namespaces = {name: os.readlink('/proc/'+str(pid)+'/ns/'+name) for name in ['net', 'mnt']}
+    require(all(re.fullmatch(name+':\\[[0-9]+\\]', value) and value != os.readlink('/proc/self/ns/'+name)
+                for name, value in namespaces.items()), 'owned_client_private_namespaces')
+    require(process_identity(pid) == identity, 'owned_client_process_changed')
+    return {'pid': pid, 'pid_identity': identity, 'status_sha256': auth.digest(status.encode()), 'namespaces': namespaces, **proof}
+
+
+def client_limits(spec, properties):
+    path = '/machine.slice/machine-paws14.slice/'+spec['unit']
+    require(properties.get('Slice') == 'machine-paws14.slice' and properties.get('ControlGroup') == path,
+            'owned_client_effective_slice')
+    group = Path('/sys/fs/cgroup'+path)
+    limits = {name: (group/name).read_text().strip() for name in ['memory.max', 'memory.swap.max', 'pids.max', 'cpu.max']}
+    require(limits == {'memory.max': str(256*1024**2), 'memory.swap.max': '0', 'pids.max': '32',
+                       'cpu.max': '50000 100000'}, 'owned_client_effective_limits')
+    return limits
+
+
+def client_terminal(spec, process_proof):
+    from benign_guest_validation import process_identity
+    properties = client_properties(spec['unit'])
+    require(properties.get('ActiveState') in {'inactive', 'failed'} and properties.get('MainPID') == '0',
+            'owned_client_unit_not_terminal')
+    group = Path('/sys/fs/cgroup/machine.slice/machine-paws14.slice')/spec['unit']
+    require(not group.exists(), 'owned_client_cgroup_not_removed')
+    if process_proof is not None:
+        require(process_identity(process_proof['pid']) != process_proof['pid_identity'], 'owned_client_writer_alive')
+    return {'unit': spec['unit'], 'load_state': properties.get('LoadState'), 'active_state': properties['ActiveState'],
+            'main_pid': 0, 'cgroup_removed': True, 'writers_stopped': True}
+
+
+def run_client(job, nonce, profile, mode, phase, context, *, slot=None):
+    root_only(); spec = client_command(job, nonce, profile, mode, phase, slot=slot)
+    verify_snapshot(spec['reader'], context)
+    folder = STATE/'jobs'/job; frontend = None; process_proof = None; acknowledged = False
+    with auth.fs.root_directory(folder) as fd:
+        logfd = os.open('client-'+spec['tag']+'.log', os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o400, dir_fd=fd)
+    with os.fdopen(logfd, 'wb') as log:
+        try:
+            frontend = subprocess.Popen(spec['argv'], stdin=subprocess.DEVNULL, stdout=log, stderr=log, env=spec['environment'])
+            deadline = time.monotonic()+12
+            while time.monotonic() < deadline and frontend.poll() is None:
+                properties = client_properties(spec['unit']); pid = properties.get('MainPID', '')
+                if pid.isdecimal() and int(pid) > 1:
+                    try: observed = client_process(int(pid))
+                    except (ValueError, FileNotFoundError, ProcessLookupError): time.sleep(.05); continue
+                    limits = client_limits(spec, properties); process_proof = {**observed, 'limits': limits}
+                    with auth.fs.root_directory(spec['reader']) as fd:
+                        auth.fs.exclusive(fd, spec['gate'].name, auth.canonical({'schema': 'paw-s14-owned-client-go-v1',
+                            'nonce': nonce, 'tag': spec['tag'], 'pid': observed['pid']}))
+                        leaf = os.open(spec['gate'].name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=fd)
+                        try: os.fchown(leaf, 0, 1000); os.fchmod(leaf, 0o440)
+                        finally: os.close(leaf)
+                        os.fsync(fd)
+                    acknowledged = True; break
+                time.sleep(.05)
+            require(acknowledged, 'owned_client_kernel_identity_not_acknowledged')
+            result = frontend.wait(timeout=185)
+        finally:
+            # The child is also bound to the parent owned unit. Stop and verify
+            # its whole dedicated cgroup before any guest/next client can start.
+            stopped = subprocess.run(['/usr/bin/systemctl', 'stop', spec['unit']], capture_output=True, text=True, timeout=12)
+            if frontend is not None:
+                try: frontend.wait(timeout=10)
+                except subprocess.TimeoutExpired: raise ValueError('owned_client_frontend_not_terminal')
+            terminal = client_terminal(spec, process_proof)
+    require(result == 0 and stopped.returncode in {0, 5} and terminal['writers_stopped'] is True,
+            'owned_client_phase_failed')
+    require(auth.canonical(auth.capture(context['profile'])) == auth.canonical(context), 'owned_client_context_changed')
+    verify_snapshot(spec['reader'], context)
+    return {'result': 'PASS', 'phase': phase, 'profile': profile, 'mode': mode, 'slot': slot,
+            'process': process_proof, 'terminal': terminal, 'log': str(folder/('client-'+spec['tag']+'.log'))}
+
+
+def owned_request(job, nonce, profile, mode, slot):
+    spec = client_command(job, nonce, profile, mode, 'request', slot=slot)
+    raw = read(spec['workspace'], 'slots/'+slot+'/request.json', auth.contract.REQUEST_LIMIT)
+    name = profile+('-selected' if profile == 'python' else '-original') if slot == 'positive' else profile+('-qp' if slot == 'qp' else '-prefix')
+    entry = next(v for v in fixtures(nonce) if v['name'] == name)
+    request = validate_owned(raw, entry, auth.contract); case = request['binding']['case_reference']['case_id']
+    original = read(spec['workspace'], 'cases/'+case+'/source.bin', 8*1024**2)
+    manifest = read(spec['workspace'], 'cases/'+case+'/manifest.json', 1024**2)
+    ref = request['binding']['case_reference']
+    require(original == entry['original'] and auth.digest(manifest) == ref['manifest_sha256'] and
+            auth.digest(read(spec['workspace'], 'cases/'+case+'/evidence/merkle_index.json', 2*1024**2)) == ref['merkle_index_sha256'] and
+            read(spec['workspace'], 'cases/'+case+'/evidence/merkle_root.bin', 1024).decode().strip() == ref['merkle_root_blake3'],
+            'owned_representation_actual_parent_files')
+    parent = spec['workspace']/'cases'/case
+    return raw, parent, case_inventory(parent)
+
+
+def case_inventory(case):
+    from verify_representation import inventory
+    return {name: auth.digest(read(case, name, 1024**2)) for name in inventory(case) if not name.endswith('/')}
+
+
+def snapshot_proof():
+    from vm_release_contract import release as validate_release
+    with auth.fs.root_directory(STATE) as fd:
+        active = auth.decode(auth.fs.read(fd, 'active.json'))
+        enrolled = auth.decode(auth.fs.read(fd, 'policy.json'))
+    with auth.fs.root_directory(RELEASES) as parent:
+        manifest, proof = auth.storage.verify(parent, active['release_sha'], active['manifest_sha256'])
+    require(auth.HERE.parents[1] == RELEASES/active['release_sha'], 'owned_representation_active_snapshot')
+    validate_release(proof, enrolled, enrolled['owner_uid'])
+    require(enrolled['owner_uid'] == 1000, 'owned_representation_fixed_client_owner')
+    return manifest, proof
+
+
+def new_readiness(context, matrix_raw):
+    manifest, proof = snapshot_proof(); review = proof['review']
+    runs = [row for row in proof['ci'] if row['event'] == 'pull_request']
+    require(review['decision'] == 'no_findings' and review['open_threads'] == 0 and review['resolved_head_sha'] == manifest['head_sha'] and
+            len(runs) == 2 and all(row['status'] == 'completed' and row['conclusion'] == 'success' and
+            row['head_sha'] == manifest['head_sha'] for row in runs) and sum(len(row['jobs']) for row in runs) == 7,
+            'owned_representation_review_and_ci')
+    now = int(time.time()); raw = auth.canonical({'schema': 'paw-s14-representation-i08-v1', 'scope': auth.SCOPE,
+        'decision': 'ready-for-explicit-single-representation-no-nic', 'context_sha256': auth.digest(auth.canonical(context)),
+        'matrix_sha256': auth.digest(matrix_raw), 'reviewed_head': manifest['head_sha'],
+        'review_url': 'https://github.com/'+auth.storage.REPOSITORY+'/pull/'+str(proof['pull_request']['number'])+'#issuecomment-'+str(review['receipt_id']),
+        'ci_runs': [row['run_id'] for row in runs], 'ci_successful_jobs': 7, 'created_at': now, 'expires_at': now+86400})
+    auth.validate_readiness(raw, context); return raw
+
+
+def accepted(profile, context):
+    prefix = 'acceptance-'+profile+'-'+auth.digest(auth.canonical(context))+'-'
+    with auth.store() as fd:
+        names = os.listdir(fd); require(len(names) <= 4096, 'owned_representation_acceptance_inventory')
+        for name in names:
+            if not re.fullmatch(re.escape(prefix)+'[0-9a-f]{64}\\.json', name): continue
+            value = auth.decode(auth.fs.read(fd, name, 65536))
+            try: ready = auth.fs.read(fd, 'readiness-'+value['readiness_sha256']+'.json', 65536)
+            except FileNotFoundError: continue  # A revoked readiness never authorizes reuse.
+            parsed = auth.decode(ready); auth.validate_readiness(ready, context, now=parsed['created_at'])
+            require(name == prefix+auth.digest(ready)+'.json' and value['context_sha256'] == auth.digest(auth.canonical(context)) and
+                    value['profile'] == context['profile'] and value['result'] == 'PASS', 'owned_representation_acceptance_binding')
+            if parsed['expires_at'] <= time.time(): continue
+            matrix = CONTROL/('representation-owned-'+value['job'])
+            require(re.fullmatch('[0-9a-f]{32}', value['job']) and
+                    auth.digest(read(matrix, 'validation.json', 1024**2)) == parsed['matrix_sha256'] == value['matrix_sha256'] and
+                    auth.digest(read(matrix, 'acceptance.json', 1024**2)) == value['acceptance_sha256'],
+                    'owned_representation_acceptance_files')
+            return True
+    return False
+
+
+def owned_success(report, profile, nonce):
+    require(report['result'] == 'PASS' and len(report['runs']) == 1, 'owned_representation_execution_failed')
+    outcome = report['runs'][0]['outcome']
+    require(outcome['status'] == 'completed' and type(outcome['returncode']) is int and outcome['returncode'] == 0,
+            'owned_representation_expected_completion')
+    blob = bytes.fromhex(outcome['records'][0]['bytes_hex'])
+    if profile == 'python': require(blob.decode().splitlines() == ['OWNED-REPRESENTATION-'+nonce], 'owned_representation_python_oracle')
+    else: require(profile == 'html' and auth.decode(blob, 1024)['title'] == ('OWNED-REPRESENTATION-'+nonce)[:32],
+                  'owned_representation_html_oracle')
+
+
+def run_owned(job, release):
+    """One pending existing profile per bounded call: Python, then HTML.
+
+    The existing reserved recipe accepts no profile or source from its caller.
+    Both current profile acceptances mean a subsequent call starts no VM.
+    """
+    root_only(); require(re.fullmatch('[0-9a-f]{32}', job) and re.fullmatch('[0-9a-f]{40}', release) and
+                        auth.HERE.parents[1] == RELEASES/release, 'owned_representation_job_snapshot')
+    from vm_operator_host import write_state
+    from vm_runtime_revalidation import revalidate
+    from gw_quarantine import publish as quarantine_publish
+    folder = STATE/'jobs'/job; ready_raw = None; ready_installed = False; completed = False; selected = None
+    record = {'result': 'FAIL', 'job': job, 'recipe': 'python-owned-v2', 'release_sha': release,
+              'real_samples_executed': 0, 'real_source_grants_issued': 0}
+    with auth.fs.root_directory(folder): pass
+    try:
+        snapshot_proof()  # Full merged review/head+main CI proof before any new work.
+        runtime = revalidate(); auth.initialize()
+        contexts = {key: auth.capture(auth.contract.PROFILES[key][0]) for key in ['python', 'html']}
+        selected = next((key for key in ['python', 'html'] if not accepted(key, contexts[key])), None)
+        if selected is None:
+            record.update(result='PASS', already_accepted=True, cases=0, vm_started=False)
+        else:
+            context = contexts[selected]; nonce = uuid.uuid4().hex[:16]
+            matrix = CONTROL/('representation-owned-'+job)
+            with auth.fs.root_directory(CONTROL) as fd: os.mkdir(matrix.name, mode=0o700, dir_fd=fd)
+            stage_client(job, context)
+            summary = {'schema': 'paw-s14-representation-owned-matrix-v1', 'profile': context['profile'],
+                'context': context, 'nonce': nonce, 'validations': [], 'clients': [], 'real_samples_executed': 0}
+            for mode in ['source', 'installed']:
+                summary['clients'].append(run_client(job, nonce, selected, mode, 'prepare', context))
+            for slot in ['positive', 'prefix', 'qp', 'paused-refusal', 'owner-loss', 'protocol-loss']:
+                summary['clients'].append(run_client(job, nonce, selected, 'source', 'request', context, slot=slot))
+                raw, parent, original = owned_request(job, nonce, selected, 'source', slot)
+                policy_raw = auth.make_policy(context, [raw], owned_manifest_sha256=auth.digest(auth.canonical({
+                    'nonce': nonce, 'slot': slot, 'profile': context['profile'], 'request_sha256': auth.digest(raw)})))
+                auth.install_policy(policy_raw, context); auth.issue(raw, policy_raw, context)
+                for field in ['selection_binding_sha256', 'source']:
+                    changed = auth.decode(raw)
+                    if field == 'source': changed['candidate']['source']['sha256'] = '0'*64
+                    else: changed['candidate'][field] = '0'*64
+                    try: auth.inspect(auth.canonical(changed))
+                    except ValueError: pass
+                    else: raise ValueError('owned_representation_changed_request_admitted')
+                witness = {}; report, audit = execute(raw, policy_raw, _owned_fault=slot if slot in FAULTS else None,
+                    _witness=witness, _owned_probe=slot == 'positive')
+                if slot in FAULTS: verified = verify_fault(audit, raw, slot, witness)
+                else:
+                    require(report['result'] == 'PASS', 'owned_representation_execution_failed:'+slot+':'+report.get('error', '')+report.get('verification_error', ''))
+                    verified = verify_single(audit); owned_success(report, selected, nonce)
+                    if slot == 'positive': require(witness.get('live_busy_lock_refused') is True, 'owned_representation_live_busy_witness')
+                require(verified['result'] == 'PASS', 'owned_representation_independent_verification_failed')
+                require(case_inventory(parent) == original, 'owned_representation_parent_changed')
+                try: auth.consume(raw, policy_raw, context)
+                except FileExistsError: pass
+                else: raise ValueError('owned_representation_replay_accepted')
+                summary['validations'].append({'slot': slot, 'request_id': auth.decode(raw)['candidate']['request_id'],
+                    'audit': str(audit), 'verification': verified, 'witness': witness, 'replay_refused': True,
+                    'wrong_parent_and_digest_refused': True, 'parent_unchanged': True})
+            refused = matrix/'unknown-stop-must-not-publish'
+            try: quarantine_publish(refused, [], stopped=None)
+            except ValueError: require(not refused.exists(), 'owned_representation_unknown_stop_output')
+            else: raise ValueError('owned_representation_unknown_stop_published')
+            require(auth.canonical(auth.capture(context['profile'])) == auth.canonical(context), 'owned_representation_final_context')
+            summary.update(result='PASS', unknown_stop_publication_refused=True)
+            validation_raw = auth.canonical(summary)
+            with auth.fs.root_directory(matrix) as fd: auth.fs.exclusive(fd, 'validation.json', validation_raw)
+            ready_raw = new_readiness(context, validation_raw); auth.install_readiness(ready_raw, context); ready_installed = True
+            smokes = []
+            for mode in ['source', 'installed']:
+                run_client(job, nonce, selected, mode, 'request', context, slot='smoke')
+                raw, parent, original = owned_request(job, nonce, selected, mode, 'smoke')
+                policy_raw = auth.make_policy(context, [raw], mode='explicit-source-analysis', ready=ready_raw)
+                auth.install_policy(policy_raw, context); auth.issue(raw, policy_raw, context)
+                report, audit = execute(raw, policy_raw); require(report['result'] == 'PASS', 'owned_representation_smoke_execution')
+                owned_success(report, selected, nonce)
+                exported = publish(raw)
+                client = run_client(job, nonce, selected, mode, 'import', context, slot='smoke')
+                require(case_inventory(parent) == original, 'owned_representation_smoke_parent_changed')
+                sidecar = client_command(job, nonce, selected, mode, 'import', slot='smoke')['workspace']/'sidecar-smoke/result'
+                require(read(sidecar, 'request.json', auth.contract.REQUEST_LIMIT) == raw and
+                        auth.digest(read(sidecar, 'receipt.json', auth.contract.RECEIPT_LIMIT)) == exported['receipt_sha256'],
+                        'owned_representation_smoke_sidecar_binding')
+                receipt = auth.contract.validate_receipt(read(sidecar, 'receipt.json', auth.contract.RECEIPT_LIMIT),
+                    auth.contract.validate_request(raw, auth.decode(raw)['candidate']['created_at']), auth.digest(raw))
+                for item in receipt['artifacts']:
+                    require(auth.digest(read(sidecar, item['stored_as'], 1024)) == item['sha256'], 'owned_representation_smoke_sidecar_output')
+                try: auth.consume(raw, policy_raw, context)
+                except FileExistsError: pass
+                else: raise ValueError('owned_representation_smoke_replay_accepted')
+                smokes.append({'mode': mode, 'request_id': exported['request_id'], 'export': exported, 'client': client,
+                               'original_unchanged': True, 'replay_refused': True})
+            acceptance = auth.canonical({'result': 'PASS', 'job': job, 'profile': context['profile'],
+                'matrix_sha256': auth.digest(validation_raw), 'readiness_sha256': auth.digest(ready_raw),
+                'smokes': smokes, 'real_source_grants_issued': 0})
+            with auth.fs.root_directory(matrix) as fd: auth.fs.exclusive(fd, 'acceptance.json', acceptance)
+            value = {'schema': 'paw-s14-representation-owned-acceptance-v1', 'result': 'PASS', 'job': job,
+                'profile': context['profile'], 'context_sha256': auth.digest(auth.canonical(context)),
+                'readiness_sha256': auth.digest(ready_raw), 'matrix_sha256': auth.digest(validation_raw),
+                'acceptance_sha256': auth.digest(acceptance)}
+            publish_reader_tree(matrix)
+            with auth.store() as fd:
+                auth.fs.exclusive(fd, 'acceptance-'+selected+'-'+value['context_sha256']+'-'+value['readiness_sha256']+'.json', auth.canonical(value))
+            record.update(result='PASS', profile=selected, cases=8, vm_started=True, matrix=str(matrix),
+                          readiness_sha256=auth.digest(ready_raw), matrix_sha256=auth.digest(validation_raw))
+            completed = True
+        record['runtime_sha256'] = auth.digest(auth.canonical(runtime))
+    except Exception as error: record.update(result='FAIL', error=str(error), traceback=traceback.format_exc())
+    finally:
+        if ready_installed and not completed:
+            with auth.store() as fd:
+                try: os.unlink('readiness-'+auth.digest(ready_raw)+'.json', dir_fd=fd)
+                except FileNotFoundError: pass
+                os.fsync(fd)
+            record['new_readiness_revoked'] = True
+        with auth.fs.root_directory(folder) as fd: write_state(fd, 'result.json', record)
+    print(json.dumps({'result': record['result'], 'job': job, 'profile': selected, 'real_samples_executed': 0}), flush=True)
+    require(record['result'] == 'PASS', 'owned_representation_recipe_failed')

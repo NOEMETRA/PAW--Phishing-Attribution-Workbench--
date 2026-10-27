@@ -66,6 +66,9 @@ class Evidence(unittest.TestCase):
         # physical image/context, guest or I08 is claimed by this fixture.
         with mock.patch.object(auth, '_backend', return_value=SimpleNamespace(validate_context=lambda value: None)):
             policy = auth.make_policy(context, [raw], owned_manifest_sha256='3'*64)
+        # Policy generation can cross a wall-clock second. Model grant/consume
+        # after policy creation, as the real authority does.
+        now = int(time.time())
         grant = {'schema': 'paw-s14-representation-grant-v1', 'scope': auth.SCOPE, **summary,
             'policy_sha256': auth.digest(policy), 'context_sha256': auth.digest(auth.canonical(context)),
             'execution_purpose': 'owned-validation', 'created_at': now, 'expires_at': min(now+900, request['candidate']['expires_at'])}

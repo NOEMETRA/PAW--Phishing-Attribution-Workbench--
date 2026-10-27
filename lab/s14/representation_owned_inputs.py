@@ -2,7 +2,7 @@
 
 A reviewed Root recipe must drop UID/capabilities before invoking this client,
 distrust its output and independently restrict approval to the immutable-owned
-exact expected bytes. No such invocation is installed by this module.
+exact expected bytes. The fixed invocation lives in the separately reviewed producer recipe.
 """
 import argparse
 import base64
@@ -15,6 +15,61 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import stat
+import time
+
+SLOTS = {'positive', 'prefix', 'qp', 'paused-refusal', 'owner-loss', 'protocol-loss', 'smoke'}
+
+
+def identity(raw):
+    require(type(raw) is str and len(raw) <= 65536, 'owned_client_process_status_budget')
+    fields = {}
+    for line in raw.splitlines():
+        if ':' in line:
+            key, value = line.split(':', 1); require(key not in fields, 'owned_client_duplicate_process_status')
+            fields[key] = value.split()
+    require(fields.get('Uid') == ['1000']*4 and fields.get('Gid') == ['1000']*4 and fields.get('Groups') == [] and
+            fields.get('NoNewPrivs') == ['1'], 'owned_client_uid_groups_or_nnp')
+    for key in ['CapInh', 'CapPrm', 'CapEff', 'CapBnd', 'CapAmb']:
+        values = fields.get(key)
+        require(type(values) is list and len(values) == 1 and re.fullmatch('[0-9a-fA-F]{1,16}', values[0]) and
+                int(values[0], 16) == 0, 'owned_client_capabilities')
+    return {'uid': 1000, 'gid': 1000, 'groups': [], 'no_new_privileges': True, 'capabilities': 'all zero including bounding'}
+
+
+def await_gate(path, tag, nonce):
+    """Root's protected acknowledgment follows independent kernel PID checks.
+
+    Does not grant execution: this process remains the unprivileged PAW client.
+    """
+    identity(Path('/proc/self/status').read_text())
+    require(type(tag) is str and re.fullmatch('[a-z-]{1,96}', tag) and path.is_absolute() and
+            path.name == 'go-'+tag+'.json' and '..' not in path.parts, 'owned_client_gate_path')
+    fd = os.open('/', os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        for part in path.parts[1:-1]:
+            info = os.fstat(fd); require(info.st_uid == 0 and not info.st_mode & 0o022, 'owned_client_gate_ancestor')
+            child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+            os.close(fd); fd = child
+        info = os.fstat(fd); require(info.st_uid == 0 and not info.st_mode & 0o022, 'owned_client_gate_parent')
+        deadline = time.monotonic()+15
+        while True:
+            try: leaf = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=fd)
+            except (FileNotFoundError, PermissionError):
+                require(time.monotonic() < deadline, 'owned_client_gate_deadline'); time.sleep(.05); continue
+            try:
+                before = os.fstat(leaf)
+                require(stat.S_ISREG(before.st_mode) and before.st_uid == 0 and not before.st_mode & 0o022 and
+                        before.st_nlink == 1 and before.st_size <= 1024, 'owned_client_gate_file')
+                raw = os.read(leaf, 1025); after = os.fstat(leaf)
+                require(len(raw) == before.st_size and (before.st_dev, before.st_ino, before.st_mtime_ns) ==
+                        (after.st_dev, after.st_ino, after.st_mtime_ns), 'owned_client_gate_changed')
+                value = json.loads(raw)
+                require(value == {'schema': 'paw-s14-owned-client-go-v1', 'nonce': nonce, 'tag': tag, 'pid': os.getpid()} and
+                        type(value['pid']) is int, 'owned_client_gate_binding')
+                return
+            finally: os.close(leaf)
+    finally: os.close(fd)
 
 
 def require(value, reason):
@@ -66,7 +121,7 @@ def validate_owned(raw, entry, bridge):
     return request
 
 
-def prepare(workspace, nonce, source_tree=None):
+def prepare(workspace, nonce, source_tree=None, profile=None):
     require(os.geteuid() != 0, 'owned_PAW_client_must_run_unprivileged')
     workspace = Path(workspace).absolute(); workspace.mkdir(mode=0o700, parents=False, exist_ok=False)
     if source_tree is not None:
@@ -86,7 +141,9 @@ def prepare(workspace, nonce, source_tree=None):
         require(result.returncode == 0, 'owned_PAW_cli_failed:'+result.stderr[-2000:])
         return json.loads(result.stdout)
     rows = []
+    require(profile is None or type(profile) is str and profile in {'python', 'html'}, 'owned_client_profile')
     for entry in fixtures(nonce):
+        if profile is not None and entry['profile'] != profile: continue
         original = workspace/(entry['name']+'.bin'); original.write_bytes(entry['original']); original.chmod(0o400)
         analyzed = cli(['inspect-representations', str(original), '--interpretation', entry['interpretation']])
         require(analyzed['supervisor']['tree_stopped'] is True, 'owned_PAW_tree_not_stopped')
@@ -115,11 +172,60 @@ def prepare(workspace, nonce, source_tree=None):
     return report
 
 
+def next_request(workspace, nonce, profile, slot, source_tree=None, *, collect=False):
+    require(os.geteuid() != 0 and type(profile) is str and profile in {'python', 'html'} and
+            type(slot) is str and slot in SLOTS, 'owned_client_fixed_request_slot')
+    if source_tree is not None: sys.path.insert(0, str(Path(source_tree).resolve(strict=True)))
+    import paw
+    from paw.core import representation_bridge as bridge
+    from paw.core.job_registry import require_stopped_case
+    from paw.core.verify import verify_case
+    package = Path(paw.__file__).resolve()
+    if source_tree is None: require(package.is_relative_to(Path(sys.prefix).resolve()), 'owned_installed_PAW_required')
+    else: require(package.is_relative_to(Path(source_tree).resolve()), 'owned_source_PAW_required')
+    workspace = Path(workspace).absolute()
+    name = profile+('-selected' if profile == 'python' else '-original') if slot == 'positive' else profile+('-qp' if slot == 'qp' else '-prefix')
+    entry = next(v for v in fixtures(nonce) if v['name'] == name)
+    prepared = json.loads((workspace/'prepared.json').read_bytes())
+    require(prepared['nonce'] == nonce and prepared['mode'] == ('source' if source_tree else 'installed'), 'owned_client_prepared_context')
+    row = next(v for v in prepared['cases'] if v['name'] == name)
+    case_id = Path(row['case']).name
+    require(re.fullmatch('case-forensic-[0-9a-f]{32}', case_id), 'owned_client_case_id')
+    case = workspace/'cases'/case_id; require_stopped_case(case)
+    require(inventory(case) == row['case_inventory'] and (workspace/(name+'.bin')).read_bytes() == entry['original'],
+            'owned_client_prepared_case_changed')
+    before = inventory(case)
+    with redirect_stdout(io.StringIO()): require(verify_case(case), 'owned_client_case_seal')
+    slots = workspace/'slots'; slots.mkdir(mode=0o700, exist_ok=True); target = slots/slot
+    if not collect:
+        graph = json.loads((case/'report/representations.json').read_bytes())
+        selected = [v for v in graph['nodes'] if v['kind'] == entry['kind'] and (case/v['blob_path']).read_bytes() == entry['selected']]
+        require(len(selected) == 1, 'owned_client_unique_slot_node')
+        value = bridge.prepare(case, selected[0]['id'], profile, target)
+        validate_owned(Path(value['request']).read_bytes(), entry, bridge)
+    else:
+        raw = (target/'request.json').read_bytes(); validate_owned(raw, entry, bridge)
+        value = bridge.import_result(case, target/'request.json', workspace/('sidecar-'+slot))
+    require(inventory(case) == before, 'owned_client_original_case_changed')
+    return {'result': 'PASS', 'phase': 'import' if collect else 'request', 'slot': slot, 'case': str(case),
+            'execution_authorized': False, 'original_case_unchanged': True, 'client_result': value}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--workspace', required=True, type=Path); parser.add_argument('--nonce', required=True)
     parser.add_argument('--source-tree', type=Path)
-    args = parser.parse_args(); print(json.dumps(prepare(args.workspace, args.nonce, args.source_tree), indent=2))
+    parser.add_argument('--profile', choices=['python', 'html'])
+    parser.add_argument('--phase', choices=['prepare', 'request', 'import'], default='prepare')
+    parser.add_argument('--slot', choices=sorted(SLOTS)); parser.add_argument('--gate-file', type=Path); parser.add_argument('--gate-tag')
+    args = parser.parse_args()
+    require((args.gate_file is None) == (args.gate_tag is None), 'owned_client_gate_pair')
+    if args.gate_file is not None: await_gate(args.gate_file, args.gate_tag, args.nonce)
+    if args.phase == 'prepare':
+        require(args.slot is None, 'owned_client_prepare_without_slot')
+        result = prepare(args.workspace, args.nonce, args.source_tree, args.profile)
+    else: result = next_request(args.workspace, args.nonce, args.profile, args.slot, args.source_tree, collect=args.phase == 'import')
+    print(json.dumps(result, indent=2))
 
 
 if __name__ == '__main__': main()
