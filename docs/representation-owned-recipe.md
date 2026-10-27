@@ -139,3 +139,39 @@ full paths, opaque output and full traceback remain private. This lets subsequen
 owned refusals be diagnosed without another administrative authentication.
 New code still requires exact review/head+main CI, immutable promotion and fresh
 owned acceptance; it does not turn the first failed attempt into a success.
+
+## Inherited client ceilings
+
+PR123 main `ed001cf258b411df46d5721d0b6c12d5b2df6f61` passed clear exact-head
+review and seven head/main checks, then immutable promotion without a password.
+No-guest job `e34dc6084d1c4649aef471762124d4ad` passed the exact reviewed Brotli
+maintenance transition; protected reader evidence and independent terminal,
+resource and readonly libvirt checks passed. No I08, grant or VM was enabled by
+that maintenance step.
+
+The following Python attempt `997e996162a14856b7f8585b55e9f605` reached the
+privilege-dropped source client's preparation, then stopped before a VM. The
+ordinary-owned nested PAW worker result reported `ValueError:not allowed to
+raise maximum limit`. Its service inherited the fixed8MiB file ceiling, while
+the forensic worker attempted to set80MiB. Six harmless real CLI regressions
+also reproduced the failure for both byte and forensic workers with inherited
+file, CPU or address-space hard ceilings. The supervised start gate likewise
+attempted to set its requested memory above a lower inherited hard limit.
+The sequence stopped at this first failure; HTML and guest cases were not run.
+All failed attempts/logs are retained, with no active service/cgroup, QEMU,
+domain, active network or namespace before releasing the source freeze.
+
+Workers and the start gate now tighten POSIX resource limits while retaining
+the minimum of requested and inherited soft/hard ceilings. They do not raise
+either inherited value. Existing default budgets are unchanged; byte/forensic
+execution evidence records the effective memory, CPU and file ceilings.
+Seven new real-process tests cover both actual no-egress CLIs, exact original
+bytes, verified seals, known process-tree stop and a kernel-observed file
+overflow refusal. Both source and installed-wheel modes are in CI. This is an
+engine correction justified by reproduced failures, not a reopening of other
+consolidated audits or an increase to the client, controller or guest budgets.
+
+The correction still requires its own completed exact-head review, green
+head/main CI, source/installed package equality, immutable promotion and fresh
+owned acceptance. P3 remains open; it cannot close on these CLI tests, and P4
+must wait for the complete P3 matrices and scoped I08.

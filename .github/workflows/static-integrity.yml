@@ -147,6 +147,8 @@ jobs:
           python -B -m unittest discover -s tests -p 'test_source_inspection.py' -v
           python -B -m unittest discover -s tests -p 'test_source_runtime.py' -v
           python -B tests/integration_source_inspection_real.py
+      - name: Verify actual byte and forensic workers retain tighter inherited POSIX limits
+        run: python -B -m unittest discover -s tests -p 'test_inherited_worker_limits.py' -v
       - name: Verify explicit forensic representations and actual owned faults
         run: |
           python -B -m unittest discover -s tests -p 'test_representation_graph.py' -v

@@ -8,7 +8,7 @@ import re
 from datetime import datetime, timezone
 import sys
 
-from paw.core.runtime import wait_for_gate, mark_stage, atomic_json
+from paw.core.runtime import wait_for_gate, mark_stage, atomic_json, tighten_posix_limit
 from paw.core.network_policy import offline_policy
 
 
@@ -27,12 +27,10 @@ def main():
         wait_for_gate()
         if os.name != 'posix': raise ValueError('forensic_runtime_requires_posix_limits')
         import resource
-        _, hard = resource.getrlimit(resource.RLIMIT_AS)
-        memory = min(256*1024**2, hard) if hard != resource.RLIM_INFINITY else 256*1024**2
-        resource.setrlimit(resource.RLIMIT_AS, (memory, memory))
-        resource.setrlimit(resource.RLIMIT_CPU, (10, 11))
-        resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
-        resource.setrlimit(resource.RLIMIT_FSIZE, (80*1024**2, 80*1024**2))
+        memory, _ = tighten_posix_limit(resource.RLIMIT_AS, 256*1024**2)
+        cpu, _ = tighten_posix_limit(resource.RLIMIT_CPU, 10, 11)
+        tighten_posix_limit(resource.RLIMIT_CORE, 0)
+        file_bytes, _ = tighten_posix_limit(resource.RLIMIT_FSIZE, 80*1024**2)
         with offline_policy(True):
             from ..core import source_inspection as source
             from ..core.representation_graph import Graph, GraphLimits, text_view
@@ -92,7 +90,7 @@ def main():
             atomic_json(case/'execution.json', {'status': 'completed', 'assessment_status': 'not_evaluated',
                         'sample_execution': 'not_performed', 'no_egress': True, 'analysis_kind': 'forensic_representations',
                         'coverage': 'partial' if partial else 'bounded_views_observed',
-                        'limits': {'cpu_seconds': 10, 'address_space_bytes': memory,
+                        'limits': {'cpu_seconds': cpu, 'address_space_bytes': memory, 'file_bytes': file_bytes,
                                    'network_isolation': 'application_policy_only',
                                    'graph': vars(graph.limits)}})
             mark_stage('forensic_sealing', identifier)
