@@ -70,6 +70,13 @@ mode0777 under umask000 before correction. Creation now uses the existing
 descriptor-relative protected subdirectory primitive for both levels, producing
 mode0700 independent of umask and refusing substituted/writable existing paths.
 
+The exact-head review also reproduced unreported jobs being ignored by the
+single-run verifier: an extra admission, request directory, quarantine or VM
+ready file could coexist with a PASS. Five negative checks failed before the
+fix. Authority and admission inventories now match the one reported request
+exactly, and the complete audit top-level inventory accepts only its fixed
+metadata and that job's known VM files/quarantine. Unaccounted evidence refuses.
+
 P3 remains open: the reviewed finite owned producer and fault matrices,
 actual PAW-to-VM-to-PAW source/installed handoff, one-use replay and scoped
 I08 acceptance are still required. P4/P5 follow. This increment adds two lab

@@ -177,5 +177,19 @@ class Evidence(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'representation_analysis_readiness'):
             verify.verify_single(root, production=True)
 
+    def test_unreported_admission_request_quarantine_or_job_files_refuse(self):
+        for mutation in ['admission', 'request', 'quarantine', 'job-file', 'combined']:
+            root, _, _ = self.fixture(); extra = 'rep-python-'+'f'*32
+            if mutation in {'admission', 'combined'}:
+                (root/'admissions'/(extra+'.json')).write_bytes(b'{}')
+            if mutation in {'request', 'combined'}:
+                folder = root/'authority-copy'/('f'*32); folder.mkdir()
+                (folder/'request.json').write_bytes(b'{}')
+            if mutation in {'quarantine', 'combined'}:
+                folder = root/(extra+'-quarantine'); folder.mkdir()
+                (folder/'artifact-00.bin').write_bytes(b'UNREPORTED OWNED OUTPUT')
+            if mutation == 'job-file': (root/(extra+'-ready.json')).write_bytes(b'{}')
+            with self.subTest(mutation=mutation), self.assertRaises(ValueError): self.verify(root)
+
 
 if __name__ == '__main__': unittest.main()

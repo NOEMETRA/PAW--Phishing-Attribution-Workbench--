@@ -103,6 +103,23 @@ def _html_vm(root, vm, context):
             certificate['guest']['chrome_version'] == backend['chrome_version'], 'representation_html_image_provenance')
 
 
+def job_inventory(root, rid, label, profile, mode):
+    authority = {rid+'/', *(rid+'/'+name for name in ['request.json', 'grant.json', 'consumed.json'])}
+    require(inventory(root/'authority-copy') == authority, 'representation_complete_authority_inventory')
+    require(inventory(root/'admissions') == {label+'.json'}, 'representation_complete_admission_inventory')
+    # Both existing VM backends write one descriptor, supervisor/serial files
+    # and the runtime XML. Every job-scoped name belongs to the reported job;
+    # unrelated evidence cannot be silently omitted from a single-run audit.
+    files = {label+suffix for suffix in ['-control.json', '-ready.json', '-owner.json',
+        '-owner-result.json', '-owner.log', '-domain.xml', '-serial.log', '-quarantine']}
+    files.add(('authorized-' if profile == PYTHON else 'browser-')+label+'-extractor.xml')
+    files |= {'results.json', 'policy.json', 'maintenance.json', 'host-owned-canary.bin',
+        'independent-verification.json', 'authority-copy', 'admissions', 'sources', 'runtime-snapshot'}
+    if profile == HTML: files.add('browser-image-certificate.json')
+    if mode == 'explicit-source-analysis': files.add('readiness.json')
+    require(set(os.listdir(root)) <= files, 'representation_complete_job_inventory')
+
+
 def verify_single(root, *, production=False):
     root = Path(root)
     report = auth.decode(read(root, 'results.json', 2*1024**2), 2*1024**2)
@@ -135,6 +152,7 @@ def verify_single(root, *, production=False):
             run['grant_sha256'] == auth.digest(grant_raw) and run['policy_sha256'] == auth.digest(policy_raw) and
             run['context_sha256'] == auth.digest(auth.canonical(context)), 'representation_run_authority')
     expected = job(request); label = expected['job_id']; job_sha = auth.digest(auth.canonical(expected))
+    job_inventory(root, rid, label, context['profile'], policy['mode'])
     require(run['job'] == expected and run['job_sha256'] == job_sha and
             auth.decode(read(root, 'admissions/'+label+'.json', 65536), 65536) == expected and
             vm['label'] == label and run['vm_uuid'] == vm['uuid'], 'representation_guest_job_binding')
