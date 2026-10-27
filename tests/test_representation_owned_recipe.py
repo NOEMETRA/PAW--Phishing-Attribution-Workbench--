@@ -146,6 +146,18 @@ class Recipe(unittest.TestCase):
 
 
 class Diagnostics(unittest.TestCase):
+    def test_actual_deep_exception_reports_bounded_module_locations_without_paths(self):
+        def fail(depth):
+            if depth: return fail(depth-1)
+            raise PermissionError(13, 'owned private exception detail', '/private/owned-input.bin')
+        try: fail(12)
+        except PermissionError as error: value = p.failure_diagnostic(error)
+        self.assertEqual(value['errno'], 13); self.assertEqual(value['error_code'], 'non_code_failure')
+        self.assertEqual(len(value['locations']), 6)
+        self.assertTrue(all(row['module'] == Path(__file__).name and type(row['line']) is int for row in value['locations']))
+        self.assertNotIn('/private', json.dumps(value)); self.assertNotIn('exception detail', json.dumps(value))
+        self.assertLess(len(json.dumps(value)), 2048)
+
     def test_reason_codes_are_available_without_private_paths_or_raw_output(self):
         for error, code in [(ValueError('operator_release_history'), 'operator_release_history'),
                             (ValueError('owned_representation_execution_failed:positive:private opaque detail'), 'owned_representation_execution_failed'),
