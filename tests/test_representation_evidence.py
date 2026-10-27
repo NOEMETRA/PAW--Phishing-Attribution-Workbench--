@@ -66,6 +66,9 @@ class Evidence(unittest.TestCase):
         # physical image/context, guest or I08 is claimed by this fixture.
         with mock.patch.object(auth, '_backend', return_value=SimpleNamespace(validate_context=lambda value: None)):
             policy = auth.make_policy(context, [raw], owned_manifest_sha256='3'*64)
+        # Policy generation can cross a wall-clock second. Model grant/consume
+        # after policy creation, as the real authority does.
+        now = int(time.time())
         grant = {'schema': 'paw-s14-representation-grant-v1', 'scope': auth.SCOPE, **summary,
             'policy_sha256': auth.digest(policy), 'context_sha256': auth.digest(auth.canonical(context)),
             'execution_purpose': 'owned-validation', 'created_at': now, 'expires_at': min(now+900, request['candidate']['expires_at'])}
@@ -166,6 +169,18 @@ class Evidence(unittest.TestCase):
         with self.assertRaises(OSError): verify.read(root, 'link/proof.json', 1024)
         for name in ['../policy.json', '/etc/passwd', 'a//b', './policy.json']:
             with self.subTest(name=name), self.assertRaises(ValueError): verify.read(root, name, 1024)
+
+    def test_caller_case_anchor_rejects_intermediate_symlinks(self):
+        target = self.root/'anchor-target'; target.mkdir()
+        case = target/'case'; case.mkdir(); (case/'source.bin').write_bytes(b'owned inert probe')
+        link = self.root/'anchor-link'; link.symlink_to(target, target_is_directory=True)
+        # The final case directory itself is regular. O_NOFOLLOW on only that
+        # final component previously still followed its caller-owned ancestor.
+        for name, operation in [('read', lambda: verify.read(link/'case', 'source.bin', 1024)),
+                                ('inventory', lambda: verify.inventory(link/'case'))]:
+            with self.subTest(operation=name), self.assertRaises(OSError): operation()
+        self.assertEqual(verify.read(case, 'source.bin', 1024), b'owned inert probe')
+        self.assertEqual(verify.inventory(case), {'source.bin'})
 
     def test_source_copies_are_bounded_regular_and_exact_inventory(self):
         for mutation in ['oversize', 'empty-directory', 'hardlink']:

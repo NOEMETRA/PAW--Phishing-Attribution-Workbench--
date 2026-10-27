@@ -38,6 +38,12 @@ def main():
         from vm_runtime_revalidation import run_owned
         run_owned(args.job, HERE.parents[1].name)
         return
+    if args.recipe == 'python-owned-v2':
+        # Fixed staged representation acceptance: one pending existing profile
+        # per bounded job (Python, then its HTML companion), never caller input.
+        from representation_producer import run_owned
+        run_owned(args.job, HERE.parents[1].name)
+        return
     # Additional execution recipes must be implemented and reviewed later.
     require(args.recipe == 'browser-owned-v1', 'operator_recipe_not_implemented')
     from browser_validation_inputs import make

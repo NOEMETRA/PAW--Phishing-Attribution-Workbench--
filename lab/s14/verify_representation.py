@@ -23,12 +23,30 @@ from hostile_maintenance import SIGNER
 require = auth.require
 
 
+def open_directory(root):
+    """Pin every anchor component, including ancestors owned by the client.
+
+    Offline copies need not be Root-owned, but an intermediate symlink must
+    never redirect a privileged caller beyond the supplied directory tree.
+    """
+    path = Path(root).absolute()
+    require('..' not in path.parts, 'representation_audit_anchor_traversal')
+    fd = os.open('/', os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        for part in path.parts[1:]:
+            child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
+            os.close(fd); fd = child
+        return fd
+    except BaseException:
+        os.close(fd); raise
+
+
 def read(root, relative, maximum):
     path = PurePosixPath(relative)
     require(not path.is_absolute() and path.as_posix() == relative and
             all(re.fullmatch('[A-Za-z0-9_.-]{1,128}', p) and p not in {'.', '..'} for p in path.parts),
             'representation_audit_relative_path')
-    fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    fd = open_directory(root)
     try:
         for part in path.parts[:-1]:
             child = os.open(part, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
@@ -54,7 +72,7 @@ def inventory(root):
             else:
                 require(stat.S_ISREG(info.st_mode) and info.st_nlink == 1, 'representation_snapshot_regular_unlinked')
                 result.add(relative)
-    fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    fd = open_directory(root)
     try: walk(fd)
     finally: os.close(fd)
     return result
@@ -220,3 +238,97 @@ def verify_single(root, *, production=False):
                 auth.digest(blob) == item['sha256'], 'representation_output_digest')
     return {'result': 'PASS', 'jobs': 1, 'profile': profile, 'mode': policy['mode'], 'sources': len(report['source_hashes']),
             'request_sha256': auth.digest(raw), 'meaning': 'opaque execution/custody only; no origin, risk or attribution verdict'}
+
+
+FAULTS = {'paused-refusal': 'owned_representation_paused_refusal',
+          'owner-loss': 'owned_representation_owner_loss',
+          'protocol-loss': 'owned_representation_protocol_closed'}
+
+
+def fault_controls(root, vm, context):
+    profile = context['profile']; backend = context['backend']
+    if profile == HTML: _html_vm(root, vm, context)
+    else:
+        require(profile == PYTHON, 'representation_fault_profile'); python_vm_evidence(root, vm, backend)
+        ready = auth.decode(read(root, vm['label']+'-ready.json', 65536), 65536)
+        require(ready['uuid'] == vm['uuid'] and ready['pid'] == vm['actual']['pid'] and
+                ready['pid_identity'] == vm['actual']['pid_identity'], 'representation_fault_process_identity')
+        proof = auth.decode(read(root, 'image-provenance.json', 65536), 65536)
+        require(proof['result'] == 'PASS' and proof['signed_manifest'] is True and proof['image'] == BASE.name and
+                proof['sha256'] == backend['host']['image_sha256'] == auth.fs.IMAGE_SHA256 and
+                type(proof['bytes']) is int and 0 < proof['bytes'] <= 8*1024**3 and
+                type(proof['signature_status']) is str and len(proof['signature_status']) <= 8192 and
+                any(line.startswith('[GNUPG:] VALIDSIG '+SIGNER+' ') for line in proof['signature_status'].splitlines()),
+                'representation_fault_image_provenance')
+
+
+def verify_fault(root, raw, case, witness):
+    root = Path(root); require(type(case) is str and case in FAULTS, 'representation_expected_fault')
+    report = auth.decode(read(root, 'results.json', 2*1024**2), 2*1024**2)
+    policy_raw = read(root, 'policy.json', 256*1024); policy = auth.decode(policy_raw); context = policy['context']
+    require(report['result'] == 'FAIL' and not report.get('cleanup_error') and type(report['error']) is str and
+            FAULTS[case] in report['error'] and all(report.get(key) is True for key in
+            ['host_restored', 'base_unchanged', 'host_canary_unchanged', 'writers_stopped', 'source_freeze_unchanged']) and
+            report['host_before'] == report['host_after'] and type(report['real_connections']) is int and
+            report['real_connections'] == 0 and report['runs'] == [] and len(report['vms']) == 1,
+            'representation_fault_lifecycle')
+    rid = auth.decode(raw, auth.contract.REQUEST_LIMIT)['candidate']['request_id']
+    require(type(rid) is str and len(rid) == 32 and all(c in '0123456789abcdef' for c in rid), 'representation_fault_request_id')
+    copied = 'authority-copy/'+rid
+    require(read(root, copied+'/request.json', auth.contract.REQUEST_LIMIT) == raw, 'representation_fault_request_copy')
+    grant_raw = read(root, copied+'/grant.json', 8192); grant = auth.decode(grant_raw, 8192)
+    ledger_raw = read(root, copied+'/consumed.json', 8192); ledger = auth.decode(ledger_raw, 8192)
+    require(grant_raw == auth.canonical(grant) and ledger_raw == auth.canonical(ledger) and
+            type(ledger['consumed_at']) is int, 'representation_fault_canonical_authority')
+    summary, request, _ = auth.validate_binding(raw, grant, policy_raw, context, now=ledger['consumed_at'])
+    require(policy['mode'] == 'owned-validation' and ledger == {'schema': 'paw-s14-representation-consumed-v1',
+        'request_id': rid, 'request_sha256': auth.digest(raw), 'grant_sha256': auth.digest(grant_raw),
+        'policy_sha256': auth.digest(policy_raw), 'context_sha256': auth.digest(auth.canonical(context)),
+        'consumed_at': ledger['consumed_at']}, 'representation_fault_global_consumption')
+    current = job(request); label = current['job_id']; vm = report['vms'][0]
+    job_inventory(root, rid, label, context['profile'], policy['mode'])
+    require(auth.decode(read(root, 'admissions/'+label+'.json', 65536), 65536) == current and
+            vm['label'] == label and not (root/(label+'-quarantine')).exists(), 'representation_fault_no_publication')
+    seconds = vm['stop_seconds']; fault_seconds = witness['fault_stop_seconds']
+    require(vm['stopped'] is True and type(seconds) in {int, float} and math.isfinite(seconds) and 0 <= seconds < 12 and
+            type(fault_seconds) in {int, float} and math.isfinite(fault_seconds) and 0 <= fault_seconds < 12 and
+            witness['schema'] == 'paw-s14-representation-fault-v1' and witness['case'] == case and
+            witness['vm_uuid'] == vm['uuid'], 'representation_fault_external_stop')
+    require(report['source_hashes'] == verify_snapshot(root, context), 'representation_fault_snapshot')
+    backend = context['backend']; host = backend['host'] if context['profile'] == PYTHON else backend['platform']['host']
+    require(report['source_hashes'] == host['source_hashes'] and
+            REQUIRED_SOURCES | {'representation_authorization.py', 'representation_adapter.py', 'verify_representation.py'} <= report['source_hashes'].keys() and
+            inventory(root/'sources') == set(report['source_hashes']), 'representation_fault_source_inventory')
+    for name, digest in report['source_hashes'].items():
+        require(auth.digest(read(root, 'sources/'+name, auth.storage.MAX_FILE)) == digest, 'representation_fault_source_digest')
+    maintenance = read(root, 'maintenance.json', 65536)
+    require(auth.digest(maintenance) == context['maintenance_sha256'], 'representation_fault_maintenance')
+    auth.python_backend.validate_maintenance(maintenance, backend if context['profile'] == PYTHON else backend['platform'])
+    fault_controls(root, vm, context)
+    if context['profile'] == HTML: require(report.get('browser_image_unchanged') is True, 'representation_fault_browser_image')
+    if case == 'paused-refusal':
+        require(witness.get('paused_before_refusal') is True and 'guest_admission' not in witness and
+                not (root/(label+'-serial.log')).exists(), 'representation_fault_paused_before_execution')
+    else:
+        when = witness['admitted_at']; admission = witness['guest_admission']
+        require(type(when) is int and ledger['consumed_at'] <= when < grant['expires_at'] and
+                admission['started'] is True and admission['prior_marker_absent'] is True and
+                admission['source_sha256'] == summary['source_sha256'] and
+                admission['job_sha256'] == auth.digest(auth.canonical(current)), 'representation_fault_actual_admission')
+        if context['profile'] == HTML:
+            require(witness['guest_inspection'] == {'chrome_version': backend['chrome_version'],
+                'chrome_binary_sha256': backend['chrome_binary_sha256'], 'kernel_release': '6.8.0-147-generic',
+                'network_interfaces': ['lo'], 'prior_marker_absent': True} and admission['job_limits'] == {
+                'memory.max': str(512*1024**2), 'memory.swap.max': '0', 'pids.max': '256'}, 'representation_fault_browser_admission')
+        if case == 'owner-loss':
+            require(type(witness['owner_pid']) is int and witness['owner_pid'] > 1 and witness['owner_pid'] != vm['actual']['pid'] and
+                    type(witness['owner_identity']) is str and witness['owner_identity'].isdecimal() and
+                    type(witness['owner_returncode']) is int and witness['owner_returncode'] == -9 and
+                    not (root/(label+'-owner-result.json')).exists(), 'representation_fault_owner_witness')
+        else: require(witness.get('serial_closed') is True, 'representation_fault_protocol_witness')
+    if case != 'owner-loss':
+        owner = auth.decode(read(root, label+'-owner-result.json', 65536), 65536)
+        require(owner['reason'] == 'requested_stop' and owner['connection_closed'] is True, 'representation_fault_owner_stop')
+        if context['profile'] == HTML: require(owner['vm_uuid'] == vm['uuid'], 'representation_fault_owner_uuid')
+    return {'result': 'PASS', 'case': case, 'profile': context['profile'], 'request_sha256': auth.digest(raw),
+            'scope': 'owned failed execution, known external stop and no output; no execution success or I08'}
