@@ -158,6 +158,18 @@ audit verifier. Its tests substitute hardware/Root boundaries and do not activat
 a recipe, issue a grant or install I08. Actual finite owned producer/matrix and
 source/installed PAW handoff remain required before P3 can close.
 
+That adapter/verifier increment merged as PR119 main
+`786e844d067a43c0681b0a80a2511e100b0c06d0`, after a completed clear exact-head
+review on `bdad7b18d441ba99475f45e62e5bf75b9c374f23` and7/7head checks.
+Main passed7/7checks and has the identical source tree. Both review findings
+(unaccounted jobs and inherited HTML descriptor naming) have reproduced
+negative-before/positive-after regressions.67 representation,44 browser,18
+legacy-authority and90 operator/release tests passed. No Root snapshot, new
+grant, readiness or actual VM was activated. The next
+[producer and owned client increment](representation-producer-contract.md)
+adds separately reviewed libraries; actual owned recipes/matrices and scoped
+I08 remain required before P3 closure.
+
 P0 closed on26 October2026 after the owner-authorized same-head review retry
 completed clear on `e63ab29a10f2a5b8c561c1fc0ea370b60ec893f6`, all seven required
 head checks and all prior threads were clear, and PR111 merged as
