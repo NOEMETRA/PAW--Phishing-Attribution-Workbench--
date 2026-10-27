@@ -152,6 +152,12 @@ its maintained context. P3 now advances to the separately scoped
 [representation authority](representation-authority-contract.md), then actual
 adapters/verifiers, owned matrices and I08. P3–P5 remain open.
 
+The next [adapter and opaque custody increment](representation-adapter-contract.md)
+adds separate Python/HTML representation libraries and an independent serialized
+audit verifier. Its tests substitute hardware/Root boundaries and do not activate
+a recipe, issue a grant or install I08. Actual finite owned producer/matrix and
+source/installed PAW handoff remain required before P3 can close.
+
 P0 closed on26 October2026 after the owner-authorized same-head review retry
 completed clear on `e63ab29a10f2a5b8c561c1fc0ea370b60ec893f6`, all seven required
 head checks and all prior threads were clear, and PR111 merged as
