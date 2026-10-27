@@ -440,14 +440,20 @@ def case_inventory(case):
 
 
 def snapshot_proof():
-    from vm_release_contract import release as validate_release
+    from vm_release_contract import release as validate_release, policy as validate_enrollment
     with auth.fs.root_directory(STATE) as fd:
         active = auth.decode(auth.fs.read(fd, 'active.json'))
         enrolled = auth.decode(auth.fs.read(fd, 'policy.json'))
     with auth.fs.root_directory(RELEASES) as parent:
         manifest, proof = auth.storage.verify(parent, active['release_sha'], active['manifest_sha256'])
     require(auth.HERE.parents[1] == RELEASES/active['release_sha'], 'owned_representation_active_snapshot')
-    validate_release(proof, enrolled, enrolled['owner_uid'])
+    # The fixed promoter authenticated this complete proof against its then-
+    # active predecessor. Enrollment policy retains the original native anchor.
+    # Only storage.verify() of the Root active state/manifest above supplies this
+    # historical anchor; no caller proof or arbitrary anchor is accepted here.
+    validate_enrollment(enrolled)
+    promoted_policy = dict(enrolled, anchor_sha=proof.get('anchor_sha'))
+    validate_release(proof, promoted_policy, enrolled['owner_uid'])
     require(enrolled['owner_uid'] == 1000, 'owned_representation_fixed_client_owner')
     return manifest, proof
 
@@ -498,6 +504,39 @@ def owned_success(report, profile, nonce):
     if profile == 'python': require(blob.decode().splitlines() == ['OWNED-REPRESENTATION-'+nonce], 'owned_representation_python_oracle')
     else: require(profile == 'html' and auth.decode(blob, 1024)['title'] == ('OWNED-REPRESENTATION-'+nonce)[:32],
                   'owned_representation_html_oracle')
+
+
+DIAGNOSTIC_CODES = frozenset({
+    'operator_release_history', 'operator_policy_lease', 'operator_exact_head_clear_review',
+    'operator_exact_head_successful_ci', 'operator_completed_successful_job', 'operator_required_workflow_runs',
+    'operator_head_and_main_workflows', 'snapshot_manifest_digest', 'snapshot_proof_digest',
+    'snapshot_proof_identity', 'snapshot_source_digest', 'owned_representation_active_snapshot',
+    'owned_representation_fixed_client_owner', 'owned_representation_execution_failed',
+    'owned_representation_smoke_execution', 'owned_client_kernel_identity_not_acknowledged',
+    'owned_client_phase_failed', 'owned_client_effective_limits', 'owned_client_unit_not_terminal',
+    'owned_client_cgroup_not_removed', 'owned_client_context_changed',
+    'representation_current_protected_maintenance_required', 'representation_producer_context_changed',
+    'representation_producer_host_not_restored', 'runtime_root_PID1_only', 'runtime_foreign_work_or_autostart',
+    'runtime_host_network_changed', 'runtime_final_state_changed', 'runtime_unit_state',
+    'runtime_fixed_unit_not_active', 'runtime_unreviewed_daemon_command', 'runtime_guard_dependency_changed',
+    'hash_context_shape', 'maintenance_binding', 'qemu_maintenance_baseline'})
+
+
+def failure_diagnostic(error):
+    """Bounded public codes/locations; private error text stays in Root state."""
+    code = str(error).split(':', 1)[0]
+    if code not in DIAGNOSTIC_CODES: code = 'non_code_failure'
+    number = getattr(error, 'errno', None)
+    if type(number) is not int or not 0 <= number <= 4096: number = None
+    locations = []
+    for frame in traceback.extract_tb(error.__traceback__)[-6:]:
+        name = Path(frame.filename).name
+        if re.fullmatch('[A-Za-z0-9_.-]{1,96}\.py', name) and type(frame.lineno) is int and 0 < frame.lineno <= 1000000:
+            locations.append({'module': name, 'line': frame.lineno})
+    kind = type(error).__name__
+    if kind not in {'ValueError', 'TypeError', 'KeyError', 'AssertionError', 'FileNotFoundError', 'PermissionError',
+                    'OSError', 'TimeoutExpired', 'TimeoutError', 'ProcessLookupError', 'CalledProcessError'}: kind = 'Exception'
+    return {'error_type': kind, 'error_code': code, 'errno': number, 'locations': locations}
 
 
 def run_owned(job, release):
@@ -607,7 +646,8 @@ def run_owned(job, release):
                           readiness_sha256=auth.digest(ready_raw), matrix_sha256=auth.digest(validation_raw))
             completed = True
         record['runtime_sha256'] = auth.digest(auth.canonical(runtime))
-    except Exception as error: record.update(result='FAIL', error=str(error), traceback=traceback.format_exc())
+    except Exception as error:
+        record.update(result='FAIL', error=str(error), traceback=traceback.format_exc(), diagnostic=failure_diagnostic(error))
     finally:
         if ready_installed and not completed:
             with auth.store() as fd:
@@ -616,5 +656,6 @@ def run_owned(job, release):
                 os.fsync(fd)
             record['new_readiness_revoked'] = True
         with auth.fs.root_directory(folder) as fd: write_state(fd, 'result.json', record)
-    print(json.dumps({'result': record['result'], 'job': job, 'profile': selected, 'real_samples_executed': 0}), flush=True)
+    print(json.dumps({'result': record['result'], 'job': job, 'profile': selected,
+                      'diagnostic': record.get('diagnostic'), 'real_samples_executed': 0}), flush=True)
     require(record['result'] == 'PASS', 'owned_representation_recipe_failed')

@@ -4,8 +4,9 @@ These tests prove orchestration and durable failure handling, not Root or I08
 acceptance. The serialized authority/VM custody and client phase suites exercise
 their real boundaries separately. No service or VM starts here.
 """
-from contextlib import contextmanager, ExitStack
+from contextlib import contextmanager, ExitStack, redirect_stdout
 import json
+import io
 import os
 from pathlib import Path
 import sys
@@ -76,7 +77,7 @@ class Recipe(unittest.TestCase):
             return {'request_id': p.auth.decode(raw)['candidate']['request_id'], 'receipt_sha256': p.auth.digest(b'{"owned":"receipt"}\n')}
         execution_patch = mock.patch.object(p, 'execute', side_effect=execute)
         installed_patch = mock.patch.object(p.auth, 'install_readiness', side_effect=install)
-        patches = [mock.patch.object(p, 'root_only'), mock.patch.object(p, 'snapshot_proof', side_effect=ValueError('owned invalid release proof') if fault == 'proof' else None), mock.patch.object(p, 'STATE', self.state), mock.patch.object(p, 'CONTROL', self.control), 
+        patches = [mock.patch.object(p, 'root_only'), mock.patch.object(p, 'snapshot_proof', side_effect=ValueError('operator_release_history') if fault == 'proof' else None), mock.patch.object(p, 'STATE', self.state), mock.patch.object(p, 'CONTROL', self.control),
              mock.patch.object(p, 'CLIENTS', self.root/'clients'), mock.patch.object(p, 'READERS', self.root/'readers'), 
              mock.patch.object(p, 'RELEASES', self.root/'releases'), mock.patch.object(p.auth, 'HERE', self.root/'releases'/self.release/'lab/s14'), 
              mock.patch.object(p.auth.fs, 'root_directory', anchor), mock.patch.object(p.auth, 'store', authority), 
@@ -95,7 +96,8 @@ class Recipe(unittest.TestCase):
              mock.patch.object(p, 'publish', side_effect=exported), mock.patch.object(p.auth.contract, 'validate_request', side_effect=lambda raw, now=None: p.auth.decode(raw)), 
              mock.patch.object(p.auth.contract, 'validate_receipt', return_value={'artifacts': []}), 
              mock.patch.object(p, 'publish_reader_tree')]
-        with ExitStack() as stack:
+        self.output = io.StringIO()
+        with ExitStack() as stack, redirect_stdout(self.output):
             handles = {id(patch): stack.enter_context(patch) for patch in patches}
             execution = handles[id(execution_patch)]; installed = handles[id(installed_patch)]
             try: p.run_owned(self.job, self.release)
@@ -137,6 +139,24 @@ class Recipe(unittest.TestCase):
         result, failure, executed, installed = self.run_recipe('proof')
         self.assertIsNotNone(failure); self.assertEqual(result['result'], 'FAIL'); self.assertEqual((executed, installed), (0, 0))
         self.assertEqual(self.events, [])
+        diagnostic = json.loads(self.output.getvalue())['diagnostic']
+        self.assertEqual(diagnostic['error_code'], 'operator_release_history')
+        self.assertEqual(diagnostic['error_type'], 'ValueError')
+
+
+
+class Diagnostics(unittest.TestCase):
+    def test_reason_codes_are_available_without_private_paths_or_raw_output(self):
+        for error, code in [(ValueError('operator_release_history'), 'operator_release_history'),
+                            (ValueError('owned_representation_execution_failed:positive:private opaque detail'), 'owned_representation_execution_failed'),
+                            (PermissionError(13, 'permission denied', '/private/owned-probe'), 'non_code_failure'),
+                            (ValueError('secret\nopaque untrusted bytes'), 'non_code_failure'),
+                            (ValueError('secret_identifier'), 'non_code_failure'),
+                            (ValueError('x'*200), 'non_code_failure')]:
+            with self.subTest(code=code):
+                value = p.failure_diagnostic(error)
+                self.assertEqual(value['error_code'], code); self.assertLess(len(json.dumps(value)), 512)
+                self.assertNotIn('private', json.dumps(value)); self.assertNotIn('secret', json.dumps(value))
 
 
 if __name__ == '__main__': unittest.main()
