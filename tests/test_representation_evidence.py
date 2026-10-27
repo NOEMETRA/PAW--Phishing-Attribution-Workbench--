@@ -49,7 +49,11 @@ class Evidence(unittest.TestCase):
         (snapshot/'release.json').write_bytes(header); (snapshot/'proof.json').write_bytes(proof)
         maintenance = auth.canonical({'owned': 'inert maintenance stand-in'})
         (root/'maintenance.json').write_bytes(maintenance)
-        backend = {'host': {'source_hashes': source_hashes}}
+        backend = {'host': {'source_hashes': source_hashes, 'image_sha256': auth.fs.IMAGE_SHA256}}
+        if profile == adapter.PYTHON:
+            (root/'image-provenance.json').write_bytes(auth.canonical({'result': 'PASS', 'signed_manifest': True,
+                'image': verify.BASE.name, 'sha256': auth.fs.IMAGE_SHA256, 'bytes': 259981312,
+                'signature_status': '[GNUPG:] VALIDSIG '+verify.SIGNER+' owned inert metadata fixture'}))
         if profile == adapter.HTML:
             backend = {'platform': backend, 'chrome_version': 'Google Chrome inert', 'chrome_binary_sha256': 'a'*64}
         context = {'profile': profile, 'backend': backend, 'contract_sha256': auth.contract.contract_hash(),
@@ -210,6 +214,12 @@ class Evidence(unittest.TestCase):
                 node = gate.descriptor('extractor', label, 'owned', 'owned')
             with self.subTest(profile=profile):
                 self.assertEqual(self.verify(root)['result'], 'PASS', node['xml'].name)
+
+    def test_base_image_provenance_is_bound_and_not_a_boolean_or_unsigned_claim(self):
+        for mutation in [{'sha256': '0'*64}, {'signed_manifest': False}, {'bytes': True}, {'signature_status': 'unsigned'}]:
+            root, _, _ = self.fixture()
+            self.rewrite(root, 'image-provenance.json', lambda value: value.update(mutation))
+            with self.subTest(mutation=mutation), self.assertRaises(ValueError): self.verify(root)
 
 
 if __name__ == '__main__': unittest.main()

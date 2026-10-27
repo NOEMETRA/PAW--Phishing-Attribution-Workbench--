@@ -166,6 +166,8 @@ jobs:
         run: |
           python -B -m unittest discover -s tests -p 'test_representation_adapter.py' -v
           python -B -m unittest discover -s tests -p 'test_representation_evidence.py' -v
+          python -B -m unittest discover -s tests -p 'test_representation_producer.py' -v
+          python -I -B lab/s14/representation_owned_inputs.py --workspace "$RUNNER_TEMP/paw-owned-representation-preparation" --nonce 0123456789abcdef --source-tree .
       - name: Verify source paths and native runtime admission before I/O
         run: python -m unittest discover -s tests -p 'test_input_admission.py' -v
       - name: Verify real malformed EML, input refusals and CLI/HTTP accounting

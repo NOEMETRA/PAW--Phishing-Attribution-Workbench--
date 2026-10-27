@@ -17,6 +17,8 @@ from browser_vm import validate_xml, LIMITS
 from browser_offline_adapter import validate_outcome
 from verify_synthetic_gate import REQUIRED_SOURCES
 from gw_quarantine import validate_records
+from benign_guest_validation import BASE
+from hostile_maintenance import SIGNER
 
 require = auth.require
 
@@ -115,7 +117,7 @@ def job_inventory(root, rid, label, profile, mode):
     files.add(('authorized-' if profile == PYTHON else 'authorized-browser-')+label+'-extractor.xml')
     files |= {'results.json', 'policy.json', 'maintenance.json', 'host-owned-canary.bin',
         'independent-verification.json', 'authority-copy', 'admissions', 'sources', 'runtime-snapshot'}
-    if profile == HTML: files.add('browser-image-certificate.json')
+    files.add('browser-image-certificate.json' if profile == HTML else 'image-provenance.json')
     if mode == 'explicit-source-analysis': files.add('readiness.json')
     require(set(os.listdir(root)) <= files, 'representation_complete_job_inventory')
 
@@ -181,6 +183,13 @@ def verify_single(root, *, production=False):
     outcome = run['outcome']; status = outcome['status']; records = outcome['records']
     if profile == PYTHON:
         python_vm_evidence(root, vm, backend)
+        provenance = auth.decode(read(root, 'image-provenance.json', 65536), 65536)
+        require(provenance['result'] == 'PASS' and provenance['signed_manifest'] is True and
+                provenance['image'] == BASE.name and provenance['sha256'] == backend['host']['image_sha256'] == auth.fs.IMAGE_SHA256 and
+                type(provenance['bytes']) is int and 0 < provenance['bytes'] <= 8*1024**3 and
+                type(provenance['signature_status']) is str and len(provenance['signature_status']) <= 8192 and
+                any(line.startswith('[GNUPG:] VALIDSIG '+SIGNER+' ') for line in provenance['signature_status'].splitlines()),
+                'representation_base_image_provenance')
         ready_vm = auth.decode(read(root, label+'-ready.json', 65536), 65536)
         require(ready_vm['uuid'] == vm['uuid'] and ready_vm['pid'] == vm['actual']['pid'] and
                 ready_vm['pid_identity'] == vm['actual']['pid_identity'], 'representation_python_owner_identity')
