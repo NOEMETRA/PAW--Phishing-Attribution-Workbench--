@@ -14,6 +14,8 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'lab/s14'))
 import vm_runtime_revalidation as runtime
+import hash_authorization as maintenance_auth
+from test_hash_authorization import context as maintenance_context, maintenance
 
 GOOD = {'guard': 'a'*64, 'guard_service': {'LoadState': 'loaded', 'ActiveState': 'active'},
     'slice_properties': {'LoadState': 'loaded', **runtime.SLICE}, 'qemu_pids': [], 'namespaces': [],
@@ -226,6 +228,7 @@ class Runtime(unittest.TestCase):
         with mock.patch.dict(sys.modules, modules), mock.patch.object(runtime.os, 'geteuid', return_value=0), \
              mock.patch.object(runtime, 'HERE', Path('/opt/paw-vm/releases')/release/'lab/s14'), \
              mock.patch.object(runtime, 'revalidate', **({'side_effect': ValueError('owned injected failure')} if fail else {'return_value': value})), \
+             mock.patch.object(runtime, 'refresh_maintenance', return_value={'result': 'PASS', 'vm_started': False}), \
              mock.patch.object(Path, 'mkdir'), mock.patch('builtins.print'):
             try: runtime.run_owned(job, release)
             except ValueError: pass
@@ -241,6 +244,125 @@ class Runtime(unittest.TestCase):
         for kwargs in [{'fail': True}, {'unsafe': True}]:
             states, writes, published = self.owned(**kwargs)
             self.assertEqual(states[-1]['result'], 'FAIL'); self.assertEqual(writes, []); self.assertEqual(published, [])
+
+
+class MaintenanceTransition(unittest.TestCase):
+    """Real maintenance validation with inert host data; no Root/VM authority."""
+    def setUp(self):
+        self.old_rows = b'libbrotli1:amd64\t1.2.0-3build1\nowned-other\t1\npython3-brotli\t1.2.0-3build1\n'
+        self.new_rows = self.old_rows.replace(b'1.2.0-3build1', b'1.2.0-3ubuntu0.1')
+        self.old_hash = self.inventory_hash(self.old_rows); self.new_hash = self.inventory_hash(self.new_rows)
+        self.context = maintenance_context(); self.context['dpkg_inventory_sha256'] = self.old_hash
+        self.previous = maintenance(self.context); self.context['dpkg_inventory_sha256'] = self.new_hash
+        self.patches = [mock.patch.object(runtime, 'MAINTENANCE_PREVIOUS', maintenance_auth.digest(self.previous)),
+            mock.patch.object(runtime, 'INVENTORY_PREVIOUS', self.old_hash),
+            mock.patch.object(runtime, 'INVENTORY_BROTLI', self.new_hash)]
+        for patch in self.patches: patch.start()
+
+    def tearDown(self):
+        for patch in reversed(self.patches): patch.stop()
+
+    @staticmethod
+    def inventory_hash(rows): return maintenance_auth.digest(b'\n'.join(sorted(rows.splitlines()))+b'\n')
+
+    def transition(self, *, previous=None, context=None, rows=None):
+        return runtime.maintenance_transition(self.previous if previous is None else previous,
+            self.context if context is None else context, self.new_rows if rows is None else rows)
+
+    def test_stale_receipt_refuses_before_exact_transition_then_real_validator_accepts(self):
+        with self.assertRaisesRegex(ValueError, 'maintenance_binding'):
+            maintenance_auth.validate_maintenance(self.previous, self.context)
+        result = self.transition(); receipt = maintenance_auth.validate_maintenance(result, self.context)
+        self.assertEqual(receipt['dpkg_inventory_sha256'], self.new_hash)
+        old = json.loads(self.previous)
+        for key in set(old)-{'dpkg_inventory_sha256', 'review_notes'}: self.assertEqual(receipt[key], old[key])
+
+    def test_old_unchanged_baseline_is_idempotent(self):
+        context = dict(self.context, dpkg_inventory_sha256=self.old_hash)
+        self.assertEqual(self.transition(context=context, rows=self.old_rows), self.previous)
+
+    def test_receipt_tamper_or_wrong_protected_predecessor_refuses(self):
+        with self.assertRaisesRegex(ValueError, 'previous_maintenance_digest'):
+            self.transition(previous=self.previous+b' ')
+
+    def test_unknown_inventory_or_changed_context_inventory_refuses(self):
+        for rows in [self.new_rows+b'extra\t1\n', self.new_rows.replace(b'owned-other\t1', b'owned-other\t2')]:
+            with self.subTest(rows=rows), self.assertRaisesRegex(ValueError, 'unreviewed_inventory'):
+                self.transition(rows=rows)
+
+    def test_known_target_digest_cannot_hide_an_additional_delta(self):
+        rows = self.new_rows.replace(b'owned-other\t1', b'owned-other\t2'); digest = self.inventory_hash(rows)
+        with mock.patch.object(runtime, 'INVENTORY_BROTLI', digest), self.assertRaisesRegex(ValueError, 'inventory_delta'):
+            self.transition(context=dict(self.context, dpkg_inventory_sha256=digest), rows=rows)
+
+    def test_missing_duplicate_wrong_version_and_malformed_packages_refuse(self):
+        for rows in [self.new_rows.replace(b'python3-brotli\t1.2.0-3ubuntu0.1\n', b''),
+                     self.new_rows+b'python3-brotli\t1.2.0-3ubuntu0.1\n',
+                     self.new_rows.replace(b'1.2.0-3ubuntu0.1', b'other'), b'malformed', b'x'*(2*1024**2+1)]:
+            with self.subTest(size=len(rows)), self.assertRaises(ValueError):
+                self.transition(rows=rows)
+
+    def test_other_platform_fields_still_use_unchanged_real_validator(self):
+        for key in ['qemu_binary_sha256', 'host_identity_sha256']:
+            context = copy.deepcopy(self.context); context[key] = '0'*64
+            with self.subTest(key=key), self.assertRaisesRegex(ValueError, 'maintenance_binding'):
+                self.transition(context=context)
+        context = copy.deepcopy(self.context); context['host']['kernel'] = 'other'
+        with self.assertRaisesRegex(ValueError, 'maintenance_binding'): self.transition(context=context)
+
+    def test_refresh_requires_root_before_reading_or_writing(self):
+        with mock.patch.object(runtime.os, 'geteuid', return_value=1000), \
+             mock.patch.object(runtime.subprocess, 'check_output') as commands, self.assertRaises(ValueError):
+            runtime.refresh_maintenance()
+        commands.assert_not_called()
+
+    def refresh(self, *, reboot=False, audit=b'', changed=False, exists=False, damaged=False):
+        writes=[]; saved={}; calls=[]
+        def read(fd, name, maximum):
+            if name == 'maintenance-'+runtime.MAINTENANCE_PREVIOUS+'.json': return self.previous
+            return b'damaged' if damaged else saved[name]
+        def exclusive(fd, name, raw):
+            saved[name]=raw
+            if exists: raise FileExistsError(name)
+            writes.append((name,raw))
+        fs=SimpleNamespace(execution_lock=nullcontext,read=read,exclusive=exclusive,
+                           digest=lambda raw:hashlib.sha256(raw).hexdigest(),
+                           make_policy=maintenance_auth.fs.make_policy, IMAGE_SHA256=maintenance_auth.fs.IMAGE_SHA256)
+        contexts=[self.context, dict(self.context, dpkg_inventory_sha256='f'*64)] if changed else [self.context]*2
+        def output(argv, **kwargs):
+            calls.append(argv)
+            if argv == ['/usr/bin/dpkg','--audit']: return audit
+            self.assertEqual(argv, ['/usr/bin/dpkg-query','-W','-f=${binary:Package}\t${Version}\n'])
+            return self.new_rows
+        with mock.patch.object(runtime.os,'geteuid',return_value=0), \
+             mock.patch.object(runtime,'snapshot',return_value=GOOD), \
+             mock.patch.object(runtime,'network_state',return_value={'same':True}), \
+             mock.patch.object(Path,'exists',return_value=reboot), \
+             mock.patch.object(runtime.subprocess,'check_output',side_effect=output), \
+             mock.patch.object(maintenance_auth,'fs',fs), \
+             mock.patch.object(maintenance_auth,'store',side_effect=lambda:nullcontext(1)), \
+             mock.patch.object(maintenance_auth,'capture',side_effect=contexts):
+            # Only filesystem/host boundaries are substituted. Both the
+            # transition and the existing platform/maintenance validators run.
+            try: result=runtime.refresh_maintenance()
+            except Exception as error: result=error
+        return result,writes,calls
+
+    def test_refresh_only_appends_maintenance_and_does_not_enable_execution(self):
+        result,writes,calls=self.refresh()
+        self.assertEqual(result['result'],'PASS');self.assertEqual(len(writes),1)
+        self.assertTrue(writes[0][0].startswith('maintenance-'))
+        self.assertFalse(result['i08_installed']);self.assertFalse(result['production_grants_enabled']);self.assertFalse(result['vm_started'])
+        self.assertEqual(len(calls),2)
+
+    def test_reboot_package_audit_or_context_race_refuses_without_write(self):
+        for kwargs in [{'reboot':True},{'audit':b'incomplete package'},{'changed':True}]:
+            result,writes,_=self.refresh(**kwargs)
+            with self.subTest(kwargs=kwargs): self.assertIsInstance(result,ValueError);self.assertEqual(writes,[])
+
+    def test_existing_receipt_requires_exact_bytes(self):
+        result,writes,_=self.refresh(exists=True);self.assertEqual(result['result'],'PASS');self.assertEqual(writes,[])
+        result,_,_=self.refresh(exists=True,damaged=True);self.assertIsInstance(result,ValueError)
 
 
 if __name__ == '__main__': unittest.main()

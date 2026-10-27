@@ -78,3 +78,54 @@ predicate remain unchanged. Tests retain set integers, map pairs/ranges and
 scalar metadata spellings, ignore only existing volatile fields and detect
 actual rule changes. The corrected runtime still needs exact review/head/main
 CI, immutable promotion and a new real no-guest invocation before acceptance.
+
+## Exact Brotli maintenance transition (27 October)
+
+PR122 merged as `9451c2e1c5a1d0f7b3d9b49c6770aaf5f4dea3ff` after a
+completed clear review of `3884e58064b46ea280f709017ed9bfbff72b9ba1` and seven
+green head/main checks. Independent immutable promotion passed without a
+password. The following owned attempt, `ec85c0112fd84c56b8d5b54d43e3361e`,
+passed the corrected history check but refused current maintenance before
+profile selection, client or VM startup. The job, its diagnostic and empty
+terminal service/cgroup/domain/network observations are preserved outside the
+checkout. This is not a successful P3 matrix.
+
+During main CI, Ubuntu unattended-upgrade changed only `libbrotli1:amd64` and
+`python3-brotli` from `1.2.0-3build1` to `1.2.0-3ubuntu0.1`. Read-only
+reconstruction of those two previous versions recovers the exact prior whole
+inventory digest. The existing maintenance predicate correctly rejects the
+old receipt; it must remain strict. QEMU bytes, kernel and host identity were
+unchanged; no reboot-required marker was present. Local APT metadata lists
+the new versions in Ubuntu's resolute security/updates repositories. These
+ordinary observations diagnose the drift; they are not privileged authority.
+
+The existing no-guest `vm-acceptance-v1` recipe now additionally supports this
+one reviewed transition. It reads only the fixed protected predecessor receipt
+with SHA256 `4ab64d87b191dd6ea2879fae0f9e5f12eb255a8fe83062d34f577c2d8d7b1e44`.
+The old inventory is pinned to
+`4c4a2167cfbd316bd7923426ef249b25f459dc7181df5fbe55624bb4ffeaed80`, and the
+new inventory to
+`e214bcd487744333146303190396743973b1ad9755112c182b0bf7aa255c2ef3`.
+Both exact package names/versions and reconstruction of the complete old
+inventory must match. The unchanged maintenance validator checks all other
+platform, host, QEMU, image and existing vendor-attestation bindings against
+the protected predecessor. No new vendor signature or inspection of the
+guest is claimed by this transition.
+
+The deployment lock remains held by the operator; the refresh also holds the
+global execution lock, requires an empty package audit/no pending reboot, and
+reobserves full platform, guards and network before its single append-only
+maintenance write. Existing identical bytes are idempotent; differing bytes
+refuse. The prior record, policies, readiness and grants are never rewritten.
+There is no package installation, network request, caller-supplied path,
+command or authority, static privilege change, budget increase, VM or I08.
+Unknown future package drift needs a separate reviewed transition.
+
+Eleven new inert tests exercise the real maintenance/context validators,
+exact transition, stale-receipt refusal, changed host/QEMU/kernel, hidden extra
+delta, malformed/duplicate inventory, reboot/audit/race and immutable existing
+receipt refusals. All 35 runtime tests pass with host/filesystem boundaries
+explicitly substituted. Actual refresh still requires this increment's clear
+exact-head review, seven green head/main checks, immutable promotion and a new
+no-guest invocation with protected receipt readback. Only then may fresh owned
+P3 jobs proceed. P3, P4 and P5 remain open.
