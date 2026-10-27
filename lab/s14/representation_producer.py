@@ -531,7 +531,7 @@ def failure_diagnostic(error):
     locations = []
     for frame in traceback.extract_tb(error.__traceback__)[-6:]:
         name = Path(frame.filename).name
-        if re.fullmatch('[A-Za-z0-9_.-]{1,96}\.py', name) and type(frame.lineno) is int and 0 < frame.lineno <= 1000000:
+        if re.fullmatch(r'[A-Za-z0-9_.-]{1,96}\.py', name) and type(frame.lineno) is int and 0 < frame.lineno <= 1000000:
             locations.append({'module': name, 'line': frame.lineno})
     kind = type(error).__name__
     if kind not in {'ValueError', 'TypeError', 'KeyError', 'AssertionError', 'FileNotFoundError', 'PermissionError',
