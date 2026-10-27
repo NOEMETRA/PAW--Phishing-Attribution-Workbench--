@@ -32,9 +32,9 @@ def job(request):
 
 
 def _copy(gate, raw, grant, ledger):
-    rid = ledger['request_id']; directory = gate.output/'authority-copy'/rid
-    directory.mkdir(mode=0o700, parents=True)
-    with auth.fs.root_directory(directory) as fd:
+    with auth.fs.root_directory(gate.output) as output, \
+         auth.fs.subdirectory(output, 'authority-copy') as parent, \
+         auth.fs.subdirectory(parent, ledger['request_id']) as fd:
         for name, data in [('request.json', raw), ('grant.json', grant), ('consumed.json', auth.canonical(ledger))]:
             auth.fs.exclusive(fd, name, data)
 

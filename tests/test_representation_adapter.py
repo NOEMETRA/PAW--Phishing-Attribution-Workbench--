@@ -149,5 +149,38 @@ class Adapter(unittest.TestCase):
                     function(None, b'', b'')
             lock.assert_not_called(); consume.assert_not_called()
 
+    def test_authority_parent_remains_private_with_permissive_umask(self):
+        output = self.root/'private-audit'; output.mkdir(mode=0o700)
+        @contextmanager
+        def anchor(path):
+            fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            try: yield fd
+            finally: os.close(fd)
+        previous = os.umask(0)
+        try:
+            with mock.patch.object(adapter.auth.fs, 'root_directory', anchor), \
+                 mock.patch.object(adapter.auth.fs, 'OWNER_UID', os.getuid()):
+                adapter._copy(SimpleNamespace(output=output), b'owned request', b'owned grant', {'request_id': '1'*32})
+            self.assertEqual((output/'authority-copy').stat().st_mode & 0o777, 0o700)
+            self.assertEqual((output/'authority-copy'/('1'*32)).stat().st_mode & 0o777, 0o700)
+        finally: os.umask(previous)
+
+    def test_writable_or_symlink_authority_parent_refuses_before_copy(self):
+        @contextmanager
+        def anchor(path):
+            fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+            try: yield fd
+            finally: os.close(fd)
+        for fault in ['writable', 'symlink']:
+            output = self.root/('bad-parent-'+fault); output.mkdir(mode=0o700)
+            parent = output/'authority-copy'
+            if fault == 'writable': parent.mkdir(); parent.chmod(0o777)
+            else: parent.symlink_to(self.root, target_is_directory=True)
+            with mock.patch.object(adapter.auth.fs, 'root_directory', anchor), \
+                 mock.patch.object(adapter.auth.fs, 'OWNER_UID', os.getuid()), \
+                 self.subTest(fault=fault), self.assertRaises((ValueError, OSError)):
+                adapter._copy(SimpleNamespace(output=output), b'owned request', b'owned grant', {'request_id': '1'*32})
+            self.assertFalse((self.root/('1'*32)).exists())
+
 
 if __name__ == '__main__': unittest.main()

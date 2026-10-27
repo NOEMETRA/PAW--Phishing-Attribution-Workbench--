@@ -64,6 +64,12 @@ They do not establish actual VM acceptance or I08. Mandatory CI runs these
 tests without Root or VM access; existing authority/client and VM controls
 remain covered separately.
 
+The new authority-copy parent originally inherited permissive caller umask
+through recursive directory creation. An owned filesystem regression reproduced
+mode0777 under umask000 before correction. Creation now uses the existing
+descriptor-relative protected subdirectory primitive for both levels, producing
+mode0700 independent of umask and refusing substituted/writable existing paths.
+
 P3 remains open: the reviewed finite owned producer and fault matrices,
 actual PAW-to-VM-to-PAW source/installed handoff, one-use replay and scoped
 I08 acceptance are still required. P4/P5 follow. This increment adds two lab
