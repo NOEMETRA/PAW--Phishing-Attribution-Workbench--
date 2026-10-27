@@ -14,6 +14,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'lab/s14'))
 import vm_runtime_revalidation as runtime
+import representation_producer
 import hash_authorization as maintenance_auth
 from test_hash_authorization import context as maintenance_context, maintenance
 
@@ -229,6 +230,7 @@ class Runtime(unittest.TestCase):
              mock.patch.object(runtime, 'HERE', Path('/opt/paw-vm/releases')/release/'lab/s14'), \
              mock.patch.object(runtime, 'revalidate', **({'side_effect': ValueError('owned injected failure')} if fail else {'return_value': value})), \
              mock.patch.object(runtime, 'refresh_maintenance', return_value={'result': 'PASS', 'vm_started': False}), \
+             mock.patch('representation_producer.previous_owned_failure', return_value={'source_result': 'FAIL', 'vm_started': False}), \
              mock.patch.object(Path, 'mkdir'), mock.patch('builtins.print'):
             try: runtime.run_owned(job, release)
             except ValueError: pass

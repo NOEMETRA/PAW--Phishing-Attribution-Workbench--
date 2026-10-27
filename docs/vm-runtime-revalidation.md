@@ -129,3 +129,31 @@ explicitly substituted. Actual refresh still requires this increment's clear
 exact-head review, seven green head/main checks, immutable promotion and a new
 no-guest invocation with protected receipt readback. Only then may fresh owned
 P3 jobs proceed. P3, P4 and P5 remain open.
+
+## Fixed historical owned-failure readback
+
+After the PR124 guest attempt stopped with an uninformative outer reason,
+`vm-acceptance-v1` additionally reads only the fixed failed request
+`fe3d0adb0130410eb510f8143451a036` from owned job
+`ccec225bc95f4f4ca2f89927cc33adbb`. No caller supplies an ID, path, source,
+command or output selector. The function requires Root, physically verifies
+the prior release `9877cdd9eaedbd5d6ade1c85c2769747ff7fedc0` against its fixed
+manifest hash, and requires the protected audit's matching snapshot inventory,
+Python profile, exact immutable-generated harmless fixture bytes, request hash
+and `owned-validation` policy/manifest with no readiness. This readback does not
+revalidate historical data as current execution authority or change a ledger.
+
+Only finite allowlisted reason/exception codes, six known-module basename/line
+locations, hashes, boolean cleanup attestations and seven fixed serial marker
+flags enter the protected runtime reader. The private result and serial files
+are descriptor-read with2MiB/1MiB budgets. Raw traceback/error paths and serial
+bytes are never published or evaluated. Serial flags are diagnostic string
+observations, not trusted guest assertions or a PASS. The diagnostic retains
+`source_result: FAIL` and explicitly carries no VM, I08 or real-source grant.
+
+Current runtime/network/guard/resource revalidation and the existing exact
+maintenance predicate remain mandatory; an already matching receipt is
+idempotent. No package, guard, route, policy, grant, historical audit or source
+snapshot is rewritten. This addition still requires clear exact-head review,
+green head/main CI and immutable promotion before one actual no-guest readback.
+Future privileged guest work must wait for diagnosis of this preserved failure.
