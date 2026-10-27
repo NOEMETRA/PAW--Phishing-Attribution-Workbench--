@@ -76,6 +76,10 @@ ready file could coexist with a PASS. Five negative checks failed before the
 fix. Authority and admission inventories now match the one reported request
 exactly, and the complete audit top-level inventory accepts only its fixed
 metadata and that job's known VM files/quarantine. Unaccounted evidence refuses.
+An additional inert test executes the real descriptor inheritance/name
+transformations for both backends (physical media/VM commands substituted).
+It reproduced and corrected the initial allowlist missing HTML's inherited
+`authorized-browser-` descriptor prefix; valid job files remain accepted.
 
 P3 remains open: the reviewed finite owned producer and fault matrices,
 actual PAW-to-VM-to-PAW source/installed handoff, one-use replay and scoped

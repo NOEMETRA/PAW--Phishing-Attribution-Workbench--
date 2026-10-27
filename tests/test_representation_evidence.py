@@ -191,5 +191,25 @@ class Evidence(unittest.TestCase):
             if mutation == 'job-file': (root/(extra+'-ready.json')).write_bytes(b'{}')
             with self.subTest(mutation=mutation), self.assertRaises(ValueError): self.verify(root)
 
+    def test_real_descriptor_name_transformations_remain_in_the_single_job_inventory(self):
+        import browser_vm
+        import hash_offline_adapter
+        import gw_validation
+        for profile in [adapter.PYTHON, adapter.HTML]:
+            root, report, _ = self.fixture(profile); label = report['vms'][0]['label']
+            # Execute the real descriptor inheritance/name transformations;
+            # substitute only physical VM/media commands and the base writer.
+            def descriptor(gate, role, case, *args):
+                xml = root/(case+'-'+role+'.xml')
+                xml.write_bytes((REPO/'lab/s14/paused-probe.xml').read_bytes())
+                return {'xml': xml, 'overlay': root/'owned-overlay-not-created'}
+            cls = browser_vm.BrowserVM if profile == adapter.HTML else hash_offline_adapter.HashGate
+            gate = object.__new__(cls); gate.phase = 'build'; gate.media = root/'owned-media-not-created'; gate.run = mock.Mock()
+            with mock.patch.object(gw_validation.Matrix, 'descriptor', descriptor), \
+                 mock.patch.object(hash_offline_adapter, 'protect_input_folder'), mock.patch.object(browser_vm, 'validate_xml'):
+                node = gate.descriptor('extractor', label, 'owned', 'owned')
+            with self.subTest(profile=profile):
+                self.assertEqual(self.verify(root)['result'], 'PASS', node['xml'].name)
+
 
 if __name__ == '__main__': unittest.main()

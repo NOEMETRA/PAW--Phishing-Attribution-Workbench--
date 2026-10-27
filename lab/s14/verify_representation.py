@@ -112,7 +112,7 @@ def job_inventory(root, rid, label, profile, mode):
     # unrelated evidence cannot be silently omitted from a single-run audit.
     files = {label+suffix for suffix in ['-control.json', '-ready.json', '-owner.json',
         '-owner-result.json', '-owner.log', '-domain.xml', '-serial.log', '-quarantine']}
-    files.add(('authorized-' if profile == PYTHON else 'browser-')+label+'-extractor.xml')
+    files.add(('authorized-' if profile == PYTHON else 'authorized-browser-')+label+'-extractor.xml')
     files |= {'results.json', 'policy.json', 'maintenance.json', 'host-owned-canary.bin',
         'independent-verification.json', 'authority-copy', 'admissions', 'sources', 'runtime-snapshot'}
     if profile == HTML: files.add('browser-image-certificate.json')
