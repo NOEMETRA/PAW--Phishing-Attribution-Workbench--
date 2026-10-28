@@ -8,12 +8,13 @@ import uuid
 
 from paw.core.runtime import RunLimits, atomic_json, supervise, read_progress, preserve_interrupted
 from paw.core.process_recovery import process_identity
+from paw.core.representation_graph import INTERPRETATIONS
 
 REPRESENTATION_RUN_LIMITS = RunLimits(wall_seconds=45, stage_seconds=15, memory_bytes=256*1024**2,
                              artifact_bytes=96*1024**2, artifact_files=160, log_bytes=128*1024)
 
 def inspect_representations(source, workspace, interpretation):
-    if interpretation not in {'mime', 'html-utf8'}: raise ValueError('forensic_interpretation_required')
+    if interpretation not in INTERPRETATIONS: raise ValueError('forensic_interpretation_required')
     from . import source_inspection as module
     source = module.admit_path(source).absolute()
     workspace = Path(workspace).absolute(); workspace.mkdir(mode=0o700, parents=True, exist_ok=True)

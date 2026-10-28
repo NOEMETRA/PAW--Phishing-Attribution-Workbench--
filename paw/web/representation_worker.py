@@ -33,11 +33,11 @@ def main():
         file_bytes, _ = tighten_posix_limit(resource.RLIMIT_FSIZE, 80*1024**2)
         with offline_policy(True):
             from ..core import source_inspection as source
-            from ..core.representation_graph import Graph, GraphLimits, text_view
+            from ..core.representation_graph import Graph, GraphLimits, text_view, INTERPRETATIONS
             from ..core.mime_representations import populate_mime_graph
             from ..core.html_representation_observer import observe_html
             if set(request) != {'source', 'case_id', 'analysis_job', 'interpretation'}: raise ValueError('forensic_request_shape')
-            if request['interpretation'] not in {'mime', 'html-utf8'}: raise ValueError('forensic_interpretation')
+            if request['interpretation'] not in INTERPRETATIONS: raise ValueError('forensic_interpretation')
             identifier = request['case_id']
             if not isinstance(identifier, str) or not re.fullmatch(r'case-forensic-[0-9a-f]{32}', identifier):
                 raise ValueError('forensic_case_identifier')
@@ -68,7 +68,23 @@ def main():
                     if row.get('selected_content_type') != 'text/html': continue
                     parents.append((row.get('selected_text_node'), 'parser_selected', row['path']))
                     parents.extend((node, 'derived_candidate', row['path']) for node in row['candidate_text_nodes'])
-            else: parents = [(text_view(graph, graph.root, 'utf-8'), 'requested_utf8', None)]
+            elif request['interpretation'] == 'html-utf8':
+                parents = [(text_view(graph, graph.root, 'utf-8'), 'requested_utf8', None)]
+            elif request['interpretation'] == 'javascript-utf8':
+                from ..core.javascript_representation_observer import observe_javascript
+                reports['javascript'] = observe_javascript(graph, graph.root); parents = []
+            else:
+                from ..core.linux_profiles import inspect_source
+                profile = 'shell' if request['interpretation'] == 'posix-shell-utf8' else 'elf'
+                try:
+                    reports['linux_profile'] = dict(inspect_source(profile, capture.raw), status='structurally_admissible')
+                except ValueError as error:
+                    reason = str(error); graph.omit(graph.root, 'linux-source-admission', reason)
+                    reports['linux_profile'] = {'schema': 'paw-linux-source-admission-v1', 'status': 'unsupported',
+                        'requested_profile': profile, 'issues': [reason], 'source_sha256': capture.sha256,
+                        'scope': 'original bytes preserved; this execution profile cannot admit this source',
+                        'origin_verified': False, 'execution_authority': 'none'}
+                parents = []
             reports['html'] = [dict(observe_html(graph, node), view_role=role, mime_part_path=path)
                                for node, role, path in parents if node]
             mark_stage('forensic_blobs', identifier); (case/'blobs').mkdir(mode=0o700)

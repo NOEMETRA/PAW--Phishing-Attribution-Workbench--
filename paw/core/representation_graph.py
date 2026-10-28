@@ -9,6 +9,7 @@ import hashlib
 import json
 import re
 
+INTERPRETATIONS = ('mime', 'html-utf8', 'javascript-utf8', 'posix-shell-utf8', 'elf64-x86_64')
 
 def canonical(value):
     return json.dumps(value, sort_keys=True, separators=(',', ':'), ensure_ascii=True, allow_nan=False).encode()
@@ -95,7 +96,7 @@ class Graph:
                 'omissions_not_retained': self.omission_count-len(self.omissions),
                 'unique_blob_bytes': sum(map(len, self.blobs.values())), 'work_bytes': self.work_bytes,
                 'status': 'partial' if self.omissions or any(not n['complete_transform'] for n in self.nodes.values()) else 'completed',
-                'scope': 'byte derivation inventory; associated interpretation reports state MIME/HTML mapping coverage; no browser DOM or classification',
+                'scope': 'byte derivation inventory; associated reports state finite interpretation coverage; no execution or classification',
                 'origin_verified': False, 'execution_authority': 'none'}
         return json.loads(canonical(record))
 

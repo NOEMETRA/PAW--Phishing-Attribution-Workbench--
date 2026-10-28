@@ -99,6 +99,15 @@ their current scoped isolation gate even after unattended benign acceptance.
 
 ## Current disposition
 
+P4 starts with the [finite Linux admission and explicit JavaScript view](vm-linux-profiles-contract.md).
+The first increment adds supervised CLI/HTTP forensic modes, bounded shell/ELF
+structural metadata and a byte-preserving JavaScript→HTML candidate. It is not
+native execution or a new grant issuer. Fourteen new unit tests,121 existing
+representation tests and40 source/40 installed actual CLI/HTTP cases passed.
+Distinct native custody/Root authority, guest runtime, actual normal/fault/I08
+matrices and operational P5 acceptance remain mandatory. No Root snapshot or
+VM is activated by these ordinary tests; P4 and P5 remain open.
+
 P3 actual owned acceptance passed on28 October2026 on PR127 main
 `5884889ad5d08e1333197c5b12a219587815b5ba`, after clear exact-head review,
 seven green head/main checks, identical source trees and independently gated
