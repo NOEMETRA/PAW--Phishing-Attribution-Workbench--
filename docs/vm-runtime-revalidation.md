@@ -227,5 +227,11 @@ the exact trusted owner/group/mode and are never repaired. Links, regular files,
 foreign ownership and unexpected modes refuse without changing existing data.
 The real-authority inert round trip now starts with the root absent; separate
 tests check idempotence, preserved receipts and negative inode/permission cases.
+The first CI run exposed an ordinary-test portability error: the fixture
+substituted ownership but attempted the production reader group1000 on a runner
+that cannot assign that group. A local unprivileged user namespace mapped to
+UID/GID1001 reproduces the two failing producer tests. The fixture now substitutes
+its actual group alongside its actual owner; production still pins group1000.
+All13 producer tests pass both normally and in that mapped namespace.
 This correction needs its own clear exact-head review, head/main CI and immutable
 promotion before another synthetic guest attempt. P3, P4 and P5 remain open.

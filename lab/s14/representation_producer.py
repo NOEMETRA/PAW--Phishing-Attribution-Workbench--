@@ -30,6 +30,7 @@ CONTROL = Path('/var/lib/paw-s14/control')
 STATE = Path('/var/lib/paw-vm')
 RELEASES = Path('/opt/paw-vm/releases')
 HISTORICAL_MANIFEST_SHA256 = '350e9cb3937ef497a1ad601e3001d4b87e71e9df81b2263b2d71f3d805c4d169'
+READER_GID = 1000
 require = auth.require
 
 
@@ -239,10 +240,10 @@ def _export_parent():
             auth.fs.trusted(os.fstat(fd), True)
             if created:
                 require(stat.S_IMODE(os.fstat(fd).st_mode) == 0o700, 'representation_export_new_root_mode')
-                os.fchown(fd, auth.fs.OWNER_UID, 1000); os.fchmod(fd, 0o750)
+                os.fchown(fd, auth.fs.OWNER_UID, READER_GID); os.fchmod(fd, 0o750)
                 os.fsync(fd); os.fsync(ancestor)
             info = os.fstat(fd)
-            require(info.st_gid == 1000 and stat.S_IMODE(info.st_mode) == 0o750,
+            require(info.st_gid == READER_GID and stat.S_IMODE(info.st_mode) == 0o750,
                     'representation_export_root_mode')
             yield fd
         finally: os.close(fd)

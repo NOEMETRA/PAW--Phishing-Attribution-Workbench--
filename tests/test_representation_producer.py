@@ -36,6 +36,7 @@ class Producer(unittest.TestCase):
         # descriptor-relative copy, exclusive writes and atomic replacement are
         # real. Only absolute Root locations/ownership/ancestors are substituted.
         with mock.patch.object(producer.auth.fs, 'OWNER_UID', os.getuid()), \
+             mock.patch.object(producer, 'READER_GID', os.getgid()), \
              mock.patch.object(producer.auth.storage, 'ROOT_UID', os.getuid()), \
              mock.patch.object(producer.auth.fs, 'root_directory', anchor): yield
 
@@ -199,7 +200,7 @@ class Producer(unittest.TestCase):
         with self.boundary(), mock.patch.object(producer.auth.contract, 'EXPORT_ROOT', exports):
             with producer._export_parent() as fd:
                 info = os.fstat(fd)
-                self.assertEqual((info.st_uid, info.st_gid, info.st_mode & 0o777), (os.getuid(), 1000, 0o750))
+                self.assertEqual((info.st_uid, info.st_gid, info.st_mode & 0o777), (os.getuid(), os.getgid(), 0o750))
                 child = exports/'already-published'; child.mkdir(mode=0o750)
                 original = child/'receipt.json'; original.write_bytes(b'preserved'); original.chmod(0o440)
             before = (exports.stat(), original.stat())
