@@ -1,8 +1,9 @@
 """Finite native producer/recipe tests; no privileged service, VM or payload run."""
 import copy
-from contextlib import contextmanager
+from contextlib import contextmanager, ExitStack
 import json
 import os
+import shutil
 from pathlib import Path
 import subprocess
 import sys
@@ -37,6 +38,17 @@ class NativeRecipe(unittest.TestCase):
                 self.assertNotEqual(derived['original'],derived['selected']);self.assertEqual(derived['kind'],'parser_selected_payload')
         for profile,nonce in [('windows','a'*16),('elf','../x')]:
             with self.assertRaises(ValueError):native_fixtures(nonce,profile)
+
+    def test_validation_batches_fit_unchanged_parent_budget_and_cover_every_case_once(self):
+        for profile in ['shell','elf']:
+            batches=native.validation_batches(profile)
+            self.assertEqual(tuple(slot for batch in batches for slot in batch),NATIVE_CASES[profile])
+            self.assertTrue(all(1 <= len(batch) <= 3 for batch in batches))
+            # The observed full Shell sequence hit1800s before case8 completed.
+            # Three cold boots at the existing220s readiness limit leave room
+            # for preparation and verification; the Root1800s cap is unchanged.
+            self.assertLess(max(map(len,batches))*260+360,1800)
+        with self.assertRaises(ValueError):native.validation_batches('windows')
 
     def test_full_size_elf_job_keeps_source_opaque_in_ingress_not_in_report(self):
         data=native_fixtures('a'*16,'elf')[-1]['selected'];home=self.root/'input';home.mkdir()
@@ -133,6 +145,164 @@ class NativeRecipe(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,native.FAULTS['owner-loss']):started['channel'].call('poll')
         owner.kill.assert_called_once();self.assertEqual(witness['owner_pid'],4321);self.assertEqual(witness['owner_returncode'],-9)
         self.assertEqual(witness['guest_admission'],admission)
+
+    def stage_environment(self):
+        control=self.root/'control';control.mkdir(mode=0o700)
+        store=self.root/'authority';store.mkdir(mode=0o700)
+        return control,store
+
+    def test_one_stage_runs_only_three_jobs_and_never_installs_readiness(self):
+        control,store=self.stage_environment();ctx=self.context();record={};rid='c'*32
+        raw=native.canonical({'candidate':{'request_id':rid,'source':{'sha256':'1'*64}}})
+        report={'result':'PASS'};client={'result':'PASS','terminal':{'writers_stopped':True}}
+        with ExitStack() as stack:
+            for target,name,value in [(native,'CONTROL',control),(native.fs,'OWNER_UID',os.getuid())]:
+                stack.enter_context(mock.patch.object(target,name,value))
+            stack.enter_context(mock.patch.object(native.fs,'root_directory',self.owned_root_directory))
+            stack.enter_context(mock.patch.object(native,'store',lambda:self.store(store)))
+            for target,name in [(native.common,'stage_client'),(native,'install_policy'),(native,'issue'),
+                                (native,'native_owned_assert'),(native,'verify_owned_stage'),(native,'publish_reader_tree')]:
+                stack.enter_context(mock.patch.object(target,name))
+            stack.enter_context(mock.patch.object(native,'stage_client_call',return_value=client))
+            stack.enter_context(mock.patch.object(native,'native_owned_request',return_value=(raw,self.root,{})))
+            stack.enter_context(mock.patch.object(native,'make_policy',return_value=b'inert-policy'))
+            stack.enter_context(mock.patch.object(native,'capture',return_value=ctx))
+            stack.enter_context(mock.patch.object(native,'consume',side_effect=FileExistsError))
+            stack.enter_context(mock.patch.object(native.common,'case_inventory',return_value={}))
+            execute=stack.enter_context(mock.patch.object(native,'execute_native',side_effect=lambda *a,**kw:
+                (kw['_witness'].update(live_busy_lock_refused=True) or report,self.root)))
+            stack.enter_context(mock.patch.object(native,'verify_native',return_value={'result':'PASS'}))
+            readiness=stack.enter_context(mock.patch.object(native,'install_readiness'))
+            value,matrix=native.run_validation_stage('a'*32,'b'*40,'shell',ctx,0,record)
+            self.assertEqual([row['slot'] for row in value['validations']],['positive','derived','error'])
+            self.assertEqual(execute.call_count,3);readiness.assert_not_called()
+            self.assertEqual(len(list(store.iterdir())),1)
+            self.assertTrue((matrix/'stage.json').is_file());self.assertFalse((matrix/'acceptance.json').exists())
+
+    def test_incomplete_stage_never_creates_a_resume_pointer(self):
+        control,store=self.stage_environment();ctx=self.context()
+        with mock.patch.object(native,'CONTROL',control),mock.patch.object(native.fs,'OWNER_UID',os.getuid()), \
+             mock.patch.object(native.fs,'root_directory',self.owned_root_directory), \
+             mock.patch.object(native.common,'stage_client'),mock.patch.object(native,'stage_client_call',side_effect=ValueError('owned failure')), \
+             mock.patch.object(native,'install_readiness') as readiness:
+            with self.assertRaisesRegex(ValueError,'owned failure'):
+                native.run_validation_stage('a'*32,'b'*40,'shell',ctx,0,{})
+            self.assertEqual(list(store.iterdir()),[]);readiness.assert_not_called()
+            self.assertFalse((control/('native-owned-stage-'+'a'*32)/'stage.json').exists())
+
+    def test_cached_stage_refuses_changed_bytes_or_gap_and_never_issues_authority(self):
+        control,store=self.stage_environment();ctx=self.context();job='a'*32
+        matrix=control/('native-owned-stage-'+job);matrix.mkdir(mode=0o700)
+        stage=native.canonical({'owned':'inert serialized stage stand-in'})
+        leaf=matrix/'stage.json';leaf.write_bytes(stage);leaf.chmod(0o400)
+        pointer={'schema':'paw-s14-native-owned-stage-pointer-v1','context_sha256':native.digest(native.canonical(ctx)),
+            'profile':'shell','index':0,'job':job,'stage_sha256':native.digest(stage)}
+        first=store/native.stage_name('shell',ctx,0);first.write_bytes(native.canonical(pointer));first.chmod(0o400)
+        with mock.patch.object(native,'CONTROL',control),mock.patch.object(native.fs,'OWNER_UID',os.getuid()), \
+             mock.patch.object(native,'store',lambda:self.store(store)),mock.patch.object(native,'verify_owned_stage',side_effect=lambda v,*args:v) as verify, \
+             mock.patch.object(native,'issue') as issue,mock.patch.object(native,'install_readiness') as readiness:
+            self.assertEqual(native.completed_owned_stages('shell',ctx),[native.decode(stage)])
+            verify.assert_called_once();issue.assert_not_called();readiness.assert_not_called()
+            leaf.chmod(0o600);leaf.write_bytes(b'changed');leaf.chmod(0o400)
+            with self.assertRaisesRegex(ValueError,'native_stage_digest'):native.completed_owned_stages('shell',ctx)
+            first.unlink();pointer['index']=1
+            second=store/native.stage_name('shell',ctx,1);second.write_bytes(native.canonical(pointer));second.chmod(0o400)
+            with self.assertRaisesRegex(ValueError,'native_stage_gap'):native.completed_owned_stages('shell',ctx)
+
+    def test_stage_rereads_serialized_audit_consumption_and_actual_parent_without_new_authority(self):
+        # Reuse the serialized audit fixture with explicit fake VM/hardware
+        # observations. Real source/proof inventories, grant hashes, opaque
+        # artifacts and parent bytes are still independently read from disk.
+        from test_native_evidence import NativeEvidence
+        evidence=NativeEvidence();evidence.root=self.root
+        audit,report,ctx=evidence.fixture();rid=report['runs'][0]['request_id'];nonce='a'*16;job='b'*32
+        raw=(audit/'authority-copy'/rid/'request.json').read_bytes();request=native.decode(raw)
+        policy=native.decode((audit/'policy.json').read_bytes())
+        policy['owned_manifest_sha256']=native.digest(native.canonical({'nonce':nonce,'slot':'positive',
+            'profile':ctx['profile'],'request_sha256':native.digest(raw)}));policy_raw=native.canonical(policy)
+        grant=native.decode((audit/'authority-copy'/rid/'grant.json').read_bytes());grant['policy_sha256']=native.digest(policy_raw)
+        grant_raw=native.canonical(grant);ledger=report['runs'][0]['consumption']
+        ledger.update(policy_sha256=native.digest(policy_raw),grant_sha256=native.digest(grant_raw))
+        (audit/'policy.json').write_bytes(policy_raw)
+        (audit/'authority-copy'/rid/'grant.json').write_bytes(grant_raw)
+        (audit/'authority-copy'/rid/'consumed.json').write_bytes(native.canonical(ledger))
+        run=report['runs'][0];run.update(policy_sha256=native.digest(policy_raw),grant_sha256=native.digest(grant_raw))
+        marker=('OWNED-NATIVE-SHELL-'+nonce+'\n').encode();out=run['outcome']['records'][0]
+        out.update(bytes_hex=marker.hex(),sha256=native.digest(marker))
+        item=run['quarantine'][0];item.update(bytes=len(marker),sha256=native.digest(marker))
+        (audit/(run['job']['job_id']+'-quarantine')/item['stored_as']).write_bytes(marker)
+        (audit/'results.json').write_bytes(native.canonical(report))
+        control,store=self.stage_environment();target=control/('native-job-'+rid);audit.rename(target);audit=target
+        consumed=store/'consumed';consumed.mkdir(mode=0o700);leaf=consumed/(rid+'.json')
+        leaf.write_bytes(native.canonical(ledger));leaf.chmod(0o400)
+        readers=self.root/'readers';reader=readers/(job+'-client-source');reader.mkdir(parents=True)
+        shutil.copytree(audit/'runtime-snapshot',reader/'runtime-snapshot')
+        workspace=self.root/'workspace';workspace.mkdir();slot=workspace/'slots/positive';slot.mkdir(parents=True);(slot/'request.json').write_bytes(raw)
+        case_id=request['binding']['case_reference']['case_id']
+        original=next(q.parent for q in self.root.rglob('manifest.json') if native.decode(q.read_bytes()).get('case_id')==case_id)
+        parent=workspace/'cases'/case_id;parent.parent.mkdir();shutil.copytree(original,parent)
+        client={'result':'PASS','fixture_job':job,'fixture_nonce':nonce,
+            'terminal':{'writers_stopped':True,'cgroup_removed':True,'main_pid':0}}
+        with evidence.hardware():verified=native.verify_native(audit)
+        row={'slot':'positive','request_id':rid,'audit':str(audit),'verification':verified,
+            'witness':{'live_busy_lock_refused':True},'replay_refused':True,'wrong_parent_and_digest_refused':True,
+            'parent_unchanged':True,'parent_inventory_sha256':native.digest(native.canonical(native.common.case_inventory(parent)))}
+        value={'schema':'paw-s14-native-owned-stage-v1','result':'PASS','profile':'shell','context':ctx,
+            'job':job,'release_sha':'2'*40,'stage_index':0,'nonce':nonce,'validations':[row],
+            'clients':[client]*3,'real_samples_executed':0}
+        with evidence.hardware(),mock.patch.object(native,'CONTROL',control),mock.patch.object(native.common,'READERS',readers), \
+             mock.patch.object(native.fs,'OWNER_UID',os.getuid()),mock.patch.object(native,'store',lambda:self.store(store)), \
+             mock.patch.object(native,'validation_batches',return_value=(('positive',),)), \
+             mock.patch.object(native.common,'client_command',return_value={'workspace':workspace}), \
+             mock.patch.object(native,'issue') as issue,mock.patch.object(native,'install_readiness') as ready:
+            # Historical consumed grants may be verified, never refreshed or reused.
+            with mock.patch.object(native.time,'time',return_value=request['candidate']['expires_at']+3600):
+                self.assertEqual(native.verify_owned_stage(value,'shell',ctx,0),value)
+            issue.assert_not_called();ready.assert_not_called()
+            leaf.chmod(0o600);leaf.write_bytes(b'changed');leaf.chmod(0o400)
+            with self.assertRaisesRegex(ValueError,'native_consumption_changed'):native.verify_owned_stage(value,'shell',ctx,0)
+            leaf.chmod(0o600);leaf.write_bytes(native.canonical(ledger));leaf.chmod(0o400)
+            (parent/'source.bin').write_bytes(b'changed')
+            with self.assertRaisesRegex(ValueError,'native_stage_parent_changed'):native.verify_owned_stage(value,'shell',ctx,0)
+
+    def test_final_smoke_failure_revokes_new_readiness_and_keeps_stage_evidence(self):
+        control,store=self.stage_environment();ctx=self.context();job='a'*32;record={}
+        stage={'job':'b'*32,'stage_index':0,'nonce':'c'*16,'clients':[],
+            'validations':[{'slot':slot} for slot in NATIVE_CASES['shell']]}
+        ready=b'owned readiness stand-in';name='readiness-'+native.digest(ready)+'.json'
+        leaf=store/name;leaf.write_bytes(ready);leaf.chmod(0o400)
+        with mock.patch.object(native,'CONTROL',control),mock.patch.object(native.fs,'OWNER_UID',os.getuid()), \
+             mock.patch.object(native.fs,'root_directory',self.owned_root_directory), \
+             mock.patch.object(native,'store',lambda:self.store(store)),mock.patch.object(native.common,'stage_client'), \
+             mock.patch.object(native,'stage_client_call',return_value={'owned':'inert nonroot client stand-in'}), \
+             mock.patch.object(native,'capture',return_value=ctx),mock.patch.object(native,'new_native_readiness',return_value=ready), \
+             mock.patch.object(native,'install_readiness') as install,mock.patch.object(native.common,'run_client'), \
+             mock.patch.object(native,'native_owned_request',side_effect=ValueError('owned final smoke failure')):
+            with self.assertRaisesRegex(ValueError,'owned final smoke failure'):
+                native.finish_owned_native(job,'d'*40,'shell',ctx,[stage],record)
+            install.assert_called_once();self.assertIs(record['new_readiness_revoked'],True)
+            self.assertFalse(leaf.exists());self.assertEqual(list(store.iterdir()),[])
+            self.assertTrue((control/('native-owned-'+job)/'validation.json').exists())
+            self.assertFalse((control/('native-owned-'+job)/'acceptance.json').exists())
+
+    def test_pending_stage_cannot_be_treated_as_final_profile_acceptance(self):
+        job='a'*32;release='b'*40;state=self.root/'state';folder=state/'jobs'/job;folder.mkdir(parents=True,mode=0o700)
+        for path in [state,state/'jobs']:path.chmod(0o700)
+        ctx=self.context();record={}
+        with mock.patch.object(native,'root_only'),mock.patch.object(native,'HERE',Path('/opt/paw-vm/releases')/release/'lab/s14'), \
+             mock.patch.object(native,'STATE',state),mock.patch.object(native.fs,'OWNER_UID',os.getuid()), \
+             mock.patch.object(native.fs,'root_directory',self.owned_root_directory),mock.patch.object(native.common,'snapshot_proof'), \
+             mock.patch('vm_runtime_revalidation.revalidate',return_value={}),mock.patch.object(native,'initialize'), \
+             mock.patch.object(native,'capture',return_value=ctx),mock.patch.object(native,'accepted_native',return_value=False), \
+             mock.patch.object(native,'completed_owned_stages',return_value=[{'owned':'earlier fully verified stage'}]), \
+             mock.patch.object(native,'run_validation_stage',return_value=({'validations':[1,2,3]},self.root)) as stage, \
+             mock.patch.object(native,'finish_owned_native') as finish, \
+             mock.patch('vm_operator_host.write_state',side_effect=lambda fd,name,value:record.update(value)):
+            native.run_owned_native(job,release,'shell')
+            self.assertEqual(stage.call_args.args[4],1);finish.assert_not_called()
+        self.assertIs(record['stage_only'],True);self.assertIs(record['i08_installed'],False)
+        self.assertEqual(record['stages_complete'],2);self.assertEqual(record['stages_required'],4)
+        self.assertNotIn('readiness_sha256',record)
 
     def test_cached_owned_recipe_runs_no_vm_and_records_existing_fixed_recipe(self):
         job='a'*32;release='b'*40;state=self.root/'state';folder=state/'jobs'/job;folder.mkdir(parents=True,mode=0o700)
