@@ -186,3 +186,52 @@ execution/rollback. The actual protected extras are not claimed to be bytecode
 until this metadata is read. Unknown original guest failure and P3 acceptance
 remain pending. New readback still requires this correction's own review/CI,
 immutable promotion and one fresh no-guest job.
+
+## PR126 actual diagnosis and first publication failure
+
+PR126 merged as `832a2b45e9b1a48dd8e243cde19376da2c3fa49f` after a clear
+exact-head review, seven green head/main checks and identical trees. The limited
+operator promoted it without a password. No-guest job
+`985e9a4ec2fe4abf92d72ef04f5f3e48` passed and its protected reader confirmed nine
+extra historical deployment entries, all Python bytecode, with no missing
+manifest entries. The original traceback reaches the exact inventory predicate
+during post-boot context revalidation. This confirms the owner `-B` correction's
+reproduced cause; the dirty old deployment remains inadmissible and untouched.
+Current host/network snapshots matched, with no VM, I08 or real-source grant.
+
+The ordinary reader initially asserted `maintenance.changed == false`, which
+misinterpreted the reviewed field. It means the refreshed receipt differs from
+the fixed historical receipt, even if that refreshed receipt already exists;
+it does not attest whether this invocation created a file. A separate read-only
+reconciliation checked the exact old/new receipt and inventory hashes, protected
+output inode, current budgets and terminal host state without repeating the job.
+The original reader failure remains preserved.
+
+One fresh no-NIC Python owned job `b36cc5f61e20495dad73eae21f5fe7a6` then reached
+the first source-mode smoke's publication, after the six validation scenarios
+and its smoke execution/verification. It failed with `FileNotFoundError`, errno2,
+at `publish()` opening `/var/lib/paw-s14-representation-exports`; that fixed root
+does not exist on this host. The earlier round-trip test precreated its temporary
+equivalent and therefore missed first deployment. Removing that setup reproduces
+the same failure without Root or VM. No source sidecar or installed-mode smoke
+completed, no acceptance was published and HTML did not run. The recipe's failure
+path revokes its newly installed readiness; independent terminal readback found
+no service/client, cgroup, QEMU, domain, active network or network namespace.
+These observations do not turn this failed job into P3 acceptance.
+
+Publication now initializes only the fixed export leaf through its protected
+parent descriptor. A new Root-owned0700 directory is pinned with `O_NOFOLLOW`,
+validated and assigned Root:1000/0750; each result remains0700 until the existing
+reader publisher seals its440 files/750 tree. Existing parents must already have
+the exact trusted owner/group/mode and are never repaired. Links, regular files,
+foreign ownership and unexpected modes refuse without changing existing data.
+The real-authority inert round trip now starts with the root absent; separate
+tests check idempotence, preserved receipts and negative inode/permission cases.
+The first CI run exposed an ordinary-test portability error: the fixture
+substituted ownership but attempted the production reader group1000 on a runner
+that cannot assign that group. A local unprivileged user namespace mapped to
+UID/GID1001 reproduces the two failing producer tests. The fixture now substitutes
+its actual group alongside its actual owner; production still pins group1000.
+All13 producer tests pass both normally and in that mapped namespace.
+This correction needs its own clear exact-head review, head/main CI and immutable
+promotion before another synthetic guest attempt. P3, P4 and P5 remain open.

@@ -36,6 +36,7 @@ class Producer(unittest.TestCase):
         # descriptor-relative copy, exclusive writes and atomic replacement are
         # real. Only absolute Root locations/ownership/ancestors are substituted.
         with mock.patch.object(producer.auth.fs, 'OWNER_UID', os.getuid()), \
+             mock.patch.object(producer, 'READER_GID', os.getgid()), \
              mock.patch.object(producer.auth.storage, 'ROOT_UID', os.getuid()), \
              mock.patch.object(producer.auth.fs, 'root_directory', anchor): yield
 
@@ -194,6 +195,40 @@ class Producer(unittest.TestCase):
                     load.assert_not_called(); publish.assert_not_called()
         finally: fixture.tearDown()
 
+    def test_export_parent_is_created_once_and_pinned_without_changing_existing_results(self):
+        exports = self.root/'exports'
+        with self.boundary(), mock.patch.object(producer.auth.contract, 'EXPORT_ROOT', exports):
+            with producer._export_parent() as fd:
+                info = os.fstat(fd)
+                self.assertEqual((info.st_uid, info.st_gid, info.st_mode & 0o777), (os.getuid(), os.getgid(), 0o750))
+                child = exports/'already-published'; child.mkdir(mode=0o750)
+                original = child/'receipt.json'; original.write_bytes(b'preserved'); original.chmod(0o440)
+            before = (exports.stat(), original.stat())
+            with producer._export_parent() as fd:
+                self.assertEqual(os.fstat(fd).st_ino, before[0].st_ino)
+            self.assertEqual((exports.stat(), original.stat()), before)
+            self.assertEqual(original.read_bytes(), b'preserved')
+
+    def test_export_parent_refuses_links_files_foreign_owner_and_unexpected_modes_without_repair(self):
+        target = self.root/'outside'; target.mkdir(mode=0o700)
+        (target/'canary').write_bytes(b'unchanged')
+        for fault in ['symlink', 'file', 'foreign-owner', 'writable', 'private-existing']:
+            with self.subTest(fault=fault):
+                exports = self.root/('exports-'+fault)
+                if fault == 'symlink': exports.symlink_to(target, target_is_directory=True)
+                elif fault == 'file': exports.write_bytes(b'unchanged')
+                else:
+                    exports.mkdir(mode=0o750)
+                    if fault == 'writable': exports.chmod(0o777)
+                    if fault == 'private-existing': exports.chmod(0o700)
+                before = exports.lstat(); target_before = inventory(target)
+                with self.boundary(), mock.patch.object(producer.auth.contract, 'EXPORT_ROOT', exports), \
+                     mock.patch.object(producer.auth.fs, 'OWNER_UID', os.getuid()+1 if fault == 'foreign-owner' else os.getuid()):
+                    with self.assertRaises((ValueError, OSError)):
+                        with producer._export_parent(): self.fail('untrusted export parent accepted')
+                self.assertEqual(exports.lstat(), before)
+                self.assertEqual(inventory(target), target_before)
+
     def test_real_authority_custody_receipt_and_sealed_client_round_trip_with_inert_hardware(self):
         fixture = evidence.Evidence(); fixture.setUp()
         try:
@@ -203,7 +238,9 @@ class Producer(unittest.TestCase):
             context['backend'].update(image_sha256='e'*64, image_certificate_sha256=producer.auth.digest(proof))
             (output/'browser-image-certificate.json').write_bytes(proof)
             store = self.root/'actual-temporary-authority'; store.mkdir(mode=0o700)
-            exports = self.root/'temporary-exports'; exports.mkdir(mode=0o700)
+            # A first deployment has no export root. Publication must initialize
+            # only that fixed leaf; precreating it hid the actual first-run bug.
+            exports = self.root/'temporary-exports'
             now = int(time.time())
             ready = producer.auth.canonical({'schema': 'paw-s14-representation-i08-v1', 'scope': producer.auth.SCOPE,
                 'decision': 'ready-for-explicit-single-representation-no-nic',
