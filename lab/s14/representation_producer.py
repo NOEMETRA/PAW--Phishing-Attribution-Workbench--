@@ -4,6 +4,7 @@ Existing protected grants serve custody; the reserved recipe independently
 restricts new authority to immutable-generated owned bytes and scoped I08.
 """
 import argparse
+from contextlib import contextmanager
 import os
 from pathlib import Path
 import re
@@ -219,6 +220,34 @@ def execute(raw, policy_raw, *, cancel=False, _owned_fault=None, _witness=None, 
     return gate.report, output
 
 
+@contextmanager
+def _export_parent():
+    """Initialize only the fixed reader root beneath its protected parent.
+
+    Existing inodes are validated, never repaired. Pin the leaf without following
+    links and make only a newly created, trusted empty root traversable by the
+    enrolled reader. Individual result trees stay private until publication.
+    """
+    root = auth.contract.EXPORT_ROOT
+    with auth.fs.root_directory(root.parent) as ancestor:
+        created = False
+        try:
+            os.mkdir(root.name, mode=0o700, dir_fd=ancestor); created = True
+        except FileExistsError: pass
+        fd = os.open(root.name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=ancestor)
+        try:
+            auth.fs.trusted(os.fstat(fd), True)
+            if created:
+                require(stat.S_IMODE(os.fstat(fd).st_mode) == 0o700, 'representation_export_new_root_mode')
+                os.fchown(fd, auth.fs.OWNER_UID, 1000); os.fchmod(fd, 0o750)
+                os.fsync(fd); os.fsync(ancestor)
+            info = os.fstat(fd)
+            require(info.st_gid == 1000 and stat.S_IMODE(info.st_mode) == 0o750,
+                    'representation_export_root_mode')
+            yield fd
+        finally: os.close(fd)
+
+
 def publish(raw):
     """Only a current protected analysis-mode audit may enter the client export."""
     root_only(); request = auth.contract.validate_request(raw, auth.decode(raw)['candidate']['created_at'])
@@ -255,7 +284,7 @@ def publish(raw):
         'artifacts': [{k: v[k] for k in ['stored_as', 'bytes', 'sha256']} for v in run['quarantine']]}
     receipt_raw = auth.canonical(receipt); auth.contract.validate_receipt(receipt_raw, request, auth.digest(raw))
     destination = auth.contract.EXPORT_ROOT/identifier
-    with auth.fs.root_directory(auth.contract.EXPORT_ROOT) as parent:
+    with _export_parent() as parent:
         os.mkdir(identifier, mode=0o700, dir_fd=parent); os.fsync(parent)
     with auth.fs.root_directory(destination) as fd:
         auth.fs.exclusive(fd, 'request.json', raw); auth.fs.exclusive(fd, 'receipt.json', receipt_raw)
