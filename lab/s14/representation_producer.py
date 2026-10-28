@@ -307,9 +307,11 @@ SLOTS = {'positive', 'prefix', 'qp', 'paused-refusal', 'owner-loss', 'protocol-l
 def client_command(job, nonce, profile, mode, phase, *, slot=None):
     require(type(job) is str and re.fullmatch('[0-9a-f]{32}', job) and
             type(nonce) is str and re.fullmatch('[0-9a-f]{16}', nonce), 'owned_client_identifier')
-    require(type(profile) is str and profile in {'python', 'html'} and type(mode) is str and mode in {'source', 'installed'} and
+    require(type(profile) is str and profile in {'python', 'html', 'shell', 'elf'} and type(mode) is str and mode in {'source', 'installed'} and
             type(phase) is str and phase in PHASES, 'owned_client_finite_phase')
-    require((phase == 'prepare' and slot is None) or (phase != 'prepare' and type(slot) is str and slot in SLOTS),
+    from representation_owned_inputs import NATIVE_CASES
+    allowed_slots = set(NATIVE_CASES[profile]) | {'smoke'} if profile in {'shell','elf'} else SLOTS
+    require((phase == 'prepare' and slot is None) or (phase != 'prepare' and type(slot) is str and slot in allowed_slots),
             'owned_client_finite_slot')
     tag = profile+'-'+mode+'-'+phase+('' if slot is None else '-'+slot)
     unit = 'paw-vm-client-'+job+'-'+tag; parent = 'paw-vm-owned-'+job+'.service'
@@ -405,7 +407,7 @@ def client_terminal(spec, process_proof):
             'main_pid': 0, 'cgroup_removed': True, 'writers_stopped': True}
 
 
-def run_client(job, nonce, profile, mode, phase, context, *, slot=None):
+def run_client(job, nonce, profile, mode, phase, context, *, slot=None, _capture=None):
     root_only(); spec = client_command(job, nonce, profile, mode, phase, slot=slot)
     verify_snapshot(spec['reader'], context)
     folder = STATE/'jobs'/job; frontend = None; process_proof = None; acknowledged = False
@@ -442,7 +444,9 @@ def run_client(job, nonce, profile, mode, phase, context, *, slot=None):
             terminal = client_terminal(spec, process_proof)
     require(result == 0 and stopped.returncode in {0, 5} and terminal['writers_stopped'] is True,
             'owned_client_phase_failed')
-    require(auth.canonical(auth.capture(context['profile'])) == auth.canonical(context), 'owned_client_context_changed')
+    # Only reviewed immutable Root callers supply this internal context reader.
+    actual_context = (auth.capture if _capture is None else _capture)(context['profile'])
+    require(auth.canonical(actual_context) == auth.canonical(context), 'owned_client_context_changed')
     verify_snapshot(spec['reader'], context)
     return {'result': 'PASS', 'phase': phase, 'profile': profile, 'mode': mode, 'slot': slot,
             'process': process_proof, 'terminal': terminal, 'log': str(folder/('client-'+spec['tag']+'.log'))}

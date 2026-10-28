@@ -99,6 +99,13 @@ their current scoped isolation gate even after unattended benign acceptance.
 
 ## Current disposition
 
+The coherent [native runtime increment](vm-native-runtime-contract.md) adds
+separate Root authority/controller/producer/verifier and fixed owned recipe
+implementations. It retains the existing operator and budgets. Its local
+inert/CLI evidence does not close P4: review/head+main CI, immutable promotion,
+current installed client and actual no-NIC matrices/I08 remain required before
+acceptance. JavaScript browser handoff and P5 operations remain open.
+
 The next P4 [native custody client](vm-native-custody-contract.md) adds a
 separate shell/ELF request/result namespace and CLI, with19inert boundary tests,
 20legacy regressions and10source/10installed owned CLI preparations each with

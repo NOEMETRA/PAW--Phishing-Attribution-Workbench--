@@ -44,7 +44,12 @@ def main():
         from representation_producer import run_owned
         run_owned(args.job, HERE.parents[1].name)
         return
-    # Additional execution recipes must be implemented and reviewed later.
+    if args.recipe in {'shell-owned-v1', 'elf-owned-v1'}:
+        # Profile is selected by the fixed recipe, never from caller bytes/paths.
+        from native_runtime import run_owned_native
+        run_owned_native(args.job, HERE.parents[1].name,
+                         'shell' if args.recipe == 'shell-owned-v1' else 'elf')
+        return
     require(args.recipe == 'browser-owned-v1', 'operator_recipe_not_implemented')
     from browser_validation_inputs import make
     import browser_authorization as auth
