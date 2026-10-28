@@ -296,7 +296,7 @@ def validate_inspection(value, seed):
 
 def validate_boundary(value):
     keys = {'uid', 'gid', 'groups', 'no_new_privileges', 'capabilities', 'pid', 'pid_identity', 'stdin',
-            'cgroup', 'limits', 'rlimits', 'session_id', 'controlling_tty', 'observed_before_exec'}
+            'cgroup', 'limits', 'rlimits', 'session_id', 'controlling_tty', 'working_directory', 'observed_before_exec'}
     require(type(value) is dict and set(value) == keys and value['uid'] == value['gid'] == 65534 and
             value['groups'] == [] and value['no_new_privileges'] is True and
             value['capabilities'] == 'all zero including bounding' and type(value['pid']) is int and value['pid'] > 1 and
@@ -304,7 +304,7 @@ def validate_boundary(value):
             value['stdin'] == '/dev/null' and value['cgroup'] == '/paw-synthetic-job' and
             canonical(value['limits']) == canonical(GUEST_LIMITS) and canonical(value['rlimits']) == canonical(CHILD_LIMITS) and
             type(value['session_id']) is int and value['session_id'] == value['pid'] and value['controlling_tty'] is None and
-            value['observed_before_exec'] is True, 'native_guest_boundary')
+            value['working_directory'] == '/tmp/paw-gate-fixture' and value['observed_before_exec'] is True, 'native_guest_boundary')
     return value
 
 

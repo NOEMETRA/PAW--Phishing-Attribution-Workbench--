@@ -24,7 +24,7 @@ def fixture():
         'guest_controller_sha256':native.guest_controller_hash(),'interpreter':'/bin/dash','interpreter_sha256':'2'*64}
     boundary={'uid':65534,'gid':65534,'groups':[],'no_new_privileges':True,'capabilities':'all zero including bounding',
         'pid':123,'pid_identity':'99','stdin':'/dev/null','cgroup':'/paw-synthetic-job','limits':native.GUEST_LIMITS,
-        'rlimits':native.CHILD_LIMITS,'session_id':123,'controlling_tty':None,'observed_before_exec':True}
+        'rlimits':native.CHILD_LIMITS,'session_id':123,'controlling_tty':None,'working_directory':'/tmp/paw-gate-fixture','observed_before_exec':True}
     admission={'started':True,'pid':123,'source_sha256':seed['source_sha256'],'job_sha256':seed['job_sha256'],
         'profile':native.SHELL,'prior_marker_absent':True,'boundary':boundary,'inspection':inspection}
     outcome={'done':True,'status':'completed','returncode':0,'records':[{'name':name+'.bin','bytes_hex':'',
@@ -50,7 +50,7 @@ class NativeAdapter(unittest.TestCase):
 
     def test_nonroot_caps_nnp_session_and_every_effective_limit_bound(self):
         for key,value in [('uid',0),('gid',0),('groups',[27]),('capabilities','nonzero'),('no_new_privileges',False),
-                ('observed_before_exec',False),('session_id',1),('controlling_tty','ttyS0'),('pid',True),('stdin','/dev/ttyS0')]:
+                ('observed_before_exec',False),('session_id',1),('controlling_tty','ttyS0'),('pid',True),('stdin','/dev/ttyS0'),('working_directory','/')]:
             changed=copy.deepcopy(self.admission['boundary']);changed[key]=value
             with self.subTest(key=key),self.assertRaises(ValueError):native.validate_boundary(changed)
         for key in native.GUEST_LIMITS:

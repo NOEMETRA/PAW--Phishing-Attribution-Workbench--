@@ -136,8 +136,8 @@ def observe_boundary(pid):
     fields = (proc/'stat').read_text().rsplit(')', 1)[1].split()
     require(fields[2:5] == [str(pid), str(pid), '0'], 'native_session_or_controlling_tty')
     require((proc/'cgroup').read_text().strip() == '0::/'+GROUP.name and
-            str(pid) in (GROUP/'cgroup.procs').read_text().split() and os.readlink(proc/'fd/0') == '/dev/null',
-            'native_child_cgroup_or_stdin')
+            str(pid) in (GROUP/'cgroup.procs').read_text().split() and os.readlink(proc/'fd/0') == '/dev/null' and
+            os.readlink(proc/'cwd') == str(WORK), 'native_child_cgroup_stdin_or_cwd')
     limits = {name: (GROUP/name).read_text().strip() for name in LIMITS}
     require(limits == LIMITS, 'native_effective_cgroup_limits')
     expected = {'Max cpu time': 2, 'Max file size': 4096, 'Max core file size': 0,
@@ -151,7 +151,7 @@ def observe_boundary(pid):
     require(observed == expected and identity() == before, 'native_child_identity_or_rlimits')
     return {**result, 'pid': pid, 'pid_identity': before, 'stdin': '/dev/null', 'cgroup': '/'+GROUP.name,
             'limits': limits, 'rlimits': observed, 'session_id': pid, 'controlling_tty': None,
-            'observed_before_exec': True}
+            'working_directory': str(WORK), 'observed_before_exec': True}
 
 
 def _reap(pid, seconds=2):
@@ -161,6 +161,20 @@ def _reap(pid, seconds=2):
         if observed == pid: return os.waitstatus_to_exitcode(status)
         time.sleep(.01)
     raise ValueError('native_child_not_reaped')
+
+
+def _exec_child(config, null, out_w, err_w, ready_w, go_r):
+    os.setsid()
+    for name in ['SIGPIPE', 'SIGXFSZ', 'SIGXCPU']:
+        signal.signal(getattr(signal, name), signal.SIG_DFL)
+    os.dup2(null, 0); os.dup2(out_w, 1); os.dup2(err_w, 2)
+    keep = sorted([ready_w, go_r]); low = 3
+    for fd in keep: os.closerange(low, fd); low = fd+1
+    os.closerange(low, 1024*1024)
+    os.chdir(WORK)
+    child_admission(); os.write(ready_w, b'R'); os.close(ready_w)
+    require(os.read(go_r, 1) == b'G', 'native_missing_parent_go'); os.close(go_r)
+    os.execve(argv_for(config)[0], argv_for(config), {'PATH': '/usr/bin:/bin', 'HOME': '/nonexistent', 'LANG': 'C.UTF-8'})
 
 
 def spawn(config):
@@ -173,16 +187,7 @@ def spawn(config):
         child = os.fork()
         if child == 0:
             try:
-                os.setsid()
-                for name in ['SIGPIPE', 'SIGXFSZ', 'SIGXCPU']:
-                    signal.signal(getattr(signal, name), signal.SIG_DFL)
-                os.dup2(null, 0); os.dup2(out_w, 1); os.dup2(err_w, 2)
-                keep = sorted([ready_w, go_r]); low = 3
-                for fd in keep: os.closerange(low, fd); low = fd+1
-                os.closerange(low, 1024*1024)
-                child_admission(); os.write(ready_w, b'R'); os.close(ready_w)
-                require(os.read(go_r, 1) == b'G', 'native_missing_parent_go'); os.close(go_r)
-                os.execve(argv_for(config)[0], argv_for(config), {'PATH': '/usr/bin:/bin', 'HOME': '/nonexistent', 'LANG': 'C.UTF-8'})
+                _exec_child(config, null, out_w, err_w, ready_w, go_r)
             except BaseException:
                 os.write(2, b'native child admission/exec refused\n'); os._exit(126)
         for fd in [null, out_w, err_w, ready_w, go_r]: os.close(fd); opened.remove(fd)

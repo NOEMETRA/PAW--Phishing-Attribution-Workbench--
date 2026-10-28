@@ -57,11 +57,12 @@ the guest loader. Loader failures/unavailable libraries are execution outcomes.
 
 Before exec, a CLOEXEC ready/go pipe lets the trusted parent inspect the child
 without a blocking Popen preexec handshake. The child creates a new session with
-no controlling terminal, closes the serial and extra descriptors, uses `/dev/null`
+no controlling terminal, closes the serial and extra descriptors, changes to the
+writable fixed guest work directory before dropping identity, uses `/dev/null`
 for stdin, enters the fixed job cgroup, applies rlimits, drops every capability
 bounding bit while still privileged, then all groups/UID/GID and sets NNP. The
 parent checks kernel PID identity, four UIDs/GIDs, empty groups, all five zero
-capability sets, NNP, session/TTY/stdin, exact cgroup and actual rlimits before
+capability sets, NNP, session/TTY/stdin/working directory, exact cgroup and actual rlimits before
 releasing the fixed-path exec. Signals ignored by Python are reset for normal
 native CPU/file-limit behavior. Neither source nor environment can choose a host
 command, path, interpreter, systemd property or resource limit.

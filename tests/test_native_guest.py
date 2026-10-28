@@ -48,6 +48,21 @@ class NativeGuest(unittest.TestCase):
             with self.subTest(before=before), self.assertRaises(ValueError): guest.validate_status(status().replace(before, after))
         with self.assertRaises(ValueError): guest.validate_status(status()+'Uid:\t65534\n')
 
+    def test_child_enters_writable_work_directory_before_drop_and_fixed_exec(self):
+        events=[]
+        class ExecReached(BaseException):pass
+        def execute(path,argv,env):events.append(('exec',path));raise ExecReached()
+        with mock.patch.object(guest.os,'setsid'),mock.patch.object(guest.signal,'signal'), \
+             mock.patch.object(guest.os,'dup2'),mock.patch.object(guest.os,'closerange'),mock.patch.object(guest.os,'close'), \
+             mock.patch.object(guest.os,'read',return_value=b'G'),mock.patch.object(guest.os,'write',return_value=1), \
+             mock.patch.object(guest.os,'chdir',side_effect=lambda p:events.append(('cwd',str(p)))), \
+             mock.patch.object(guest,'child_admission',side_effect=lambda:events.append(('drop',65534))), \
+             mock.patch.object(guest.os,'execve',side_effect=execute):
+            with self.assertRaises(ExecReached):guest._exec_child({'profile':guest.SHELL},108,101,103,105,106)
+        self.assertIn(('cwd',str(guest.WORK)),events)
+        self.assertLess(events.index(('cwd',str(guest.WORK))),events.index(('drop',65534)))
+        self.assertLess(events.index(('drop',65534)),events.index(('exec','/bin/dash')))
+
     def test_child_admission_drops_bounding_before_uid_and_nnp_after_uid(self):
         events = []
         fake = SimpleNamespace(prctl=lambda *args: events.append(('prctl', args)) or 0)
@@ -83,7 +98,7 @@ class NativeGuest(unittest.TestCase):
 
     def test_proc_boundary_observed_before_exec_has_exact_session_limits_and_identity(self):
         rows = self.boundary_fixture()
-        with mock.patch.object(Path,'read_text',lambda p,*a,**kw:rows[str(p)]), mock.patch.object(guest.os,'readlink',return_value='/dev/null'):
+        with mock.patch.object(Path,'read_text',lambda p,*a,**kw:rows[str(p)]), mock.patch.object(guest.os,'readlink',side_effect=lambda p:'/dev/null' if Path(p).name=='0' else str(guest.WORK)):
             proof = guest.observe_boundary(123)
         self.assertTrue(proof['observed_before_exec']); self.assertEqual(proof['pid_identity'],'99')
         self.assertEqual(proof['session_id'],123); self.assertIsNone(proof['controlling_tty'])
@@ -93,8 +108,15 @@ class NativeGuest(unittest.TestCase):
         for change in [{'session':'1'},{'tty':'1234'},{'changed_limit':True}]:
             rows = self.boundary_fixture(**change)
             with mock.patch.object(Path,'read_text',lambda p,*a,**kw:rows[str(p)]), \
-                 mock.patch.object(guest.os,'readlink',return_value='/dev/null'), self.assertRaises(ValueError):
+                 mock.patch.object(guest.os,'readlink',side_effect=lambda p:'/dev/null' if Path(p).name=='0' else str(guest.WORK)), self.assertRaises(ValueError):
                 guest.observe_boundary(123)
+
+    def test_kernel_working_directory_must_match_the_writable_job_directory(self):
+        rows=self.boundary_fixture()
+        with mock.patch.object(Path,'read_text',lambda p,*a,**kw:rows[str(p)]), \
+             mock.patch.object(guest.os,'readlink',side_effect=lambda p:'/dev/null' if Path(p).name=='0' else '/'), \
+             self.assertRaisesRegex(ValueError,'stdin_or_cwd'):
+            guest.observe_boundary(123)
 
     def spawn_fixture(self, refused=False):
         events = []; opened = iter([(100,101),(102,103),(104,105),(106,107)])
