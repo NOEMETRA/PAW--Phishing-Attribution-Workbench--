@@ -2,6 +2,7 @@
 import argparse
 import base64
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -26,6 +27,22 @@ FIXTURES = [
      'mime', 'parser_selected_payload', 'python', PYTHON),
 ]
 
+# Load only this fixed inert byte-fixture helper under installed Python -P.
+_spec = importlib.util.spec_from_file_location('owned_linux_bytes', Path(__file__).with_name('linux_profile_fixtures.py'))
+_fixture = importlib.util.module_from_spec(_spec); _spec.loader.exec_module(_fixture)
+_ELF = _fixture.executable()
+_SHELL = b'#!/not/a/selector\nprintf "owned native custody"\n'
+_SHELL_MAX = b'#'+b'x'*(64*1024-2)+b'\n'
+_ELF_MAX = _ELF+bytes(1024**2-len(_ELF))
+FIXTURES += [
+    ('shell-max', _SHELL_MAX, 'posix-shell-utf8', 'original', 'shell', _SHELL_MAX),
+    ('shell-derived', b'Content-Type: text/x-shellscript\r\nContent-Transfer-Encoding: base64\r\n\r\n'+base64.b64encode(_SHELL),
+     'mime', 'parser_selected_payload', 'shell', _SHELL),
+    ('elf-max', _ELF_MAX, 'elf64-x86_64', 'original', 'elf', _ELF_MAX),
+    ('elf-pie', _fixture.executable('/lib64/ld-linux-x86-64.so.2', kind=3), 'elf64-x86_64', 'original', 'elf',
+     _fixture.executable('/lib64/ld-linux-x86-64.so.2', kind=3)),
+]
+
 
 def inventory(case):
     return {str(p.relative_to(case)): hashlib.sha256(p.read_bytes()).hexdigest() for p in case.rglob('*') if p.is_file()}
@@ -38,7 +55,7 @@ def main():
     env.pop('PYTHONPATH', None); env.pop('PYTHONHOME', None)
     if not args.installed: env['PYTHONPATH'] = str(REPO); sys.path.insert(0, str(REPO))
     import paw
-    from paw.core import representation_bridge as bridge
+    from paw.core import representation_bridge, native_bridge
     from paw.core.job_registry import require_stopped_case
     from paw.core.verify import verify_case
     if args.installed:
@@ -56,6 +73,8 @@ def main():
             return json.loads(run.stdout) if expected == 0 else None
         first_request = None; first_case = None
         for name, raw, interpretation, kind, profile, selected_bytes in FIXTURES:
+            bridge = native_bridge if profile in {'shell', 'elf'} else representation_bridge
+            command = 'lab-native' if profile in {'shell', 'elf'} else 'lab-representation'
             source = root/(name+'.bin'); source.write_bytes(raw); source.chmod(0o400)
             result = cli(['inspect-representations', str(source), '--interpretation', interpretation])
             assert result['supervisor']['tree_stopped'] is True
@@ -64,7 +83,7 @@ def main():
             selected = next(row['id'] for row in graph['nodes'] if row['kind'] == kind and
                             (case/row['blob_path']).read_bytes() == selected_bytes)
             before = inventory(case); destination = root/(name+'-request')
-            prepared = cli(['lab-representation', 'prepare', '--case', str(case), '--node', selected,
+            prepared = cli([command, 'prepare', '--case', str(case), '--node', selected,
                             '--profile', profile, '--output', str(destination)])
             request_raw = Path(prepared['request']).read_bytes(); request = bridge.validate_request(request_raw)
             assert request['candidate']['source']['data_hex'] == selected_bytes.hex()
@@ -76,19 +95,19 @@ def main():
             assert all((destination/p).stat().st_mode & 0o777 == 0o400 for p in ['request.json', 'candidate.json'])
             if first_request is None: first_request, first_case = prepared['request'], case
             missing = root/(name+'-missing-producer')
-            cli(['lab-representation', 'import', '--case', str(case), '--request', prepared['request'], '--output', str(missing)], expected=1)
+            cli([command, 'import', '--case', str(case), '--request', prepared['request'], '--output', str(missing)], expected=1)
             assert not missing.exists(); refusals += 1
             unknown = root/(name+'-unknown-node')
-            cli(['lab-representation', 'prepare', '--case', str(case), '--node', '0'*64,
+            cli([command, 'prepare', '--case', str(case), '--node', '0'*64,
                  '--profile', profile, '--output', str(unknown)], expected=1)
             assert not unknown.exists(); refusals += 1
             if case != first_case:
                 wrong = root/(name+'-wrong-parent')
-                cli(['lab-representation', 'import', '--case', str(case), '--request', first_request,
+                cli([command, 'import', '--case', str(case), '--request', first_request,
                      '--output', str(wrong)], expected=1)
                 assert not wrong.exists(); refusals += 1
             assert inventory(case) == before and verify_case(case) and source.read_bytes() == raw
-            rows.append({'fixture': name, 'profile': profile, 'node': selected, 'node_kind': kind,
+            rows.append({'fixture': name, 'profile': profile, 'custody_command': command, 'node': selected, 'node_kind': kind,
                          'original_sha256': hashlib.sha256(raw).hexdigest(), 'selected_sha256': hashlib.sha256(selected_bytes).hexdigest(),
                          'lineage_nodes': len(request['binding']['derivation']['nodes']), 'execution_authorized': False})
         report = {'result': 'PASS', 'mode': 'installed' if args.installed else 'source', 'cases': rows,

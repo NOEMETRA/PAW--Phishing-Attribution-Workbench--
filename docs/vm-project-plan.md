@@ -99,6 +99,12 @@ their current scoped isolation gate even after unattended benign acceptance.
 
 ## Current disposition
 
+The next P4 [native custody client](vm-native-custody-contract.md) adds a
+separate shell/ELF request/result namespace and CLI, with19inert boundary tests,
+20legacy regressions and10source/10installed owned CLI preparations each with
+29refusals. It issues no grant, launches no VM and leaves the P3 bridge intact.
+Native authority/runtime/I08, actual VM acceptance and P5 remain open.
+
 P4 starts with the [finite Linux admission and explicit JavaScript view](vm-linux-profiles-contract.md).
 The first increment adds supervised CLI/HTTP forensic modes, bounded shell/ELF
 structural metadata and a byte-preserving JavaScript→HTML candidate. It is not
