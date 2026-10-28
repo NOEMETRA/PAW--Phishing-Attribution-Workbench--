@@ -3,6 +3,7 @@ import argparse
 import asyncio
 from contextlib import contextmanager
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -17,6 +18,12 @@ import urllib.request
 import zipfile
 
 REPO = Path(__file__).resolve().parents[1]
+# -P intentionally excludes this script's directory in installed acceptance.
+# Load only the fixed owned byte fixture; never add the checkout to sys.path
+# or weaken the installed Paw import assertions below.
+_spec = importlib.util.spec_from_file_location('paw_owned_elf_fixture', Path(__file__).with_name('linux_profile_fixtures.py'))
+_fixture = importlib.util.module_from_spec(_spec); _spec.loader.exec_module(_fixture)
+executable, changed = _fixture.executable, _fixture.changed
 FIXTURES = [
     ('empty', b'', 'html-utf8'),
     ('binary', b'\xff\xfe\x00\x80', 'html-utf8'),
@@ -31,6 +38,13 @@ FIXTURES = [
     ('duplicate-charset', b'Content-Type: text/html; charset=us-ascii; charset=utf-8\r\n\r\n<p>owned</p>', 'mime'),
     ('broken-charset-quote', b'Content-Type: text/html; charset="us-ascii\r\n\r\n<p>owned</p>', 'mime'),
     ('duplicate-boundary', b'Content-Type: multipart/mixed; boundary=x; boundary=y\r\n\r\n--x\r\nContent-Type: text/html\r\n\r\n<p>owned</p>\r\n--x--\r\n', 'mime'),
+    ('javascript-explicit', '\ufeffconsole.log("owned π");\r\n// </script><img src="https://owned.invalid/">'.encode(), 'javascript-utf8'),
+    ('javascript-encoding', b'\xffconsole.log("owned")', 'javascript-utf8'),
+    ('posix-shell', b'#!/bin/sh\nprintf "owned"\n', 'posix-shell-utf8'),
+    ('posix-shell-binary', b'printf "owned"\x00', 'posix-shell-utf8'),
+    ('elf-static', executable(), 'elf64-x86_64'),
+    ('elf-pie', executable('/lib64/ld-linux-x86-64.so.2',3), 'elf64-x86_64'),
+    ('elf-foreign-abi', changed(executable(),18,'<H',183), 'elf64-x86_64'),
 ]
 
 
@@ -65,6 +79,41 @@ def verify_source_case(case, raw):
     assert len(record['nodes']) <= 64 and record['representation_bytes'] <= 24*1024**2
     assert record['work_bytes'] <= 64*1024**2
     execution = json.loads((case/'execution.json').read_bytes())
+    interpretation = manifest['requested_interpretation']
+    if interpretation == 'javascript-utf8':
+        import base64
+        view = reports['javascript']
+        assert view['origin_verified'] is False and view['execution_authority'] == 'none'
+        if raw[:1] == b'\xff':
+            assert view['status'] == 'partial' and view['browser_representation'] is None
+            assert execution['coverage'] == 'partial'
+        else:
+            assert view['status'] == 'derived_candidate'
+            node = next(n for n in record['nodes'] if n['id'] == view['browser_representation'])
+            assert node['parents'] == [record['root']] and node['kind'] == 'browser_html_candidate'
+            wrapper = (case/node['blob_path']).read_bytes()
+            assert base64.b64decode(wrapper.split(b'base64,',1)[1].split(b'"',1)[0],validate=True) == raw
+            assert b'<img' not in wrapper and wrapper.count(b'<script ') == 1
+            assert len(wrapper) <= 512*1024
+            # The existing strict HTML selection consumer accepts this explicit
+            # lineage without granting or launching anything. Parent stays sealed.
+            from paw.core.representation_bridge import prepare, validate_request
+            before = {p.relative_to(case).as_posix(): p.read_bytes() for p in case.rglob('*') if p.is_file()}
+            prepared = prepare(case, node['id'], 'html', case.parent.parent/'js-requests'/case.name)
+            framed = validate_request(Path(prepared['request']).read_bytes())
+            assert framed['candidate']['source']['data_hex'] == wrapper.hex()
+            assert framed['binding']['original_source']['sha256'] == hashlib.sha256(raw).hexdigest()
+            assert framed['candidate']['provenance']['execution_authority'] == 'none'
+            assert before == {p.relative_to(case).as_posix(): p.read_bytes() for p in case.rglob('*') if p.is_file()}
+    if interpretation in {'posix-shell-utf8', 'elf64-x86_64'}:
+        view = reports['linux_profile']
+        assert view['origin_verified'] is False and view['execution_authority'] == 'none'
+        if raw.endswith(b'\0') or (raw.startswith(b'\x7fELF') and raw[18:20] == b'\xb7\x00'):
+            assert view['status'] == 'unsupported' and view['issues'] and execution['coverage'] == 'partial'
+        else:
+            assert view['status'] == 'structurally_admissible' and view['source_sha256'] == hashlib.sha256(raw).hexdigest()
+            assert view['profile'] == ('linux-posix-shell-offline-v1' if interpretation == 'posix-shell-utf8' else 'linux-x86_64-elf-offline-v1')
+        assert len(record['nodes']) == 1 and not reports['html']
     if any(marker in raw for marker in (b'charset=us-ascii; charset=utf-8', b'charset="us-ascii', b'boundary=x; boundary=y')):
         assert reports['mime']['status'] == execution['coverage'] == 'partial'
         assert 'structured_declaration_defects' in reports['mime']['parts'][0]['issues']
@@ -176,6 +225,7 @@ def main():
                     assert detail['assessment_status'] == 'not_evaluated' and not detail['artifact_errors']
                     assert not {'email', 'score', 'assessment_view'} & detail.keys()
                     assert detail['representations']['root'] == detail['manifest']['representation_root']
+                    assert detail['interpretations'] == json.loads((case/'report/interpretations.json').read_bytes())
                     results.append(dict(row, path='HTTP', fixture=name))
                 listed = request('/api/cases?limit=100')['cases']
                 assert len(listed) == 2*len(FIXTURES) and all(x['case_kind'] == 'forensic_representations' for x in listed)

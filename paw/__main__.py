@@ -173,7 +173,8 @@ For help: paw help <command>
 
         p_representations = sub.add_parser('inspect-representations', help='Explicit bounded MIME/HTML byte representations; never execution')
         p_representations.add_argument('source', help='Local regular file, maximum8MiB')
-        p_representations.add_argument('--interpretation', required=True, choices=['mime', 'html-utf8'])
+        from .core.representation_graph import INTERPRETATIONS
+        p_representations.add_argument('--interpretation', required=True, choices=INTERPRETATIONS)
         p_representations.add_argument('--workdir', type=Path, default=Path.cwd())
 
         p_source = sub.add_parser('inspect-source', help='Preserve and inspect bounded local bytes without interpretation or execution')

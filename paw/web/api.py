@@ -211,7 +211,7 @@ class SourceInspectionRequest(BaseModel):
     model_config = {'extra': 'forbid'}
 
 class RepresentationRequest(SourceInspectionRequest):
-    interpretation: Literal['mime', 'html-utf8']
+    interpretation: Literal['mime', 'html-utf8', 'javascript-utf8', 'posix-shell-utf8', 'elf64-x86_64']
 
 @app.post('/api/sources/representations')
 async def inspect_uploaded_representations(request: RepresentationRequest, background_tasks: BackgroundTasks):
