@@ -251,6 +251,18 @@ For help: paw help <command>
         rep_import.add_argument('--request', required=True)
         rep_import.add_argument('--output', required=True)
 
+        p_native = sub.add_parser('lab-native', help='Prepare/import explicit shell or AMD64 ELF custody; never launches a guest')
+        native_actions = p_native.add_subparsers(dest='lab_action', required=True)
+        native_prepare = native_actions.add_parser('prepare')
+        native_prepare.add_argument('--case', required=True)
+        native_prepare.add_argument('--node', required=True)
+        native_prepare.add_argument('--profile', required=True, choices=['shell', 'elf'])
+        native_prepare.add_argument('--output', required=True)
+        native_import = native_actions.add_parser('import')
+        native_import.add_argument('--case', required=True)
+        native_import.add_argument('--request', required=True)
+        native_import.add_argument('--output', required=True)
+
         p_offline = sub.add_parser('lab-offline', help='Prepare/import one hash-approved offline attachment; never launches a guest')
         offline_actions = p_offline.add_subparsers(dest='lab_action', required=True)
         offline_prepare = offline_actions.add_parser('prepare')
@@ -409,6 +421,12 @@ For help: paw help <command>
 
         elif args.cmd == 'lab-representation':
             from .core.representation_bridge import prepare, import_result
+            value = (prepare(args.case, args.node, args.profile, args.output) if args.lab_action == 'prepare' else
+                     import_result(args.case, args.request, args.output))
+            print(json.dumps(value, indent=2))
+
+        elif args.cmd == 'lab-native':
+            from .core.native_bridge import prepare, import_result
             value = (prepare(args.case, args.node, args.profile, args.output) if args.lab_action == 'prepare' else
                      import_result(args.case, args.request, args.output))
             print(json.dumps(value, indent=2))

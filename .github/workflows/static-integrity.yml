@@ -161,6 +161,7 @@ jobs:
       - name: Verify explicit forensic selection custody without grants or execution
         run: |
           python -B -m unittest discover -s tests -p 'test_representation_bridge.py' -v
+          python -B -m unittest discover -s tests -p 'test_native_bridge.py' -v
           python -B tests/integration_representation_bridge_real.py --output "$RUNNER_TEMP/paw-forensic-selection.json"
       - name: Verify finite runtime restart refusals without administrative actions
         run: |
