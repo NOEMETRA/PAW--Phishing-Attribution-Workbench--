@@ -830,99 +830,203 @@ def accepted_native(profile,context):
     return False
 
 
-def run_owned_native(job,release,profile):
-    """Only reserved fixed-profile recipes; never accepts a path/source from CLI."""
-    root_only();require(type(profile) is str and profile in {'shell','elf'} and re.fullmatch('[0-9a-f]{32}',job) and
-                        re.fullmatch('[0-9a-f]{40}',release) and HERE.parents[1]==Path('/opt/paw-vm/releases')/release,
-                        'native_owned_active_job')
-    from vm_operator_host import write_state
-    from vm_runtime_revalidation import revalidate
-    from gw_quarantine import publish as quarantine_publish
-    folder=STATE/'jobs'/job;ready_raw=None;ready_installed=False;completed=False
-    record={'result':'FAIL','job':job,'recipe':profile+'-owned-v1','release_sha':release,
-            'real_samples_executed':0,'real_source_grants_issued':0}
-    with fs.root_directory(folder):pass
-    try:
-        common.snapshot_proof();runtime=revalidate();initialize();context=capture(contract.PROFILES[profile].engine)
-        if accepted_native(profile,context):record.update(result='PASS',already_accepted=True,cases=0,vm_started=False)
+def validation_batches(profile):
+    require(type(profile) is str and profile in NATIVE_CASES,'native_fixed_stage_profile')
+    slots=NATIVE_CASES[profile]
+    return tuple(tuple(slots[n:n+3]) for n in range(0,len(slots),3))
+
+
+def stage_name(profile,context,index):
+    require(type(index) is int and 0<=index<len(validation_batches(profile)),'native_stage_index')
+    return 'owned-stage-'+profile+'-'+digest(canonical(context))+'-'+str(index)+'.json'
+
+
+def stage_client_call(job,nonce,profile,mode,phase,context,slot=None):
+    value=common.run_client(job,nonce,profile,mode,phase,context,slot=slot,_capture=capture)
+    # Each stage uses a fresh private client workspace and nonce. The final
+    # matrix retains those bindings instead of claiming one shared client job.
+    return dict(value,fixture_nonce=nonce,fixture_job=job)
+
+
+def verify_owned_stage(value,profile,context,index):
+    require(type(value) is dict and set(value)=={'schema','result','profile','context','job','release_sha',
+        'stage_index','nonce','validations','clients','real_samples_executed'} and
+        value['schema']=='paw-s14-native-owned-stage-v1' and value['result']=='PASS' and
+        value['profile']==profile and value['context']==context and type(value['stage_index']) is int and
+        value['stage_index']==index and type(value['real_samples_executed']) is int and value['real_samples_executed']==0,
+        'native_stage_scope')
+    job=value['job'];nonce=value['nonce'];slots=validation_batches(profile)[index]
+    require(type(job) is str and re.fullmatch('[0-9a-f]{32}',job) and type(nonce) is str and
+            re.fullmatch('[0-9a-f]{16}',nonce) and type(value['release_sha']) is str and
+            re.fullmatch('[0-9a-f]{40}',value['release_sha']),'native_stage_identity')
+    reader=common.READERS/(job+'-client-source');verify_snapshot(reader,context)
+    manifest=decode(read(reader,'runtime-snapshot/release.json',storage.MAX_MANIFEST),storage.MAX_MANIFEST)
+    require(manifest['release_sha']==value['release_sha'],'native_stage_snapshot_release')
+    clients=value['clients'];require(type(clients) is list and len(clients)==len(slots)+2,'native_stage_clients')
+    for client in clients:
+        require(client['result']=='PASS' and client['fixture_job']==job and client['fixture_nonce']==nonce and
+                client['terminal']['writers_stopped'] is True and client['terminal']['cgroup_removed'] is True and
+                client['terminal']['main_pid']==0,'native_stage_client_terminal')
+    rows=value['validations']
+    require(type(rows) is list and [row['slot'] for row in rows]==list(slots),'native_stage_exact_cases')
+    expected={row['slot']:row for row in native_fixtures(nonce,profile)}
+    for row in rows:
+        slot=row['slot'];rid=row['request_id'];audit=audit_path(rid)
+        require(row['audit']==str(audit) and all(row[key] is True for key in
+            ['replay_refused','wrong_parent_and_digest_refused','parent_unchanged']),'native_stage_validation_binding')
+        policy,ctx,raw,_,ledger,_,request,_,_,_=audit_authority(audit,None)
+        policy_value=decode(policy);entry=expected[slot];candidate=request['candidate'];binding=request['binding']
+        node=next(node for node in binding['derivation']['nodes'] if node['id']==binding['derivation']['selected'])
+        require(ctx==context and policy_value['mode']=='owned-validation' and
+            policy_value['owned_manifest_sha256']==digest(canonical({'nonce':nonce,'slot':slot,'profile':context['profile'],
+                'request_sha256':digest(raw)})) and candidate['source']['data_hex']==entry['selected'].hex() and
+            binding['original_source']['sha256']==digest(entry['original']) and
+            binding['original_source']['bytes']==len(entry['original']) and node['kind']==entry['kind'],
+            'native_stage_owned_bytes')
+        confirm_consumed(ledger)
+        spec=common.client_command(job,nonce,profile,'source','request',slot=slot)
+        require(read(spec['workspace'],'slots/'+slot+'/request.json',contract.REQUEST_LIMIT)==raw,'native_stage_client_request_changed')
+        parent=spec['workspace']/'cases'/binding['case_reference']['case_id']
+        require(digest(canonical(common.case_inventory(parent)))==row['parent_inventory_sha256'],'native_stage_parent_changed')
+        if slot in FAULTS:verified=verify_native_fault(audit,raw,slot,row['witness'])
         else:
-            nonce=uuid.uuid4().hex[:16];matrix=CONTROL/('native-owned-'+job)
-            with fs.root_directory(CONTROL) as fd:os.mkdir(matrix.name,mode=0o700,dir_fd=fd)
-            common.stage_client(job,context)
-            summary={'schema':'paw-s14-native-owned-matrix-v1','profile':context['profile'],'context':context,
-                     'nonce':nonce,'validations':[],'clients':[],'real_samples_executed':0}
-            for mode in ['source','installed']:
-                summary['clients'].append(common.run_client(job,nonce,profile,mode,'prepare',context,_capture=capture))
-            for slot in NATIVE_CASES[profile]:
-                summary['clients'].append(common.run_client(job,nonce,profile,'source','request',context,slot=slot,_capture=capture))
-                raw,parent,before=native_owned_request(job,nonce,profile,'source',slot)
-                policy=make_policy(context,[raw],owned_manifest_sha256=digest(canonical({
-                    'nonce':nonce,'slot':slot,'profile':context['profile'],'request_sha256':digest(raw)})))
-                install_policy(policy,context);issue(raw,policy,context)
-                for field in ['selection_binding_sha256','source']:
-                    changed=decode(raw,contract.REQUEST_LIMIT)
-                    if field=='source':changed['candidate']['source']['sha256']='0'*64
-                    else:changed['candidate'][field]='0'*64
-                    try:inspect(canonical(changed))
-                    except ValueError:pass
-                    else:raise ValueError('native_owned_changed_request_admitted')
-                witness={};report,audit=execute_native(raw,policy,cancel=slot=='cancel',_fault=slot if slot in FAULTS else None,
-                    _witness=witness,_probe=slot=='positive')
-                record['backend_diagnostics']={key:report[key] for key in ['diagnostic','cleanup_diagnostic','verification_diagnostic'] if key in report}
-                if slot in FAULTS:verified=verify_native_fault(audit,raw,slot,witness)
-                else:
-                    require(report['result']=='PASS','native_owned_execution_failed:'+slot+':'+report.get('error','')+report.get('verification_error',''))
-                    verified=verify_native(audit);native_owned_assert(report,slot,profile,nonce)
-                    if slot=='positive':require(witness.get('live_busy_lock_refused') is True,'native_owned_live_busy_witness')
-                require(verified['result']=='PASS' and common.case_inventory(parent)==before,'native_owned_verification_or_parent')
-                try:consume(raw,policy,context)
-                except FileExistsError:pass
-                else:raise ValueError('native_owned_replay_admitted')
-                summary['validations'].append({'slot':slot,'request_id':decode(raw,contract.REQUEST_LIMIT)['candidate']['request_id'],
-                    'audit':str(audit),'verification':verified,'witness':witness,'replay_refused':True,
-                    'wrong_parent_and_digest_refused':True,'parent_unchanged':True})
-            refused=matrix/'unknown-stop-must-not-publish'
-            try:quarantine_publish(refused,[],stopped=None)
-            except ValueError:require(not refused.exists(),'native_owned_unknown_stop_output')
-            else:raise ValueError('native_owned_unknown_stop_publication')
-            require(canonical(capture(context['profile']))==canonical(context),'native_owned_final_context')
-            summary.update(result='PASS',unknown_stop_publication_refused=True);validation_raw=canonical(summary)
-            with fs.root_directory(matrix) as fd:fs.exclusive(fd,'validation.json',validation_raw)
-            ready_raw=new_native_readiness(context,validation_raw);install_readiness(ready_raw,context);ready_installed=True;smokes=[]
-            for mode in ['source','installed']:
-                common.run_client(job,nonce,profile,mode,'request',context,slot='smoke',_capture=capture)
-                raw,parent,before=native_owned_request(job,nonce,profile,mode,'smoke')
-                policy=make_policy(context,[raw],mode='explicit-source-analysis',ready=ready_raw)
-                install_policy(policy,context);issue(raw,policy,context)
-                report,audit=execute_native(raw,policy);require(report['result']=='PASS','native_owned_smoke_failed')
-                native_owned_assert(report,'smoke',profile,nonce);exported=publish_native(raw)
-                client=common.run_client(job,nonce,profile,mode,'import',context,slot='smoke',_capture=capture)
-                require(common.case_inventory(parent)==before,'native_owned_smoke_parent_changed')
-                sidecar=common.client_command(job,nonce,profile,mode,'import',slot='smoke')['workspace']/'sidecar-smoke/result'
-                receipt_raw=read(sidecar,'receipt.json',contract.RECEIPT_LIMIT)
-                require(read(sidecar,'request.json',contract.REQUEST_LIMIT)==raw and digest(receipt_raw)==exported['receipt_sha256'],
-                        'native_owned_sidecar_binding')
-                request=contract.validate_request(raw,decode(raw,contract.REQUEST_LIMIT)['candidate']['created_at'])
-                receipt=contract.validate_receipt(receipt_raw,request,digest(raw))
-                for item in receipt['artifacts']:
-                    require(digest(read(sidecar,item['stored_as'],1024))==item['sha256'],'native_owned_sidecar_output')
-                try:consume(raw,policy,context)
-                except FileExistsError:pass
-                else:raise ValueError('native_owned_smoke_replay_admitted')
-                smokes.append({'mode':mode,'request_id':exported['request_id'],'export':exported,'client':client,
-                               'original_unchanged':True,'replay_refused':True})
-            acceptance=canonical({'result':'PASS','job':job,'profile':context['profile'],'matrix_sha256':digest(validation_raw),
-                'readiness_sha256':digest(ready_raw),'smokes':smokes,'real_source_grants_issued':0})
-            with fs.root_directory(matrix) as fd:fs.exclusive(fd,'acceptance.json',acceptance)
-            value={'schema':'paw-s14-native-owned-acceptance-v1','result':'PASS','job':job,'profile':context['profile'],
-                'context_sha256':digest(canonical(context)),'readiness_sha256':digest(ready_raw),
-                'matrix_sha256':digest(validation_raw),'acceptance_sha256':digest(acceptance)}
-            publish_reader_tree(matrix)
-            with store() as fd:fs.exclusive(fd,'acceptance-'+profile+'-'+value['context_sha256']+'-'+value['readiness_sha256']+'.json',canonical(value))
-            record.update(result='PASS',profile=profile,cases=len(NATIVE_CASES[profile])+2,vm_started=True,matrix=str(matrix),
-                          readiness_sha256=digest(ready_raw),matrix_sha256=digest(validation_raw));completed=True
-        record['runtime_sha256']=digest(canonical(runtime))
-    except Exception as error:record.update(result='FAIL',error=str(error),traceback=traceback.format_exc(),diagnostic=common.failure_diagnostic(error))
+            verified=verify_native(audit)
+            report=decode(read(audit,'results.json',2*1024**2),2*1024**2);native_owned_assert(report,slot,profile,nonce)
+            if slot=='positive':require(row['witness'].get('live_busy_lock_refused') is True,'native_stage_busy_witness')
+        require(verified==row['verification'] and verified['result']=='PASS','native_stage_independent_verification')
+    return value
+
+
+def completed_owned_stages(profile,context):
+    stages=[];missing=False
+    with store() as fd:
+        for index in range(len(validation_batches(profile))):
+            name=stage_name(profile,context,index)
+            try:raw=fs.read(fd,name,65536)
+            except FileNotFoundError:missing=True;continue
+            require(not missing,'native_stage_gap')
+            pointer=decode(raw,65536)
+            require(raw==canonical(pointer) and type(pointer) is dict and set(pointer)=={
+                'schema','context_sha256','profile','index','job','stage_sha256'} and
+                pointer['schema']=='paw-s14-native-owned-stage-pointer-v1' and
+                pointer['context_sha256']==digest(canonical(context)) and pointer['profile']==profile and
+                type(pointer['index']) is int and pointer['index']==index and
+                type(pointer['job']) is str and re.fullmatch('[0-9a-f]{32}',pointer['job']) and
+                contract.shared._hex(pointer['stage_sha256']),'native_stage_pointer')
+            stage_raw=read(CONTROL/('native-owned-stage-'+pointer['job']),'stage.json',2*1024**2)
+            require(digest(stage_raw)==pointer['stage_sha256'],'native_stage_digest')
+            value=decode(stage_raw,2*1024**2);require(stage_raw==canonical(value),'native_stage_canonical')
+            stages.append(verify_owned_stage(value,profile,context,index))
+    return stages
+
+
+def run_validation_stage(job,release,profile,context,index,record):
+    nonce=uuid.uuid4().hex[:16];matrix=CONTROL/('native-owned-stage-'+job)
+    with fs.root_directory(CONTROL) as fd:os.mkdir(matrix.name,mode=0o700,dir_fd=fd)
+    common.stage_client(job,context)
+    summary={'schema':'paw-s14-native-owned-stage-v1','result':'PASS','profile':profile,'context':context,
+             'job':job,'release_sha':release,'stage_index':index,'nonce':nonce,'validations':[],
+             'clients':[],'real_samples_executed':0}
+    for mode in ['source','installed']:
+        summary['clients'].append(stage_client_call(job,nonce,profile,mode,'prepare',context))
+    for slot in validation_batches(profile)[index]:
+        summary['clients'].append(stage_client_call(job,nonce,profile,'source','request',context,slot=slot))
+        raw,parent,before=native_owned_request(job,nonce,profile,'source',slot)
+        policy=make_policy(context,[raw],owned_manifest_sha256=digest(canonical({
+            'nonce':nonce,'slot':slot,'profile':context['profile'],'request_sha256':digest(raw)})))
+        install_policy(policy,context);issue(raw,policy,context)
+        for field in ['selection_binding_sha256','source']:
+            changed=decode(raw,contract.REQUEST_LIMIT)
+            if field=='source':changed['candidate']['source']['sha256']='0'*64
+            else:changed['candidate'][field]='0'*64
+            try:inspect(canonical(changed))
+            except ValueError:pass
+            else:raise ValueError('native_owned_changed_request_admitted')
+        witness={};report,audit=execute_native(raw,policy,cancel=slot=='cancel',_fault=slot if slot in FAULTS else None,
+            _witness=witness,_probe=slot=='positive')
+        record['backend_diagnostics']={key:report[key] for key in ['diagnostic','cleanup_diagnostic','verification_diagnostic'] if key in report}
+        if slot in FAULTS:verified=verify_native_fault(audit,raw,slot,witness)
+        else:
+            require(report['result']=='PASS','native_owned_execution_failed:'+slot+':'+report.get('error','')+report.get('verification_error',''))
+            verified=verify_native(audit);native_owned_assert(report,slot,profile,nonce)
+            if slot=='positive':require(witness.get('live_busy_lock_refused') is True,'native_owned_live_busy_witness')
+        require(verified['result']=='PASS' and common.case_inventory(parent)==before,'native_owned_verification_or_parent')
+        try:consume(raw,policy,context)
+        except FileExistsError:pass
+        else:raise ValueError('native_owned_replay_admitted')
+        summary['validations'].append({'slot':slot,'request_id':decode(raw,contract.REQUEST_LIMIT)['candidate']['request_id'],
+            'audit':str(audit),'verification':verified,'witness':witness,'replay_refused':True,
+            'wrong_parent_and_digest_refused':True,'parent_unchanged':True,
+            'parent_inventory_sha256':digest(canonical(before))})
+    require(canonical(capture(context['profile']))==canonical(context),'native_stage_final_context')
+    verify_owned_stage(summary,profile,context,index)
+    raw=canonical(summary);require(len(raw)<=2*1024**2,'native_stage_report_budget')
+    with fs.root_directory(matrix) as fd:fs.exclusive(fd,'stage.json',raw)
+    publish_reader_tree(matrix)
+    pointer=canonical({'schema':'paw-s14-native-owned-stage-pointer-v1','context_sha256':digest(canonical(context)),
+        'profile':profile,'index':index,'job':job,'stage_sha256':digest(raw)})
+    with store() as fd:fs.exclusive(fd,stage_name(profile,context,index),pointer)
+    return summary,matrix
+
+
+def finish_owned_native(job,release,profile,context,stages,record):
+    from gw_quarantine import publish as quarantine_publish
+    # A distinct bounded call runs only two final smokes. Cached stages have
+    # already been independently re-read against the exact maintained context.
+    nonce=uuid.uuid4().hex[:16];matrix=CONTROL/('native-owned-'+job)
+    with fs.root_directory(CONTROL) as fd:os.mkdir(matrix.name,mode=0o700,dir_fd=fd)
+    common.stage_client(job,context)
+    summary={'schema':'paw-s14-native-owned-matrix-v2','profile':context['profile'],'context':context,
+        'nonce':nonce,'validations':[row for stage in stages for row in stage['validations']],
+        'clients':[client for stage in stages for client in stage['clients']],
+        'stages':[{'job':stage['job'],'stage_index':stage['stage_index'],'nonce':stage['nonce'],
+            'stage_sha256':digest(canonical(stage))} for stage in stages],'real_samples_executed':0}
+    require([row['slot'] for row in summary['validations']]==list(NATIVE_CASES[profile]),'native_complete_stage_coverage')
+    for mode in ['source','installed']:
+        summary['clients'].append(stage_client_call(job,nonce,profile,mode,'prepare',context))
+    ready_raw=None;ready_installed=False;completed=False
+    try:
+        refused=matrix/'unknown-stop-must-not-publish'
+        try:quarantine_publish(refused,[],stopped=None)
+        except ValueError:require(not refused.exists(),'native_owned_unknown_stop_output')
+        else:raise ValueError('native_owned_unknown_stop_publication')
+        require(canonical(capture(context['profile']))==canonical(context),'native_owned_final_context')
+        summary.update(result='PASS',unknown_stop_publication_refused=True);validation_raw=canonical(summary)
+        with fs.root_directory(matrix) as fd:fs.exclusive(fd,'validation.json',validation_raw)
+        ready_raw=new_native_readiness(context,validation_raw);install_readiness(ready_raw,context);ready_installed=True;smokes=[]
+        for mode in ['source','installed']:
+            common.run_client(job,nonce,profile,mode,'request',context,slot='smoke',_capture=capture)
+            raw,parent,before=native_owned_request(job,nonce,profile,mode,'smoke')
+            policy=make_policy(context,[raw],mode='explicit-source-analysis',ready=ready_raw)
+            install_policy(policy,context);issue(raw,policy,context)
+            report,audit=execute_native(raw,policy);require(report['result']=='PASS','native_owned_smoke_failed')
+            native_owned_assert(report,'smoke',profile,nonce);exported=publish_native(raw)
+            client=stage_client_call(job,nonce,profile,mode,'import',context,slot='smoke')
+            require(common.case_inventory(parent)==before,'native_owned_smoke_parent_changed')
+            sidecar=common.client_command(job,nonce,profile,mode,'import',slot='smoke')['workspace']/'sidecar-smoke/result'
+            receipt_raw=read(sidecar,'receipt.json',contract.RECEIPT_LIMIT)
+            require(read(sidecar,'request.json',contract.REQUEST_LIMIT)==raw and digest(receipt_raw)==exported['receipt_sha256'],
+                    'native_owned_sidecar_binding')
+            request=contract.validate_request(raw,decode(raw,contract.REQUEST_LIMIT)['candidate']['created_at'])
+            receipt=contract.validate_receipt(receipt_raw,request,digest(raw))
+            for item in receipt['artifacts']:
+                require(digest(read(sidecar,item['stored_as'],1024))==item['sha256'],'native_owned_sidecar_output')
+            try:consume(raw,policy,context)
+            except FileExistsError:pass
+            else:raise ValueError('native_owned_smoke_replay_admitted')
+            smokes.append({'mode':mode,'request_id':exported['request_id'],'export':exported,'client':client,
+                           'original_unchanged':True,'replay_refused':True})
+        acceptance=canonical({'result':'PASS','job':job,'profile':context['profile'],'matrix_sha256':digest(validation_raw),
+            'readiness_sha256':digest(ready_raw),'smokes':smokes,'real_source_grants_issued':0})
+        with fs.root_directory(matrix) as fd:fs.exclusive(fd,'acceptance.json',acceptance)
+        value={'schema':'paw-s14-native-owned-acceptance-v1','result':'PASS','job':job,'profile':context['profile'],
+            'context_sha256':digest(canonical(context)),'readiness_sha256':digest(ready_raw),
+            'matrix_sha256':digest(validation_raw),'acceptance_sha256':digest(acceptance)}
+        publish_reader_tree(matrix)
+        with store() as fd:fs.exclusive(fd,'acceptance-'+profile+'-'+value['context_sha256']+'-'+value['readiness_sha256']+'.json',canonical(value))
+        record.update(result='PASS',profile=profile,stage_only=False,cases=2,matrix_cases=len(NATIVE_CASES[profile])+2,
+                      stages_complete=len(stages),stages_required=len(validation_batches(profile)),i08_installed=True,
+                      vm_started=True,matrix=str(matrix),readiness_sha256=digest(ready_raw),matrix_sha256=digest(validation_raw));completed=True
     finally:
         if ready_installed and not completed:
             with store() as fd:
@@ -930,7 +1034,38 @@ def run_owned_native(job,release,profile):
                 except FileNotFoundError:pass
                 os.fsync(fd)
             record['new_readiness_revoked']=True
+
+
+def run_owned_native(job,release,profile):
+    """Only reserved fixed-profile recipes; never accepts a path/source from CLI."""
+    root_only();require(type(profile) is str and profile in {'shell','elf'} and re.fullmatch('[0-9a-f]{32}',job) and
+                        re.fullmatch('[0-9a-f]{40}',release) and HERE.parents[1]==Path('/opt/paw-vm/releases')/release,
+                        'native_owned_active_job')
+    from vm_operator_host import write_state
+    from vm_runtime_revalidation import revalidate
+    folder=STATE/'jobs'/job
+    record={'result':'FAIL','job':job,'recipe':profile+'-owned-v1','release_sha':release,
+            'real_samples_executed':0,'real_source_grants_issued':0}
+    with fs.root_directory(folder):pass
+    try:
+        common.snapshot_proof();runtime=revalidate();initialize();context=capture(contract.PROFILES[profile].engine)
+        if accepted_native(profile,context):record.update(result='PASS',already_accepted=True,cases=0,vm_started=False)
+        else:
+            stages=completed_owned_stages(profile,context)
+            if len(stages)<len(validation_batches(profile)):
+                stage,matrix=run_validation_stage(job,release,profile,context,len(stages),record)
+                record.update(result='PASS',profile=profile,stage_only=True,stage_index=len(stages),
+                    stages_complete=len(stages)+1,stages_required=len(validation_batches(profile)),
+                    cases=len(stage['validations']),vm_started=True,matrix=str(matrix),i08_installed=False)
+            else:
+                finish_owned_native(job,release,profile,context,stages,record)
+        record['runtime_sha256']=digest(canonical(runtime))
+    except Exception as error:record.update(result='FAIL',error=str(error),traceback=traceback.format_exc(),diagnostic=common.failure_diagnostic(error))
+    finally:
         with fs.root_directory(folder) as fd:write_state(fd,'result.json',record)
     print(json.dumps({'result':record['result'],'job':job,'profile':profile,'diagnostic':record.get('diagnostic'),
-        'backend_diagnostics':record.get('backend_diagnostics'),'real_samples_executed':0}),flush=True)
+        'backend_diagnostics':record.get('backend_diagnostics'),'stage_only':record.get('stage_only',False),
+        'stages_complete':record.get('stages_complete'),'stages_required':record.get('stages_required'),
+        'i08_installed':record.get('i08_installed',False),'matrix':record.get('matrix'),
+        'real_samples_executed':0}),flush=True)
     require(record['result']=='PASS','native_owned_recipe_failed')

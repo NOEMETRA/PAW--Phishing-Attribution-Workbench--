@@ -99,6 +99,15 @@ their current scoped isolation gate even after unattended benign acceptance.
 
 ## Current disposition
 
+The first actual PR131 native Shell matrix reproduced the1800s parent runtime
+limit during case8, with no full acceptance/I08 and verified terminal host
+cleanup. The follow-up partitions the unchanged finite matrix into at most
+three validation VMs per call, protected independently revalidated stage
+receipts, then a separate two-smoke final call. It expands no budgets or caller
+authority. This scheduling correction still requires exact review, head/main
+CI, immutable promotion and actual staged acceptance; P4/P5 remain open.
+
+
 The coherent [native runtime increment](vm-native-runtime-contract.md) adds
 separate Root authority/controller/producer/verifier and fixed owned recipe
 implementations. It retains the existing operator and budgets. Its local

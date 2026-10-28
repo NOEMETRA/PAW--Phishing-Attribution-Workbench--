@@ -141,3 +141,44 @@ current Python/HTML acceptance also remain required, followed by P5 operational
 batch/cancel/crash/recovery/replay/cleanup, rollback/revocation/restart checks and
 final evidence consolidation. No real source, network or generic hostile-code
 safety is enabled merely by this implementation or its local tests.
+
+
+## Reproduced long-matrix timeout and bounded stages
+
+The first actual Shell call on merged PR131 reached the unchanged1800s Root
+service limit during its eighth case, `file`. The recipe had advanced through
+positive, derived, expected error, loop, fork, output and memory; it did not
+complete the full matrix or install I08. Journal evidence records the service
+timeout. Subsequent read-only checks found the parent inactive with MainPID0,
+no libvirt domain/network, QEMU or network namespace, unchanged protected
+operator status and a clean source tree. Partial Root-private audits remain
+preserved; those host checks do not claim a full acceptance result.
+
+A fixed recipe call now executes at most three validation VMs. Shell needs four
+such calls and ELF five, followed by a separate call with only the two final
+source/installed smokes. These are finite internal stages of the same reserved
+recipes, without new caller arguments, target/source paths or privilege. All
+budgets, including the1800s parent cap, remain unchanged. Cold boots and
+verification must still satisfy that cap; partition tests are scheduling
+regressions, not a guarantee of host performance.
+
+A completed stage writes a canonical protected summary and an exclusive Root
+pointer bound to profile, stage index, exact maintained context and summary
+hash. An interrupted/incomplete stage creates no resume pointer. Subsequent
+calls require a contiguous prefix and independently re-read each cached stage:
+complete copied immutable source/proof inventory, exact owned bytes and nonce,
+original case inventory, consumed grant ledger and serialized normal/fault VM
+verification. A changed digest, parent, ledger, profile/context or missing
+prefix refuses. Historical consumed grants are checked at their recorded
+admission clock; they are never refreshed or reused. Stages from the old
+failed unpartitioned call have no pointer and are not imported into acceptance.
+
+Each stage has its own client job and nonce; these remain explicit in the final
+matrix rather than attributing every client acknowledgment to the final job.
+`stage_only: true` is a per-call PASS, explicitly `i08_installed: false`; it does
+not close a profile. Only the complete ordered matrix can issue readiness and
+attempt the two fresh smokes, sealed exports and replay refusals. Failure after
+new readiness installation revokes that receipt while preserving stage evidence
+and consumption ledgers. A full result reports two current-call VMs separately
+from the cumulative matrix case count. Actual staged Shell/ELF acceptance and
+the independent reader reconciliation are still required; P4/P5 remain open.
