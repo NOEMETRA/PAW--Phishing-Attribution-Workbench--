@@ -12,7 +12,7 @@ def executable(interpreter=None, kind=2):
         62, 1, 0x400000+offset+len(name), 64, 0, 0, 64, 56, count, 0, 0, 0)
     load = struct.pack('<IIQQQQQQ', 1, 5, 0, 0x400000, 0, size, size, 4096)
     interp = b'' if not name else struct.pack('<IIQQQQQQ', 3, 4, offset, 0, 0, len(name), len(name), 1)
-    return header+load+interp+name+code
+    return header+interp+load+name+code
 
 
 def changed(raw, offset, fmt, value):

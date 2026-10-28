@@ -36,6 +36,12 @@ are metadata and are not opened on the host. Sections/symbols and DT_NEEDED are
 uninterpreted. Structural admission does not prove guest loadability: missing
 guest libraries and loader errors must remain execution outcomes in the later
 runtime increment. Validity is not harmlessness or permission to execute.
+Unused `PT_NULL` entries are skipped rather than interpreting their undefined
+members as file ranges, as specified by the
+[gABI program-header definition](https://gabi.xinuos.com/elf/07-pheader.html#segment-types).
+An actual byte-only negative/positive regression covers this compatibility case;
+the first implementation incorrectly rejected it. The PIE data fixture places
+its interpreter entry before its load entry.
 
 The JavaScript transform checks strict UTF-8, then Base64-embeds the exact bytes
 in a fixed classic-script data URL inside a new HTML document. Quotes and closing
@@ -56,7 +62,7 @@ bytes/profile bindings and cannot authorize native shell/ELF execution.
 
 ## Measured ordinary acceptance and remaining runtime work
 
-Ten admission and four JavaScript derivation tests cover byte identity, bounded
+Eleven admission and four JavaScript derivation tests cover byte identity, bounded
 headers/ranges/entry/ABI/interpreter/memory, shell encoding/NUL, markup-safe
 embedding and graph omissions. All121 existing representation tests pass.
 Forty actual source plus40 installed CLI/HTTP cases pass, including seven new
@@ -69,6 +75,12 @@ files match source/wheel/installation and dependency checking passes. Validated
 dependencies were copied locally without downloading; clean dependency
 resolution remains the four-version installed CI gate. The fixed client used
 by the accepted Root runtime was not replaced. No Root snapshot or VM changed.
+The first CI run exposed a test-fixture import that failed under Python `-P`.
+The same isolated installed invocation reproduced it locally. The test now
+loads only its fixed byte-data fixture by absolute path; it does not add the
+checkout to `sys.path` or relax the installed PAW origin assertions. The updated
+40-case installed CLI/HTTP suite passes with `-P`, outside the checkout and with
+`PYTHONPATH`/`PYTHONHOME` removed.
 
 Next P4 increments must provide separate native selection/receipt/one-use
 authority, opaque ingress and trusted guest-only `/bin/dash`/x86-64 execution,

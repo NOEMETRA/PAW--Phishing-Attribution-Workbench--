@@ -1,5 +1,6 @@
 """Owned ELF bytes are inspected, never loaded or executed on the host."""
 import hashlib
+import struct
 import unittest
 
 from paw.core import linux_profiles as profiles
@@ -69,8 +70,20 @@ class LinuxAdmission(unittest.TestCase):
 
     def test_duplicate_interpreter_and_no_load_refuse(self):
         raw=executable('/lib64/ld-linux-x86-64.so.2',3)
-        with self.assertRaises(ValueError): profiles.inspect_source('elf',changed(raw,64,'<I',3))
+        with self.assertRaises(ValueError): profiles.inspect_source('elf',changed(raw,120,'<I',3))
         with self.assertRaises(ValueError): profiles.inspect_source('elf',changed(executable(),64,'<I',0))
+
+    def test_unused_program_header_members_are_not_interpreted_as_file_ranges(self):
+        original = executable(); raw = bytearray(original[:120]+bytes(56)+original[120:])
+        struct.pack_into('<H', raw, 56, 2)
+        struct.pack_into('<Q', raw, 24, 0x400000+176)
+        struct.pack_into('<Q', raw, 96, len(raw)); struct.pack_into('<Q', raw, 104, len(raw))
+        # gABI PT_NULL leaves the remaining members undefined. This is data,
+        # not a mapping; legitimate ignored entries must not become lookups.
+        struct.pack_into('<IIQQQQQQ', raw, 120, 0, 0xffffffff, *([2**64-1]*6))
+        result = profiles.inspect_source('elf',bytes(raw))
+        self.assertEqual(result['details']['program_headers'],2)
+        self.assertEqual(len(result['details']['load_segments']),1)
 
 
 if __name__ == '__main__': unittest.main()

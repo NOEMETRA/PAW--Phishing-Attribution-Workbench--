@@ -52,6 +52,7 @@ def elf_metadata(raw):
     loads = []; interpreter = None; mapped = 0; executable_entry = False
     for index in range(phnum):
         ptype, pflags, offset, address, physical, filesz, memsz, alignment = struct.unpack_from('<IIQQQQQQ', raw, phoff+index*phsize)
+        if ptype == 0: continue  # PT_NULL members are undefined, not file/memory ranges.
         require(offset <= len(raw) and filesz <= len(raw)-offset, 'elf_segment_file_range')
         if ptype == 1:
             require(pflags & ~7 == 0 and filesz <= memsz and address < USER_ADDRESS_END and

@@ -3,6 +3,7 @@ import argparse
 import asyncio
 from contextlib import contextmanager
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -15,9 +16,14 @@ import time
 import urllib.error
 import urllib.request
 import zipfile
-from linux_profile_fixtures import executable, changed
 
 REPO = Path(__file__).resolve().parents[1]
+# -P intentionally excludes this script's directory in installed acceptance.
+# Load only the fixed owned byte fixture; never add the checkout to sys.path
+# or weaken the installed Paw import assertions below.
+_spec = importlib.util.spec_from_file_location('paw_owned_elf_fixture', Path(__file__).with_name('linux_profile_fixtures.py'))
+_fixture = importlib.util.module_from_spec(_spec); _spec.loader.exec_module(_fixture)
+executable, changed = _fixture.executable, _fixture.changed
 FIXTURES = [
     ('empty', b'', 'html-utf8'),
     ('binary', b'\xff\xfe\x00\x80', 'html-utf8'),
