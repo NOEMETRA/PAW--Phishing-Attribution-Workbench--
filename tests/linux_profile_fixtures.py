@@ -17,4 +17,3 @@ def executable(interpreter=None, kind=2):
 
 def changed(raw, offset, fmt, value):
     result = bytearray(raw); struct.pack_into(fmt, result, offset, value); return bytes(result)
-
