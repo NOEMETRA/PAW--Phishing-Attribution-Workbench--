@@ -99,6 +99,21 @@ their current scoped isolation gate even after unattended benign acceptance.
 
 ## Current disposition
 
+P3 actual owned acceptance passed on28 October2026 on PR127 main
+`5884889ad5d08e1333197c5b12a219587815b5ba`, after clear exact-head review,
+seven green head/main checks, identical source trees and independently gated
+passwordless promotion. Python and HTML each passed six validation cases and
+two fresh source/installed PAW smokes; independent readback verified all four
+sealed sidecars, unchanged original cases and terminal host state. A final audit
+checked all12 original forensic cases and108 source/installed Python files;
+current cached acceptance also passed through the explicit no-VM branch.
+The [P3 acceptance checkpoint](vm-p3-acceptance.md) records exact jobs, hashes,
+timings, the private evidence archive and the distinction between Root-private
+verification and ordinary-reader evidence. This documentation-only checkpoint
+closes P3 after its own review/head+main CI and maintained source-equivalence
+checks. P4/P5 remain open, with only harmless fixtures and no NIC; no automatic
+real-source execution or generic hostile-code safety is authorized.
+
 P1 closed on26 October2026 after PR112 merged as
 `172f0f2db5cc59a5a28bbb042475dccef1491b2b` and the reproduced private-ZIP
 follow-up PR113 merged as `d8fb865ae8164026b69d39cf0419482e1dd870e7`.
