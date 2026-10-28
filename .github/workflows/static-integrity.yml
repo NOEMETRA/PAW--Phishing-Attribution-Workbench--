@@ -162,6 +162,11 @@ jobs:
         run: |
           python -B -m unittest discover -s tests -p 'test_representation_bridge.py' -v
           python -B -m unittest discover -s tests -p 'test_native_bridge.py' -v
+          python -B -m unittest discover -s tests -p 'test_native_authority.py' -v
+          python -B -m unittest discover -s tests -p 'test_native_guest.py' -v
+          python -B -m unittest discover -s tests -p 'test_native_adapter.py' -v
+          python -B -m unittest discover -s tests -p 'test_native_evidence.py' -v
+          python -B -m unittest discover -s tests -p 'test_native_recipe.py' -v
           python -B tests/integration_representation_bridge_real.py --output "$RUNNER_TEMP/paw-forensic-selection.json"
       - name: Verify finite runtime restart refusals without administrative actions
         run: |
