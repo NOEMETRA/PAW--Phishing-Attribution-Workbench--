@@ -23,7 +23,7 @@ from benign_guest_validation import BASE, digest
 from verify_representation import read, verify_single
 from reader_export import publish_reader_tree
 from representation_owned_inputs import identity as client_identity
-from representation_owned_inputs import fixtures, validate_owned
+from representation_owned_inputs import fixtures, javascript_fixture, validate_owned
 from verify_representation import verify_snapshot, verify_fault, FAULTS
 
 CONTROL = Path('/var/lib/paw-s14/control')
@@ -307,10 +307,11 @@ SLOTS = {'positive', 'prefix', 'qp', 'paused-refusal', 'owner-loss', 'protocol-l
 def client_command(job, nonce, profile, mode, phase, *, slot=None):
     require(type(job) is str and re.fullmatch('[0-9a-f]{32}', job) and
             type(nonce) is str and re.fullmatch('[0-9a-f]{16}', nonce), 'owned_client_identifier')
-    require(type(profile) is str and profile in {'python', 'html', 'shell', 'elf'} and type(mode) is str and mode in {'source', 'installed'} and
+    require(type(profile) is str and profile in {'python', 'html', 'shell', 'elf', 'javascript'} and type(mode) is str and mode in {'source', 'installed'} and
             type(phase) is str and phase in PHASES, 'owned_client_finite_phase')
     from representation_owned_inputs import NATIVE_CASES
-    allowed_slots = set(NATIVE_CASES[profile]) | {'smoke'} if profile in {'shell','elf'} else SLOTS
+    allowed_slots = (set(NATIVE_CASES[profile]) | {'smoke'} if profile in {'shell','elf'} else
+                     {'smoke'} if profile == 'javascript' else SLOTS)
     require((phase == 'prepare' and slot is None) or (phase != 'prepare' and type(slot) is str and slot in allowed_slots),
             'owned_client_finite_slot')
     tag = profile+'-'+mode+'-'+phase+('' if slot is None else '-'+slot)
@@ -456,7 +457,7 @@ def owned_request(job, nonce, profile, mode, slot):
     spec = client_command(job, nonce, profile, mode, 'request', slot=slot)
     raw = read(spec['workspace'], 'slots/'+slot+'/request.json', auth.contract.REQUEST_LIMIT)
     name = profile+('-selected' if profile == 'python' else '-original') if slot == 'positive' else profile+('-qp' if slot == 'qp' else '-prefix')
-    entry = next(v for v in fixtures(nonce) if v['name'] == name)
+    entry = javascript_fixture(nonce) if profile == 'javascript' else next(v for v in fixtures(nonce) if v['name'] == name)
     request = validate_owned(raw, entry, auth.contract); case = request['binding']['case_reference']['case_id']
     original = read(spec['workspace'], 'cases/'+case+'/source.bin', 8*1024**2)
     manifest = read(spec['workspace'], 'cases/'+case+'/manifest.json', 1024**2)
@@ -508,7 +509,7 @@ def new_readiness(context, matrix_raw):
     auth.validate_readiness(raw, context); return raw
 
 
-def accepted(profile, context):
+def accepted(profile, context, *, readiness=False):
     prefix = 'acceptance-'+profile+'-'+auth.digest(auth.canonical(context))+'-'
     with auth.store() as fd:
         names = os.listdir(fd); require(len(names) <= 4096, 'owned_representation_acceptance_inventory')
@@ -526,8 +527,99 @@ def accepted(profile, context):
                     auth.digest(read(matrix, 'validation.json', 1024**2)) == parsed['matrix_sha256'] == value['matrix_sha256'] and
                     auth.digest(read(matrix, 'acceptance.json', 1024**2)) == value['acceptance_sha256'],
                     'owned_representation_acceptance_files')
-            return True
-    return False
+            return ready if readiness else True
+    return None if readiness else False
+
+
+def javascript_accepted(context):
+    """A separate owned handoff proof, subordinate to current HTML readiness.
+
+    This marker issues no I08 and cannot keep expired or revoked HTML authority
+    alive. Both proof files are Root generated; a caller's JSON is never read.
+    """
+    ready = accepted('html', context, readiness=True)
+    if ready is None: return False
+    context_sha = auth.digest(auth.canonical(context)); ready_sha = auth.digest(ready)
+    name = 'javascript-acceptance-'+context_sha+'-'+ready_sha+'.json'
+    with auth.store() as fd:
+        try: raw = auth.fs.read(fd, name, 65536)
+        except FileNotFoundError: return False
+    value = auth.decode(raw)
+    require(value['schema'] == 'paw-s14-owned-javascript-pointer-v1' and value['result'] == 'PASS' and
+            value['context_sha256'] == context_sha and value['readiness_sha256'] == ready_sha and
+            re.fullmatch('[0-9a-f]{32}', value['job']), 'owned_javascript_acceptance_binding')
+    matrix = CONTROL/('representation-js-owned-'+value['job'])
+    proof_raw = read(matrix, 'acceptance.json', 1024**2)
+    require(auth.digest(proof_raw) == value['acceptance_sha256'], 'owned_javascript_acceptance_digest')
+    proof = auth.decode(proof_raw, 1024**2); entry = javascript_fixture(proof['nonce'])
+    require(proof['schema'] == 'paw-s14-owned-javascript-handoff-v1' and proof['result'] == 'PASS' and
+            proof['job'] == value['job'] and proof['context'] == context and proof['profile'] == adapter.HTML and
+            proof['readiness_sha256'] == ready_sha and proof['source_sha256'] == auth.digest(entry['original']) and
+            proof['source_bytes'] == len(entry['original']) and proof['browser_sha256'] == auth.digest(entry['selected']) and
+            proof['browser_bytes'] == len(entry['selected']) and proof['real_source_grants_issued'] == 0 and
+            [row['mode'] for row in proof['smokes']] == ['source', 'installed'] and
+            all(row['original_unchanged'] is True and row['replay_refused'] is True for row in proof['smokes']),
+            'owned_javascript_acceptance_proof')
+    return True
+
+
+def run_owned_javascript(job, context):
+    """Two fixed maximum-size owned JS→HTML smokes in their own bounded call.
+
+    No new profile, readiness installation or caller-controlled source. The
+    ordinary client must select the exact explicit browser representation and
+    Root independently regenerates its bytes and derivation before each grant.
+    """
+    root_only(); require(type(job) is str and re.fullmatch('[0-9a-f]{32}', job) and
+                         context['profile'] == adapter.HTML, 'owned_javascript_job_context')
+    ready_raw = accepted('html', context, readiness=True)
+    require(ready_raw is not None, 'owned_javascript_current_html_required')
+    nonce = uuid.uuid4().hex[:16]; entry = javascript_fixture(nonce)
+    matrix = CONTROL/('representation-js-owned-'+job)
+    with auth.fs.root_directory(CONTROL) as fd: os.mkdir(matrix.name, mode=0o700, dir_fd=fd)
+    stage_client(job, context); clients = []; smokes = []
+    for mode in ['source', 'installed']:
+        clients.append(run_client(job, nonce, 'javascript', mode, 'prepare', context))
+        clients.append(run_client(job, nonce, 'javascript', mode, 'request', context, slot='smoke'))
+        raw, parent, original = owned_request(job, nonce, 'javascript', mode, 'smoke')
+        policy_raw = auth.make_policy(context, [raw], mode='explicit-source-analysis', ready=ready_raw)
+        auth.install_policy(policy_raw, context); auth.issue(raw, policy_raw, context)
+        report, audit = execute(raw, policy_raw)
+        require(report['result'] == 'PASS', 'owned_representation_smoke_execution')
+        owned_success(report, 'html', nonce)
+        exported = publish(raw)  # Independently verifies the protected VM audit.
+        client = run_client(job, nonce, 'javascript', mode, 'import', context, slot='smoke'); clients.append(client)
+        require(case_inventory(parent) == original, 'owned_representation_smoke_parent_changed')
+        sidecar = client_command(job, nonce, 'javascript', mode, 'import', slot='smoke')['workspace']/'sidecar-smoke/result'
+        receipt_raw = read(sidecar, 'receipt.json', auth.contract.RECEIPT_LIMIT)
+        require(read(sidecar, 'request.json', auth.contract.REQUEST_LIMIT) == raw and
+                auth.digest(receipt_raw) == exported['receipt_sha256'], 'owned_representation_smoke_sidecar_binding')
+        receipt = auth.contract.validate_receipt(receipt_raw,
+            auth.contract.validate_request(raw, auth.decode(raw)['candidate']['created_at']), auth.digest(raw))
+        for item in receipt['artifacts']:
+            require(auth.digest(read(sidecar, item['stored_as'], 1024)) == item['sha256'], 'owned_representation_smoke_sidecar_output')
+        try: auth.consume(raw, policy_raw, context)
+        except FileExistsError: pass
+        else: raise ValueError('owned_representation_smoke_replay_accepted')
+        smokes.append({'mode': mode, 'request_id': exported['request_id'], 'export': exported, 'client': client,
+                       'original_unchanged': True, 'replay_refused': True})
+    require(auth.canonical(auth.capture(adapter.HTML)) == auth.canonical(context) and
+            accepted('html', context, readiness=True) == ready_raw, 'owned_javascript_final_context')
+    proof = auth.canonical({'schema': 'paw-s14-owned-javascript-handoff-v1', 'result': 'PASS', 'job': job,
+        'profile': adapter.HTML, 'context': context, 'nonce': nonce, 'readiness_sha256': auth.digest(ready_raw),
+        'source_bytes': len(entry['original']), 'source_sha256': auth.digest(entry['original']),
+        'browser_bytes': len(entry['selected']), 'browser_sha256': auth.digest(entry['selected']),
+        'clients': clients, 'smokes': smokes, 'real_source_grants_issued': 0})
+    with auth.fs.root_directory(matrix) as fd: auth.fs.exclusive(fd, 'acceptance.json', proof)
+    publish_reader_tree(matrix)
+    context_sha = auth.digest(auth.canonical(context)); ready_sha = auth.digest(ready_raw)
+    with auth.store() as fd:
+        auth.fs.exclusive(fd, 'javascript-acceptance-'+context_sha+'-'+ready_sha+'.json', auth.canonical({
+            'schema': 'paw-s14-owned-javascript-pointer-v1', 'result': 'PASS', 'job': job,
+            'context_sha256': context_sha, 'readiness_sha256': ready_sha, 'acceptance_sha256': auth.digest(proof)}))
+    return {'result': 'PASS', 'profile': 'javascript', 'engine_profile': adapter.HTML, 'cases': 2,
+            'vm_started': True, 'i08_installed': False, 'matrix': str(matrix),
+            'readiness_sha256': ready_sha, 'acceptance_sha256': auth.digest(proof)}
 
 
 def owned_success(report, profile, nonce):
@@ -670,10 +762,10 @@ def previous_owned_failure():
 
 
 def run_owned(job, release):
-    """One pending existing profile per bounded call: Python, then HTML.
+    """One pending finite stage per call: Python, HTML, then owned JS handoff.
 
     The existing reserved recipe accepts no profile or source from its caller.
-    Both current profile acceptances mean a subsequent call starts no VM.
+    All three current acceptances mean a subsequent call starts no VM.
     """
     root_only(); require(re.fullmatch('[0-9a-f]{32}', job) and re.fullmatch('[0-9a-f]{40}', release) and
                         auth.HERE.parents[1] == RELEASES/release, 'owned_representation_job_snapshot')
@@ -690,7 +782,10 @@ def run_owned(job, release):
         contexts = {key: auth.capture(auth.contract.PROFILES[key][0]) for key in ['python', 'html']}
         selected = next((key for key in ['python', 'html'] if not accepted(key, contexts[key])), None)
         if selected is None:
-            record.update(result='PASS', already_accepted=True, cases=0, vm_started=False)
+            if javascript_accepted(contexts['html']):
+                record.update(result='PASS', already_accepted=True, cases=0, vm_started=False)
+            else:
+                selected = 'javascript'; record.update(run_owned_javascript(job, contexts['html']))
         else:
             context = contexts[selected]; nonce = uuid.uuid4().hex[:16]
             matrix = CONTROL/('representation-owned-'+job)

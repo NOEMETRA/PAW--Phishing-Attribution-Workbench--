@@ -40,7 +40,7 @@ def main():
         return
     if args.recipe == 'python-owned-v2':
         # Fixed staged representation acceptance: one pending existing profile
-        # per bounded job (Python, then its HTML companion), never caller input.
+        # per bounded job (Python, HTML, then owned JS handoff), never caller input.
         from representation_producer import run_owned
         run_owned(args.job, HERE.parents[1].name)
         return

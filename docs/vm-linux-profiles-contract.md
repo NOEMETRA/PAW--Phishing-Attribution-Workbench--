@@ -93,3 +93,39 @@ external stop and existing laboratory/controller budgets remain mandatory.
 JavaScript must also pass actual source/installed browser handoff of the explicit
 derived view. P4 closes only after those actual harmless runtime/I08 results;
 P5 still requires the full operational consolidation in the project plan.
+
+## Finite owned JavaScript runtime handoff
+
+The existing reserved `python-owned-v2` recipe progresses through current Python,
+current HTML, then a separate owned JavaScript handoff. The last call has only
+two VMs, one source client and one installed client. The caller supplies no
+profile, path, source, URL, interpreter or budget. The internal `javascript`
+client selector is not a new execution profile: it always prepares the explicit
+`browser_html_candidate` for `linux-chrome-html-offline-v1`.
+
+The immutable producer regenerates a nonce-bound256KiB harmless classic script
+and its exact349676-byte Base64 HTML wrapper. Before each grant it checks actual
+parent files, exact original and selected bytes, the two-node lineage, complete
+transform, version and all JavaScript embedding/environment parameters. Generic
+forensic custody may describe other derivations; this finite owned issuer cannot
+authorize them. Encoding on the host never executes JavaScript. It preserves
+the source's bytes and the changed browser document/origin semantics.
+
+Each smoke uses existing current HTML I08 and a fresh exact-request one-use grant.
+The reviewed protected VM verifier and publisher must pass, the expected document
+title must be observed, untrusted output must be imported into a separate sealed
+sidecar, originals must remain unchanged and replay must refuse. Only both smokes
+plus final context/readiness equality publish the separate Root acceptance marker.
+Failure publishes no accepted marker and installs no new I08; the independently
+accepted HTML readiness is not revoked or broadened by this extra smoke. Its
+expiry/revocation/context change invalidates JavaScript cached acceptance too.
+Existing parent/client/VM budgets, no NIC, global lock and known external stop
+remain unchanged. Root source inventory still has128 lab and111 PAW files;
+no static operator/polkit change is needed.
+
+Ordinary tests cover actual maximum-size source custody, installed/source private
+client preparation, sealed import and strict derivation/slot/nonce refusals.
+Inert orchestration and protected-cache tests explicitly substitute VM/systemd
+and Root provenance; they do not establish browser runtime acceptance. That
+acceptance remains pending review, green head/main CI, immutable promotion and
+the actual harmless no-NIC two-smoke call. P4/P5 remain open.

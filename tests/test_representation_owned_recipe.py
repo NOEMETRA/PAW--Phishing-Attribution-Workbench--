@@ -34,7 +34,7 @@ class Recipe(unittest.TestCase):
 
     def tearDown(self): self.tmp.cleanup()
 
-    def run_recipe(self, fault=None, python_done=False, all_done=False):
+    def run_recipe(self, fault=None, python_done=False, all_done=False, javascript_done=True):
         @contextmanager
         def anchor(path):
             fd = os.open(path, os.O_RDONLY | os.O_DIRECTORY)
@@ -44,7 +44,9 @@ class Recipe(unittest.TestCase):
         def authority():
             with anchor(self.store) as fd: yield fd
         def capture(engine): return next(v for v in self.contexts.values() if v['profile'] == engine)
-        def accepted(key, context): return all_done or python_done and key == 'python'
+        def accepted(key, context, *, readiness=False):
+            current = all_done or python_done and key == 'python'
+            return (self.ready if current else None) if readiness else current
         def request(job, nonce, profile, mode, slot):
             rid = f'{len(self.requests)+1:032x}'
             raw = p.auth.canonical({'candidate': {'request_id': rid, 'slot': slot,
@@ -59,7 +61,7 @@ class Recipe(unittest.TestCase):
             if slot in p.FAULTS: return {'result': 'FAIL', 'runs': []}, self.root/'inert-audit'
             if fault == 'validation' and slot == 'qp' or fault == 'smoke' and slot == 'smoke' and self.events.count('execute:smoke') == 2:
                 return {'result': 'FAIL', 'error': 'owned injected failure'}, self.root/'inert-audit'
-            selected = 'html' if python_done else 'python'
+            selected = 'html' if python_done or all_done else 'python'
             blob = b'OWNED-REPRESENTATION-0000000000000000\n' if selected == 'python' else p.auth.canonical({'title': 'OWNED-REPRESENTATION-0000000000000000'[:32]})
             return {'result': 'PASS', 'runs': [{'outcome': {'status': 'completed', 'returncode': 0,
                 'records': [{'bytes_hex': blob.hex()}]}}]}, self.root/'inert-audit'
@@ -85,7 +87,7 @@ class Recipe(unittest.TestCase):
              mock.patch.object(p.uuid, 'uuid4', return_value=SimpleNamespace(hex='0'*32)), 
              mock.patch.object(runtime, 'revalidate', return_value={'result': 'PASS', 'vm_started': False}), 
              mock.patch.object(p.auth, 'initialize'), mock.patch.object(p.auth, 'capture', side_effect=capture), 
-             mock.patch.object(p, 'accepted', side_effect=accepted), mock.patch.object(p, 'stage_client'), 
+             mock.patch.object(p, 'accepted', side_effect=accepted), mock.patch.object(p, 'javascript_accepted', return_value=javascript_done), mock.patch.object(p, 'stage_client'),
              mock.patch.object(p, 'run_client', side_effect=client), mock.patch.object(p, 'owned_request', side_effect=request), 
              mock.patch.object(p, 'case_inventory', return_value={'fixed': 'same parent bytes'}), 
              mock.patch.object(p.auth, 'make_policy', return_value=b'owned policy'), mock.patch.object(p.auth, 'install_policy'), 
@@ -135,6 +137,21 @@ class Recipe(unittest.TestCase):
         result, failure, executed, installed = self.run_recipe(all_done=True)
         self.assertIsNone(failure); self.assertEqual((executed, installed), (0, 0))
         self.assertTrue(result['already_accepted']); self.assertFalse(result['vm_started'])
+
+    def test_third_bounded_call_runs_only_two_javascript_smokes_and_no_new_i08(self):
+        result, failure, executed, installed = self.run_recipe(all_done=True, javascript_done=False)
+        self.assertIsNone(failure, repr(result)); self.assertEqual((executed, installed, result['cases']), (2, 0, 2))
+        self.assertEqual(result['profile'], 'javascript'); self.assertEqual(result['engine_profile'], p.adapter.HTML)
+        self.assertFalse(result['i08_installed']); self.assertEqual(result['real_source_grants_issued'], 0)
+        self.assertEqual(self.events.count('client:prepare:source'), 1); self.assertEqual(self.events.count('client:prepare:installed'), 1)
+        self.assertEqual(self.events.count('client:import:source'), 1); self.assertEqual(self.events.count('client:import:installed'), 1)
+        self.assertEqual(len(list(self.store.glob('javascript-acceptance-*'))), 1)
+
+    def test_partial_javascript_failure_never_accepts_or_revokes_existing_html_i08(self):
+        result, failure, executed, installed = self.run_recipe('smoke', all_done=True, javascript_done=False)
+        self.assertIsNotNone(failure); self.assertEqual((executed, installed), (2, 0))
+        self.assertEqual(result['result'], 'FAIL'); self.assertNotIn('new_readiness_revoked', result)
+        self.assertEqual(list(self.store.glob('javascript-acceptance-*')), [])
 
     def test_invalid_release_proof_refuses_before_runtime_client_or_guest(self):
         result, failure, executed, installed = self.run_recipe('proof')
