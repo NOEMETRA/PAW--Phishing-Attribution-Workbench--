@@ -253,3 +253,24 @@ object occurs in the console log (including behind a console prefix). Other
 frames/text remain private. This boolean distinguishes absence of observed
 readiness from a possible console framing/timing problem without a new guest;
 it does not itself establish correct protocol admission or execution.
+
+PR135 main `8ecb05c41462e58716a75b0c6c390a41bb465757` passed exact-head clear
+review, seven head/main checks, tree equality, installed111-file parity and
+independent passwordless promotion. The complete no-VM operator command and
+terminal readback passed for job `930ea9d87b5747fb8273c5a43b651b09`; the fixed
+historical log reports `ready_frame_observed=true`. No new guest, grant or I08
+was created, and the historical failed smoke's readiness remains revoked.
+
+The native emitter/strict Serial combination has a separate reproduced byte
+framing defect: an unterminated console status prefix followed by the old emit
+output makes the host discard the readiness line and reach its deadline. The
+regression uses the actual emit function and host decoder over an ordinary pipe;
+it fails before the producer correction. The native controller now writes a
+leading newline with each protocol frame, preserving the same JSON and partial
+write handling. Multiple frames and escaped content round-trip with console
+noise; a protocol tag embedded in a console line still refuses. The shared
+Python/HTML emitter and strict host decoder are unchanged. The historical bool
+does not establish its exact prefix/timing cause; only subsequent full-size
+acceptance can show whether this correction resolves that smoke. No guest or
+budget expansion is used for this reproduction. P4/P5 remain open pending fresh
+review/head+main gates, promotion and actual maintained-context acceptance.

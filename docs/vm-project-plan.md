@@ -99,6 +99,30 @@ their current scoped isolation gate even after unattended benign acceptance.
 
 ## Current disposition
 
+PR135 merged as `8ecb05c41462e58716a75b0c6c390a41bb465757`, after completed
+clear review of exact head `d6bdf003d9df6b60d128b79a0888ec62bc330812` and
+seven green head/main checks with identical trees. Installed111-file parity and
+independent passwordless promotion passed. Actual no-VM job
+`930ea9d87b5747fb8273c5a43b651b09` completed the full operator command and
+independent terminal readback: integer diagnostics passed the strict consumer,
+and the historical console contains the exact readiness object. The old ELF
+attempt remains FAIL with revoked readiness; no guest, I08 or grant was created
+by this read. Evidence is saved in the private PR135 no-VM archive recorded in
+the work state. P4/P5 remain open.
+
+The next native-only increment reproduces an emitter/decoder defect with actual
+trusted emit code, an ordinary byte pipe and the unchanged strict host Serial
+decoder: an unterminated console prefix hides the first protocol frame. The
+producer now starts every frame on its own line, including after partial writes.
+The historical readiness boolean supports investigating this boundary but does
+not by itself prove the old log's exact framing/timing cause.99 native tests and
+90 inert operator/release tests pass; an unrelated test fixture's intended0755
+directory is now explicit under both022 and077 caller umasks, without changing
+installer behavior. Review/head+main CI and immutable promotion must precede
+fresh native acceptance, including the original full1MiB ELF source/installed
+smokes. Guest budgets and the strict decoder stay unchanged. No VM ran during
+this increment; JavaScript runtime handoff and P5 acceptance are still required.
+
 PR134 exposed a concrete producer/consumer mismatch: its no-VM worker exported
 decimal boot times, then the unchanged static operator refused them as
 `operator_proof_scalar`. The next correction encodes exact integer microseconds
