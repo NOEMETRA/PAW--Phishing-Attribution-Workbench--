@@ -2,6 +2,7 @@
 from contextlib import ExitStack
 import copy
 import hashlib
+import io
 import json
 import tempfile
 import os
@@ -14,6 +15,7 @@ from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]/'lab/s14'))
 import native_guest as guest
+from benign_guest_validation import Serial
 
 
 def status():
@@ -27,6 +29,52 @@ def proc_stat(session='123', tty='0', identity='99'):
 
 
 class NativeGuest(unittest.TestCase):
+    def emitted_bytes(self, value, fragment=None):
+        chunks = []
+        def write(fd, raw):
+            self.assertEqual(fd, 1)
+            piece = raw if fragment is None else raw[:fragment]
+            chunks.append(piece)
+            return len(piece)
+        with mock.patch.object(guest.os, 'write', side_effect=write):
+            guest.emit(value)
+        return b''.join(chunks)
+
+    def serial_messages(self, raw, count, timeout=1):
+        # Real byte transport and the unchanged host decoder; no tty, guest,
+        # Root operation, interpreter or specimen execution.
+        reader, writer = os.pipe()
+        channel = Serial.__new__(Serial)
+        channel.fd = reader
+        channel.buffer = bytearray()
+        channel.log = io.BytesIO()
+        channel.total = 0
+        try:
+            self.assertLess(len(raw), 4096)
+            self.assertEqual(os.write(writer, raw), len(raw))
+            return [channel.message(timeout) for _ in range(count)]
+        finally:
+            channel.log.close()
+            os.close(reader)
+            os.close(writer)
+
+    def test_ready_frame_survives_unterminated_console_prefix(self):
+        value = {'ready': True, 'network_interfaces': ['lo']}
+        raw = self.emitted_bytes(value)
+        self.assertEqual(self.serial_messages(b'console status: ' + raw, 1), [value])
+
+    def test_native_frames_round_trip_after_partial_writes_and_console_noise(self):
+        values = [{'ready': True, 'network_interfaces': ['lo']},
+                  {'id': 1, 'ok': True, 'data': {'value': 'line\nquote"\u00e8'}},
+                  {'id': 2, 'ok': False, 'error': 'owned inert refusal'}]
+        raw = b''.join(b'console status: ' + self.emitted_bytes(value, fragment=7) for value in values)
+        self.assertEqual(self.serial_messages(raw, len(values)), values)
+
+    def test_host_decoder_still_refuses_protocol_tag_inside_console_line(self):
+        raw = b'console status: PAW14 ' + json.dumps({'ready': True}).encode() + b'\n'
+        with self.assertRaises(TimeoutError):
+            self.serial_messages(raw, 1, timeout=.05)
+
     def test_host_refuses_before_input_cgroup_or_spawn(self):
         with mock.patch.object(guest.os, 'geteuid', return_value=1000), mock.patch.object(guest, 'spawn') as spawn, \
              mock.patch.object(guest, 'group') as group, mock.patch.object(guest, 'read_source') as read:

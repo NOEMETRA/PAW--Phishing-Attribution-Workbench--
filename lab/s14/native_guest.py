@@ -20,7 +20,7 @@ import time
 import tty
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from gate_guest import GROUP, WORK, clean, emit, group, no_network
+from gate_guest import GROUP, WORK, clean, group, no_network
 
 CONFIG = Path('/etc/paw-native.json')
 SOURCE = Path('/opt/paw-input/sample.bin')
@@ -44,6 +44,13 @@ LIMIT = 1024
 
 def require(value, reason):
     if not value: raise ValueError(reason)
+
+
+def emit(value):
+    # The console may end in an unterminated boot/status line. Keep the strict
+    # host decoder's PAW14 marker at the start of its own line, for every frame.
+    data = ('\nPAW14 ' + json.dumps(value) + '\n').encode()
+    while data: data = data[os.write(1, data):]
 
 
 def guest_only():

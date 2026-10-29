@@ -160,6 +160,8 @@ class NativeLayout(_NativeLayoutFixture):
 
     def test_preexisting_state_must_already_be_private_and_is_not_repaired_implicitly(self):
         self.host.STATE.mkdir(mode=0o755)
+        # The refusal fixture must stay nonprivate even under caller umask077.
+        self.host.STATE.chmod(0o755)
         with self.assertRaisesRegex(ValueError, 'existing_private_directory_mode'):
             native.install_layout(self.host, storage, archive, self.meta, self.files, self.proof)
         self.assertEqual(stat.S_IMODE(self.host.STATE.stat().st_mode), 0o755)
