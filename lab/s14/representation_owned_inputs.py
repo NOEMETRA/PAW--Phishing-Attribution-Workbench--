@@ -111,6 +111,23 @@ def inventory(case):
     return {p.relative_to(case).as_posix(): digest(p.read_bytes()) for p in case.rglob('*') if p.is_file()}
 
 
+def javascript_fixture(nonce):
+    """Owned maximum-size classic script and independently encoded HTML bytes.
+
+    The host encodes data only. Root regenerates this exact nonce-bound pair
+    before issuing any grant; the unprivileged PAW client cannot choose bytes.
+    """
+    require(type(nonce) is str and re.fullmatch('[0-9a-f]{16}', nonce), 'owned_javascript_nonce')
+    prefix = ('document.title="OWNED-REPRESENTATION-'+nonce+'";\n/*').encode('ascii')
+    original = prefix + b'x'*(256*1024-len(prefix)-3) + b'*/\n'
+    selected = (b'<!doctype html><meta charset="utf-8"><title>PAW explicit JavaScript view</title>\n'
+                b'<script src="data:text/javascript;charset=utf-8;base64,'+base64.b64encode(original)+b'"></script>\n')
+    require(len(original) == 256*1024 and len(selected) <= 512*1024, 'owned_javascript_budget')
+    return {'name': 'javascript-original', 'profile': 'html', 'interpretation': 'javascript-utf8',
+            'kind': 'browser_html_candidate', 'original': original, 'selected': selected,
+            'javascript_browser': True}
+
+
 def validate_owned(raw, entry, bridge):
     request = bridge.validate_request(raw); selected = request['candidate']; binding = request['binding']
     spec = bridge.PROFILES[entry['profile']]
@@ -121,6 +138,13 @@ def validate_owned(raw, entry, bridge):
             binding['original_source']['bytes'] == len(entry['original']), 'owned_representation_bytes')
     row = next(v for v in binding['derivation']['nodes'] if v['id'] == binding['derivation']['selected'])
     require(row['kind'] == entry['kind'] and row['sha256'] == digest(entry['selected']), 'owned_representation_selection')
+    if entry.get('javascript_browser') is True:
+        require(len(binding['derivation']['nodes']) == 2 and row['parents'] == [binding['derivation']['root']] and
+                row['complete_transform'] is True and row['transform'] == {
+                    'name': 'javascript-to-browser-html', 'version': 1, 'parameters': {
+                        'input_charset': 'utf-8', 'errors': 'strict', 'embedding': 'base64-data-classic-script',
+                        'source_sha256': digest(entry['original']), 'environment': 'new_document_and_origin'}},
+                'owned_javascript_exact_derivation')
     return request
 
 
@@ -147,10 +171,11 @@ def prepare(workspace, nonce, source_tree=None, profile=None):
         require(result.returncode == 0, 'owned_PAW_cli_failed:'+result.stderr[-2000:])
         return json.loads(result.stdout)
     rows = []
-    require(profile is None or type(profile) is str and profile in {'python', 'html', 'shell', 'elf'}, 'owned_client_profile')
-    entries = native_fixtures(nonce, profile) if profile in {'shell', 'elf'} else fixtures(nonce)
+    require(profile is None or type(profile) is str and profile in {'python', 'html', 'shell', 'elf', 'javascript'}, 'owned_client_profile')
+    entries = ([javascript_fixture(nonce)] if profile == 'javascript' else
+               native_fixtures(nonce, profile) if profile in {'shell', 'elf'} else fixtures(nonce))
     for entry in entries:
-        if profile is not None and entry['profile'] != profile: continue
+        if profile is not None and entry['profile'] != ('html' if profile == 'javascript' else profile): continue
         original = workspace/(entry['name']+'.bin'); original.write_bytes(entry['original']); original.chmod(0o400)
         analyzed = cli(['inspect-representations', str(original), '--interpretation', entry['interpretation']])
         require(analyzed['supervisor']['tree_stopped'] is True, 'owned_PAW_tree_not_stopped')
@@ -180,8 +205,9 @@ def prepare(workspace, nonce, source_tree=None, profile=None):
 
 
 def next_request(workspace, nonce, profile, slot, source_tree=None, *, collect=False):
-    require(os.geteuid() != 0 and type(profile) is str and profile in {'python', 'html', 'shell', 'elf'} and
-            type(slot) is str and slot in (set(NATIVE_CASES[profile]) | {'smoke'} if profile in {'shell','elf'} else SLOTS), 'owned_client_fixed_request_slot')
+    require(os.geteuid() != 0 and type(profile) is str and profile in {'python', 'html', 'shell', 'elf', 'javascript'} and
+            type(slot) is str and slot in (set(NATIVE_CASES[profile]) | {'smoke'} if profile in {'shell','elf'} else
+                                          {'smoke'} if profile == 'javascript' else SLOTS), 'owned_client_fixed_request_slot')
     if source_tree is not None: sys.path.insert(0, str(Path(source_tree).resolve(strict=True)))
     import paw
     if profile in {'shell', 'elf'}:
@@ -195,7 +221,9 @@ def next_request(workspace, nonce, profile, slot, source_tree=None, *, collect=F
     else: require(package.is_relative_to(Path(source_tree).resolve()), 'owned_source_PAW_required')
     workspace = Path(workspace).absolute()
     name = profile+('-selected' if profile == 'python' else '-original') if slot == 'positive' else profile+('-qp' if slot == 'qp' else '-prefix')
-    if profile in {'shell','elf'}:
+    if profile == 'javascript':
+        entry = javascript_fixture(nonce); name = entry['name']
+    elif profile in {'shell','elf'}:
         entry = next(v for v in native_fixtures(nonce,profile) if v['slot'] == slot); name = entry['name']
     else: entry = next(v for v in fixtures(nonce) if v['name'] == name)
     prepared = json.loads((workspace/'prepared.json').read_bytes())
@@ -213,7 +241,7 @@ def next_request(workspace, nonce, profile, slot, source_tree=None, *, collect=F
         graph = json.loads((case/'report/representations.json').read_bytes())
         selected = [v for v in graph['nodes'] if v['kind'] == entry['kind'] and (case/v['blob_path']).read_bytes() == entry['selected']]
         require(len(selected) == 1, 'owned_client_unique_slot_node')
-        value = bridge.prepare(case, selected[0]['id'], profile, target)
+        value = bridge.prepare(case, selected[0]['id'], entry['profile'], target)
         validate_owned(Path(value['request']).read_bytes(), entry, bridge)
     else:
         raw = (target/'request.json').read_bytes(); validate_owned(raw, entry, bridge)
@@ -335,7 +363,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--workspace', required=True, type=Path); parser.add_argument('--nonce', required=True)
     parser.add_argument('--source-tree', type=Path)
-    parser.add_argument('--profile', choices=['python', 'html', 'shell', 'elf'])
+    parser.add_argument('--profile', choices=['python', 'html', 'shell', 'elf', 'javascript'])
     parser.add_argument('--phase', choices=['prepare', 'request', 'import'], default='prepare')
     parser.add_argument('--slot', choices=sorted(SLOTS | NATIVE_SLOTS)); parser.add_argument('--gate-file', type=Path); parser.add_argument('--gate-tag')
     args = parser.parse_args()

@@ -14,6 +14,20 @@ STATUS = 'Uid:\t1000 1000 1000 1000\nGid:\t1000 1000 1000 1000\nGroups:\t\nNoNew
 
 
 class Client(unittest.TestCase):
+    def test_owned_javascript_selector_keeps_fixed_html_client_budgets_and_smoke_only(self):
+        for mode in ['source', 'installed']:
+            for phase in ['prepare', 'request', 'import']:
+                value = client.client_command('a'*32, 'b'*16, 'javascript', mode, phase,
+                    slot=None if phase == 'prepare' else 'smoke')
+                self.assertIn('--property=MemoryMax=256M', value['argv'])
+                self.assertIn('--property=TasksMax=32', value['argv'])
+                self.assertIn('--property=PrivateNetwork=yes', value['argv'])
+                self.assertIn('--no-new-privs', value['argv'])
+                self.assertEqual(value['workspace'].name, 'javascript-'+mode)
+        for slot in ['positive', 'prefix', 'qp', 'owner-loss', 'protocol-loss', '../escape']:
+            with self.subTest(slot=slot), self.assertRaises(ValueError):
+                client.client_command('a'*32, 'b'*16, 'javascript', 'source', 'request', slot=slot)
+
     def test_only_fixed_setpriv_can_precede_the_user_writable_interpreter(self):
         for mode in ['source', 'installed']:
             value = client.client_command('a'*32, 'b'*16, 'python', mode, 'prepare'); argv = value['argv']

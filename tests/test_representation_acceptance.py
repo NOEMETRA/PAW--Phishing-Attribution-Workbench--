@@ -51,14 +51,16 @@ class Acceptance(unittest.TestCase):
             'profile': self.context['profile'], 'context_sha256': p.auth.digest(p.auth.canonical(self.context)),
             'readiness_sha256': p.auth.digest(ready), 'matrix_sha256': p.auth.digest(self.validation),
             'acceptance_sha256': p.auth.digest(self.acceptance)}
-        accepted = self.store/('acceptance-python-'+value['context_sha256']+'-'+value['readiness_sha256']+'.json')
+        key = next(key for key, spec in p.auth.contract.PROFILES.items() if spec[0] == self.context['profile'])
+        accepted = self.store/('acceptance-'+key+'-'+value['context_sha256']+'-'+value['readiness_sha256']+'.json')
         accepted.write_bytes(p.auth.canonical(value)); accepted.chmod(0o400)
         return path
 
     def test_current_bound_receipt_and_evidence_are_required(self):
         with self.boundary():
             self.assertFalse(p.accepted('python', self.context))
-            self.receipt(); self.assertTrue(p.accepted('python', self.context))
+            current = self.receipt(); self.assertTrue(p.accepted('python', self.context))
+            self.assertEqual(p.accepted('python', self.context, readiness=True), current.read_bytes())
             (self.matrix/'acceptance.json').write_bytes(b'changed')
             with self.assertRaisesRegex(ValueError, 'owned_representation_acceptance_files'): p.accepted('python', self.context)
 
@@ -67,6 +69,51 @@ class Acceptance(unittest.TestCase):
             self.receipt(expired=True); self.assertFalse(p.accepted('python', self.context))
             current = self.receipt(); self.assertTrue(p.accepted('python', self.context))
             current.unlink(); self.assertFalse(p.accepted('python', self.context))
+
+    def javascript_proof(self, ready):
+        entry = p.javascript_fixture('b'*16); job = 'c'*32; ready_sha = p.auth.digest(ready.read_bytes())
+        proof = {'schema': 'paw-s14-owned-javascript-handoff-v1', 'result': 'PASS', 'job': job,
+            'profile': p.adapter.HTML, 'context': self.context, 'nonce': 'b'*16, 'readiness_sha256': ready_sha,
+            'source_bytes': len(entry['original']), 'source_sha256': p.auth.digest(entry['original']),
+            'browser_bytes': len(entry['selected']), 'browser_sha256': p.auth.digest(entry['selected']),
+            'smokes': [{'mode': mode, 'original_unchanged': True, 'replay_refused': True} for mode in ['source', 'installed']],
+            'real_source_grants_issued': 0}
+        matrix = self.control/('representation-js-owned-'+job); matrix.mkdir(mode=0o700)
+        path = matrix/'acceptance.json'; path.write_bytes(p.auth.canonical(proof)); path.chmod(0o400)
+        context_sha = p.auth.digest(p.auth.canonical(self.context))
+        pointer = self.store/('javascript-acceptance-'+context_sha+'-'+ready_sha+'.json')
+        value = {'schema': 'paw-s14-owned-javascript-pointer-v1', 'result': 'PASS', 'job': job,
+            'context_sha256': context_sha, 'readiness_sha256': ready_sha, 'acceptance_sha256': p.auth.digest(path.read_bytes())}
+        pointer.write_bytes(p.auth.canonical(value)); pointer.chmod(0o400)
+        return path, pointer
+
+    def test_javascript_cache_requires_current_html_readiness_and_two_bound_smokes(self):
+        self.context['profile'] = p.adapter.HTML
+        with self.boundary():
+            self.assertFalse(p.javascript_accepted(self.context))
+            ready = self.receipt(); self.assertFalse(p.javascript_accepted(self.context))
+            proof, pointer = self.javascript_proof(ready); current_path = ready; current_raw = ready.read_bytes()
+            self.assertTrue(p.javascript_accepted(self.context))
+            ready.unlink(); self.assertFalse(p.javascript_accepted(self.context))
+            ready = self.receipt(expired=True); self.assertFalse(p.javascript_accepted(self.context))
+            ready.unlink(); current_path.write_bytes(current_raw); current_path.chmod(0o400)
+            self.assertTrue(p.javascript_accepted(self.context))
+            proof.chmod(0o600); proof.write_bytes(b'changed')
+            with self.assertRaisesRegex(ValueError, 'owned_javascript_acceptance_digest'): p.javascript_accepted(self.context)
+
+    def test_javascript_cache_rejects_false_handoff_even_with_matching_protected_digest(self):
+        self.context['profile'] = p.adapter.HTML
+        with self.boundary():
+            ready = self.receipt(); proof_path, pointer_path = self.javascript_proof(ready)
+            original = p.auth.decode(proof_path.read_bytes()); pointer = p.auth.decode(pointer_path.read_bytes())
+            for field, changed in [('source_sha256', '0'*64), ('browser_bytes', 1), ('profile', p.adapter.PYTHON),
+                    ('smokes', [original['smokes'][0]]), ('readiness_sha256', '0'*64), ('real_source_grants_issued', 1)]:
+                proof = dict(original, **{field: changed}); raw = p.auth.canonical(proof)
+                proof_path.chmod(0o600); proof_path.write_bytes(raw); proof_path.chmod(0o400)
+                pointer['acceptance_sha256'] = p.auth.digest(raw)
+                pointer_path.chmod(0o600); pointer_path.write_bytes(p.auth.canonical(pointer)); pointer_path.chmod(0o400)
+                with self.subTest(field=field), self.assertRaisesRegex(ValueError, 'owned_javascript_acceptance_proof'):
+                    p.javascript_accepted(self.context)
 
     def test_owned_fixture_error_status_is_not_a_successful_smoke(self):
         good = {'result': 'PASS', 'runs': [{'outcome': {'status': 'completed', 'returncode': 0,
