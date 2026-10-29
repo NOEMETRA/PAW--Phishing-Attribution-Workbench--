@@ -99,6 +99,17 @@ their current scoped isolation gate even after unattended benign acceptance.
 
 ## Current disposition
 
+Actual PR132 bounded acceptance completed Shell14/14 with source/installed sealed
+exports and independent reconciliation. ELF completed all14 validation cases,
+but its first final1MiB source smoke failed inside the backend; full ELF/I08
+acceptance is not claimed. The next increment preserves missing public smoke
+diagnostics and adds one fixed historical diagnostic to the existing no-VM
+recipe. It cannot run a guest or choose arbitrary Root files. Review/head+main
+CI and immutable promotion precede that read; only a reproduced underlying
+cause will be corrected. JavaScript browser handoff/current-context acceptance
+and the full operational P5 matrix remain open.
+
+
 The first actual PR131 native Shell matrix reproduced the1800s parent runtime
 limit during case8, with no full acceptance/I08 and verified terminal host
 cleanup. The follow-up partitions the unchanged finite matrix into at most

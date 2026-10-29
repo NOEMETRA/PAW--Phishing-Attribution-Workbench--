@@ -265,6 +265,87 @@ class NativeRecipe(unittest.TestCase):
             (parent/'source.bin').write_bytes(b'changed')
             with self.assertRaisesRegex(ValueError,'native_stage_parent_changed'):native.verify_owned_stage(value,'shell',ctx,0)
 
+    def test_native_failure_metadata_never_publishes_private_text_or_foreign_locations(self):
+        report={'result':'FAIL','scope':native.SCOPE,'real_connections':0,
+            'error':'guest_channel_deadline:PRIVATE_GUEST_TEXT:/private/path',
+            'verification_error':'unknown_private_value','writers_stopped':True,'host_restored':True,
+            'traceback':'  File "/private/root/native_runtime.py", line 50\n  File "/private/foreign.py", line 1\nValueError: PRIVATE_GUEST_TEXT',
+            'diagnostic':{'locations':[{'module':'native_guest.py','line':70}]}}
+        value=native.native_failure_metadata(report,{'native_runtime.py','native_guest.py'},{'guest_channel_deadline'})
+        raw=json.dumps(value);self.assertNotIn('PRIVATE_GUEST_TEXT',raw);self.assertNotIn('/private',raw)
+        self.assertNotIn('unknown_private_value',raw);self.assertNotIn('foreign.py',raw)
+        self.assertEqual(value['diagnostics']['error']['error_code'],'guest_channel_deadline')
+        self.assertEqual(value['diagnostics']['verification_error']['error_code'],'non_code_failure')
+        for changed in [dict(report,scope='foreign'),dict(report,real_connections=False),dict(report,error='x'*65537)]:
+            with self.assertRaises(ValueError):native.native_failure_metadata(changed,set(),set())
+
+    def test_fixed_historical_native_reader_checks_full_snapshot_owned_bytes_and_revocation(self):
+        from test_native_evidence import NativeEvidence
+        evidence=NativeEvidence();evidence.root=self.root;audit,report,ctx=evidence.fixture('elf')
+        control=self.root/'control';control.mkdir();fixed=control/('native-job-'+native.HISTORICAL_NATIVE_REQUEST);audit.rename(fixed)
+        entry=next(r for r in native_fixtures('a'*16,'elf') if r['slot']=='smoke')
+        home=self.root/'full-size';home.mkdir();case,graph=forensic_case(home,entry['selected'])
+        info=native.contract.prepare(case,graph.root,'elf',home/'request');request=native.decode(Path(info['request']).read_bytes(),native.contract.REQUEST_LIMIT)
+        request['candidate']['request_id']=native.HISTORICAL_NATIVE_REQUEST;raw=native.canonical(request)
+        old_copy=next((fixed/'authority-copy').iterdir());copy=fixed/'authority-copy'/native.HISTORICAL_NATIVE_REQUEST
+        if old_copy!=copy:old_copy.rename(copy)
+        (copy/'request.json').write_bytes(raw)
+        ready=b'owned revoked readiness stand-in';(fixed/'readiness.json').write_bytes(ready)
+        policy=native.decode((fixed/'policy.json').read_bytes());policy.update(mode='explicit-source-analysis',readiness_sha256=native.digest(ready),approved_requests=[
+            {'request_sha256':native.digest(raw),'source_sha256':request['candidate']['source']['sha256']}])
+        policy_raw=native.canonical(policy);(fixed/'policy.json').write_bytes(policy_raw)
+        report.update(result='FAIL',error='guest_channel_deadline:PRIVATE_GUEST_TEXT',traceback='')
+        (fixed/'results.json').write_bytes(native.canonical(report))
+        (fixed/('native-elf-'+native.HISTORICAL_NATIVE_REQUEST+'-serial.log')).write_bytes(b'Linux version owned\ncloud-init\nPRIVATE_GUEST_TEXT')
+        header=(fixed/'runtime-snapshot/release.json').read_bytes()
+        state=self.root/'state';folder=state/'jobs'/native.HISTORICAL_NATIVE_JOB;folder.mkdir(parents=True)
+        outer={'result':'FAIL','job':native.HISTORICAL_NATIVE_JOB,'recipe':'elf-owned-v1','release_sha':'2'*40,
+            'error':'native_owned_smoke_failed','new_readiness_revoked':True,'real_samples_executed':0,'real_source_grants_issued':0}
+        (folder/'result.json').write_bytes(native.canonical(outer))
+        matrix=control/('native-owned-'+native.HISTORICAL_NATIVE_JOB);matrix.mkdir()
+        (matrix/'validation.json').write_bytes(native.canonical({'result':'PASS','profile':native.ELF,'context':ctx,'nonce':'a'*16}))
+        authority=self.root/'authority';authority.mkdir(mode=0o700)
+        # Only Root/hardware authority is substituted. Snapshot proof/inventory,
+        # exact1MiB request/lineage and all fixed file reads are real temporary data.
+        with mock.patch.object(native,'root_only'),mock.patch.object(native,'STATE',state),mock.patch.object(native,'CONTROL',control), \
+             mock.patch.object(native.fs,'OWNER_UID',os.getuid()), \
+             mock.patch.object(native,'HISTORICAL_NATIVE_RELEASE','2'*40),mock.patch.object(native,'HISTORICAL_NATIVE_MANIFEST',native.digest(header)), \
+             mock.patch.object(native,'store',lambda:self.store(authority)), \
+             mock.patch.object(native,'issue') as issue,mock.patch.object(native,'install_readiness') as install:
+            value=native.previous_owned_native_failure();self.assertIs(value['readiness_revoked'],True)
+            self.assertIs(value['vm_started'],False);self.assertEqual(value['real_source_grants_issued'],0)
+            self.assertEqual(value['diagnostics']['error']['error_code'],'guest_channel_deadline')
+            self.assertNotIn('PRIVATE_GUEST_TEXT',json.dumps(value));issue.assert_not_called();install.assert_not_called()
+            leaf=authority/('readiness-'+native.digest(ready)+'.json');leaf.write_bytes(ready);leaf.chmod(0o400)
+            with self.assertRaisesRegex(ValueError,'native_historical_readiness_not_revoked'):native.previous_owned_native_failure()
+            leaf.unlink();(fixed/'runtime-snapshot/paw/owned.py').write_bytes(b'changed')
+            with self.assertRaisesRegex(ValueError,'representation_snapshot_source_changed'):native.previous_owned_native_failure()
+
+    def test_historical_native_reader_refuses_foreign_job_before_reading_backend(self):
+        with mock.patch.object(native,'root_only'),mock.patch.object(native,'read',return_value=native.canonical({'result':'FAIL','job':'f'*32})) as read, \
+             self.assertRaisesRegex(ValueError,'native_historical_owned_job'):
+            native.previous_owned_native_failure()
+        self.assertEqual(read.call_count,1)
+
+    def test_final_smoke_backend_failure_preserves_public_diagnostics_and_revokes_readiness(self):
+        control,store=self.stage_environment();ctx=self.context();job='a'*32;record={}
+        stage={'job':'b'*32,'stage_index':0,'nonce':'c'*16,'clients':[],
+            'validations':[{'slot':slot} for slot in NATIVE_CASES['shell']]}
+        ready=b'owned readiness stand-in';leaf=store/('readiness-'+native.digest(ready)+'.json');leaf.write_bytes(ready);leaf.chmod(0o400)
+        diagnostic={'error_type':'TimeoutError','error_code':'guest_channel_deadline','locations':[]}
+        with mock.patch.object(native,'CONTROL',control),mock.patch.object(native.fs,'OWNER_UID',os.getuid()), \
+             mock.patch.object(native.fs,'root_directory',self.owned_root_directory),mock.patch.object(native,'store',lambda:self.store(store)), \
+             mock.patch.object(native.common,'stage_client'),mock.patch.object(native,'stage_client_call',return_value={}), \
+             mock.patch.object(native,'capture',return_value=ctx),mock.patch.object(native,'new_native_readiness',return_value=ready), \
+             mock.patch.object(native,'install_readiness'),mock.patch.object(native.common,'run_client'), \
+             mock.patch.object(native,'native_owned_request',return_value=(b'owned',self.root,{})), \
+             mock.patch.object(native,'make_policy',return_value=b'owned'),mock.patch.object(native,'install_policy'),mock.patch.object(native,'issue'), \
+             mock.patch.object(native,'execute_native',return_value=({'result':'FAIL','diagnostic':diagnostic},self.root)):
+            with self.assertRaisesRegex(ValueError,'native_owned_smoke_failed'):
+                native.finish_owned_native(job,'d'*40,'shell',ctx,[stage],record)
+            self.assertEqual(record['backend_diagnostics'],{'diagnostic':diagnostic})
+            self.assertIs(record['new_readiness_revoked'],True);self.assertFalse(leaf.exists())
+
     def test_final_smoke_failure_revokes_new_readiness_and_keeps_stage_evidence(self):
         control,store=self.stage_environment();ctx=self.context();job='a'*32;record={}
         stage={'job':'b'*32,'stage_index':0,'nonce':'c'*16,'clients':[],

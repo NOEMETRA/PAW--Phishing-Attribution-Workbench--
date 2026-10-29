@@ -182,3 +182,40 @@ new readiness installation revokes that receipt while preserving stage evidence
 and consumption ledgers. A full result reports two current-call VMs separately
 from the cumulative matrix case count. Actual staged Shell/ELF acceptance and
 the independent reader reconciliation are still required; P4/P5 remain open.
+
+
+## Fixed historical ELF smoke diagnosis
+
+On reviewed main `3a8446b`, all14 ELF validation scenarios passed in five bounded
+stages and each stage passed the independent ordinary reader. The first final
+source-mode1MiB ELF smoke then failed inside `execute_native`. Its parent job
+`9ab7f09d2a8640a39a7c2f9a2ab590ad` terminated normally as a failure; read-only host
+checks confirmed MainPID0, no domain/network/QEMU/netns, unchanged operator
+status and clean sources. Full ELF acceptance is not claimed. Shell's separate
+14-case acceptance and its archive remain historical evidence for that context.
+
+The final-smoke path omitted the backend's already sanitized diagnostics from
+its public job result. An inert negative regression against the committed
+function reproduces that omission; the corrected path preserves those metadata
+before failing and still revokes new readiness. This does not identify or fix
+the underlying1MiB backend failure, which requires the protected report.
+
+The existing no-VM `vm-acceptance-v1` recipe now also reads only that fixed job
+and request `e51ae5f1725d401592ed67eea27e04d2`. There is no caller-selected ID,
+path, output selector or new command. It checks the fixed historical manifest
+hash/full source inventory, exact regenerated owned1MiB bytes and policy
+request/hash binding, failed outer result and absence of its revoked readiness.
+It exposes only reviewed literal error-code words from that verified public
+snapshot, bounded known-module line locations, report/serial hashes and fixed
+serial flags. Raw exception/traceback/serial text, source bytes and output stay
+private. A successful failed-job diagnostic is not a successful VM verifier,
+execution acceptance or restored grant; it deliberately does not require the
+failed acceptance verifier itself to pass. Missing/foreign/tampered evidence or
+an unexpectedly live old receipt refuses the diagnostic.
+
+Only after fresh review, head/main CI and independent immutable promotion may
+this read-only historical diagnostic run. No new VM is authorized by it. The
+underlying cause remains unclassified until the metadata are read and the
+specific defect is independently reproduced. Source-changing promotion requires
+fresh current-context readiness before further execution acceptance. P4/P5
+remain open; no new real-source approval or network is enabled.

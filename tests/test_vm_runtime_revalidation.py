@@ -217,7 +217,8 @@ class Runtime(unittest.TestCase):
             with mock.patch.object(runtime.os, 'geteuid', return_value=0), self.assertRaises(ValueError):
                 runtime.run_owned(job, release)
 
-    def owned(self, *, fail=False, unsafe=False):
+    def owned(self, *, fail=False, unsafe=False, fail_native=False):
+        import native_runtime
         job, release = 'a'*32, 'b'*40; states = []; writes = []; published = []
         value = {'result': 'PASS', 'vm_started': unsafe, 'real_samples_executed': 0,
                  'production_grants_enabled': False, 'i08_installed': False}
@@ -231,6 +232,7 @@ class Runtime(unittest.TestCase):
              mock.patch.object(runtime, 'revalidate', **({'side_effect': ValueError('owned injected failure')} if fail else {'return_value': value})), \
              mock.patch.object(runtime, 'refresh_maintenance', return_value={'result': 'PASS', 'vm_started': False}), \
              mock.patch('representation_producer.previous_owned_failure', return_value={'source_result': 'FAIL', 'vm_started': False}), \
+             mock.patch.object(native_runtime, 'previous_owned_native_failure', **({'side_effect': ValueError('owned native diagnostic failure')} if fail_native else {'return_value': {'source_result': 'FAIL', 'vm_started': False}})), \
              mock.patch.object(Path, 'mkdir'), mock.patch('builtins.print'):
             try: runtime.run_owned(job, release)
             except ValueError: pass
@@ -240,10 +242,11 @@ class Runtime(unittest.TestCase):
         states, writes, published = self.owned()
         self.assertEqual(states[-1]['result'], 'PASS'); self.assertEqual(states[-1]['recipe'], 'vm-acceptance-v1')
         self.assertEqual(len(writes), 1); self.assertEqual(writes[0][1], 'runtime.json')
+        exported=json.loads(writes[0][2]);self.assertEqual(exported['previous_owned_native_failure'],{'source_result':'FAIL','vm_started':False})
         self.assertEqual(published, [Path('/var/lib/paw-vm-exports')/('a'*32)])
 
     def test_failed_or_unsafe_runtime_is_recorded_and_never_exported_as_pass(self):
-        for kwargs in [{'fail': True}, {'unsafe': True}]:
+        for kwargs in [{'fail': True}, {'unsafe': True}, {'fail_native': True}]:
             states, writes, published = self.owned(**kwargs)
             self.assertEqual(states[-1]['result'], 'FAIL'); self.assertEqual(writes, []); self.assertEqual(published, [])
 
