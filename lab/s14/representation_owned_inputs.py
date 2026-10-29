@@ -118,7 +118,10 @@ def javascript_fixture(nonce):
     before issuing any grant; the unprivileged PAW client cannot choose bytes.
     """
     require(type(nonce) is str and re.fullmatch('[0-9a-f]{16}', nonce), 'owned_javascript_nonce')
-    prefix = ('document.title="OWNED-REPRESENTATION-'+nonce+'";\n/*').encode('ascii')
+    # Keep the input at its maximum while making the owned page's resulting
+    # DOM small. Otherwise --dump-dom echoes this entire Base64 script URL,
+    # exceeding the separate unchanged256KiB output budget by construction.
+    prefix = ('document.title="OWNED-REPRESENTATION-'+nonce+'";document.currentScript.remove();\n/*').encode('ascii')
     original = prefix + b'x'*(256*1024-len(prefix)-3) + b'*/\n'
     selected = (b'<!doctype html><meta charset="utf-8"><title>PAW explicit JavaScript view</title>\n'
                 b'<script src="data:text/javascript;charset=utf-8;base64,'+base64.b64encode(original)+b'"></script>\n')

@@ -30,6 +30,8 @@ CONTROL = Path('/var/lib/paw-s14/control')
 STATE = Path('/var/lib/paw-vm')
 RELEASES = Path('/opt/paw-vm/releases')
 HISTORICAL_MANIFEST_SHA256 = '350e9cb3937ef497a1ad601e3001d4b87e71e9df81b2263b2d71f3d805c4d169'
+HISTORICAL_JS_MANIFEST_SHA256 = '21e422c8d2fd1bd86f298d8f9d63dab8b6da8a90bfa35f9ea6e8bba7818380c7'
+HISTORICAL_JS_REQUEST_SHA256 = '93e58ff6c4c12549c0c6570352ca4e1a349e963466176cc3d95f276177e820b1'
 READER_GID = 1000
 require = auth.require
 
@@ -251,7 +253,7 @@ def _export_parent():
 
 def publish(raw):
     """Only a current protected analysis-mode audit may enter the client export."""
-    root_only(); request = auth.contract.validate_request(raw, auth.decode(raw)['candidate']['created_at'])
+    root_only(); request = auth.contract.validate_request(raw, auth.decode(raw, auth.contract.REQUEST_LIMIT)['candidate']['created_at'])
     identifier = request['candidate']['request_id']; output = audit_path(identifier)
     verified = verify_single(output, production=True)
     report = auth.decode(read(output, 'results.json', 2*1024**2), 2*1024**2); run = report['runs'][0]
@@ -595,7 +597,7 @@ def run_owned_javascript(job, context):
         require(read(sidecar, 'request.json', auth.contract.REQUEST_LIMIT) == raw and
                 auth.digest(receipt_raw) == exported['receipt_sha256'], 'owned_representation_smoke_sidecar_binding')
         receipt = auth.contract.validate_receipt(receipt_raw,
-            auth.contract.validate_request(raw, auth.decode(raw)['candidate']['created_at']), auth.digest(raw))
+            auth.contract.validate_request(raw, auth.decode(raw, auth.contract.REQUEST_LIMIT)['candidate']['created_at']), auth.digest(raw))
         for item in receipt['artifacts']:
             require(auth.digest(read(sidecar, item['stored_as'], 1024)) == item['sha256'], 'owned_representation_smoke_sidecar_output')
         try: auth.consume(raw, policy_raw, context)
@@ -633,13 +635,77 @@ def owned_success(report, profile, nonce):
                   'owned_representation_html_oracle')
 
 
+def browser_outcome_metadata(report):
+    """Typed outcome/counters only, never guest text, markup or console bytes."""
+    from browser_offline_adapter import validate_outcome
+    from browser_policy import MAX_DOM
+    require(report.get('result') == 'PASS' and len(report['runs']) == 1, 'owned_browser_outcome_report')
+    outcome = validate_outcome(report['runs'][0]['outcome'])
+    result = {key: outcome[key] for key in ['status', 'returncode', 'writers_stopped', 'output_truncated', 'sandbox']}
+    result['observations_available'] = False
+    if outcome['records']:
+        try: observations = auth.decode(bytes.fromhex(outcome['records'][0]['bytes_hex']), 1024)
+        except ValueError: observations = None
+        if type(observations) is dict and type(observations.get('dom_bytes')) is int and \
+                0 <= observations['dom_bytes'] <= MAX_DOM and auth.contract.shared._hex(observations.get('dom_sha256')):
+            result.update(observations_available=True, dom_bytes=observations['dom_bytes'], dom_sha256=observations['dom_sha256'])
+    return result
+
+
+def previous_owned_javascript_failure():
+    """One pinned historical JS smoke, through the existing no-VM recipe only.
+
+    No caller selects a path/job, raw logs are not exported and the complete
+    protected VM audit must verify before its bounded outcome is summarized.
+    Historical success of custody is distinct from acceptance of this smoke.
+    """
+    import base64
+    root_only(); job = 'ca8b61fc0c7b4d4f8288fe9ff63f131b'
+    rid = '212c0b19513e4fe8a31fdf114c2d6ec1'; nonce = 'ee4fa4ca23784bd3'
+    release = 'd0a9dbd78f0170b85e3a5516337908ec5809e3cc'
+    with auth.fs.root_directory(STATE/'jobs'/job) as fd: outer = auth.decode(auth.fs.read(fd, 'result.json', 256*1024))
+    require(outer.get('result') == 'FAIL' and outer.get('job') == job and outer.get('recipe') == 'python-owned-v2' and
+            outer.get('release_sha') == release and outer.get('profile') is None and
+            outer.get('error') == 'owned_representation_expected_completion' and outer.get('real_samples_executed') == 0,
+            'owned_javascript_historical_outer')
+    root = audit_path(rid)
+    with auth.fs.root_directory(root): pass
+    header = read(root, 'runtime-snapshot/release.json', auth.storage.MAX_MANIFEST)
+    require(auth.digest(header) == HISTORICAL_JS_MANIFEST_SHA256,
+            'owned_javascript_historical_manifest')
+    auth.storage.manifest(header, release)
+    policy_raw = read(root, 'policy.json', 256*1024); policy = auth.decode(policy_raw); context = policy['context']
+    require(context['profile'] == adapter.HTML and policy['mode'] == 'explicit-source-analysis', 'owned_javascript_historical_policy')
+    verify_snapshot(root, context); verified = verify_single(root, production=True)
+    raw = read(root, 'authority-copy/'+rid+'/request.json', auth.contract.REQUEST_LIMIT)
+    require(auth.digest(raw) == HISTORICAL_JS_REQUEST_SHA256,
+            'owned_javascript_historical_request')
+    request = auth.contract.validate_request(raw, auth.decode(raw, auth.contract.REQUEST_LIMIT)['candidate']['created_at'])
+    # Reconstruct the old immutable fixture, not the newly corrected one.
+    prefix = ('document.title="OWNED-REPRESENTATION-'+nonce+'";\n/*').encode('ascii')
+    original = prefix+b'x'*(256*1024-len(prefix)-3)+b'*/\n'
+    source = (b'<!doctype html><meta charset="utf-8"><title>PAW explicit JavaScript view</title>\n'
+              b'<script src="data:text/javascript;charset=utf-8;base64,'+base64.b64encode(original)+b'"></script>\n')
+    require(request['candidate']['request_id'] == rid and request['candidate']['profile'] == adapter.HTML and
+            bytes.fromhex(request['candidate']['source']['data_hex']) == source and
+            request['binding']['original_source'] == {'bytes': len(original), 'sha256': auth.digest(original)} and
+            verified['result'] == 'PASS' and verified['request_sha256'] == auth.digest(raw),
+            'owned_javascript_historical_fixture')
+    report_raw = read(root, 'results.json', 2*1024**2); report = auth.decode(report_raw, 2*1024**2)
+    return {'scope': 'fixed historical owned JS smoke diagnostic; no acceptance or authority',
+        'job': job, 'request_id': rid, 'release_sha': release, 'request_sha256': auth.digest(raw),
+        'report_sha256': auth.digest(report_raw), 'custody_verification': 'PASS', 'smoke_accepted': False,
+        'source_bytes': len(original), 'browser_bytes': len(source), 'outcome': browser_outcome_metadata(report),
+        'external_stop_under_12_seconds': True, 'vm_started': False, 'i08_installed': False, 'real_source_grants_issued': 0}
+
+
 DIAGNOSTIC_CODES = frozenset({
     'operator_release_history', 'operator_policy_lease', 'operator_exact_head_clear_review',
     'operator_exact_head_successful_ci', 'operator_completed_successful_job', 'operator_required_workflow_runs',
     'operator_head_and_main_workflows', 'snapshot_manifest_digest', 'snapshot_proof_digest',
     'snapshot_proof_identity', 'snapshot_source_digest', 'owned_representation_active_snapshot',
     'owned_representation_fixed_client_owner', 'owned_representation_execution_failed',
-    'owned_representation_smoke_execution', 'owned_client_kernel_identity_not_acknowledged',
+    'owned_representation_smoke_execution', 'owned_representation_expected_completion', 'owned_client_kernel_identity_not_acknowledged',
     'owned_client_phase_failed', 'owned_client_effective_limits', 'owned_client_unit_not_terminal',
     'owned_client_cgroup_not_removed', 'owned_client_context_changed',
     'representation_current_protected_maintenance_required', 'representation_producer_context_changed',
@@ -726,7 +792,7 @@ def previous_owned_failure():
             auth.digest(auth.storage.canonical(manifest['files'])), 'owned_historical_snapshot_binding')
     with auth.fs.root_directory(folder/'authority-copy'/identifier) as fd:
         raw = auth.fs.read(fd, 'request.json', auth.contract.REQUEST_LIMIT)
-    request = auth.contract.validate_request(raw, auth.decode(raw)['candidate']['created_at'])
+    request = auth.contract.validate_request(raw, auth.decode(raw, auth.contract.REQUEST_LIMIT)['candidate']['created_at'])
     candidate = request['candidate']
     require(candidate['request_id'] == identifier and candidate['profile'] == adapter.PYTHON and
             bytes.fromhex(candidate['source']['data_hex']) == next(v['selected'] for v in fixtures(nonce)
@@ -802,7 +868,7 @@ def run_owned(job, release):
                     'nonce': nonce, 'slot': slot, 'profile': context['profile'], 'request_sha256': auth.digest(raw)})))
                 auth.install_policy(policy_raw, context); auth.issue(raw, policy_raw, context)
                 for field in ['selection_binding_sha256', 'source']:
-                    changed = auth.decode(raw)
+                    changed = auth.decode(raw, auth.contract.REQUEST_LIMIT)
                     if field == 'source': changed['candidate']['source']['sha256'] = '0'*64
                     else: changed['candidate'][field] = '0'*64
                     try: auth.inspect(auth.canonical(changed))
@@ -822,7 +888,7 @@ def run_owned(job, release):
                 try: auth.consume(raw, policy_raw, context)
                 except FileExistsError: pass
                 else: raise ValueError('owned_representation_replay_accepted')
-                summary['validations'].append({'slot': slot, 'request_id': auth.decode(raw)['candidate']['request_id'],
+                summary['validations'].append({'slot': slot, 'request_id': auth.decode(raw, auth.contract.REQUEST_LIMIT)['candidate']['request_id'],
                     'audit': str(audit), 'verification': verified, 'witness': witness, 'replay_refused': True,
                     'wrong_parent_and_digest_refused': True, 'parent_unchanged': True})
             refused = matrix/'unknown-stop-must-not-publish'
@@ -850,7 +916,7 @@ def run_owned(job, release):
                         auth.digest(read(sidecar, 'receipt.json', auth.contract.RECEIPT_LIMIT)) == exported['receipt_sha256'],
                         'owned_representation_smoke_sidecar_binding')
                 receipt = auth.contract.validate_receipt(read(sidecar, 'receipt.json', auth.contract.RECEIPT_LIMIT),
-                    auth.contract.validate_request(raw, auth.decode(raw)['candidate']['created_at']), auth.digest(raw))
+                    auth.contract.validate_request(raw, auth.decode(raw, auth.contract.REQUEST_LIMIT)['candidate']['created_at']), auth.digest(raw))
                 for item in receipt['artifacts']:
                     require(auth.digest(read(sidecar, item['stored_as'], 1024)) == item['sha256'], 'owned_representation_smoke_sidecar_output')
                 try: auth.consume(raw, policy_raw, context)
