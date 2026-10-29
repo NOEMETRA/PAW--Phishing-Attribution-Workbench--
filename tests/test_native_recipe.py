@@ -265,6 +265,34 @@ class NativeRecipe(unittest.TestCase):
             (parent/'source.bin').write_bytes(b'changed')
             with self.assertRaisesRegex(ValueError,'native_stage_parent_changed'):native.verify_owned_stage(value,'shell',ctx,0)
 
+    def test_boot_metadata_is_finite_and_never_returns_private_log_lines(self):
+        serial=(b'[ 219.250] PRIVATE_KERNEL_TEXT\n'
+            b"cloud-init[1]: Cloud-init running 'modules:final' at PRIVATE_DATE. Up 213.75 seconds\n"
+            b'[FAILED] Failed to start systemd-networkd-wait-online.service - PRIVATE_TEXT\n'
+            b'systemd[1]: paw-gate.service: Main process exited, code=exited, status=1/FAILURE PRIVATE_TEXT\n'
+            b'Failed to start paw-gate.service: Unit paw-gate.service not found. PRIVATE_TEXT\n'
+            b'Failed to start PRIVATE_UNIT.service - PRIVATE_TEXT\n'
+            b'Failed to start PRIVATE-paw-gate.service - PRIVATE_TEXT\n'
+            b'native_seed_budget arbitrary_secret PRIVATE_TEXT\n')
+        result=native.native_boot_metadata(serial,{'native_seed_budget'})
+        self.assertEqual(result['last_kernel_seconds'],219.25)
+        self.assertEqual(result['cloud_init'],[{'stage':'modules:final','event':'running','up_seconds':213.75}])
+        self.assertEqual(result['guest_error_codes'],['native_seed_budget'])
+        self.assertIn({'unit':'paw-gate.service','event':'exited','exit_status':1},result['services'])
+        self.assertIn({'unit':'paw-gate.service','event':'missing'},result['services'])
+        self.assertNotIn('PRIVATE_',json.dumps(result));self.assertNotIn('arbitrary_secret',json.dumps(result))
+        self.assertEqual(len(result['services']),3)
+        with self.assertRaises(ValueError):native.native_boot_metadata(b'x'*(1024**2+1),set())
+        oversized=b'PRIVATE_TEXT '*1000+b'paw-gate.service failed to start'
+        self.assertEqual(native.native_boot_metadata(oversized,set())['services'],[])
+
+    def test_boot_metadata_caps_events_and_ignores_foreign_times(self):
+        serial=(b'[99999] unknown\n'+b'systemd[1]: paw-gate.service: Main process exited, status=255/FAILURE\n'*100+
+            b"cloud-init running 'modules:final' at PRIVATE_DATE. Up 1.5 seconds\n"*100)
+        result=native.native_boot_metadata(serial,set());self.assertIsNone(result['last_kernel_seconds'])
+        self.assertEqual(len(result['services']),32);self.assertEqual(len(result['cloud_init']),16)
+        with self.assertRaises(ValueError):native.native_boot_metadata(b'\n'*16385,set())
+
     def test_native_failure_metadata_never_publishes_private_text_or_foreign_locations(self):
         report={'result':'FAIL','scope':native.SCOPE,'real_connections':0,
             'error':'guest_channel_deadline:PRIVATE_GUEST_TEXT:/private/path',
