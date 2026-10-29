@@ -999,7 +999,9 @@ def finish_owned_native(job,release,profile,context,stages,record):
             raw,parent,before=native_owned_request(job,nonce,profile,mode,'smoke')
             policy=make_policy(context,[raw],mode='explicit-source-analysis',ready=ready_raw)
             install_policy(policy,context);issue(raw,policy,context)
-            report,audit=execute_native(raw,policy);require(report['result']=='PASS','native_owned_smoke_failed')
+            report,audit=execute_native(raw,policy)
+            record['backend_diagnostics']={key:report[key] for key in ['diagnostic','cleanup_diagnostic','verification_diagnostic'] if key in report}
+            require(report['result']=='PASS','native_owned_smoke_failed')
             native_owned_assert(report,'smoke',profile,nonce);exported=publish_native(raw)
             client=stage_client_call(job,nonce,profile,mode,'import',context,slot='smoke')
             require(common.case_inventory(parent)==before,'native_owned_smoke_parent_changed')
@@ -1069,3 +1071,99 @@ def run_owned_native(job,release,profile):
         'i08_installed':record.get('i08_installed',False),'matrix':record.get('matrix'),
         'real_samples_executed':0}),flush=True)
     require(record['result']=='PASS','native_owned_recipe_failed')
+
+
+# One reproduced owned historical failure; never a caller-selected Root reader.
+HISTORICAL_NATIVE_JOB='9ab7f09d2a8640a39a7c2f9a2ab590ad'
+HISTORICAL_NATIVE_REQUEST='e51ae5f1725d401592ed67eea27e04d2'
+HISTORICAL_NATIVE_RELEASE='3a8446b3034a998bb876cc55b4bd14020b3ad8ee'
+HISTORICAL_NATIVE_MANIFEST='edf94ac1d9e9114cc6cdef578c1154cadd8828f7082e6ccbcae25ac86b8b0fce'
+
+
+def native_failure_metadata(report,modules,codes):
+    """Publish only reviewed literal codes, bounded locations and booleans."""
+    require(type(report) is dict and report.get('result')=='FAIL' and report.get('scope')==SCOPE and
+        type(report.get('real_connections')) is int and report['real_connections']==0,'native_historical_failure_scope')
+    diagnostics={}
+    for field in ['error','verification_error','cleanup_error']:
+        text=report.get(field)
+        if text is None:continue
+        require(type(text) is str and len(text)<=65536,'native_historical_error_budget')
+        parts=text.split(':',8);code=parts[0]
+        diagnostics[field]={'error_code':code if code in codes else 'non_code_failure',
+            'causes':[part for part in parts[1:] if part in codes][:4]}
+    trace=report.get('traceback','');require(type(trace) is str and len(trace)<=65536,'native_historical_trace_budget')
+    locations=[]
+    for filename,line in re.findall(r'  File "([^"\n]{1,4096})", line ([0-9]{1,7})',trace):
+        name=Path(filename).name
+        if name in modules and 0<int(line)<=1000000:locations.append({'module':name,'line':int(line)})
+    for field in ['diagnostic','verification_diagnostic','cleanup_diagnostic']:
+        value=report.get(field)
+        if value is None:continue
+        require(type(value) is dict and type(value.get('locations')) is list and len(value['locations'])<=6,
+                'native_historical_stored_diagnostic')
+        for location in value['locations']:
+            require(type(location) is dict and set(location)=={'module','line'},'native_historical_stored_location')
+            if location['module'] in modules and type(location['line']) is int and 0<location['line']<=1000000:
+                locations.append(dict(location))
+    return {'source_result':'FAIL','diagnostics':diagnostics,'locations':locations[-6:],
+        'writers_stopped_attested':report.get('writers_stopped') is True,
+        'host_restored_attested':report.get('host_restored') is True}
+
+
+def previous_owned_native_failure():
+    """Read only this fixed failed1MiB owned smoke; no guest or authority write."""
+    import ast
+    root_only();folder=STATE/'jobs'/HISTORICAL_NATIVE_JOB
+    outer=decode(read(folder,'result.json',256*1024))
+    require(outer.get('result')=='FAIL' and outer.get('job')==HISTORICAL_NATIVE_JOB and
+        outer.get('recipe')=='elf-owned-v1' and outer.get('release_sha')==HISTORICAL_NATIVE_RELEASE and
+        outer.get('error')=='native_owned_smoke_failed' and outer.get('new_readiness_revoked') is True and
+        outer.get('real_samples_executed')==outer.get('real_source_grants_issued')==0,'native_historical_owned_job')
+    root=audit_path(HISTORICAL_NATIVE_REQUEST)
+    policy_raw=read(root,'policy.json',256*1024);policy=decode(policy_raw);context=policy['context']
+    header=read(root,'runtime-snapshot/release.json',storage.MAX_MANIFEST)
+    require(digest(header)==HISTORICAL_NATIVE_MANIFEST,'native_historical_manifest_digest')
+    manifest=storage.manifest(header,HISTORICAL_NATIVE_RELEASE);verify_snapshot(root,context)
+    modules=set();codes=set()
+    for name,entry in manifest['files'].items():
+        if not name.endswith('.py'):continue
+        source=read(root,'runtime-snapshot/'+name,storage.MAX_FILE)
+        require(digest(source)==entry['sha256'] and len(source)==entry['bytes'],'native_historical_source_digest')
+        modules.add(Path(name).name)
+        # These finite words are public literals in the exact reviewed snapshot,
+        # not arbitrary error text, source bytes, guest output or caller data.
+        for node in ast.walk(ast.parse(source)):
+            if isinstance(node,ast.Constant) and type(node.value) is str:
+                prefix=node.value.split(':',1)[0]
+                if re.fullmatch('[a-z][a-z0-9_]{0,95}',prefix):codes.add(prefix)
+    matrix=CONTROL/('native-owned-'+HISTORICAL_NATIVE_JOB)
+    validation=decode(read(matrix,'validation.json',2*1024**2),2*1024**2)
+    require(validation.get('result')=='PASS' and validation.get('profile')==ELF and
+        validation.get('context')==context,'native_historical_validation_context')
+    raw=read(root,'authority-copy/'+HISTORICAL_NATIVE_REQUEST+'/request.json',contract.REQUEST_LIMIT)
+    request=contract.validate_request(raw,decode(raw,contract.REQUEST_LIMIT)['candidate']['created_at']);candidate=request['candidate']
+    expected=next(row for row in native_fixtures(validation['nonce'],'elf') if row['slot']=='smoke')
+    require(candidate['request_id']==HISTORICAL_NATIVE_REQUEST and candidate['profile']==ELF and
+        candidate['source']['bytes']==1024**2 and candidate['source']['data_hex']==expected['selected'].hex() and
+        request['binding']['original_source']['sha256']==digest(expected['original']) and
+        policy['mode']=='explicit-source-analysis' and policy['approved_requests']==[
+            {'request_sha256':digest(raw),'source_sha256':candidate['source']['sha256']}],
+        'native_historical_exact_owned_smoke')
+    readiness=read(root,'readiness.json',65536)
+    require(digest(readiness)==policy['readiness_sha256'],'native_historical_readiness_copy')
+    with store() as fd:
+        try:fs.read(fd,'readiness-'+digest(readiness)+'.json',65536)
+        except FileNotFoundError:pass
+        else:raise ValueError('native_historical_readiness_not_revoked')
+    report_raw=read(root,'results.json',2*1024**2);report=decode(report_raw,2*1024**2)
+    serial=read(root,'native-elf-'+HISTORICAL_NATIVE_REQUEST+'-serial.log',1024**2)
+    value=native_failure_metadata(report,modules,codes)
+    markers={'linux_boot':b'Linux version','cloud_init':b'cloud-init','traceback':b'Traceback (most recent call last)',
+        'service_failure':b'Failed to start','emergency':b'emergency mode','kernel_panic':b'Kernel panic','oom':b'Out of memory'}
+    value.update(scope='fixed historical owned native smoke diagnostic only; no acceptance or authority',
+        job=HISTORICAL_NATIVE_JOB,request_id=HISTORICAL_NATIVE_REQUEST,release_sha=HISTORICAL_NATIVE_RELEASE,
+        report_sha256=digest(report_raw),serial_sha256=digest(serial),serial_bytes=len(serial),
+        serial_flags={key:marker in serial for key,marker in markers.items()},
+        readiness_revoked=True,vm_started=False,i08_installed=False,real_source_grants_issued=0)
+    return value
