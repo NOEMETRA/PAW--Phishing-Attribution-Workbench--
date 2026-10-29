@@ -273,11 +273,15 @@ class NativeRecipe(unittest.TestCase):
             b'Failed to start paw-gate.service: Unit paw-gate.service not found. PRIVATE_TEXT\n'
             b'Failed to start PRIVATE_UNIT.service - PRIVATE_TEXT\n'
             b'Failed to start PRIVATE-paw-gate.service - PRIVATE_TEXT\n'
-            b'native_seed_budget arbitrary_secret PRIVATE_TEXT\n')
+            b'native_seed_budget arbitrary_secret PRIVATE_TEXT\n'
+            b'CONSOLE_PREFIX {"ready":true,"network_interfaces":["lo"]}\n')
         result=native.native_boot_metadata(serial,{'native_seed_budget'})
-        self.assertEqual(result['last_kernel_seconds'],219.25)
-        self.assertEqual(result['cloud_init'],[{'stage':'modules:final','event':'running','up_seconds':213.75}])
+        self.assertEqual(result['last_kernel_microseconds'],219250000)
+        self.assertEqual(result['cloud_init'],[{'stage':'modules:final','event':'running','up_microseconds':213750000}])
         self.assertEqual(result['guest_error_codes'],['native_seed_budget'])
+        self.assertIs(result['ready_frame_observed'],True)
+        for raw in [b'{"ready":1,"network_interfaces":["lo"]}',b'{"ready":true,"network_interfaces":["lo","eth0"]}',b'not json']:
+            self.assertIs(native.native_boot_metadata(raw,set())['ready_frame_observed'],False)
         self.assertIn({'unit':'paw-gate.service','event':'exited','exit_status':1},result['services'])
         self.assertIn({'unit':'paw-gate.service','event':'missing'},result['services'])
         self.assertNotIn('PRIVATE_',json.dumps(result));self.assertNotIn('arbitrary_secret',json.dumps(result))
@@ -289,9 +293,30 @@ class NativeRecipe(unittest.TestCase):
     def test_boot_metadata_caps_events_and_ignores_foreign_times(self):
         serial=(b'[99999] unknown\n'+b'systemd[1]: paw-gate.service: Main process exited, status=255/FAILURE\n'*100+
             b"cloud-init running 'modules:final' at PRIVATE_DATE. Up 1.5 seconds\n"*100)
-        result=native.native_boot_metadata(serial,set());self.assertIsNone(result['last_kernel_seconds'])
+        result=native.native_boot_metadata(serial,set());self.assertIsNone(result['last_kernel_microseconds'])
         self.assertEqual(len(result['services']),32);self.assertEqual(len(result['cloud_init']),16)
         with self.assertRaises(ValueError):native.native_boot_metadata(b'\n'*16385,set())
+
+    def test_boot_metadata_roundtrips_existing_strict_root_result_decoder(self):
+        import vm_release_contract as contract
+        import vm_operator_host as host
+        data=(b'[ 212.593704] owned kernel\n'+
+              b"cloud-init running 'modules:final' at DATE. Up 205.06 seconds\n"+
+              b'cloud-init finished at DATE. Up 212.58 seconds\n')
+        metadata=native.native_boot_metadata(data,set())
+        self.assertEqual(metadata['last_kernel_microseconds'],212593704)
+        self.assertEqual(metadata['cloud_init'][-1]['up_microseconds'],212580000)
+        result={'result':'PASS','runtime':{'previous_owned_native_failure':{'boot_metadata':metadata}}}
+        raw=native.storage.canonical(result);self.assertEqual(contract.decode(raw),result)
+        # Exercise the same private result consumer with only inode Root identity
+        # substituted, not its decoder, canonical/scalar/depth or budget checks.
+        path=self.root/'result.json';path.write_bytes(raw);path.chmod(0o600)
+        fd=os.open(self.root,os.O_RDONLY|os.O_DIRECTORY)
+        try:
+            with mock.patch.object(host,'ROOT_UID',os.getuid()):self.assertEqual(host.private_json(fd,'result.json'),result)
+        finally:os.close(fd)
+        with self.assertRaisesRegex(ValueError,'operator_proof_scalar'):
+            contract.decode(native.storage.canonical({'result':'PASS','runtime':{'up_seconds':212.58}}))
 
     def test_native_failure_metadata_never_publishes_private_text_or_foreign_locations(self):
         report={'result':'FAIL','scope':native.SCOPE,'real_connections':0,

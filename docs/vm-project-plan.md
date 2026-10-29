@@ -99,6 +99,15 @@ their current scoped isolation gate even after unattended benign acceptance.
 
 ## Current disposition
 
+PR134 exposed a concrete producer/consumer mismatch: its no-VM worker exported
+decimal boot times, then the unchanged static operator refused them as
+`operator_proof_scalar`. The next correction encodes exact integer microseconds
+and tests the actual strict private-result consumer. It does not relax the
+decoder or start a guest. Boot facts read from the protected export show
+cloud-init finalization near the deadline and a schema marker; they still do
+not prove a particular underlying execution fix. P4/P5 remain open.
+
+
 PR133's fixed historical no-VM diagnosis passed and confirmed an initial guest
 readiness deadline, failed-service log marker and revoked receipt. It does not
 yet distinguish a guest service/config failure from slow initialization. The

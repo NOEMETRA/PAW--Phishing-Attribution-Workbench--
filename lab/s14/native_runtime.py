@@ -1118,14 +1118,26 @@ def native_boot_metadata(serial,codes):
     text=re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]','',text)
     units={'paw-gate.service','cloud-init-local.service','cloud-init.service','cloud-config.service',
            'cloud-final.service','systemd-networkd-wait-online.service'}
-    events=[];cloud=[];kernel=[];guest_codes=set()
+    events=[];cloud=[];kernel=[];guest_codes=set();ready_frame=False
+    def microseconds(value):
+        whole,_,fraction=value.partition('.')
+        return int(whole)*1000000+int(fraction.ljust(6,'0'))
     lines=text.splitlines();require(len(lines)<=16384,'native_boot_line_budget')
     for line in lines:
         if len(line)>8192:continue  # Never return or scan oversized source/data lines.
+        # A console prefix may precede a frame; expose only whether the exact
+        # fixed readiness object was observed, never frame contents or text.
+        start=line.find('{')
+        if 0<=start and len(line)-start<=4096:
+            try:frame=json.loads(line[start:])
+            except (ValueError,RecursionError):pass
+            else:
+                if type(frame) is dict and frame=={'ready':True,'network_interfaces':['lo']} and frame.get('ready') is True:
+                    ready_frame=True
         match=re.search(r'^\s*\[\s*([0-9]{1,5}(?:\.[0-9]{1,6})?)\]',line)
         if match:
-            seconds=float(match[1])
-            if 0<=seconds<=10000:kernel.append(seconds)
+            stamp=microseconds(match[1])
+            if 0<=stamp<=10000000000:kernel.append(stamp)
         for unit in sorted(units):
             if re.search(r'(?<![A-Za-z0-9@_.-])'+re.escape(unit)+r'(?![A-Za-z0-9@_.-])',line) is None:continue
             lower=line.lower();event=None
@@ -1142,8 +1154,8 @@ def native_boot_metadata(serial,codes):
         if 'cloud-init' in line.lower() and len(cloud)<16:
             running=re.search(r"running '(init-local|init|modules:config|modules:final)'.*?Up ([0-9]{1,5}(?:\.[0-9]{1,3})?) seconds",line)
             finished=re.search(r'finished.*?Up ([0-9]{1,5}(?:\.[0-9]{1,3})?) seconds',line)
-            if running and 0<=float(running[2])<=10000:cloud.append({'stage':running[1],'event':'running','up_seconds':float(running[2])})
-            elif finished and 0<=float(finished[1])<=10000:cloud.append({'stage':'final','event':'finished','up_seconds':float(finished[1])})
+            if running and 0<=microseconds(running[2])<=10000000000:cloud.append({'stage':running[1],'event':'running','up_microseconds':microseconds(running[2])})
+            elif finished and 0<=microseconds(finished[1])<=10000000000:cloud.append({'stage':'final','event':'finished','up_microseconds':microseconds(finished[1])})
         for word in re.findall(r'\b(?:native|guest|frame)_[a-z0-9_]{1,88}\b',line):
             if word in codes and len(guest_codes)<16:guest_codes.add(word)
     lower=text.lower()
@@ -1151,7 +1163,7 @@ def native_boot_metadata(serial,codes):
         'yaml_load_failed':'failed loading yaml','scripts_user_failed':'failed to run module scripts_user',
         'cloud_schema_error':'cloud-config failed schema','kernel_oom':'out of memory',
         'kernel_oom_kill':'oom-kill:','mount_failed':'failed to mount'}
-    return {'last_kernel_seconds':max(kernel) if kernel else None,'cloud_init':cloud,'services':events,
+    return {'last_kernel_microseconds':max(kernel) if kernel else None,'ready_frame_observed':ready_frame,'cloud_init':cloud,'services':events,
         'guest_error_codes':sorted(guest_codes),'flags':{name:probe in lower for name,probe in probes.items()}}
 
 

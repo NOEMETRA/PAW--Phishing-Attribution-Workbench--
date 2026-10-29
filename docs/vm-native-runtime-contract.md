@@ -235,3 +235,21 @@ lines are omitted; event counts and timestamps are capped. A systemd PID in
 brackets is not a kernel uptime. No selector, raw-log export, guest, source
 authorization or budget changes are introduced. Actual underlying-cause
 reproduction/fix and P4/P5 acceptance remain pending these observations.
+
+
+The actual PR134 no-VM worker completed its read/export, but the static operator
+correctly rejected its nested decimal uptime values with `operator_proof_scalar`.
+The unchanged strict private-state decoder reproduces the rejection on the
+actual protected exported JSON. The producer now reports exact integer
+microseconds (`last_kernel_microseconds`, `up_microseconds`), using decimal
+string arithmetic rather than floating conversion. The operator/decoder,
+privileges, log selectors and budgets remain unchanged. A regression exercises
+the actual private-result consumer with only inode Root identity substituted;
+float metadata still refuses. Root worker success alone did not establish a
+successful command/phase acceptance. No guest ran during either diagnostic.
+
+The same bounded metadata also reports whether the exact fixed readiness JSON
+object occurs in the console log (including behind a console prefix). Other
+frames/text remain private. This boolean distinguishes absence of observed
+readiness from a possible console framing/timing problem without a new guest;
+it does not itself establish correct protocol admission or execution.
