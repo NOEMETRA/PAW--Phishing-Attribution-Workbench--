@@ -1111,6 +1111,50 @@ def native_failure_metadata(report,modules,codes):
         'host_restored_attested':report.get('host_restored') is True}
 
 
+def native_boot_metadata(serial,codes):
+    """Finite structured facts from the already fixed owned boot log, no text."""
+    require(type(serial) is bytes and len(serial)<=1024**2,'native_boot_log_budget')
+    text=serial.decode('utf-8','replace')
+    text=re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]','',text)
+    units={'paw-gate.service','cloud-init-local.service','cloud-init.service','cloud-config.service',
+           'cloud-final.service','systemd-networkd-wait-online.service'}
+    events=[];cloud=[];kernel=[];guest_codes=set()
+    lines=text.splitlines();require(len(lines)<=16384,'native_boot_line_budget')
+    for line in lines:
+        if len(line)>8192:continue  # Never return or scan oversized source/data lines.
+        match=re.search(r'^\s*\[\s*([0-9]{1,5}(?:\.[0-9]{1,6})?)\]',line)
+        if match:
+            seconds=float(match[1])
+            if 0<=seconds<=10000:kernel.append(seconds)
+        for unit in sorted(units):
+            if re.search(r'(?<![A-Za-z0-9@_.-])'+re.escape(unit)+r'(?![A-Za-z0-9@_.-])',line) is None:continue
+            lower=line.lower();event=None
+            if 'not found' in lower:event='missing'
+            elif 'failed to start' in lower:event='start_failed'
+            elif 'failed with result' in lower:event='failed'
+            elif 'main process exited' in lower:event='exited'
+            elif 'started ' in lower:event='started'
+            if event and len(events)<32:
+                value={'unit':unit,'event':event}
+                status=re.search(r'status=([0-9]{1,3})(?:/[A-Z0-9_]{1,32})?',line)
+                if status and 0<=int(status[1])<=255:value['exit_status']=int(status[1])
+                events.append(value)
+        if 'cloud-init' in line.lower() and len(cloud)<16:
+            running=re.search(r"running '(init-local|init|modules:config|modules:final)'.*?Up ([0-9]{1,5}(?:\.[0-9]{1,3})?) seconds",line)
+            finished=re.search(r'finished.*?Up ([0-9]{1,5}(?:\.[0-9]{1,3})?) seconds',line)
+            if running and 0<=float(running[2])<=10000:cloud.append({'stage':running[1],'event':'running','up_seconds':float(running[2])})
+            elif finished and 0<=float(finished[1])<=10000:cloud.append({'stage':'final','event':'finished','up_seconds':float(finished[1])})
+        for word in re.findall(r'\b(?:native|guest|frame)_[a-z0-9_]{1,88}\b',line):
+            if word in codes and len(guest_codes)<16:guest_codes.add(word)
+    lower=text.lower()
+    probes={'unhandled_userdata':'unhandled non-multipart','invalid_cloud_config':'invalid cloud-config',
+        'yaml_load_failed':'failed loading yaml','scripts_user_failed':'failed to run module scripts_user',
+        'cloud_schema_error':'cloud-config failed schema','kernel_oom':'out of memory',
+        'kernel_oom_kill':'oom-kill:','mount_failed':'failed to mount'}
+    return {'last_kernel_seconds':max(kernel) if kernel else None,'cloud_init':cloud,'services':events,
+        'guest_error_codes':sorted(guest_codes),'flags':{name:probe in lower for name,probe in probes.items()}}
+
+
 def previous_owned_native_failure():
     """Read only this fixed failed1MiB owned smoke; no guest or authority write."""
     import ast
@@ -1165,5 +1209,6 @@ def previous_owned_native_failure():
         job=HISTORICAL_NATIVE_JOB,request_id=HISTORICAL_NATIVE_REQUEST,release_sha=HISTORICAL_NATIVE_RELEASE,
         report_sha256=digest(report_raw),serial_sha256=digest(serial),serial_bytes=len(serial),
         serial_flags={key:marker in serial for key,marker in markers.items()},
+        boot_metadata=native_boot_metadata(serial,codes),
         readiness_revoked=True,vm_started=False,i08_installed=False,real_source_grants_issued=0)
     return value

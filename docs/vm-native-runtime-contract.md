@@ -219,3 +219,19 @@ underlying cause remains unclassified until the metadata are read and the
 specific defect is independently reproduced. Source-changing promotion requires
 fresh current-context readiness before further execution acceptance. P4/P5
 remain open; no new real-source approval or network is enabled.
+
+
+The actual PR133 historical read (no guest) returned `guest_channel_deadline`
+in initial `Gate.start` readiness, with host-restored/writers-stopped attestations
+and actual absence of the new revoked receipt. The preserved serial log is83727
+bytes; it contains a failed-service marker and no observed kernel-panic/OOM or
+Python-traceback marker. That proves the failed phase, not a particular root
+cause or permission to increase a budget.
+
+A follow-up adds structured facts from that same fixed log: bounded kernel/cloud
+uptimes, events for six fixed service names, numeric exit status, reviewed guest
+error words and fixed config/boot flags. Unknown units, raw text/paths and large
+lines are omitted; event counts and timestamps are capped. A systemd PID in
+brackets is not a kernel uptime. No selector, raw-log export, guest, source
+authorization or budget changes are introduced. Actual underlying-cause
+reproduction/fix and P4/P5 acceptance remain pending these observations.

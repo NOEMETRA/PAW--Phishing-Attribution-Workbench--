@@ -99,6 +99,14 @@ their current scoped isolation gate even after unattended benign acceptance.
 
 ## Current disposition
 
+PR133's fixed historical no-VM diagnosis passed and confirmed an initial guest
+readiness deadline, failed-service log marker and revoked receipt. It does not
+yet distinguish a guest service/config failure from slow initialization. The
+next finite addition extracts only bounded structured boot timings and fixed
+service statuses from the same log; no new VM or budget change. P4/P5 remain
+open and the underlying behavior is not patched on assumption.
+
+
 Actual PR132 bounded acceptance completed Shell14/14 with source/installed sealed
 exports and independent reconciliation. ELF completed all14 validation cases,
 but its first final1MiB source smoke failed inside the backend; full ELF/I08
