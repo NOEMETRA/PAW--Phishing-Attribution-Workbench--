@@ -129,3 +129,30 @@ Inert orchestration and protected-cache tests explicitly substitute VM/systemd
 and Root provenance; they do not establish browser runtime acceptance. That
 acceptance remains pending review, green head/main CI, immutable promotion and
 the actual harmless no-NIC two-smoke call. P4/P5 remain open.
+
+### Maximum-size owned smoke follow-up
+
+Actual137 Python/HTML acceptance passed; its first JS smoke failed the strict
+completion oracle and was not accepted. The independent terminal observer found
+the lab clean. A separate ordinary-pipe reproduction proves that echoing the
+349676-byte wrapper through the real guest output collector yields
+`output_budget` with the unchanged256KiB DOM cap. The harmless maximum-size
+fixture now executes `document.currentScript.remove()` after setting its title,
+so its input remains256KiB while its intended resulting DOM is small. The host
+never executes this script; actual corrected browser acceptance remains required.
+
+A separate maximum-size real request regression reaches a generic JSON budget
+failure before the publisher's independent verifier. Request-specific reads now
+use the existing request-contract bound. The generic256KiB decoder still rejects
+that raw request, and a large invalid profile still fails before verification;
+there is no generic proof-budget or schema relaxation.
+
+The fixed no-VM recipe will read only the preserved failed137 JS request and
+its exact Root audit after the follow-up's review/CI/promotion. It verifies the
+pinned historical snapshot and complete production custody before returning
+finite status, return code, stop/truncation/sandbox flags and optional validated
+DOM byte count/hash. It exports no untrusted text or raw output, grants no
+readiness and starts no VM. Its result must confirm the historical failure
+before any fresh JS runtime test. A valid failure custody record is not a PASS
+for the failed smoke, and historical Python/HTML readiness cannot silently move
+to a source-changing release.

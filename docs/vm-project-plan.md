@@ -99,6 +99,39 @@ their current scoped isolation gate even after unattended benign acceptance.
 
 ## Current disposition
 
+PR137 merged as `d0a9dbd78f0170b85e3a5516337908ec5809e3cc`, after clear
+review of exact head `54e3a8817563c34ff1edc2123fadfb748f12bf4d`, seven green
+head/main checks, identical trees, installed111-file parity and independent
+passwordless promotion. Current Python and HTML each completed six validations
+and two source/installed smokes, independently reconciled. Their respective jobs
+are `fcb4f9dd8e04447580c2e5239e27a49e` and
+`d562829aaa7f4ddea77d63d4258d1fe2`; these PASS results are preserved.
+
+The first JS smoke, job `ca8b61fc0c7b4d4f8288fe9ff63f131b`, stopped at the
+expected-completion oracle. No JS acceptance was published. Independent terminal
+readback found no active worker/client/VM, networks, namespaces or QEMU, and the
+protected enrollment/release stayed unchanged. The full private guest outcome
+is not yet claimed: the public diagnostic establishes the failed oracle only.
+
+An ordinary-pipe regression using the actual guest drain/poll/finish code
+reproduces the fixture's349676-byte script-URL echo exceeding the unchanged
+256KiB DOM cap. Only the owned fixture now removes its own script element after
+setting the title, retaining the full256KiB input and existing wrapper size.
+This is not an increase in output budget or a change to arbitrary HTML handling.
+A second real maximum-size request regression reproduces a generic256KiB JSON
+decoder rejecting the valid roughly700KiB request before publication verification.
+Only request-specific decodes use the already declared request-contract limit;
+the generic decoder and independent schema/custody checks remain strict.
+
+The same follow-up adds one fixed historical read to the existing no-VM recipe.
+It pins that job/request/release/manifest and request digest, verifies the complete
+protected audit and exports only typed outcome/status/counter/hash/flag metadata.
+No raw DOM/script/console, caller-selected paths, guest start, grants or I08 are
+introduced. Review/head+main CI and immutable promotion must precede this read.
+Confirm the actual historical guest outcome before any new JS VM attempt; other
+causes remain possible until that protected evidence is available. Final current
+profile acceptance and P4/P5 closure remain outstanding.
+
 PR136 merged as `644bb45ca8e29f85fa11803aed440a27911cdb34` after clear
 exact-head review of `84f1c739dde0a77733df5a9ea0e5d3f9f59ed645`, seven green
 head/main checks, identical trees, installed111-file parity and independent
