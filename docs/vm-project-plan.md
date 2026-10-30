@@ -99,6 +99,23 @@ their current scoped isolation gate even after unattended benign acceptance.
 
 ## Current disposition
 
+All declared profiles now have independently reconciled current PR138 runtime
+acceptance: Python6+2, HTML6+2, maximum JavaScript browser handoff2,
+Shell12+2 and ELF14+2. The active Root release is
+`19d88876e8e2d452dc12df5daa42b847eeb63429`, reviewed at full head
+`fdf866ae2465a20a221e3c99ead162e9565f7b6d`, with clear review, seven green
+head/main checks, identical trees and independent passwordless promotion.
+Final current cached/no-VM checks and source/installed forensic lifecycle
+faults passed. The [P4/P5 acceptance checkpoint](vm-final-acceptance.md) records
+exact jobs, scoped readiness, archives, retained rollback/revoke/restart evidence
+and unsupported capabilities. P0–P3 stay closed. P4/P5 close only after this
+documentation-only checkpoint's own exact-head review, head/main CI and239-file
+source-equivalence gate. No runtime source or Root context changes here.
+Only after that gate passes may the monitor stop and the goal complete.
+
+The entries below retain historical checkpoints and their then-outstanding
+work; they do not supersede the current acceptance disposition above.
+
 PR137 merged as `d0a9dbd78f0170b85e3a5516337908ec5809e3cc`, after clear
 review of exact head `54e3a8817563c34ff1edc2123fadfb748f12bf4d`, seven green
 head/main checks, identical trees, installed111-file parity and independent
