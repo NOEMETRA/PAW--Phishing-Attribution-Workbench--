@@ -82,7 +82,7 @@ old P0–P5 readiness is not inherited.
 | Stage | Work | Required evidence before advancing |
 | --- | --- | --- |
 | O0 | Real offline pipeline and original corpus acquisition | Actual source-copy hashes, installed CLI/API workers, honest coverage, seals/exports and stopped writers. Completed as described above; private artifacts retained. |
-| O1 | Separate prepare-only contract | Inert rejection/binding tests, existing uplink regressions, exact-head review and required CI. This is the current increment; no activation follows from passing it. |
+| O1 | Separate prepare-only contract | Completed in PR140 after exact-head review, head7/main7 and tree equivalence. No activation follows from passing it. |
 | O2 | Broker, guest transport, custody and limited operator integration | Root independently rechecks actual sealed source/parent/URL record and protected per-hash approval, immutable reviewed code and fresh scoped runtime context. Finite commands and exact data only; no caller-selected host code, paths or administrative properties. |
 | O3 | Actual owned online-browser matrix | Rehearse complete installed PAW→broker→disposable browser VM→sealed sidecar using owned local HTTP/TLS fixtures. Exercise success, JavaScript resource/navigation requests, redirects, forbidden addresses, guard/owner/protocol loss, counters/deadlines, DNS rebinding and replay. Independently reconcile stop and full host restoration. |
 | O4 | Explicitly approved real batch | Present the concrete corpus hashes, initial targets, allowed-host policy and tracking/token disclosure before accepting per-hash execution approval. Require all preceding gates current and clear; then run the real installed pipeline with controlled egress, preserve partial/failure observations, import a separate sealed sidecar and reverify original cases. |
@@ -133,8 +133,54 @@ successful execution, Spam placement and matching hashes do not supply labels.
 
 ## Current disposition
 
-O0 passed for three acquired originals; O1 is prepare-only software pending its
-own review/CI. O2–O4 are open. Zero real target connections or real website-script
+O0 passed for three acquired originals; O1 merged with review, head/main CI and
+tree equivalence. O2–O4 are open. Zero real target connections or real website-script
 executions have occurred in this new corpus test. The completed P0–P5 monitor
 stays disabled; this document does not silently recreate an automation, extend
 its closed goal or claim full online pipeline acceptance.
+
+### O2 component: sequential request accounting and HTTP transport
+
+`paw.core.browser_mediator` is a library component, with no CLI, API, Root
+operator or guest entrypoint. Import and ledger operations open no socket and
+perform no DNS. Its explicit `exchange` function can open one numeric pinned
+IPv4 HTTP(S) connection; calling it does not establish permission or isolation.
+It must only be wired into the separately confined trusted broker after O2
+integration. The old offline operator and accepted no-NIC profiles are unchanged.
+
+The ledger consumes a nonce/sequence before request admission, requires the exact
+initial seed even after refusal, allows one pending request and refuses replay
+or changed leases. It enforces32 request slots, eight public host pin sets,
+4MiB response bodies,15 seconds and at most five seconds per lease. The initial
+version uses a stricter five-redirect ceiling across the entire session. Public
+host discovery defaults off; enabling it is a future protected policy decision.
+Mixed/special/noncanonical answers, changed DNS pin sets and stale facts refuse.
+DNS facts passed to this object are not independently verified by the object.
+Its internal lease identity is not a Root approval, grant or security boundary
+against a caller that controls Python memory.
+
+Only GET/HEAD use fixed broker headers: page cookies, credentials, client headers,
+proxies and environment settings are not forwarded. TLS uses the standard trust
+store with hostname verification and SNI. Redirects are returned for a separately
+admitted browser request. The absolute deadline covers connect, TLS, header and
+body reads. Fixed-length, close-delimited and simple chunked HTTP/1 bodies are
+bounded; interim/upgrade responses, chunk extensions/trailers, encoded bodies,
+ambiguous framing and truncation refuse. Failed exchanges exhaust the remaining
+body allowance and close the session, rather than restoring quota after partial
+unaccounted reads. Cookies, authentication challenges, hop headers and fields
+named by `Connection` are removed from responses. An additional CSP blocks forms
+and objects; this is an application restriction, not kernel confinement.
+
+Returned metadata says explicitly that TLS was verified **by the broker**.
+Broker TLS fingerprints must not be labeled browser TLS fingerprints. This
+mediated observation deliberately differs from a browser's direct TCP/TLS stack;
+unsupported protocols/resources and refusals must remain visible coverage gaps.
+
+Tests use inert data, mocked numeric transport and actual owned loopback HTTP
+streams, including slow-header deadlines, partial/oversized/ambiguous responses,
+DNS/pin/replay refusals and certificate-failure handling. They launch no browser,
+create no namespace/firewall or Root authority and contact no public target.
+They do not constitute the owned VM acceptance matrix. Guest CDP interception,
+bounded serial transport, independently checked real custody/protected approval,
+immutable source integration, the confined runtime and external stop/restoration
+remain O2/O3 work before any concrete real-batch O4 approval is requested.
