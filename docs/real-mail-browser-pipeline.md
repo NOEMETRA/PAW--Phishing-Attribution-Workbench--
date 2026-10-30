@@ -160,8 +160,12 @@ Its internal lease identity is not a Root approval, grant or security boundary
 against a caller that controls Python memory.
 
 Only GET/HEAD use fixed broker headers: page cookies, credentials, client headers,
-proxies and environment settings are not forwarded. TLS uses the standard trust
-store with hostname verification and SNI. Redirects are returned for a separately
+proxies and environment settings are not forwarded. TLS loads the fixed Linux
+CA file `/etc/ssl/certs/ca-certificates.crt`, with hostname verification, SNI and
+TLS1.2 minimum. It ignores caller CA-directory/file and key-log environment
+variables. The future immutable runtime must bind the actual CA bytes to its
+scoped context; a fixed path alone does not attest those bytes.
+Redirects are returned for a separately
 admitted browser request. The absolute deadline covers connect, TLS, header and
 body reads. Fixed-length, close-delimited and simple chunked HTTP/1 bodies are
 bounded; interim/upgrade responses, chunk extensions/trailers, encoded bodies,
@@ -178,7 +182,8 @@ unsupported protocols/resources and refusals must remain visible coverage gaps.
 
 Tests use inert data, mocked numeric transport and actual owned loopback HTTP
 streams, including slow-header deadlines, partial/oversized/ambiguous responses,
-DNS/pin/replay refusals and certificate-failure handling. They launch no browser,
+DNS/pin/replay refusals, certificate-failure handling and actual stdlib rejection
+of caller-selected CA/key-log environment. They launch no browser,
 create no namespace/firewall or Root authority and contact no public target.
 They do not constitute the owned VM acceptance matrix. Guest CDP interception,
 bounded serial transport, independently checked real custody/protected approval,

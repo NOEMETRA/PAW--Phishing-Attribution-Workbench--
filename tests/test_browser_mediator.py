@@ -1,9 +1,11 @@
 import base64
 import copy
 import hashlib
+import os
 import socket
 import ssl
-import threading
+import tempfile
+from pathlib import Path
 import time
 import unittest
 from unittest.mock import patch
@@ -201,11 +203,33 @@ class Wire(unittest.TestCase):
             from unittest.mock import MagicMock
             stream=MagicMock();stream.getpeername.return_value=('127.0.0.1' if failure=='peer' else p['peer_ipv4'],443)
             context=MagicMock();context.wrap_socket.side_effect=ssl.SSLCertVerificationError('owned invalid certificate')
-            with patch.object(socket,'socket',return_value=stream),patch.object(ssl,'create_default_context',return_value=context):
+            with patch.object(socket,'socket',return_value=stream),patch.object(ssl,'SSLContext',return_value=context):
                 with self.assertRaises((ValueError,ssl.SSLError)):b.exchange(l,p)
             stream.sendall.assert_not_called();stream.close.assert_called_once()
             self.assertTrue(l.closed);self.assertEqual(l.received,b.LIMITS['bytes']);self.assertIsNone(l._pending)
             if failure=='tls':context.wrap_socket.assert_called_once_with(stream,server_hostname='owned.invalid')
+
+    def test_tls_ignores_caller_ca_and_keylog_environment(self):
+        # Actual stdlib context construction, no TLS connection or certificate
+        # exchange. Capture it at the wrap boundary after fixed trust loading.
+        from unittest.mock import MagicMock
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);(root/'empty.pem').write_bytes(b'');(root/'certs').mkdir()
+            env={'SSL_CERT_FILE':str(root/'empty.pem'),'SSL_CERT_DIR':str(root/'certs'),
+                 'SSLKEYLOGFILE':str(root/'keylog')}
+            contexts=[]
+            def stop_at_wrap(context,*args,**kwargs):
+                contexts.append(context);raise ssl.SSLError('owned capture, no connection')
+            l=b.BrowserRequestLedger(URL,NS,time.monotonic_ns());p=admit(l,now=time.monotonic_ns())
+            stream=MagicMock();stream.getpeername.return_value=(p['peer_ipv4'],443)
+            with patch.dict(os.environ,env),patch.object(socket,'socket',return_value=stream), \
+                 patch.object(ssl.SSLContext,'wrap_socket',stop_at_wrap):
+                with self.assertRaises(ssl.SSLError):b.exchange(l,p)
+            context,=contexts
+            self.assertGreater(context.cert_store_stats()['x509_ca'],0)
+            self.assertEqual(context.verify_mode,ssl.CERT_REQUIRED);self.assertTrue(context.check_hostname)
+            self.assertGreaterEqual(context.minimum_version,ssl.TLSVersion.TLSv1_2)
+            self.assertIsNone(context.keylog_filename);self.assertFalse((root/'keylog').exists())
 
 
 if __name__=='__main__':unittest.main()

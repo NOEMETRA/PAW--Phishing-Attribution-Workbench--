@@ -27,6 +27,7 @@ DENIED = tuple(ipaddress.ip_network(x) for x in (
     '198.51.100.0/24','203.0.113.0/24','224.0.0.0/4','240.0.0.0/4'))
 HOST = re.compile(r'[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+\Z')
 RESOURCES = {'Document','Stylesheet','Image','Media','Font','Script','XHR','Fetch','Other'}
+TRUST_FILE = '/etc/ssl/certs/ca-certificates.crt'
 
 
 def require(condition, reason):
@@ -293,7 +294,14 @@ def exchange(ledger, plan):
         stream.connect((plan['peer_ipv4'],plan['port']))
         require(stream.getpeername()[0]==plan['peer_ipv4'],'broker_connected_peer')
         if plan['scheme']=='https':
-            context=ssl.create_default_context()
+            # Do not use create_default_context(): SSL_CERT_FILE/SSL_CERT_DIR
+            # and SSLKEYLOGFILE can otherwise select caller-controlled trust or
+            # log keys. The future immutable runtime must bind this fixed CA
+            # artifact's actual bytes as part of its scoped context.
+            context=ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            context.minimum_version=ssl.TLSVersion.TLSv1_2
+            context.verify_mode=ssl.CERT_REQUIRED;context.check_hostname=True
+            context.load_verify_locations(cafile=TRUST_FILE)
             ledger.lease(plan,time.monotonic_ns())
             stream.settimeout((plan['expires_ns']-time.monotonic_ns())/10**9)
             stream=context.wrap_socket(stream,server_hostname=plan['host'])
