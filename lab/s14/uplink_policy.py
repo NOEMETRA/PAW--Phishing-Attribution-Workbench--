@@ -29,6 +29,101 @@ DENIED = tuple(ipaddress.ip_network(value) for value in (
     '198.51.100.0/24','203.0.113.0/24','224.0.0.0/4','240.0.0.0/4'))
 FIXTURE = '198.18.43.10'
 
+# Separate prepare-only contract for the requested real-mail/browser project.
+# This does not relax endpoint(), admit(), the owned public probe or any Root
+# command. A plan is untrusted data, never a grant or an activation request.
+MAIL_BROWSER_LIMITS = {
+    'initial_targets': 3, 'public_hosts': 8, 'requests': 32,
+    'redirects_per_navigation': 5, 'response_bytes_total': 4*1024**2,
+    'browser_seconds': 15, 'dom_bytes': 256*1024, 'netlog_bytes': 1024**2,
+    'external_stop_seconds': 12,
+}
+
+
+def mail_browser_endpoint(url):
+    """Validate an exact HTTP(S) seed without resolving or rewriting it."""
+    require(type(url) is str and 0 < len(url) <= 2048, 'mail_url_size')
+    require(all(33 <= ord(c) < 127 for c in url) and '\\' not in url,
+            'mail_url_characters')
+    try:
+        parsed = urllib.parse.urlsplit(url); port = parsed.port; host = parsed.hostname
+    except ValueError as error:
+        raise Refused('mail_url_parse') from error
+    require(parsed.scheme in {'http', 'https'} and host and len(host) <= 253 and
+            HOST.fullmatch(host) and host.rsplit('.', 1)[-1][0].isalpha(),
+            'mail_url_scheme_or_host')
+    require(parsed.username is None and parsed.password is None and
+            not parsed.fragment and '#' not in url, 'mail_url_userinfo_or_fragment')
+    require('%' not in parsed.netloc and '[' not in parsed.netloc and
+            parsed.netloc in {host, host+(':'+str(443 if parsed.scheme == 'https' else 80))},
+            'mail_url_authority')
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        pass
+    else:
+        raise Refused('mail_url_ip_literal')
+    require(port in {None, 443 if parsed.scheme == 'https' else 80}, 'mail_url_port')
+    return {'url': url, 'scheme': parsed.scheme, 'host': host,
+            'port': port or (443 if parsed.scheme == 'https' else 80),
+            'url_sha256': hashlib.sha256(url.encode('ascii')).hexdigest()}
+
+
+def prepare_mail_browser_plan(selections):
+    """Bind <=3 email/parent/evidence/URL selections, with no authority.
+
+    Hash syntax is not custody verification. The future privileged gate must
+    independently verify actual sealed bytes, exact URL records, protected
+    approval and current isolation before any network operation.
+    """
+    require(type(selections) is list and 0 < len(selections) <= 3,
+            'mail_selection_count')
+    targets = []; seen = set()
+    fields = {'email_sha256', 'case_manifest_sha256', 'url_evidence_sha256',
+              'url_index', 'url'}
+    for selection in selections:
+        exact(selection, fields, 'mail_selection')
+        for name in ['email_sha256', 'case_manifest_sha256', 'url_evidence_sha256']:
+            value = selection[name]
+            require(type(value) is str and re.fullmatch('[0-9a-f]{64}', value),
+                    'mail_selection_digest')
+        integer(selection['url_index'], 0, 4095, 'mail_url_record_index')
+        seed = mail_browser_endpoint(selection['url'])
+        require(selection['email_sha256'] not in seen, 'mail_duplicate_email')
+        seen.add(selection['email_sha256'])
+        targets.append({**copy.deepcopy(selection), 'endpoint': seed})
+    return {'schema': 'paw-mail-browser-egress-plan-v1',
+            'state': 'PREPARED_NOT_ACTIVE', 'execution_authority': 'none',
+            'network_authority': 'none', 'targets': targets,
+            'limits': dict(MAIL_BROWSER_LIMITS),
+            'required_controls': {
+                'root_protected_exact_hash_approval': True,
+                'independent_parent_and_url_record_verification': True,
+                'fresh_immutable_runtime_and_scoped_acceptance': True,
+                'public_ipv4_pins_and_rebinding_recheck': True,
+                'deny_lan_host_metadata_ipv6_guest_dns_direct_egress': True,
+                'no_host_shares_credentials_or_form_submission': True,
+                'known_external_tree_stop_before_publication': True,
+                'separate_sealed_sidecar_original_unchanged': True,
+            }}
+
+
+def validate_mail_browser_plan(value):
+    """Reject forged/expanded prepared claims; never grants runtime authority."""
+    require(type(value) is dict and type(value.get('targets')) is list,
+            'mail_plan_shape')
+    selections = []
+    for row in value['targets']:
+        require(type(row) is dict and 'endpoint' in row, 'mail_plan_target_shape')
+        selections.append({k: v for k, v in row.items() if k != 'endpoint'})
+    expected = prepare_mail_browser_plan(selections)
+    # Compare canonical JSON too: Python's True==1 must not admit bool budgets.
+    require(value == expected and
+            json.dumps(value, sort_keys=True, separators=(',', ':'), allow_nan=False) ==
+            json.dumps(expected, sort_keys=True, separators=(',', ':'), allow_nan=False),
+            'mail_plan_changed_or_authority_claim')
+    return copy.deepcopy(expected)
+
 def fingerprint(value):
     return hashlib.sha256(json.dumps(value,sort_keys=True,separators=(',',':'),allow_nan=False).encode()).hexdigest()
 
