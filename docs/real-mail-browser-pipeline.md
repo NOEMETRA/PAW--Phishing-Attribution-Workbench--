@@ -150,7 +150,11 @@ integration. The old offline operator and accepted no-NIC profiles are unchanged
 
 The ledger consumes a nonce/sequence before request admission, requires the exact
 initial seed even after refusal, allows one pending request and refuses replay
-or changed leases. It enforces32 request slots, eight public host pin sets,
+or changed leases. Invalid envelopes, wrong nonce/sequence, replay or concurrent
+admission permanently close the session before another lease can be admitted or
+completed. Well-formed requests with refused URL/method/DNS facts still consume
+their request slot. Reconstructing this ordinary ledger is not a new protected
+one-use job grant. It enforces32 request slots, eight public host pin sets,
 4MiB response bodies,15 seconds and at most five seconds per lease. The initial
 version uses a stricter five-redirect ceiling across the entire session. Public
 host discovery defaults off; enabling it is a future protected policy decision.

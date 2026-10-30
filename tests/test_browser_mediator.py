@@ -41,11 +41,26 @@ class Ledger(unittest.TestCase):
     def test_consumed_sequence_pending_replay_and_forged_plan(self):
         l=ledger();p=admit(l)
         with self.assertRaisesRegex(ValueError,'pending'):admit(l,frame(seq=1))
+        self.assertTrue(l.closed)
+        with self.assertRaisesRegex(ValueError,'closed'):complete(l,p)
+        l=ledger();p=admit(l)
         forged={**p,'peer_ipv4':'127.0.0.1'}
         with self.assertRaisesRegex(ValueError,'forged'):complete(l,forged)
         complete(l,p)
         with self.assertRaisesRegex(ValueError,'identity'):admit(l,frame())
-        with self.assertRaisesRegex(ValueError,'forged'):complete(l,p)
+        self.assertTrue(l.closed)
+        with self.assertRaises(ValueError):complete(l,p)
+
+    def test_malformed_missing_extra_nonce_and_replay_envelopes_close_session(self):
+        variants=[[],{k:v for k,v in frame().items() if k!='resource'},
+                  {**frame(),'extra':'invalid'},frame(seq=1),{**frame(),'nonce':'b'*32},frame(seq=True)]
+        for bad in variants:
+            l=ledger()
+            with self.subTest(frame=bad),self.assertRaises(ValueError):admit(l,bad)
+            self.assertTrue(l.closed);self.assertEqual(l.used,0)
+            for _ in range(100):
+                with self.assertRaisesRegex(ValueError,'closed'):admit(l)
+            self.assertIsNone(l._pending)
 
     def test_page_cannot_select_methods_or_code_arguments(self):
         for method in ['POST','PUT','DELETE','CONNECT','OPTIONS',[],True]:

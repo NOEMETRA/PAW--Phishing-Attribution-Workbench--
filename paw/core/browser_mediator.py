@@ -124,11 +124,19 @@ class BrowserRequestLedger:
         require(not self.closed,'broker_session_closed')
 
     def admit(self,frame,answers,age_ns,ttl_ns,now_ns):
-        self._time(now_ns);require(self._pending is None,'broker_pending_request')
-        require(self.used<LIMITS['requests'],'broker_request_budget')
-        require(type(frame) is dict and set(frame)=={'nonce','seq','url','method','resource'},'broker_frame_shape')
-        require(frame['nonce']==self.nonce and type(frame['seq']) is int and frame['seq']==self.used,
-                'broker_frame_identity')
+        try:
+            self._time(now_ns);require(self._pending is None,'broker_pending_request')
+            require(self.used<LIMITS['requests'],'broker_request_budget')
+            require(type(frame) is dict and set(frame)=={'nonce','seq','url','method','resource'},'broker_frame_shape')
+            require(frame['nonce']==self.nonce and type(frame['seq']) is int and frame['seq']==self.used,
+                    'broker_frame_identity')
+        except ValueError:
+            # An invalid envelope, replay or concurrent request is protocol
+            # loss, not a retryable URL refusal. Kill this session's authority
+            # to return/admit leases, including any already-pending response.
+            # A new ledger is not a new grant: Root's one-use job is separate.
+            self.closed=True
+            raise
         slot=self.used;self.used+=1  # Refused requests still consume work budget.
         require(type(frame['method']) is str and frame['method'] in {'GET','HEAD'} and
                 type(frame['resource']) is str and frame['resource'] in RESOURCES,'broker_method_or_resource')
