@@ -54,6 +54,16 @@ ordinary reviewed payload releases do not replace the static trust verifier.
   retain their bounded deadline and known-stop obligations. A native admin
   enrollment is needed to re-enable, not an unprivileged resume argument.
 
+Automatic promotion requires a **two-parent merge commit** whose parents include
+the reviewed full PR head (`merge_method: merge`, GitHub's “Create a merge
+commit”). Squash and rebase merges do not carry this direct parent binding and
+refuse with `github_merge_parent_binding`, even if review and all seven head/main
+checks passed. This is an existing verifier requirement, not a new permission.
+The PR157 squash release `0ed99bd70fdf34f9312af8b7e113e9b4e2e4d639`
+reproduced that refusal before activation; the previously accepted Root release
+remained active. A reviewed follow-up release can preserve the accepted payload
+and use the required merge method. Keep the strict verifier and existing history.
+
 Ordinary run/promotion additionally require a protected successful native
 acceptance receipt bound to the enrolled initial anchor, the four core phases,
 nine harmless cases, integer zero real inputs and the protected job digest.
