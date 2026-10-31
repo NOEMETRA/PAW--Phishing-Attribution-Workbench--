@@ -218,6 +218,37 @@ successful execution, Spam placement and matching hashes do not supply labels.
 
 ## Current disposition
 
+The fixed owned installed email/VM/sidecar round trip subsequently passed on
+PR159's immutable release, including all nine HTML cases, known terminal stop,
+unchanged originals, exact sealed exports and nonce/source/replay refusals. This
+is a compiled harmless fixture, not activation of the real/public path.
+
+The owner's next instruction is the paired comparison on the same three real
+offline parents. Fresh installed readback verified their original bytes, full
+stopped-case seals and selected URL records without contacting a target. Those
+private corpus hashes, URLs and provider data remain outside Git.
+
+`paw.core.mail_browser_custody` is the bounded real-selected-parent **data** seam.
+Its ordinary preparation verifies the whole stopped case, then copies at most
+64KiB source and five finite parent pieces into a canonical128KiB request.
+Validation checks source/manifest/selected pieces against the original BLAKE3
+index, root and exact URL record, including the completed offline parent claim.
+It accepts a hash callback whose trusted origin remains the privileged caller's
+responsibility; it installs/imports no native Root dependency and has no Root,
+CLI or network entrypoint. Other parent files are represented by the index,
+not independently read by this data verifier. Ordinary preparation/import must
+still verify the whole stopped parent.
+
+The stable native-approval subject binds source SHA256, parent reference, all
+selected-piece SHA256 values, exact URL/index/profile and unchanged budgets.
+Only a fresh request ID and its at-most900-second clock may vary without
+changing that subject. Comparing against a caller-created subject is not
+protected approval. Runtime must load independently created protected approval,
+check it against a validated request and consume protected one-use authority
+before any DNS or VM operation. Real native activation, current public-path
+owned fault acceptance, per-hash disclosure/approval and the real batch remain
+required. The fixed-owned admission stays byte-exact and unchanged.
+
 O0 passed for three acquired originals; O1 and the separate request mediator
 component in PR141 merged with review, head/main CI and tree equivalence.
 O2–O4 are open. Zero real target connections or real website-script
