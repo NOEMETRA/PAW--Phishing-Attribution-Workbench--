@@ -57,6 +57,10 @@ def http_response(raw,nonce):
         status=302;reason='Found';body=b'';content='text/plain'
         extra=[('Location','/'if path==b'/redirect'else'/loop')]
     elif path==b'/overflow':body=b'x'*(4*1024**2+1);content='application/octet-stream'
+    elif path==b'/favicon.ico':
+        # A browser may probe this fixed icon after the document loads. An
+        # empty valid HTTP response must not masquerade as transport loss.
+        status=404;reason='Not Found';body=b'';content='image/x-icon'
     else:raise ValueError('owned_http_fixture_unknown_path')
     header=('HTTP/1.1 '+str(status)+' '+reason+'\r\nContent-Type: '+content+
         '\r\nContent-Length: '+str(len(body))+'\r\nConnection: close\r\n'+

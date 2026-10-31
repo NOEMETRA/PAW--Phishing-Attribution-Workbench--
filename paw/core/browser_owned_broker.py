@@ -275,6 +275,8 @@ def run_owned(job,release):
                     record['timing_ns']['actors_ready']=time.monotonic_ns()
                     mediation=Mediation(owner,worker,epoch,began)
                 if mediation is not None and request is not None:
+                    record['broker_progress']={'phase':'browser_request','slot':request['seq'],
+                        'url_sha256':hashlib.sha256(request['url'].encode('utf-8',errors='surrogatepass')).hexdigest()}
                     try:metadata,body=mediation.response(request)
                     except ValueError:
                         if mediation.ledger.closed:raise
@@ -292,6 +294,9 @@ def run_owned(job,release):
                     'owned_broker_actual_tls_resources_missing')
             # Separate fixed transport probe: this does not claim Chrome
             # executed mixed-content HTTP. The Chrome observations above use TLS.
+            record['guest']=value
+            record['broker_progress']={'phase':'plain_http_probe','slot':mediation.ledger.used,
+                'url_sha256':hashlib.sha256(b'http://paw-owned.invalid/owned-data').hexdigest()}
             plain,plain_body=mediation.response({'nonce':epoch,'seq':mediation.ledger.used,
                 'url':'http://paw-owned.invalid/owned-data','method':'GET','resource':'Fetch'})
             require(plain['http_status']==200 and plain_body==('PAW-OWNED-'+epoch).encode('ascii') and

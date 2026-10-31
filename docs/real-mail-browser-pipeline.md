@@ -529,3 +529,32 @@ stop path. An inert actual-producer/ledger regression uses the measured late
 pause and role costs and preserves the complete2s kernel-lease reserve.
 These passing software regressions do not establish a new runtime PASS;
 fresh review, head/main CI and immutable promotion remain required.
+
+PR152 merged as `314bbc4984d6229e9f36be872639b8368aa763f9` after clear
+exact-head review, head/main seven checks and identical trees. Passwordless
+promotion and fresh no-VM raw kernel acceptance passed. Combined job
+`14abffcc95ab4f49a63065080c122438` retained FAIL `owned_broker_transport_closed`:
+two DNS/HTTPS responses were verified, then a third DNS query preceded HTTP
+EOF. Preparation now overlapped the guest successfully. The third request URL
+and whether it belonged to the browser or subsequent plain HTTP probe were
+not retained, so its complete cause is not established. Independent protected
+readback confirmed stopped writers, collected units, expected VM disposition
+and restored host. This consumed attempt must not be replayed.
+
+A separate actual owned-loopback reproduction shows the fixed fixture closes
+`/favicon.ico` without HTTP, producing the same truncation class if a browser
+probes its icon. The bounded correction adds only an empty404 response for that
+exact fixture path; arbitrary paths, methods and authorities remain refused.
+This does not prove the historical third URL. Bounded phase/slot/URL-hash
+diagnostics distinguish a browser request from the plain HTTP probe in the next
+fresh admitted trial; completed guest evidence is retained before that probe.
+
+Owner steering,31 October: finish this bounded integrated rehearsal, then
+freeze custom broker/HTTP/TLS/browser-orchestration expansion and compare with
+Lacus and PlaywrightCapture. Public/native activation and real-site execution
+are held during that comparison. The existing custody, approval, isolation,
+original preservation and sealing guarantees remain requirements for any
+backend. A successful capture alone cannot establish better phishing analysis.
+The three uncalibrated offline `Inconclusive` results require a separate paired
+evaluation of added forensic evidence, coverage, correct conclusions and analyst
+effort; Spam-folder membership is still not a ground-truth label.
