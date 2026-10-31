@@ -372,4 +372,92 @@ class MaintenanceTransition(unittest.TestCase):
         result,_,_=self.refresh(exists=True,damaged=True);self.assertIsInstance(result,ValueError)
 
 
+class OctoberMaintenance(unittest.TestCase):
+    """Exercise the kernel/package transition through the strict real validator."""
+    def setUp(self):
+        self.old = {b'libbrotli1:amd64': b'1.2.0-3build1',
+                    b'python3-brotli': b'1.2.0-3build1', b'owned-other': b'1'}
+        self.old.update({k: before for k, (before, _) in runtime.OCT30_PACKAGES.items() if before is not None})
+        self.brotli = dict(self.old)
+        for key in runtime.BROTLI_PACKAGES: self.brotli[key] = b'1.2.0-3ubuntu0.1'
+        self.current = dict(self.brotli)
+        for key, (_, after) in runtime.OCT30_PACKAGES.items():
+            if after is None: self.current.pop(key)
+            else: self.current[key] = after
+        self.context = maintenance_context()
+        self.context['host']['kernel'] = runtime.OCT30_KERNEL[0]
+        self.context['dpkg_inventory_sha256'] = maintenance_auth.digest(self.rows(self.old))
+        self.previous = maintenance(self.context)
+        self.context = copy.deepcopy(self.context)
+        self.context['host']['kernel'] = runtime.OCT30_KERNEL[1]
+        self.context['dpkg_inventory_sha256'] = maintenance_auth.digest(self.rows(self.current))
+        self.patches = [mock.patch.object(runtime, 'MAINTENANCE_PREVIOUS', maintenance_auth.digest(self.previous)),
+            mock.patch.object(runtime, 'INVENTORY_PREVIOUS', maintenance_auth.digest(self.rows(self.old))),
+            mock.patch.object(runtime, 'INVENTORY_BROTLI', maintenance_auth.digest(self.rows(self.brotli))),
+            mock.patch.object(runtime, 'INVENTORY_OCT30', self.context['dpkg_inventory_sha256'])]
+        for patch in self.patches: patch.start()
+
+    def tearDown(self):
+        for patch in reversed(self.patches): patch.stop()
+
+    @staticmethod
+    def rows(packages): return b'\n'.join(sorted(k+b'\t'+v for k,v in packages.items()))+b'\n'
+
+    def transition(self, packages=None, context=None):
+        return runtime.maintenance_transition(self.previous, self.context if context is None else context,
+            self.rows(self.current if packages is None else packages))
+
+    def test_stale_binding_refuses_then_only_reviewed_fields_change(self):
+        with self.assertRaisesRegex(ValueError, 'maintenance_binding'):
+            maintenance_auth.validate_maintenance(self.previous, self.context)
+        original = copy.deepcopy(self.context)
+        raw = self.transition(); record = maintenance_auth.validate_maintenance(raw, self.context)
+        self.assertEqual(self.context, original)
+        old = json.loads(self.previous)
+        for key in old.keys()-{'kernel', 'dpkg_inventory_sha256', 'review_notes'}:
+            self.assertEqual(record[key], old[key])
+        self.assertEqual(record['kernel'], runtime.OCT30_KERNEL[1])
+        self.assertEqual(record['dpkg_inventory_sha256'], self.context['dpkg_inventory_sha256'])
+
+    def test_pre_reboot_old_kernel_and_unknown_kernel_refuse(self):
+        for kernel in [runtime.OCT30_KERNEL[0], '7.0.0-43-generic']:
+            context = copy.deepcopy(self.context); context['host']['kernel'] = kernel
+            with self.subTest(kernel=kernel), self.assertRaisesRegex(ValueError, 'reviewed_kernel'):
+                self.transition(context=context)
+
+    def admitted_digest(self, packages):
+        digest = maintenance_auth.digest(self.rows(packages))
+        return mock.patch.object(runtime, 'INVENTORY_OCT30', digest), dict(self.context, dpkg_inventory_sha256=digest)
+
+    def test_target_hash_alone_cannot_hide_other_package_change(self):
+        for key, value in [(b'owned-other', b'2'), (b'unreviewed-extra', b'1')]:
+            packages = dict(self.current); packages[key] = value
+            patch, context = self.admitted_digest(packages)
+            with patch, self.assertRaisesRegex(ValueError, 'oct30_inventory_delta'):
+                self.transition(packages, context)
+
+    def test_each_reviewed_added_removed_and_upgraded_version_is_checked(self):
+        for name, (_, after) in runtime.OCT30_PACKAGES.items():
+            packages = dict(self.current); packages[name] = b'unreviewed'
+            patch, context = self.admitted_digest(packages)
+            with self.subTest(name=name, after=after), patch, self.assertRaisesRegex(ValueError, 'package_version'):
+                self.transition(packages, context)
+
+    def test_hypervisor_cpu_identity_guest_and_vendor_still_bound(self):
+        for key, value in [('qemu_binary_sha256', '0'*64), ('host_identity_sha256', '0'*64),
+                           ('cpu_signature', dict(self.context['cpu_signature'], microcode='changed'))]:
+            context = copy.deepcopy(self.context); context[key] = value
+            with self.subTest(key=key), self.assertRaisesRegex(ValueError, 'maintenance_binding'):
+                self.transition(context=context)
+        previous = json.loads(self.previous); previous['guest_kernel_release'] = 'other'
+        raw = maintenance_auth.canonical(previous)
+        with mock.patch.object(runtime, 'MAINTENANCE_PREVIOUS', maintenance_auth.digest(raw)), \
+             self.assertRaisesRegex(ValueError, 'guest_maintenance_inventory'):
+            runtime.maintenance_transition(raw, self.context, self.rows(self.current))
+
+    def test_inventory_change_without_matching_context_refuses(self):
+        context = dict(self.context, dpkg_inventory_sha256='0'*64)
+        with self.assertRaisesRegex(ValueError, 'unreviewed_inventory'): self.transition(context=context)
+
+
 if __name__ == '__main__': unittest.main()

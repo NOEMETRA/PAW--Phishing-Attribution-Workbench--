@@ -15,6 +15,50 @@ MAINTENANCE_PREVIOUS = '4ab64d87b191dd6ea2879fae0f9e5f12eb255a8fe83062d34f577c2d
 INVENTORY_PREVIOUS = '4c4a2167cfbd316bd7923426ef249b25f459dc7181df5fbe55624bb4ffeaed80'
 INVENTORY_BROTLI = 'e214bcd487744333146303190396743973b1ad9755112c182b0bf7aa255c2ef3'
 BROTLI_PACKAGES = {b'libbrotli1:amd64', b'python3-brotli'}
+# Exact 30 October host update, reconstructed back to INVENTORY_BROTLI.
+# APT history identifies the changes; whole-inventory hashes bind every row.
+INVENTORY_OCT30 = '9ae13866cbfcc41e45636a070b3add1af0ada8acc5d4a4742b32b5291fed588b'
+OCT30_KERNEL = ('7.0.0-38-generic', '7.0.0-42-generic')
+OCT30_PACKAGES = {
+    b'bpftool': (b'7.7.0+7.0.0-38.38', b'7.7.0+7.0.0-42.42'),
+    b'chatgpt': (b'26.1021.22027', b'26.1027.30824'),
+    b'cloud-init': (b'26.1-0ubuntu3~26.04.1', b'26.2-0ubuntu1~26.04.1'),
+    b'cloud-init-base': (b'26.1-0ubuntu3~26.04.1', b'26.2-0ubuntu1~26.04.1'),
+    b'gir1.2-adw-1:amd64': (b'1.9.1-0ubuntu0.1', b'1.9.1-0ubuntu0.2'),
+    b'gir1.2-mutter-18:amd64': (b'50.1-0ubuntu2.4', b'50.1-0ubuntu2.5'),
+    b'google-chrome-stable': (b'156.0.8078.47-1', b'156.0.8078.73-1'),
+    b'libadwaita-1-0:amd64': (b'1.9.1-0ubuntu0.1', b'1.9.1-0ubuntu0.2'),
+    b'libinsights0:amd64': (b'0.9.3ubuntu', b'0.9.3ubuntu0.1'),
+    b'libmutter-18-0:amd64': (b'50.1-0ubuntu2.4', b'50.1-0ubuntu2.5'),
+    b'linux-generic': (b'7.0.0-38.38', b'7.0.0-42.42'),
+    b'linux-generic-hwe-24.04': (b'7.0.0-38.38', b'7.0.0-42.42'),
+    b'linux-generic-hwe-26.04': (b'7.0.0-38.38', b'7.0.0-42.42'),
+    b'linux-headers-7.0.0-34': (b'7.0.0-34.34', None),
+    b'linux-headers-7.0.0-34-generic': (b'7.0.0-34.34', None),
+    b'linux-headers-7.0.0-42': (None, b'7.0.0-42.42'),
+    b'linux-headers-7.0.0-42-generic': (None, b'7.0.0-42.42'),
+    b'linux-headers-generic': (b'7.0.0-38.38', b'7.0.0-42.42'),
+    b'linux-headers-generic-hwe-26.04': (b'7.0.0-38.38', b'7.0.0-42.42'),
+    b'linux-image-7.0.0-42-generic': (None, b'7.0.0-42.42'),
+    b'linux-image-generic': (b'7.0.0-38.38', b'7.0.0-42.42'),
+    b'linux-image-generic-hwe-26.04': (b'7.0.0-38.38', b'7.0.0-42.42'),
+    b'linux-libc-dev:amd64': (b'7.0.0-38.38', b'7.0.0-42.42'),
+    b'linux-main-modules-v4l2loopback-7.0.0-42-generic': (None, b'7.0.0-42.42'),
+    b'linux-main-modules-zfs-7.0.0-42-generic': (None, b'7.0.0-42.42'),
+    b'linux-modules-7.0.0-42-generic': (None, b'7.0.0-42.42'),
+    b'linux-perf': (b'7.0.0-38.38', b'7.0.0-42.42'),
+    b'linux-tools-7.0.0-34': (b'7.0.0-34.34', None),
+    b'linux-tools-7.0.0-34-generic': (b'7.0.0-34.34', None),
+    b'linux-tools-7.0.0-42': (None, b'7.0.0-42.42'),
+    b'linux-tools-7.0.0-42-generic': (None, b'7.0.0-42.42'),
+    b'linux-tools-common': (b'7.0.0-38.38', b'7.0.0-42.42'),
+    b'mutter-common': (b'50.1-0ubuntu2.4', b'50.1-0ubuntu2.5'),
+    b'mutter-common-bin': (b'50.1-0ubuntu2.4', b'50.1-0ubuntu2.5'),
+    b'ubuntu-insights': (b'0.9.3ubuntu', b'0.9.3ubuntu0.1'),
+    b'ubuntu-pro-client': (b'37.2ubuntu0.1', b'38ubuntu0~26.04'),
+    b'ubuntu-pro-client-l10n': (b'37.2ubuntu0.1', b'38ubuntu0~26.04'),
+    b'xserver-common': (b'2:21.1.22-1ubuntu1.2', b'2:21.1.22-1ubuntu1.3'),
+}
 
 
 def require(value, reason):
@@ -188,7 +232,7 @@ def revalidate():
 
 
 def maintenance_transition(previous, context, inventory):
-    """One reviewed inventory delta, never a generic maintenance reattestation."""
+    """Finite reviewed transitions, never generic maintenance reattestation."""
     import hash_authorization as platform
     require(platform.digest(previous) == MAINTENANCE_PREVIOUS, 'runtime_previous_maintenance_digest')
     require(type(inventory) is bytes and len(inventory) <= 2*1024**2, 'runtime_inventory_budget')
@@ -197,11 +241,23 @@ def maintenance_transition(previous, context, inventory):
     names = [row.split(b'\t', 1)[0] for row in rows]
     require(len(set(names)) == len(names), 'runtime_inventory_duplicates')
     current = platform.digest(b'\n'.join(sorted(rows))+b'\n')
-    require(current == context['dpkg_inventory_sha256'] and current in {INVENTORY_PREVIOUS, INVENTORY_BROTLI},
+    require(current == context['dpkg_inventory_sha256'] and current in
+            {INVENTORY_PREVIOUS, INVENTORY_BROTLI, INVENTORY_OCT30},
             'runtime_unreviewed_inventory')
     old_context = dict(context, dpkg_inventory_sha256=INVENTORY_PREVIOUS)
-    # The old protected receipt must still match every non-inventory platform,
-    # host, image and vendor field through the unchanged real validator.
+    if current == INVENTORY_OCT30:
+        require(context['host']['kernel'] == OCT30_KERNEL[1], 'runtime_reviewed_kernel')
+        packages = dict(row.split(b'\t') for row in rows)
+        for name, (before, after) in OCT30_PACKAGES.items():
+            require(packages.get(name) == after, 'runtime_oct30_package_version')
+            if before is None: packages.pop(name)
+            else: packages[name] = before
+        rows = [name+b'\t'+version for name, version in packages.items()]
+        require(platform.digest(b'\n'.join(sorted(rows))+b'\n') == INVENTORY_BROTLI,
+                'runtime_oct30_inventory_delta')
+        old_context['host'] = dict(context['host'], kernel=OCT30_KERNEL[0])
+    # Only the exact reviewed kernel change above is projected back. Every
+    # other platform, host, QEMU, image and vendor field uses the real validator.
     record = platform.validate_maintenance(previous, old_context)
     if current == INVENTORY_PREVIOUS: return previous
     changed = set(); restored = []
@@ -214,8 +270,11 @@ def maintenance_transition(previous, context, inventory):
     require(changed == BROTLI_PACKAGES and platform.digest(b'\n'.join(sorted(restored))+b'\n') == INVENTORY_PREVIOUS,
             'runtime_inventory_delta')
     record['dpkg_inventory_sha256'] = current
-    record['review_notes'] = ('Exact reviewed Brotli-only inventory transition; prior protected maintenance and '
-        'unchanged hypervisor/image/host bindings retained. No I08, grant or real specimen authorization.')
+    record['kernel'] = context['host']['kernel']
+    record['review_notes'] = ('Exact reviewed inventory transition' +
+        (' and host kernel38-to42 update' if current == INVENTORY_OCT30 else ' (Brotli only)') +
+        '; protected predecessor and unchanged hypervisor/image/host identity bindings retained. '
+        'No I08, grant, guest update or real specimen authorization.')
     raw = platform.canonical(record); platform.validate_maintenance(raw, context)
     return raw
 

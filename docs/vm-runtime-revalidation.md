@@ -130,6 +130,52 @@ exact-head review, seven green head/main checks, immutable promotion and a new
 no-guest invocation with protected receipt readback. Only then may fresh owned
 P3 jobs proceed. P3, P4 and P5 remain open.
 
+## Exact 30 October host update and reboot
+
+The separate real-mail browser project reached its fixed no-guest prerequisite
+on PR142. Job `33bb923206ea4a85a0fa8400edd2d6e8` failed closed at
+`runtime_unreviewed_inventory`, before starting any guest or executing a real
+source. Terminal readback found no worker, QEMU, domains, active networks or
+namespaces. This failure does not reopen the completed P0–P5 audit or establish
+the new online-browser acceptance.
+
+APT history records the30 October desktop update and old-kernel cleanup; the
+host then booted `7.0.0-42-generic`, replacing `7.0.0-38-generic`. The current
+2241-row inventory SHA256 is
+`9ae13866cbfcc41e45636a070b3add1af0ada8acc5d4a4742b32b5291fed588b`.
+Reversing exactly38 changed binary-package rows recovers the entire prior
+Brotli inventory `e214bcd487744333146303190396743973b1ad9755112c182b0bf7aa255c2ef3`.
+That includes eight additions, four absent header/tool rows restored, and26
+version upgrades. Removed image/module packages retained as configuration-only
+rows have unchanged inventory entries; no architecture suffix is invented for
+absent non-Multi-Arch header/tool packages. Local APT policy identifies the
+installed versions; local Ubuntu and Google InRelease signatures verify with
+the configured vendor keyrings. This observation is not a new guest image
+signature, a package-file audit or independent attestation of a hostile host.
+
+The same fixed no-guest recipe admits only this complete target inventory,
+the exact reviewed package/version inverse and the exact38-to42 running-kernel
+transition. It projects those two fields back to validate the original protected
+predecessor with the unchanged real maintenance predicate, then validates the
+new append-only receipt against the actual current context. QEMU binary and
+component versions, CPU signature, host identity, existing guest/vendor/image
+bindings and all other receipt fields remain bound. An admitted target digest
+alone cannot hide another package change: both inverse inventory hashes must
+match. Unknown kernels, extra/missing packages and changed reviewed versions
+refuse. The prior Brotli and unchanged-baseline transitions remain supported.
+
+Six additional inert tests exercise the real validators, all38 changed rows,
+extra drift despite a substituted target digest, pre-reboot/unknown kernels,
+context mutation and retained QEMU/CPU/host/guest bindings. A separate ordinary
+read-only reproduction uses the actual package/kernel/QEMU/CPU/host-identity
+bindings and archived predecessor bytes: the prior function refuses, and the
+proposed transition validates, changing only inventory, kernel and review notes.
+It does not read a private Root snapshot or install a receipt. Existing strict
+guard, reboot/package audit, empty-host, lock and before/after checks still apply.
+Current review, head/main CI, immutable promotion and actual protected no-guest
+readback must precede a fresh owned VM trial. No readiness, grant, I08, browser
+network authority, native helper scope or resource ceiling changes here.
+
 ## Fixed historical owned-failure readback
 
 After the PR124 guest attempt stopped with an uninformative outer reason,
