@@ -47,7 +47,8 @@ def settings(case):return {'url':url(case),'browser':'chromium','depth':0,'headl
     'viewport':{'width':1280,'height':720},'locale':'en-US','timezone_id':'UTC'}
 def configure_home(folder):
     home=folder/'lacus-home';(home/'config').mkdir(parents=True);(home/'cache').mkdir();(home/'logs').mkdir()
-    shutil.copytree(MEDIA/'lacus-source/config',home/'config',dirs_exist_ok=True)
+    shutil.copytree(MEDIA/'lacus-source/config',home/'config',dirs_exist_ok=True,copy_function=shutil.copyfile)
+    (home/'config').chmod(0o700)  # ISO template permissions must not freeze private working configuration.
     generic=json.loads((home/'config/generic.json.sample').read_bytes())
     generic.update(concurrent_captures=1,max_capture_time=15,expire_results=300,max_retries=0,
         only_global_lookups=False,tor_proxy=None,i2p_proxy=None,allow_headed=False)

@@ -1,5 +1,5 @@
 """Ordinary inert boundary checks; no QEMU, imports of capture libraries or sockets."""
-import hashlib,importlib.util,json,tempfile,unittest,sys
+import hashlib,importlib.util,json,os,tempfile,unittest,sys
 from types import SimpleNamespace
 from unittest.mock import patch
 from pathlib import Path
@@ -104,6 +104,20 @@ class Protocol(unittest.TestCase):
                 guest.observe_renderer(witness,group)
             with patch.object(witness,'observe',side_effect=ValueError('invalid PID')),self.assertRaises(ValueError):
                 guest.observe_renderer(witness,group)
+    def test_lacus_working_config_is_writable_when_ISO_templates_are_readonly(self):
+        with tempfile.TemporaryDirectory()as d:
+            root=Path(d);media=root/'media';templates=media/'lacus-source/config';templates.mkdir(parents=True)
+            source=templates/'generic.json.sample';source.write_text('{}');source.chmod(0o444);templates.chmod(0o555)
+            folder=root/'case';folder.mkdir()
+            try:
+                with patch.object(guest,'MEDIA',media),patch.dict(os.environ,{},clear=False):home=guest.configure_home(folder)
+                self.assertEqual((home/'config').stat().st_mode&0o777,0o700)
+                config=json.loads((home/'config/generic.json').read_bytes())
+                self.assertEqual((config['max_capture_time'],config['max_retries'],config['concurrent_captures']),(15,0,1))
+                (home/'config/generic.json').write_text('{}')
+                self.assertEqual(source.read_text(),'{}');self.assertEqual(source.stat().st_mode&0o777,0o444)
+                self.assertEqual(templates.stat().st_mode&0o777,0o555)
+            finally:templates.chmod(0o755)
     def test_fixed_fixtures_exercise_JS_resource_redirect_and_never_accept_real_target(self):
         n='a'*32;status,_,body=guest.fixture(n,'/')
         self.assertEqual(status,200);self.assertIn(b"fetch('/owned-data')",body)
