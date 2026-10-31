@@ -27,7 +27,30 @@ def command(overlay,iso):
         '-drive','file='+str(iso)+',if=virtio,format=raw,readonly=on']
 
 class Receiver:
-    def __init__(self,nonce,folder):self.nonce=nonce;self.folder=folder;self.current=None;self.seq=0;self.total=0;self.files=[];self.done=None
+    def __init__(self,nonce,folder):self.nonce=nonce;self.folder=folder;self.current=None;self.seq=0;self.total=0;self.files=[];self.results={};self.done=None
+    def reconcile(self,rows):
+        for row in rows:
+            key=row['mode']+'-'+row['case'];result=row.get('result')
+            require(row.get('writers_stopped')is True and type(result)is dict,'terminal case result')
+            if result.get('status')=='failed_or_timeout':
+                require(key not in self.results and type(result.get('reason'))is str and len(result['reason'])<=2048,'uncommitted failure')
+                continue
+            require(result==self.results.get(key)and result.get('mode')==row['mode']and result.get('case')==row['case']and
+                result.get('nonce')==self.nonce and result.get('status')in {'captured','partial','failed'},'result identity/file binding')
+            inventory=result.get('artifact_inventory');require(type(inventory)is list and len(inventory)<=3,'result inventory')
+            expected={}
+            for item in inventory:
+                require(type(item)is dict and set(item)=={'name','bytes','sha256'}and
+                    item['name']in {'har.json','dom.html','screenshot.png'}and item['name']not in expected and
+                    type(item['bytes'])is int and 0<=item['bytes']<=2*1024**2 and type(item['sha256'])is str and
+                    re.fullmatch('[0-9a-f]{64}',item['sha256']),'inventory entry')
+                expected[item['name']]={'bytes':item['bytes'],'sha256':item['sha256']}
+            actual={f['name'].split('/')[1]:{'bytes':f['bytes'],'sha256':f['sha256']}for f in self.files
+                if f['name'].startswith(key+'/')and f['name'].split('/')[1]not in {'result.json','stderr.log'}}
+            require(expected==actual,'terminal artifacts missing or substituted')
+            if result['status']=='captured':require(set(expected)=={'har.json','dom.html','screenshot.png'},'incomplete successful capture')
+            elif result['status']=='partial':require(bool(expected),'empty partial capture')
+            else:require(not expected,'failed capture with unclassified artifacts')
     def feed(self,v):
         require(type(v)is dict and self.done is None,'frame object or closed receiver')
         if v.get('event')=='file':
@@ -45,6 +68,7 @@ class Receiver:
                 require(len(raw)==header['bytes']and hashlib.sha256(raw).hexdigest()==header['sha256'],'file binding')
                 path=self.folder/header['name'];path.parent.mkdir(exist_ok=True);require(not path.exists(),'duplicate file')
                 path.write_bytes(raw);path.chmod(0o400);self.files.append(header);self.seq+=1;self.current=None
+                if header['name'].endswith('/result.json'):self.results[header['name'].split('/')[0]]=strict_json(raw)
         elif v.get('event')=='done':
             require(self.current is None and v.get('nonce')==self.nonce and self.done is None and
                 v.get('network_interfaces')==['lo']and v.get('production_acceptance')is False and
@@ -52,7 +76,7 @@ class Receiver:
                 v.get('guest_writers_stopped')is True and v.get('schema')=='paw-capture-backend-experiment-v1'and
                 type(v.get('runs'))is list and [(r.get('mode'),r.get('case'))for r in v['runs']]==
                 [(m,c)for m in ['playwrightcapture','lacus-api']for c in ['http-js','https-invalid','redirect']],'terminal frame')
-            self.done=v
+            self.reconcile(v['runs']);self.done=v
         elif v.get('event')=='failure':raise ValueError('guest failure: '+str(v.get('error'))[:2048])
         else:raise ValueError('unknown frame')
 

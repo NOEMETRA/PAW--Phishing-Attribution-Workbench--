@@ -1,5 +1,7 @@
 """Ordinary inert boundary checks; no QEMU, imports of capture libraries or sockets."""
-import hashlib,importlib.util,json,tempfile,unittest
+import hashlib,importlib.util,json,tempfile,unittest,sys
+from types import SimpleNamespace
+from unittest.mock import patch
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -7,6 +9,17 @@ def module(name):
     spec=importlib.util.spec_from_file_location(name,ROOT/'experiments/capture_backends'/(name+'.py'))
     m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m);return m
 run=module('run_vm');guest=module('guest')
+def terminal(nonce,first=None):
+    rows=[{'mode':m,'case':c,'writers_stopped':True,'result':{'status':'failed_or_timeout','reason':'inert documented failure'}}
+        for m in guest.MODES for c in guest.CASES]
+    if first is not None:rows[0]['result']=first
+    return {'event':'done','nonce':nonce,'schema':'paw-capture-backend-experiment-v1','network_interfaces':['lo'],
+        'production_acceptance':False,'real_connections':0,'guest_writers_stopped':True,'runs':rows}
+def export(receiver,name,raw):
+    from browser_cdp import response_chunks
+    seq=receiver.seq;receiver.feed({'event':'file','nonce':receiver.nonce,'seq':seq,'name':name,'bytes':len(raw),
+        'sha256':hashlib.sha256(raw).hexdigest()})
+    for row in response_chunks(receiver.nonce,seq,raw):receiver.feed({'event':'chunk','row':row})
 class Protocol(unittest.TestCase):
     def test_real_binary_export_requires_declared_digest_nonce_order_and_safe_name(self):
         from browser_cdp import response_chunks
@@ -33,12 +46,51 @@ class Protocol(unittest.TestCase):
     def test_terminal_cannot_be_followed_by_another_artifact(self):
         n='a'*32
         with tempfile.TemporaryDirectory()as d:
-            receiver=run.Receiver(n,Path(d));receiver.feed({'event':'done','nonce':n,
-                'schema':'paw-capture-backend-experiment-v1','network_interfaces':['lo'],
-                'production_acceptance':False,'real_connections':0,'guest_writers_stopped':True,
-                'runs':[{'mode':m,'case':c}for m in guest.MODES for c in guest.CASES]})
+            receiver=run.Receiver(n,Path(d));receiver.feed(terminal(n))
             with self.assertRaises(ValueError):receiver.feed({'event':'file','nonce':n,'seq':0,
                 'name':'playwrightcapture-http-js/dom.html','bytes':0,'sha256':hashlib.sha256(b'').hexdigest()})
+    def test_claimed_capture_requires_received_result_identity_and_exact_artifact_inventory(self):
+        n='a'*32;body=b'owned';key='playwrightcapture-http-js';item={'name':'dom.html','bytes':len(body),'sha256':hashlib.sha256(body).hexdigest()}
+        result={'mode':'playwrightcapture','case':'http-js','nonce':n,'status':'partial','artifact_inventory':[item]}
+        for change,send_body in [({'nonce':'b'*32},True),({},False),({'status':'captured'},True)]:
+            with tempfile.TemporaryDirectory()as d,self.subTest(change=change,send_body=send_body):
+                receiver=run.Receiver(n,Path(d));value={**result,**change}
+                if send_body:export(receiver,key+'/dom.html',body)
+                export(receiver,key+'/result.json',json.dumps(value).encode())
+                with self.assertRaises(ValueError):receiver.feed(terminal(n,value))
+        with tempfile.TemporaryDirectory()as d:
+            receiver=run.Receiver(n,Path(d));export(receiver,key+'/dom.html',body)
+            export(receiver,key+'/result.json',json.dumps(result).encode());receiver.feed(terminal(n,result))
+            self.assertIsNotNone(receiver.done)
+        with tempfile.TemporaryDirectory()as d:
+            receiver=run.Receiver(n,Path(d));items=[]
+            for name,raw in [('dom.html',body),('har.json',b'{"log":{}}'),('screenshot.png',b'\x89PNG\r\n\x1a\n')]:
+                export(receiver,key+'/'+name,raw);items.append({'name':name,'bytes':len(raw),'sha256':hashlib.sha256(raw).hexdigest()})
+            value={**result,'status':'captured','artifact_inventory':items}
+            export(receiver,key+'/result.json',json.dumps(value).encode());receiver.feed(terminal(n,value))
+            self.assertIsNotNone(receiver.done)
+    def test_error_only_upstream_response_is_failed_and_artifact_response_is_partial(self):
+        async def error_only(*args):return {'error':'fixture TLS verification failed'}
+        async def partial(*args):return {'error':'capture timed out','html':'<p>owned partial</p>'}
+        async def empty(*args):return {'har':{},'html':'','png':b''}
+        for callback,status,count in [(error_only,'failed',0),(partial,'partial',1),(empty,'partial',3)]:
+            with tempfile.TemporaryDirectory()as d,self.subTest(status=status):
+                root=Path(d);folder=root/'case';folder.mkdir()
+                with patch.object(guest,'WORK',root),patch.object(guest,'capture',side_effect=callback),patch.object(guest.os,'geteuid',return_value=1000),patch.object(sys,'path',list(sys.path)):
+                    guest.worker('playwrightcapture','http-js','a'*32,str(folder))
+                value=json.loads((folder/'result.json').read_bytes());self.assertEqual(value['status'],status)
+                self.assertEqual(len(value['artifact_inventory']),count)
+    def test_collected_unit_status_one_requires_missing_unit_and_empty_cgroup(self):
+        with tempfile.TemporaryDirectory()as d:
+            group=Path(d)/'gone'
+            stop=SimpleNamespace(returncode=5,stdout='')
+            gone=SimpleNamespace(returncode=1,stdout='LoadState=not-found\nMainPID=0\nActiveState=inactive\n')
+            with patch.object(guest.subprocess,'run',side_effect=[stop,gone]):
+                self.assertEqual(guest.stop_unit('owned.service',group)['LoadState'],'not-found')
+            group.mkdir();(group/'cgroup.procs').write_text('12345\n')
+            with patch.object(guest.subprocess,'run',side_effect=[stop,gone]),self.assertRaises(ValueError):guest.stop_unit('owned.service',group)
+            missing=SimpleNamespace(returncode=1,stdout='')
+            with patch.object(guest.subprocess,'run',side_effect=[stop,missing]),self.assertRaises(ValueError):guest.stop_unit('owned.service',group)
     def test_fixed_fixtures_exercise_JS_resource_redirect_and_never_accept_real_target(self):
         n='a'*32;status,_,body=guest.fixture(n,'/')
         self.assertEqual(status,200);self.assertIn(b"fetch('/owned-data')",body)

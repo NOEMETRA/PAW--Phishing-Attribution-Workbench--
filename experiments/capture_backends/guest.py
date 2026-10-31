@@ -14,6 +14,17 @@ def require(v,r):
     if not v:raise ValueError(r)
 def canonical(v):return json.dumps(v,sort_keys=True,separators=(',',':'),allow_nan=False).encode()
 def sha(v):return hashlib.sha256(v).hexdigest()
+def stop_unit(unit,group):
+    stopped=subprocess.run(['systemctl','stop',unit],capture_output=True,text=True,timeout=2)
+    shown=subprocess.run(['systemctl','show',unit,'-p','LoadState','-p','MainPID','-p','ActiveState'],
+        capture_output=True,text=True,timeout=2)
+    props=dict(r.split('=',1)for r in shown.stdout.splitlines()if '='in r)
+    require(shown.returncode in {0,1}and props.get('MainPID')=='0'and
+        props.get('ActiveState')in {'inactive','failed'}and props.get('LoadState')in {'loaded','not-found'},
+        'guest terminal unit unknown')
+    if shown.returncode or stopped.returncode:require(props['LoadState']=='not-found','guest stop/readback failed')
+    if group.exists():require(not(group/'cgroup.procs').read_text().strip(),'guest cgroup not empty')
+    return props
 def emit(v):
     raw=canonical(v);require(len(raw)<60000,'console budget');print('CAPTUREBENCH '+raw.decode(),flush=True)
 def fixture(nonce,path):
@@ -82,8 +93,9 @@ def worker(mode,case,nonce,folder):
     sys.path[:0]=[str(MEDIA/'site'),str(MEDIA/'lacus-source')]
     record={'mode':mode,'case':case,'nonce':nonce,'owned_loopback_only':True,'production_acceptance':False,
         'settings':settings(case),'only_global_lookup':False,'tls_verified':False}
+    artifacts=[]
     try:
-        result=asyncio.run(capture(mode,case,folder));total=0;artifacts=[]
+        result=asyncio.run(capture(mode,case,folder));total=0
         for name,value in [('har.json',result.get('har')),('dom.html',result.get('html')),('screenshot.png',result.get('png'))]:
             if value is None:continue
             raw=canonical(value)if name.endswith('.json')else value.encode()if isinstance(value,str)else value
@@ -91,10 +103,15 @@ def worker(mode,case,nonce,folder):
             require(type(raw)is bytes and len(raw)<=cap,'artifact budget');total+=len(raw);require(total<=2*1024**2,'aggregate artifacts')
             (folder/name).write_bytes(raw);artifacts.append({'name':name,'bytes':len(raw),'sha256':sha(raw)})
         dom=result.get('html')or'';har=result.get('har')or{};entries=har.get('log',{}).get('entries',[])if isinstance(har,dict)else[]
-        record.update(status='captured',html_nonce_seen=('PAW-OWNED-'+nonce)in dom,dom_js_marker='data-owned="done"'in dom,
+        checks={'har_entries':bool(entries),'dom_nonempty':isinstance(dom,str)and bool(dom.strip()),
+            'png_signature':isinstance(result.get('png'),bytes)and result['png'].startswith(b'\x89PNG\r\n\x1a\n')}
+        complete={a['name']for a in artifacts}=={'har.json','dom.html','screenshot.png'}and all(checks.values())
+        status='captured'if complete and not result.get('error')else'partial'if artifacts else'failed'
+        record.update(status=status,html_nonce_seen=('PAW-OWNED-'+nonce)in dom,dom_js_marker='data-owned="done"'in dom,
             har_entries=len(entries),har_urls=[r.get('request',{}).get('url')for r in entries],final_url=result.get('last_redirected_url'),
-            upstream_error=result.get('error'),artifact_inventory=artifacts,upstream_keys=sorted(result))
-    except Exception as error:record.update(status='failed',error=type(error).__name__+':'+str(error)[:2048])
+            upstream_error=result.get('error'),capture_checks=checks,artifact_inventory=artifacts,upstream_keys=sorted(result))
+    except Exception as error:record.update(status='partial'if artifacts else'failed',error=type(error).__name__+':'+str(error)[:2048])
+    record['artifact_inventory']=artifacts
     record['worker_seconds']=time.monotonic()-began;(folder/'result.json').write_bytes(canonical(record))
 def controller(nonce):
     require(os.geteuid()==0 and sorted(os.listdir('/sys/class/net'))==['lo'],'guest no NIC')
@@ -148,13 +165,10 @@ def controller(nonce):
                                 except FileNotFoundError:pass
                         time.sleep(.03)
                 finally:
-                    subprocess.run(['systemctl','stop',unit],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=2)
+                    props=stop_unit(unit,group)
                     child.wait(timeout=2)
-            state=subprocess.check_output(['systemctl','show',unit,'-p','MainPID','-p','ActiveState'],text=True)
-            props=dict(r.split('=',1)for r in state.splitlines());require(props.get('MainPID')=='0'and props.get('ActiveState')in{'inactive','failed'},'guest writers stopped')
-            if group.exists():require(not(group/'cgroup.procs').read_text().strip(),'guest cgroup not empty')
             row={'mode':mode,'case':case,'returncode':child.returncode,'wall_seconds':time.monotonic()-began,
-                'sandbox_flags':witness.flags(),'writers_stopped':True,'renderer_details':witness.details()}
+                'sandbox_flags':witness.flags(),'writers_stopped':True,'renderer_details':witness.details(),'terminal_unit':props}
             row['observed_peaks_before_collection']=observed_peaks
             if(folder/'result.json').exists():row['result']=json.loads((folder/'result.json').read_bytes())
             else:row['result']={'status':'failed_or_timeout','reason':'no completed bounded result'}
