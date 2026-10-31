@@ -9,7 +9,7 @@ R='b'*40;J='c'*32;U='00000000-0000-4000-8000-000000000001'
 GOOD={'reason':'requested_stop','connection_closed':True,'vm_uuid':U}
 
 class Owner(unittest.TestCase):
-    def simulate(self,owner,*,cleanup_fail=False,guest_bad=False,worker_bad=False,bootstrap_delayed=False,proof_delayed=False):
+    def simulate(self,owner,*,cleanup_fail=False,guest_bad=False,worker_bad=False,bootstrap_delayed=False,proof_delayed=False,late_pause=False,prepare_bad=None):
         clock=[10**9];guest_ack=[];proof_armed=[False];proof_charged=[False]
         with tempfile.TemporaryDirectory()as directory:
             root=Path(directory);repo=root/'releases'/R;core=repo/'paw/core';core.mkdir(parents=True)
@@ -38,16 +38,19 @@ class Owner(unittest.TestCase):
             sandbox={k:True for k in ['renderer_seen','renderer_nnp','renderer_seccomp','renderer_pid_namespace','all_uids_nonroot']}
             if guest_bad:sandbox['all_uids_nonroot']=False
             class Channel:
-                def __init__(self,nonce):self.nonce=nonce;self.count=0
+                def __init__(self,nonce):self.nonce=nonce;self.count=0;self.completed=0;self.refused=False
                 def call(self,op,**kwargs):
                     if op=='inspect':return {**context,'network_interfaces':['lo']}
                     if op=='start':
                         if bootstrap_delayed:clock[0]+=6500*10**6
                         guest_ack.append(clock[0]);return {'started':True}
                     self.count+=1
+                    if late_pause:clock[0]+=250*10**6
+                    if self.refused:return {'done':True,'status':'failed','writers_stopped':True,'network_interfaces':['lo'],'sandbox':sandbox}
+                    if late_pause and clock[0]-guest_ack[0]<10528*10**6:return {'done':False,'stage':'setup'}
                     if bootstrap_delayed and self.count==1:clock[0]+=3*10**9
-                    if self.count<=2:
-                        return {'done':False,'network_request':{'nonce':self.nonce,'seq':self.count-1,
+                    if self.completed<2:
+                        return {'done':False,'network_request':{'nonce':self.nonce,'seq':self.completed,
                             'url':p.SEED,'method':'GET','resource':'Document'}}
                     return {'done':True,'status':'completed','writers_stopped':True,'network_interfaces':['lo'],'sandbox':sandbox}
             class Gate:
@@ -62,22 +65,30 @@ class Owner(unittest.TestCase):
                 def stop(self,vm):stops.append('VM');self.active_vm=None;proof_armed[0]=True
             class Actor:
                 def __init__(self,job,epoch,release,role,*args,registry=None,**kwargs):
+                    self.ready_when=clock[0]
+                    if late_pause:
+                        cost={'keeper':2000,'fixture':1300,'probe':884}[role]*10**6
+                        if kwargs.get('defer_ready'):self.ready_when=clock[0]+cost
+                        else:clock[0]+=cost
                     if bootstrap_delayed:clock[0]+={'keeper':3500,'fixture':1500,'probe':1500}[role]*10**6
                     self.unit=role+'.service';self.pid=123;self.role=role;self.errors=b''
                     self.process=types.SimpleNamespace(poll=lambda:0,wait=lambda timeout:0);self.observation={'role':role}
                     registry.append(self)
+                    if role==prepare_bad:raise ValueError('inert partial preparation failure')
+                def poll_ready(self):return clock[0]>=self.ready_when
             class Mediation:
                 def __init__(self,*args):
                     self.nonce=args[2];self.sequence=1;Mediation.latest=self
-                    self.ledger=(mediator.BrowserRequestLedger(p.SEED,self.nonce,args[3])if bootstrap_delayed else
+                    self.ledger=(mediator.BrowserRequestLedger(p.SEED,self.nonce,args[3])if bootstrap_delayed or late_pause else
                         types.SimpleNamespace(used=0,received=0,closed=False,close=lambda:{'owned':'inert stats'}))
                     self.observations=[{'operation':'http','tls_verified_by_broker':True}for _ in range(2)]
                 def response(self,request):
                     if worker_bad:
                         self.ledger.closed=True;raise ValueError('inert worker protocol loss')
-                    if bootstrap_delayed:
+                    if bootstrap_delayed or late_pause:
                         assert 0<=clock[0]-guest_ack[0]<15*10**9,'guest execution itself has not expired'
                         plan=self.ledger.admit(request,['93.184.216.34'],0,10**10,clock[0])
+                        if late_pause:p.kernel_lease_milliseconds(plan,clock[0])
                         self.ledger.complete(plan,200,[],b'owned','93.184.216.34',plan['scheme']=='https',clock[0])
                     else:self.ledger.used+=1
                     if request['url'].startswith('http:'):
@@ -108,9 +119,11 @@ class Owner(unittest.TestCase):
                 patch.object(p.kernel,'private_json',side_effect=lambda _: {'reason':'requested_stop','epoch':Mediation.latest.nonce,'namespace_inode':123456}), \
                 patch.object(p.kernel,'unit_properties',side_effect=lambda unit:{'ActiveState':'active','MainPID':str(os.getpid())if unit.startswith('paw-vm-owned-')else'123','MemoryMax':str(512*1024**2),'TasksMax':'64'}), \
                 patch.object(p.shutil,'disk_usage',return_value=types.SimpleNamespace(free=20*1024**3)), \
-                patch.object(p,'Mediation',Mediation),patch.object(p,'send_response'))
+                patch.object(p,'Mediation',Mediation), \
+                patch.object(p,'send_response',side_effect=lambda channel,*args:setattr(channel,'completed',channel.completed+1)), \
+                patch.object(p.console,'transfer',side_effect=lambda channel,*args:setattr(channel,'refused',True)))
                 for manager in managers:stack.enter_context(manager)
-                if owner==GOOD and owner.get('connection_closed')is True and not cleanup_fail and not guest_bad and not worker_bad:
+                if owner==GOOD and owner.get('connection_closed')is True and not cleanup_fail and not guest_bad and not worker_bad and prepare_bad is None:
                     try:answer=p.run_owned(J,R)
                     except ValueError as error:
                         record=json.loads(next(control.glob('*/results.json')).read_bytes())
@@ -123,7 +136,7 @@ class Owner(unittest.TestCase):
             self.assertEqual(len(published),1 if known else 0)
             if known:
                 attestation=json.loads((published[0]/'attestation.json').read_bytes())
-                self.assertEqual(attestation['result'],'FAIL'if guest_bad or worker_bad else'PASS')
+                self.assertEqual(attestation['result'],'FAIL'if guest_bad or worker_bad or prepare_bad else'PASS')
                 self.assertTrue(attestation['writers_stopped']);self.assertEqual(attestation['real_connections'],0)
                 self.assertFalse(attestation['production_grants_enabled'])
                 if proof_delayed:
@@ -140,6 +153,10 @@ class Owner(unittest.TestCase):
     def test_worker_protocol_loss_cannot_publish_pass_after_known_stop(self):self.simulate(GOOD,worker_bad=True)
     def test_allowed_guest_bootstrap_does_not_consume_execution_admission_clock(self):self.simulate(GOOD,bootstrap_delayed=True)
     def test_known_stop_measurement_excludes_slow_post_stop_integrity_proof(self):self.simulate(GOOD,proof_delayed=True)
+    def test_late_first_pause_overlaps_bounded_network_preparation_without_more_time(self):self.simulate(GOOD,late_pause=True)
+    def test_partial_network_preparation_still_stops_registered_roles_and_vm(self):
+        for role in ['keeper','fixture','probe']:
+            with self.subTest(role=role):self.simulate(GOOD,prepare_bad=role)
     def test_root_identity_or_workspace_is_refused_before_any_privileged_callback(self):
         with patch.object(p.kernel,'owned_validation')as privileged:
             with self.assertRaises(ValueError):p.run_owned(J,R)

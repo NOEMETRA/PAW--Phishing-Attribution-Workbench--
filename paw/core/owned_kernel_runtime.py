@@ -294,13 +294,14 @@ def probe(job,epoch,release):
 
 class Managed:
     """Root coordinator's bounded private stdio; never a user-selected command."""
-    def __init__(self,job,epoch,release,role,keeper_pid=None,registry=None,serial=0,*,protocol=False):
+    def __init__(self,job,epoch,release,role,keeper_pid=None,registry=None,serial=0,*,protocol=False,defer_ready=False):
         require(os.geteuid()==0 and HERE==Path('/opt/paw-vm/releases')/release/'paw/core/owned_kernel_runtime.py',
                 'owned_kernel_immutable_root_only')
         self.unit,props,command=policy.service(job,epoch,release,role,keeper_pid,serial,protocol=protocol)
+        require(type(defer_ready)is bool,'owned_kernel_readiness_mode')
         argv=['/usr/bin/systemd-run','--quiet','--wait','--pipe','--collect','--unit='+self.unit]
         argv+=['--property='+k+'='+v for k,v in props.items()]
-        self.threads=[];self.pidfd=None
+        self.threads=[];self.pidfd=None;self.ready=None;self._ready_received_at=None
         self.process=subprocess.Popen([*argv,*command],stdin=subprocess.PIPE,stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,env={'PATH':'/usr/bin:/bin','LANG':'C.UTF-8'})
         self.output=queue.Queue(maxsize=128);self.errors=bytearray()
@@ -313,7 +314,8 @@ class Managed:
                         from . import browser_broker_wire as wire
                     else:
                         import browser_broker_wire as wire
-                    self.output.put(decode(self.process.stdout.readline(4097)),timeout=1)
+                    value=decode(self.process.stdout.readline(4097))
+                    self._ready_received_at=time.monotonic();self.output.put(value,timeout=1)
                     decoder=wire.Decoder(epoch)
                     while True:
                         raw=self.process.stdout.read1(32768)
@@ -321,10 +323,12 @@ class Managed:
                         for header,body in decoder.feed(raw):
                             self.output.put({'wire':header,'body':body},timeout=1)
                     decoder.eof();self.output.put({'eof':True},timeout=1);return
-                for _ in range(128):
+                for index in range(128):
                     raw=self.process.stdout.readline(4097)
                     if not raw:break
-                    self.output.put(decode(raw),timeout=1)
+                    value=decode(raw)
+                    if index==0:self._ready_received_at=time.monotonic()
+                    self.output.put(value,timeout=1)
                 self.output.put({'eof':True},timeout=1)
             except Exception as error:
                 try:self.output.put({'reader_error':type(error).__name__},timeout=1)
@@ -336,9 +340,27 @@ class Managed:
         # The keeper creates its namespace policy under10%CPU. Its observed
         # PID1/initialization time can exceed2s; the service's8s hard ceiling
         # and500ms stop limit stay unchanged. This is only an observer wait.
-        self.ready=self.receive(4 if role=='keeper'else 2)
-        require(self.ready.get('ready')is True,'owned_kernel_role_not_ready')
-        self.pid=self.ready['witness']['pid']
+        seconds=4 if role=='keeper'else 2
+        self._ready_deadline=time.monotonic()+seconds
+        if not defer_ready:self._accept_ready(self.receive(seconds))
+    def _accept_ready(self,value):
+        require(type(value)is dict and value.get('ready')is True,'owned_kernel_role_not_ready')
+        self.ready=value;self.pid=value['witness']['pid']
+    def poll_ready(self):
+        """Same bounded readiness, advanced by the one serial coordinator.
+
+        A later poll cannot accept a header that arrived after the existing
+        observer deadline. PID1 hard lifetimes are never changed or restarted.
+        """
+        if self.ready is not None:return True
+        try:value=self.output.get_nowait()
+        except queue.Empty:
+            require(time.monotonic()<self._ready_deadline,'owned_kernel_role_deadline');return False
+        require(type(value)is dict and not value.get('reader_error')and not value.get('eof'),
+                'owned_kernel_role_protocol_lost')
+        require(self._ready_received_at is not None and self._ready_received_at<=self._ready_deadline,
+                'owned_kernel_role_deadline')
+        self._accept_ready(value);return True
     def receive(self,seconds=2):
         try:value=self.output.get(timeout=seconds)
         except queue.Empty:raise ValueError('owned_kernel_role_deadline') from None

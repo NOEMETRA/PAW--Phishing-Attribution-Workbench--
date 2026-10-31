@@ -213,6 +213,38 @@ assert all(int(r.status()[k],16)==0 for k in ['cap_eff','cap_prm','cap_inh','cap
 
 
 class Lifecycle(unittest.TestCase):
+    def test_deferred_readiness_keeps_arrival_deadline_and_registered_cleanup(self):
+        import io
+        from unittest.mock import Mock
+        for late in [False,True]:
+            with self.subTest(late=late):
+                read,write=os.pipe();stream=os.fdopen(read,'rb');registry=[]
+                process=Mock(stdin=io.BytesIO(),stdout=stream,stderr=io.BytesIO())
+                process.poll.return_value=None
+                try:
+                    with patch.object(r,'HERE',Path('/opt/paw-vm/releases')/R/'paw/core/owned_kernel_runtime.py'), \
+                         patch.object(r.os,'geteuid',return_value=0),patch.object(r.subprocess,'Popen',return_value=process), \
+                         patch.object(r.subprocess,'run',return_value=SimpleNamespace(returncode=0)), \
+                         patch.object(r,'unit_properties',return_value={'MainPID':'0','ActiveState':'inactive'}):
+                        actor=r.Managed(J,E,R,'keeper',registry=registry,defer_ready=True)
+                        self.assertIsNone(actor.ready);self.assertFalse(actor.poll_ready())
+                        arrival=actor._ready_deadline+(1 if late else -1)
+                        with patch.object(r.time,'monotonic',return_value=arrival):
+                            os.write(write,b'{"ready":true,"witness":{"pid":12345}}\n');os.close(write);write=None
+                            actor.threads[0].join(timeout=1)
+                            self.assertFalse(actor.threads[0].is_alive())
+                        # Polling later may consume an on-time header, but must
+                        # never turn a late arrival into accepted readiness.
+                        with patch.object(r.time,'monotonic',return_value=actor._ready_deadline+2):
+                            if late:
+                                with self.assertRaisesRegex(ValueError,'deadline'):actor.poll_ready()
+                            else:self.assertTrue(actor.poll_ready());self.assertEqual(actor.pid,12345)
+                        r.cleanup_actors(registry)
+                        self.assertFalse(any(t.is_alive()for t in actor.threads))
+                finally:
+                    if write is not None:os.close(write)
+                    stream.close()
+
     def test_keeper_ready_after_two_seconds_is_observed_inside_unchanged_hard_ceiling(self):
         import io
         from unittest.mock import Mock
