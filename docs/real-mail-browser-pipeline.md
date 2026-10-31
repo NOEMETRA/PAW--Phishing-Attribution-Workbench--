@@ -572,3 +572,13 @@ sandbox or permissive TLS semantics, rather than silently claiming equivalence
 to the PAW production profile. Bounded experimental outputs, explicit failures,
 actual process observations and stop/image checks inform the reuse decision.
 It is not an enrolled production egress/custody gate or a classifier benchmark.
+
+The owner's next goal is the complete fixed owned installed-PAW round trip on
+the existing accepted VM. The [owned email custody increment](owned-mail-browser-custody.md)
+separates ordinary PAW seal checks, a future Root SHA256 snapshot/authorization
+of the exact compiled harmless source, actual brokered capture and separately
+sealed sidecar publication. Its first CLI/data-contract increment starts no VM
+and does not close O2/O3. The Root producer does not claim BLAKE3 verification
+of an arbitrary parent; real-source custody/approval and public egress stay held.
+No general broker expansion, migration, static helper verb or larger budget is
+introduced by this fixed-owned goal.

@@ -239,6 +239,16 @@ For help: paw help <command>
         p_lab_import.add_argument('--request', required=True, help='Previously prepared local request.json')
         p_lab_import.add_argument('--output', required=True, help='New result container outside the case')
 
+        p_owned_mail = sub.add_parser('lab-owned-mail-browser', help='Prepare/import fixed owned email browser custody; never launches a guest')
+        owned_mail_actions = p_owned_mail.add_subparsers(dest='lab_action', required=True)
+        owned_mail_prepare = owned_mail_actions.add_parser('prepare')
+        owned_mail_prepare.add_argument('--case', required=True)
+        owned_mail_prepare.add_argument('--output', required=True)
+        owned_mail_import = owned_mail_actions.add_parser('import')
+        owned_mail_import.add_argument('--case', required=True)
+        owned_mail_import.add_argument('--request', required=True)
+        owned_mail_import.add_argument('--output', required=True)
+
         p_rep = sub.add_parser('lab-representation', help='Prepare/import an explicit sealed forensic selection; never launches a guest')
         rep_actions = p_rep.add_subparsers(dest='lab_action', required=True)
         rep_prepare = rep_actions.add_parser('prepare')
@@ -415,6 +425,12 @@ For help: paw help <command>
 
         elif args.cmd == 'lab-synthetic':
             from .core.synthetic_bridge import prepare, import_result
+            value = (prepare(args.case, args.output) if args.lab_action == 'prepare' else
+                     import_result(args.case, args.request, args.output))
+            print(json.dumps(value, indent=2))
+
+        elif args.cmd == 'lab-owned-mail-browser':
+            from .core.mail_browser_owned import prepare, import_result
             value = (prepare(args.case, args.output) if args.lab_action == 'prepare' else
                      import_result(args.case, args.request, args.output))
             print(json.dumps(value, indent=2))
