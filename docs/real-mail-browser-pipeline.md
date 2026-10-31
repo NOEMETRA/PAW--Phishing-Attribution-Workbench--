@@ -165,6 +165,14 @@ declares only that bit ambient; UID/GID lowering and the explicit capset clearin
 still occur before socket work, and readiness still requires every capability
 set zero. No host account, broad capability, budget or predicate is added.
 Actual credential/packet acceptance remains pending a fresh promoted job.
+That PR148 attempt verified actual nonroot UID/GID, empty groups and zero
+capability sets, and passed default-drop plus DNS-port-only traffic. Its third
+case stopped before a keeper readiness witness: the two-second observer wait
+included about0.8s of PID1 setup, then interrupted a normally terminating keeper.
+Host/units were reconciled. A real delayed-pipe regression reproduces that
+observer refusal. Keeper readiness observation is now at most4s inside the
+unchanged8s PID1 service limit; packet leases, stop, memory/tasks/CPU budgets
+and all admission predicates stay unchanged. Full five-case acceptance is open.
 
 Inert lifecycle tests and installed systemd259 parser checks do not prove
 packet filtering, namespace joining or fault latency. Those remain unaccepted

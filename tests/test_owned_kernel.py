@@ -8,6 +8,8 @@ from types import SimpleNamespace
 from contextlib import ExitStack, nullcontext
 import os
 import sys
+import threading
+import time
 
 from paw.core import owned_kernel_policy as p
 from paw.core import owned_kernel_runtime as r
@@ -211,6 +213,31 @@ assert all(int(r.status()[k],16)==0 for k in ['cap_eff','cap_prm','cap_inh','cap
 
 
 class Lifecycle(unittest.TestCase):
+    def test_keeper_ready_after_two_seconds_is_observed_inside_unchanged_hard_ceiling(self):
+        import io
+        from unittest.mock import Mock
+        read,write=os.pipe();stream=os.fdopen(read,'rb');registry=[]
+        process=Mock(stdin=io.BytesIO(),stdout=stream,stderr=io.BytesIO())
+        process.poll.return_value=None
+        def delayed():
+            time.sleep(2.05)
+            try:os.write(write,b'{"ready":true,"witness":{"pid":12345}}\n')
+            finally:os.close(write)
+        writer=threading.Thread(target=delayed);writer.start()
+        try:
+            with patch.object(r,'HERE',Path('/opt/paw-vm/releases')/R/'paw/core/owned_kernel_runtime.py'), \
+                 patch.object(r.os,'geteuid',return_value=0),patch.object(r.subprocess,'Popen',return_value=process), \
+                 patch.object(r.subprocess,'run',return_value=SimpleNamespace(returncode=0)), \
+                 patch.object(r,'unit_properties',return_value={'MainPID':'0','ActiveState':'inactive'}):
+                try:actor=r.Managed(J,E,R,'keeper',registry=registry)
+                finally:r.cleanup_actors(registry)
+                self.assertTrue(actor.ready['ready'])
+                _,props,_=p.service(J,E,R,'keeper')
+                self.assertEqual(props['RuntimeMaxSec'],'8');self.assertEqual(props['TimeoutStopSec'],'500ms')
+        finally:
+            writer.join(timeout=3);stream.close()
+        self.assertFalse(writer.is_alive())
+
     def test_stop_error_requires_independent_inactive_zero_mainpid_readback(self):
         from unittest.mock import Mock
         actor=SimpleNamespace(unit='owned.service',threads=[],errors=b'',process=Mock())

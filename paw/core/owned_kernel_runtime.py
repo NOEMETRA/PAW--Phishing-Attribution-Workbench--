@@ -320,7 +320,11 @@ class Managed:
             raw=self.process.stderr.read(8193);self.errors.extend(raw[:8193])
         self.threads=[threading.Thread(target=read,daemon=True),threading.Thread(target=errors,daemon=True)]
         for thread in self.threads:thread.start()
-        self.ready=self.receive(2);require(self.ready.get('ready')is True,'owned_kernel_role_not_ready')
+        # The keeper creates its namespace policy under10%CPU. Its observed
+        # PID1/initialization time can exceed2s; the service's8s hard ceiling
+        # and500ms stop limit stay unchanged. This is only an observer wait.
+        self.ready=self.receive(4 if role=='keeper'else 2)
+        require(self.ready.get('ready')is True,'owned_kernel_role_not_ready')
         self.pid=self.ready['witness']['pid']
     def receive(self,seconds=2):
         try:value=self.output.get(timeout=seconds)
