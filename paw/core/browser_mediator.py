@@ -116,16 +116,16 @@ class BrowserRequestLedger:
         self.deadline_ns=started_ns+LIMITS['seconds']*10**9
         self.dynamic=allow_dynamic_public_hosts;self.used=0;self.received=0;self.redirects=0
         self.pins={};self._pending=None;self._key=secrets.token_bytes(32);self.closed=False
-        self.seed_admitted=False
+        self.seed_admitted=False;self._resolving=False;self._lookup_hosts=set()
 
     def _time(self,now_ns):
         require(type(now_ns) is int and self.started_ns<=now_ns<self.deadline_ns,
                 'broker_session_expired')
         require(not self.closed,'broker_session_closed')
 
-    def admit(self,frame,answers,age_ns,ttl_ns,now_ns):
+    def _begin(self,frame,now_ns):
         try:
-            self._time(now_ns);require(self._pending is None,'broker_pending_request')
+            self._time(now_ns);require(self._pending is None and not self._resolving,'broker_pending_request')
             require(self.used<LIMITS['requests'],'broker_request_budget')
             require(type(frame) is dict and set(frame)=={'nonce','seq','url','method','resource'},'broker_frame_shape')
             require(frame['nonce']==self.nonce and type(frame['seq']) is int and frame['seq']==self.used,
@@ -145,6 +145,32 @@ class BrowserRequestLedger:
             require(frame['url']==self.seed['url'] and frame['method']=='GET' and
                     frame['resource']=='Document','broker_initial_seed')
         if not self.dynamic:require(target['host']==self.seed['host'],'broker_unregistered_host')
+        if target['host'] not in self._lookup_hosts:
+            require(len(self._lookup_hosts)<LIMITS['hosts'],
+                    'broker_host_budget' if len(self.pins)>=LIMITS['hosts'] else 'broker_dns_name_budget')
+            self._lookup_hosts.add(target['host'])
+        return target,slot,frame['method']
+
+    def admit(self,frame,answers,age_ns,ttl_ns,now_ns):
+        target,slot,method=self._begin(frame,now_ns)
+        return self._finish(target,slot,method,answers,age_ns,ttl_ns,now_ns)
+
+    def admit_resolved(self,frame,resolver):
+        # Trusted runtime callback only, never supplied by a page or RPC.
+        # Burn the slot and check seed/method/host before any DNS work.
+        target,slot,method=self._begin(frame,time.monotonic_ns())
+        self._resolving=True
+        try:
+            facts=resolver(target['host'],self.deadline_ns)
+            now=time.monotonic_ns()
+            require(type(facts) is dict and type(facts.get('observed_ns')) is int,
+                    'broker_dns_observation')
+            return self._finish(target,slot,method,facts.get('answers'),
+                                now-facts['observed_ns'],facts.get('ttl_ns'),now)
+        finally:self._resolving=False
+
+    def _finish(self,target,slot,method,answers,age_ns,ttl_ns,now_ns):
+        self._time(now_ns)
         pins=public_answers(answers)
         require(type(age_ns) is int and type(ttl_ns) is int and
                 0<=age_ns<min(ttl_ns,10*10**9) and 0<ttl_ns<=3600*10**9,
@@ -154,7 +180,7 @@ class BrowserRequestLedger:
             require(len(self.pins)<LIMITS['hosts'],'broker_host_budget');self.pins[target['host']]=pins
         deadline=min(self.deadline_ns,now_ns+min(LIMITS['lease_seconds']*10**9,ttl_ns-age_ns))
         require(deadline>now_ns,'broker_lease_expired')
-        plan={**target,'method':frame['method'],'slot':slot,'peer_ipv4':pins[0],
+        plan={**target,'method':method,'slot':slot,'peer_ipv4':pins[0],
               'all_ipv4':pins,'issued_ns':now_ns,'expires_ns':deadline,'nonce':self.nonce}
         token=hmac.new(self._key,canonical(plan),hashlib.sha256).hexdigest()
         plan['lease_id']=token;self._pending=copy.deepcopy(plan);self.seed_admitted=True

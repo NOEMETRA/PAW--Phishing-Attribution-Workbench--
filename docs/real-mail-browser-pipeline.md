@@ -255,3 +255,81 @@ dispositions even when domains are absent and snapshots match. None of those sof
 establishes VM acceptance. Public broker namespace/leases, full owned online
 fault matrix, Root custody/protected hash approval and sealed real observations
 remain required O2–O4 work.
+
+### Actual owned CDP acceptance checkpoint
+
+PR142's reviewed probe and PR143's separately reviewed exact host-maintenance
+transition reached actual protected runtime acceptance on main
+`01c4d33af2dd53e15262cdfe3a8d047d81277d2d`. Both PRs passed exact-head review,
+head/main7 and independent immutable promotion. Fixed no-guest job
+`d92fd2411c964506a3eec979a9f01d11` passed the current maintenance/context
+readback without a password, guest start, grant or network authority.
+
+Owned browser job `87174a6474134a5ea374e5491c07aba9` then passed actual
+Chrome/CDP/Fetch/JavaScript/DOM and all nine original HTML scenarios. The CDP
+probe observed two fulfilled requests and39 frames, the expected nonce-bound
+DOM, nonroot renderer/NNP/seccomp/PID-namespace witnesses and stopped writers.
+Its requested external stop took approximately1.07 seconds. The Root-owned
+attestation binds the three program hashes, current context, VM UUID, owner
+disposition and protected audit digest. Ordinary readback verified that
+attestation and exact source hashes; its raw CDP VM audit remains Root-private.
+
+The nine HTML audit copies were independently checked with the actual inert
+execution/fault verifiers. Normal/error/timeout/cancel/output/memory and
+paused/owner/protocol-loss cases passed, including replay and unknown-stop
+publication refusal. The terminal helper, QEMU, domains, active networks and
+namespaces were absent. A private1309-member archive was verified and retained;
+its SHA256 is `3c50f3b60b753c33a8539ccd55ced641dfaab1a0ea63e1cab221f42099985834`.
+All source-freeze interlocks were released only after that readback. Old P0–P5
+closure and its deleted monitor stay unchanged.
+
+This establishes the measured owned no-NIC browser path on that release. It is
+not public egress, DNS/TLS/kernel-broker integration, a real-source I08 or O4
+acceptance. Real target connections and real website script executions remain0.
+
+### Pre-DNS admission, resolver and private broker data channel
+
+The next unprivileged increment adds two ordinary modules and a trusted
+resolver callback in the existing ledger. It is not connected to the CLI,
+API, guest service or installed Root operator and promotes no Root release.
+
+`admit_resolved` consumes the request slot and validates envelope, seed,
+URL/method/resource and host policy before calling trusted resolver code.
+Invalid envelopes/reentry close the session; DNS failures and refused answers
+still consume the slot. At most eight names may be considered, including names
+whose answers refuse. DNS facts are timestamped after the actual response, then
+checked for age/TTL, public IPv4 pins and rebinding. A callback is trusted code,
+never a page/RPC-supplied callable or an authority object. Existing `admit` and
+the `close` statistics shape remain available.
+
+`mail_browser_dns` provides a finite A/CNAME codec and explicit single connected
+UDP exchange to numeric9.9.9.9:53, with a one-second ceiling and the enclosing
+monotonic deadline. No OS resolver/search/proxy, retry or TCP fallback is used.
+Packets are at most4096 bytes, with one matching question, up to16 answer rows,
+bounded backward compression, finite CNAME chains and positive bounded TTL.
+Wrong transaction/question/flags, truncation, unrelated/incomplete/duplicate or
+mixed/special-address answers refuse. This is an observed recursive answer,
+not DNSSEC validation or authentic origin. A future protected runtime must
+first establish its fixed resolver kernel lease; importing the module or
+passing tests does not authorize a public DNS query.
+
+`browser_broker_wire` frames canonical JSON metadata (64KiB maximum) and a
+separate digest-bound binary body (4MiB aggregate). A decoder binds nonce and
+strict sequence,128 frames and8MiB wire bytes; declared oversize, duplicate or
+noncanonical/nonfinite JSON, changed digests, replay and truncated EOF close it.
+Requests cannot carry response bodies. Descriptors, peer identity, per-operation
+field validation and Root approval must be established by the future runtime;
+framing alone establishes none of them.
+
+Tests cover admission before DNS, failed-lookup/name ceilings, timestamp and
+reentry refusal, inert DNS/compression mutations, actual application offline
+denial, maximum/fragmented binary frames and a harmless actual OS pipe. Owned
+UDP loopback tests check transaction/truncation/private-answer refusals without
+calling the public resolver. Owned TLS loopback tests verify the expected
+certificate/hostname, wrong-host and untrusted-certificate refusal and ignored
+caller CA/key-log environment. Their explicit test adapter maps one numeric
+public-looking peer to an owned127.0.0.1 listener: it does not prove real pinning
+or namespace confinement. No sample hostname is resolved and no browser or
+Root job is started. Actual broker confinement, expiring kernel leases,
+owner/guard/established-flow stop and full VM/PAW custody integration remain
+O2/O3 work before real activation.
