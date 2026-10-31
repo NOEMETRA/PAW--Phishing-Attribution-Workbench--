@@ -81,6 +81,16 @@ class AsyncOwned(unittest.TestCase):
             r.network({'kind':'begin','nonce':N,'seq':0,'bytes':2,'sha256':hashlib.sha256(b'{}').hexdigest()})
         self.assertTrue(r.transfer_failed);self.assertEqual(r.driver.stage,'failed')
 
+    def test_snapshot_boundary_latches_quiescence_and_does_not_permit_another_response(self):
+        from unittest.mock import patch
+        runtime=self.runtime;runtime.network_pending=None;runtime.driver.stage='snapshot'
+        with patch.object(g.fixed.Runtime,'tick',return_value={'done':False,'stage':'snapshot'}):
+            value=runtime.tick()
+        self.assertIs(value['network_quiescent'],True)
+        with patch.object(g.fixed.Runtime,'tick',return_value={'done':True,'writers_stopped':True}):
+            self.assertIs(runtime.tick()['network_quiescent'],True)
+        with self.assertRaises(ValueError):runtime.network({'kind':'refusal','nonce':N,'seq':0})
+
     def test_actual_maximum_console_fragment_reaches_typed_assembler(self):
         from paw.core import browser_broker_console as channel
         runtime=self.runtime;session=g.ConsoleSession(runtime);body=b'x'*32768

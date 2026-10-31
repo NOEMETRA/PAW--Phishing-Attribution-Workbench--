@@ -103,8 +103,12 @@ Only the owned broker controller adds one bounded PNG screenshot after DOM
 snapshot, under the unchanged15s browser clock. After the Chrome cgroup is
 empty, two finite in-memory streams can be read in strict name/chunk order.
 Each console reply is below60000bytes; aggregate DOM/PNG is at most512KiB.
-The Root coordinator completes its existing plain HTTP probe and stops the
-network roles before transferring these bytes. No renderer or network lease is
+The Root coordinator completes its existing plain HTTP probe as soon as the
+controller has permanently closed browser network scheduling for DOM/PNG
+capture, then performs the same typed network stops before waiting for PNG and
+transferring bytes. Running that auxiliary probe after a legal late screenshot
+can exceed the unchanged kernel commit reservation; the earlier closed-network
+boundary avoids consuming its lease with local capture work. No renderer or network lease is
 revived by artifact reads or cancellation. External VM stop, the owner record,
 whole-host/source/image restoration and the existing stop bound still precede
 publication. Unknown termination publishes no capture. Known failures may

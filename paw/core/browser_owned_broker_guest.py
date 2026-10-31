@@ -78,7 +78,7 @@ class Transfer:
 class Runtime(fixed.Runtime):
     def __init__(self):
         super().__init__();self.network_pending=None;self.transfer_failed=False
-        self.network_bytes=0;self.metadata_bytes=0;self.capture_transfer=None
+        self.network_bytes=0;self.metadata_bytes=0;self.capture_transfer=None;self.network_quiescent=False
 
     def _make_controller(self):
         return CaptureController(fixed.SEED,self.nonce,self._send,self._request)
@@ -172,6 +172,10 @@ class Runtime(fixed.Runtime):
     def tick(self):
         if self.transfer_failed:return self.finish('failed','owned_network_protocol_closed')
         result=super().tick()
+        # snapshot() permanently cuts off broker dispatch before DOM/PNG work.
+        # Expose that existing boundary; it does not grant another request.
+        if result.get('stage')=='snapshot' and self.network_pending is None:self.network_quiescent=True
+        result['network_quiescent']=self.network_quiescent
         if not result.get('done') and self.network_pending is not None:
             result={**result,'network_request':dict(self.network_pending['request']),
                     'transfer_phase':self.network_pending['phase']}
