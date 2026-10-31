@@ -96,6 +96,48 @@ password, generic sudo or writable workspace code executed as Root is allowed.
 
 ## Required online isolation semantics
 
+### Owned kernel prerequisite
+
+The fixed `vm-acceptance-v1` no-VM recipe now includes a finite owned kernel
+prerequisite after maintained runtime validation. Its only destinations are two
+numeric aliases on loopback inside a new PID1-owned private network namespace.
+It creates no interface pair, default route, NAT, forwarding change or host
+namespace mount. These aliases do not contact the public addresses they spell.
+The generated payloads are raw nonce-bound TCP/UDP fixtures, not HTTP, TLS or
+DNS. This component alone cannot establish O3 or authorize real egress.
+
+Five cases cover default drop, DNS-port-only tuple, TCP tuple expiry, loss of
+the namespace keeper during an established stream, and deletion of both owned
+filter tables during a stream. Two default-drop tables admit only one expiring
+tuple, including return packets; connection state alone cannot bypass expiry.
+Filter hooks run after connection tracking. The Root keeper accepts only fixed
+scalar control operations, holds only `CAP_NET_ADMIN`, has an eight-second
+PID1 runtime ceiling and cannot restart using the same protected marker.
+
+The two network roles use reserved numeric identities65520/65521 only after
+exclusive NSS/process vacancy checks. They have a minimal readonly filesystem,
+no home or credentials, no new privileges, syscall/address-family restrictions
+and no capabilities except the fixture's low-port bind capability. Joining the
+keeper's verified namespace and `BindsTo`/`After` tie both to its life. The Root
+coordinator uses pidfds for the known owner fault and independently observes
+UID/GID/groups, capabilities, seccomp, namespace inode and actual cgroup limits.
+
+The existing512MiB/64task/100%CPU Root budget is partitioned into coordinator
+256/32/50%, keeper64/8/10%, probe128/16/25% and fixture64/8/15%; swap remains
+zero and the separate1536MiB QEMU ceiling stays unchanged. Every partial actor
+is registered before readiness. Cleanup attempts all actors even after an
+earlier failure, restores the parent limit, checks stopped writers and compares
+the full host/network observations before publishing a terminal diagnostic.
+Unknown cleanup or restoration prevents publication; an observed component
+failure stays FAIL and prevents the enclosing runtime recipe from passing.
+
+Inert lifecycle tests and installed systemd259 parser checks do not prove
+packet filtering, namespace joining or fault latency. Those remain unaccepted
+until a reviewed, CI-green immutable release completes the actual owned recipe
+and its independent reader reconciliation. This change adds no static helper
+verb, real-source approval, I08, VM NIC or public route. The complete broker,
+guest and installed PAW custody matrix is still required afterwards.
+
 The disposable guest may execute website JavaScript only inside the browser
 sandbox, with nonroot guest execution, verified immutable image/controller,
 enforcing host confinement, no host shares/devices/credentials and the existing

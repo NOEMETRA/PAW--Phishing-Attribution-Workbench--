@@ -217,7 +217,7 @@ class Runtime(unittest.TestCase):
             with mock.patch.object(runtime.os, 'geteuid', return_value=0), self.assertRaises(ValueError):
                 runtime.run_owned(job, release)
 
-    def owned(self, *, fail=False, unsafe=False, fail_native=False, fail_javascript=False):
+    def owned(self, *, fail=False, unsafe=False, fail_native=False, fail_javascript=False, fail_kernel=False, unsafe_kernel=False):
         import native_runtime
         job, release = 'a'*32, 'b'*40; states = []; writes = []; published = []
         value = {'result': 'PASS', 'vm_started': unsafe, 'real_samples_executed': 0,
@@ -231,6 +231,7 @@ class Runtime(unittest.TestCase):
              mock.patch.object(runtime, 'HERE', Path('/opt/paw-vm/releases')/release/'lab/s14'), \
              mock.patch.object(runtime, 'revalidate', **({'side_effect': ValueError('owned injected failure')} if fail else {'return_value': value})), \
              mock.patch.object(runtime, 'refresh_maintenance', return_value={'result': 'PASS', 'vm_started': False}), \
+             mock.patch('paw.core.owned_kernel_runtime.owned_validation', **({'side_effect': ValueError('owned kernel diagnostic failure')} if fail_kernel else {'return_value': dict(value, vm_started=unsafe_kernel)})), \
              mock.patch('representation_producer.previous_owned_failure', return_value={'source_result': 'FAIL', 'vm_started': False}), \
              mock.patch('representation_producer.previous_owned_javascript_failure', **({'side_effect': ValueError('owned JS diagnostic failure')} if fail_javascript else {'return_value': {'source_result': 'FAIL', 'vm_started': False}})), \
              mock.patch.object(native_runtime, 'previous_owned_native_failure', **({'side_effect': ValueError('owned native diagnostic failure')} if fail_native else {'return_value': {'source_result': 'FAIL', 'vm_started': False}})), \
@@ -246,6 +247,12 @@ class Runtime(unittest.TestCase):
         exported=json.loads(writes[0][2]);self.assertEqual(exported['previous_owned_native_failure'],{'source_result':'FAIL','vm_started':False})
         self.assertEqual(exported['previous_owned_javascript_failure'],{'source_result':'FAIL','vm_started':False})
         self.assertEqual(published, [Path('/var/lib/paw-vm-exports')/('a'*32)])
+
+    def test_owned_kernel_failure_or_scope_expansion_cannot_publish_runtime_pass(self):
+        for kwargs in [{'fail_kernel': True}, {'unsafe_kernel': True}]:
+            states, writes, published = self.owned(**kwargs)
+            self.assertEqual(states[-1]['result'], 'FAIL')
+            self.assertEqual(writes, []); self.assertEqual(published, [])
 
     def test_failed_or_unsafe_runtime_is_recorded_and_never_exported_as_pass(self):
         for kwargs in [{'fail': True}, {'unsafe': True}, {'fail_native': True}, {'fail_javascript': True}]:
