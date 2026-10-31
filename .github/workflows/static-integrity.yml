@@ -38,6 +38,11 @@ jobs:
         run: |
           python -B -m unittest discover -s tests -p 'test_browser_cdp.py' -v
           python -B -m unittest discover -s tests -p 'test_owned_cdp*.py' -v
+      - name: Verify owned brokered guest and protocol lifecycle without Root or VM
+        run: |
+          python -B -m unittest discover -s tests -p 'test_owned_broker*.py' -v
+          python -B -m unittest discover -s tests -p 'test_owned_browser_fixture*.py' -v
+          python -B -m unittest discover -s tests -p 'test_owned_tls_console_chain.py' -v
       - name: Verify one-shot controlled transport without network or privileged operations
         run: python -B -m unittest discover -s lab/s14 -p 'test_controlled_uplink.py' -v
       - name: Verify benign metadata authority preserves refused-body status without execution
