@@ -56,7 +56,7 @@ class Server(unittest.TestCase):
     def test_fixed_browser_icon_probe_receives_empty_http_instead_of_transport_eof(self):
         for kind in ['http','https']:
             response=self.fetch(kind,path=b'/favicon.ico')
-            self.assertTrue(response.startswith(b'HTTP/1.1 204 No Content\r\n'),response)
+            self.assertTrue(response.startswith(b'HTTP/1.1 404 Not Found\r\n'),response)
             self.assertIn(b'Content-Length: 0\r\n',response)
             self.assertTrue(response.endswith(b'\r\n\r\n'))
         self.assertEqual(self.server.counts['refused'],0)

@@ -543,7 +543,7 @@ and restored host. This consumed attempt must not be replayed.
 
 A separate actual owned-loopback reproduction shows the fixed fixture closes
 `/favicon.ico` without HTTP, producing the same truncation class if a browser
-probes its icon. The bounded correction adds only an empty204 response for that
+probes its icon. The bounded correction adds only an empty404 response for that
 exact fixture path; arbitrary paths, methods and authorities remain refused.
 This does not prove the historical third URL. Bounded phase/slot/URL-hash
 diagnostics distinguish a browser request from the plain HTTP probe in the next
