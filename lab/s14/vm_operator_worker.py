@@ -59,6 +59,10 @@ def main():
               'real_samples_executed': 0, 'guard_before': guard_fingerprint()}
     context = auth.capture(); auth.validate_context(context)
     try:
+        # Fixed generated CDP fixtures in a no-NIC VM, before the existing nine
+        # HTML cases. No URL/source/host network authority is accepted here.
+        from paw.core.browser_owned_cdp_probe import run_owned as cdp_probe
+        record['owned_cdp_probe'] = cdp_probe(args.job, HERE.parents[1].name)
         manifest = make(uuid.uuid4().hex[:16]); source = folder/'owned-inputs.json'
         with auth.fs.root_directory(folder) as fd: auth.fs.exclusive(fd, source.name, manifest)
         target = EXPORTS/args.job
