@@ -195,7 +195,7 @@ def run_owned(job,release):
         'real_connections':0,'real_samples_executed':0,'i08_installed':False,'production_grants_enabled':False,
         'kernel_component':kernel_result,
         'scope':'owned private DNS, plain HTTP transport and actual HTTPS no-NIC Chrome; not full O3 fault/custody or public authority'}
-    actors=[];gate=None;vm=None;partitioned=False
+    actors=[];gate=None;vm=None;partitioned=False;mediation=None
     with auth.fs.execution_lock():
         folder,cert_sha=prepare(job,epoch,release)
         require(available_memory()>=2*1024**3 and shutil.disk_usage(BROWSER_BASE.parent).free>=10*1024**3,
@@ -211,13 +211,20 @@ def run_owned(job,release):
             inspected=vm['channel'].call('inspect',seconds=8)
             require(inspected['network_interfaces']==['lo'] and inspected['chrome_version']==context['chrome_version'] and
                 inspected['chrome_binary_sha256']==context['chrome_binary_sha256'],'owned_broker_exact_browser')
-            began=time.monotonic_ns();vm['channel'].call('start',seconds=8)
+            record['timing_ns']={'guest_start_call':time.monotonic_ns()}
+            admitted=vm['channel'].call('start',seconds=8)
+            require(admitted.get('started')is True,'owned_broker_guest_start_ack')
+            # Guest start includes its mandatory image check/preparation. The
+            # same15s execution clock begins at the successful start boundary,
+            # not before those prerequisites. Guest15s/keeper8s/worker10s stay.
+            began=time.monotonic_ns();record['timing_ns']['guest_start_ack']=began
             end=time.monotonic()+18
             while time.monotonic()<end:
                 value=vm['channel'].call('poll',seconds=5)
                 if value.get('network_request')is not None:break
                 require(not value.get('done'),'owned_broker_guest_ended_before_network');time.sleep(.03)
             else:raise ValueError('owned_broker_no_paused_request')
+            record['timing_ns']['first_paused_request']=time.monotonic_ns()
             parent=kernel.unit_properties(ids['parent'])
             require(parent['ActiveState']=='active'and parent['MainPID']==str(os.getpid())and
                 parent['MemoryMax']==str(512*1024**2)and parent['TasksMax']=='64','owned_broker_parent_budget')
@@ -229,6 +236,7 @@ def run_owned(job,release):
             kernel.live_role(server,'fixture',inode)
             worker=kernel.Managed(job,epoch,release,'probe',owner.pid,registry=actors,protocol=True)
             kernel.live_role(worker,'probe',inode)
+            record['timing_ns']['actors_ready']=time.monotonic_ns()
             mediation=Mediation(owner,worker,epoch,began)
             while time.monotonic()<end:
                 if value.get('done')is True:break
@@ -295,14 +303,25 @@ def run_owned(job,release):
                 require(owner_result.get('reason')=='requested_stop'and owner_result.get('connection_closed')is True and
                     owner_result.get('vm_uuid')==vm['node']['uuid'],'owned_broker_owner_disposition')
                 record['owner_disposition']=owner_result
-                require(time.monotonic()-stopped<12 and not gate.connection.listAllDomains(0)and
+                # Capture the actual external stop before hashing images and
+                # revalidating context. Slow proof work is reported separately.
+                record['stop_ns']=int((time.monotonic()-stopped)*10**9)
+                verified_from=time.monotonic_ns()
+                require(0<=record['stop_ns']<12*10**9 and not gate.connection.listAllDomains(0)and
                     before==gate.snapshot_host()and network==network_state()and digest(BASE)==auth.fs.IMAGE_SHA256 and
                     digest(BROWSER_BASE)==context['image_sha256']and digest(gate.canary)==canary and
                     auth.capture()==context,'owned_broker_external_stop_or_restore')
-                record.update(writers_stopped=True,host_restored=True,stop_ns=int((time.monotonic()-stopped)*10**9))
+                record.update(writers_stopped=True,host_restored=True,verification_ns=time.monotonic_ns()-verified_from)
             except Exception as error:failures.append('VM:'+type(error).__name__+':'+str(error)[:256])
             gate.connection.close()
             if failures:record.update(result='FAIL',cleanup_errors=failures)
+            # Bounded progress is useful on FAIL too. It is diagnostic only,
+            # never readiness, approval or a replacement for known termination.
+            if mediation is not None:
+                record['observations']=mediation.observations
+                record['ledger_progress']={'requests_consumed':mediation.ledger.used,
+                    'response_bytes':mediation.ledger.received,'closed':mediation.ledger.closed}
+            record['role_observations']=[v.observation for v in actors if hasattr(v,'observation')]
             record['role_diagnostics']=[{'unit':v.unit,'launcher_returncode':v.process.poll(),
                 'stderr':bytes(v.errors).decode('utf-8','replace')}for v in actors]
             record['programs']={name:digest(HERE.with_name(name))for name in PROGRAMS}

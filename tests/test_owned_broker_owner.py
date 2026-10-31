@@ -1,21 +1,25 @@
 """Inert complete producer control flow, with fake Root/VM/roles only."""
-from contextlib import nullcontext
+from contextlib import nullcontext,ExitStack
 import hashlib,json,os,sys,tempfile,types,unittest
 from pathlib import Path
 from unittest.mock import patch,Mock
-from paw.core import browser_owned_broker as p
+from paw.core import browser_owned_broker as p,browser_mediator as mediator
 
 R='b'*40;J='c'*32;U='00000000-0000-4000-8000-000000000001'
 GOOD={'reason':'requested_stop','connection_closed':True,'vm_uuid':U}
 
 class Owner(unittest.TestCase):
-    def simulate(self,owner,*,cleanup_fail=False,guest_bad=False,worker_bad=False):
+    def simulate(self,owner,*,cleanup_fail=False,guest_bad=False,worker_bad=False,bootstrap_delayed=False,proof_delayed=False):
+        clock=[10**9];guest_ack=[];proof_armed=[False];proof_charged=[False]
         with tempfile.TemporaryDirectory()as directory:
             root=Path(directory);repo=root/'releases'/R;core=repo/'paw/core';core.mkdir(parents=True)
             for name in p.PROGRAMS:(core/name).write_bytes(('inert program '+name).encode())
             control=root/'control';control.mkdir();exports=root/'exports';exports.mkdir()
             base=root/'base';base.write_bytes(b'owned base');browser=root/'browser';browser.write_bytes(b'owned browser')
-            def digest(path):return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+            def digest(path):
+                if proof_delayed and proof_armed[0]and not proof_charged[0]and Path(path)==base:
+                    clock[0]+=16*10**9;proof_charged[0]=True
+                return hashlib.sha256(Path(path).read_bytes()).hexdigest()
             context={'image_sha256':digest(browser),'chrome_version':'owned Chrome','chrome_binary_sha256':'e'*64}
             def mapped(value):
                 path=Path(value)
@@ -37,8 +41,11 @@ class Owner(unittest.TestCase):
                 def __init__(self,nonce):self.nonce=nonce;self.count=0
                 def call(self,op,**kwargs):
                     if op=='inspect':return {**context,'network_interfaces':['lo']}
-                    if op=='start':return {'started':True}
+                    if op=='start':
+                        if bootstrap_delayed:clock[0]+=6500*10**6
+                        guest_ack.append(clock[0]);return {'started':True}
                     self.count+=1
+                    if bootstrap_delayed and self.count==1:clock[0]+=3*10**9
                     if self.count<=2:
                         return {'done':False,'network_request':{'nonce':self.nonce,'seq':self.count-1,
                             'url':p.SEED,'method':'GET','resource':'Document'}}
@@ -52,21 +59,27 @@ class Owner(unittest.TestCase):
                     if owner is not None:(self.output/'owner.json').write_text(json.dumps(owner))
                     self.active_vm={'node':{'uuid':U},'owner_result_path':str(self.output/'owner.json'),'channel':Channel(self.nonce)}
                     return self.active_vm
-                def stop(self,vm):stops.append('VM');self.active_vm=None
+                def stop(self,vm):stops.append('VM');self.active_vm=None;proof_armed[0]=True
             class Actor:
                 def __init__(self,job,epoch,release,role,*args,registry=None,**kwargs):
+                    if bootstrap_delayed:clock[0]+={'keeper':3500,'fixture':1500,'probe':1500}[role]*10**6
                     self.unit=role+'.service';self.pid=123;self.role=role;self.errors=b''
                     self.process=types.SimpleNamespace(poll=lambda:0,wait=lambda timeout:0);self.observation={'role':role}
                     registry.append(self)
             class Mediation:
                 def __init__(self,*args):
                     self.nonce=args[2];self.sequence=1;Mediation.latest=self
-                    self.ledger=types.SimpleNamespace(used=0,closed=False,close=lambda:{'owned':'inert stats'})
+                    self.ledger=(mediator.BrowserRequestLedger(p.SEED,self.nonce,args[3])if bootstrap_delayed else
+                        types.SimpleNamespace(used=0,received=0,closed=False,close=lambda:{'owned':'inert stats'}))
                     self.observations=[{'operation':'http','tls_verified_by_broker':True}for _ in range(2)]
                 def response(self,request):
                     if worker_bad:
                         self.ledger.closed=True;raise ValueError('inert worker protocol loss')
-                    self.ledger.used+=1
+                    if bootstrap_delayed:
+                        assert 0<=clock[0]-guest_ack[0]<15*10**9,'guest execution itself has not expired'
+                        plan=self.ledger.admit(request,['93.184.216.34'],0,10**10,clock[0])
+                        self.ledger.complete(plan,200,[],b'owned','93.184.216.34',plan['scheme']=='https',clock[0])
+                    else:self.ledger.used+=1
                     if request['url'].startswith('http:'):
                         self.observations.append({'operation':'http','tls_verified_by_broker':False})
                         return {'http_status':200},('PAW-OWNED-'+self.nonce).encode()
@@ -82,7 +95,10 @@ class Owner(unittest.TestCase):
                 'benign_guest_validation':module('benign_guest_validation',BASE=base,digest=digest),
                 'vm_runtime_revalidation':module('vm_runtime_revalidation',network_state=lambda:{'owned':'unchanged'}),
                 'reader_export':module('reader_export',publish_reader_tree=published.append)}
-            with patch.dict(sys.modules,modules),patch.object(sys,'path',list(sys.path)), \
+            with ExitStack()as stack:
+                managers=(patch.dict(sys.modules,modules),patch.object(sys,'path',list(sys.path)), \
+                patch.object(p.time,'monotonic_ns',side_effect=lambda:clock[0]), \
+                patch.object(p.time,'monotonic',side_effect=lambda:clock[0]/10**9), \
                 patch.object(p,'HERE',core/'browser_owned_broker.py'),patch.object(p,'Path',mapped), \
                 patch.object(p.os,'geteuid',return_value=0),patch.object(p,'prepare',return_value=(root,'f'*64)), \
                 patch.object(p,'partition',side_effect=lambda unit,restore=False:partitions.append(restore)), \
@@ -92,9 +108,14 @@ class Owner(unittest.TestCase):
                 patch.object(p.kernel,'private_json',side_effect=lambda _: {'reason':'requested_stop','epoch':Mediation.latest.nonce,'namespace_inode':123456}), \
                 patch.object(p.kernel,'unit_properties',side_effect=lambda unit:{'ActiveState':'active','MainPID':str(os.getpid())if unit.startswith('paw-vm-owned-')else'123','MemoryMax':str(512*1024**2),'TasksMax':'64'}), \
                 patch.object(p.shutil,'disk_usage',return_value=types.SimpleNamespace(free=20*1024**3)), \
-                patch.object(p,'Mediation',Mediation),patch.object(p,'send_response'):
+                patch.object(p,'Mediation',Mediation),patch.object(p,'send_response'))
+                for manager in managers:stack.enter_context(manager)
                 if owner==GOOD and owner.get('connection_closed')is True and not cleanup_fail and not guest_bad and not worker_bad:
-                    answer=p.run_owned(J,R);self.assertEqual(answer['result'],'PASS')
+                    try:answer=p.run_owned(J,R)
+                    except ValueError as error:
+                        record=json.loads(next(control.glob('*/results.json')).read_bytes())
+                        raise AssertionError('producer failed: '+record.get('error','unknown'))from error
+                    self.assertEqual(answer['result'],'PASS')
                 else:
                     with self.assertRaises(ValueError):p.run_owned(J,R)
             self.assertIn('VM',stops);self.assertEqual(partitions,[False,True])
@@ -105,6 +126,9 @@ class Owner(unittest.TestCase):
                 self.assertEqual(attestation['result'],'FAIL'if guest_bad or worker_bad else'PASS')
                 self.assertTrue(attestation['writers_stopped']);self.assertEqual(attestation['real_connections'],0)
                 self.assertFalse(attestation['production_grants_enabled'])
+                if proof_delayed:
+                    self.assertLess(attestation['stop_ns'],12*10**9,'post-stop hashing must not inflate the external stop measurement')
+                    self.assertGreaterEqual(attestation['verification_ns'],16*10**9)
             else:self.assertEqual(list(exports.iterdir()),[])
     def test_owned_complete_path_needs_expected_external_owner_before_pass(self):self.simulate(GOOD)
     def test_domain_absence_does_not_replace_missing_changed_or_unclosed_owner(self):
@@ -114,6 +138,8 @@ class Owner(unittest.TestCase):
     def test_unknown_network_stop_blocks_even_failure_publication(self):self.simulate(GOOD,cleanup_fail=True)
     def test_known_stop_can_publish_only_diagnostic_fail_for_missing_sandbox(self):self.simulate(GOOD,guest_bad=True)
     def test_worker_protocol_loss_cannot_publish_pass_after_known_stop(self):self.simulate(GOOD,worker_bad=True)
+    def test_allowed_guest_bootstrap_does_not_consume_execution_admission_clock(self):self.simulate(GOOD,bootstrap_delayed=True)
+    def test_known_stop_measurement_excludes_slow_post_stop_integrity_proof(self):self.simulate(GOOD,proof_delayed=True)
     def test_root_identity_or_workspace_is_refused_before_any_privileged_callback(self):
         with patch.object(p.kernel,'owned_validation')as privileged:
             with self.assertRaises(ValueError):p.run_owned(J,R)
