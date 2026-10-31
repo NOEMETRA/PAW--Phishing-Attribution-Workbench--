@@ -139,6 +139,9 @@ class Owner(unittest.TestCase):
                 self.assertEqual(attestation['result'],'FAIL'if guest_bad or worker_bad or prepare_bad else'PASS')
                 self.assertTrue(attestation['writers_stopped']);self.assertEqual(attestation['real_connections'],0)
                 self.assertFalse(attestation['production_grants_enabled'])
+                if worker_bad:
+                    self.assertEqual(attestation['broker_progress'],{'phase':'browser_request','slot':0,
+                        'url_sha256':hashlib.sha256(p.SEED.encode()).hexdigest()})
                 if proof_delayed:
                     self.assertLess(attestation['stop_ns'],12*10**9,'post-stop hashing must not inflate the external stop measurement')
                     self.assertGreaterEqual(attestation['verification_ns'],16*10**9)
