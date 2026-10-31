@@ -330,6 +330,15 @@ def run_owned(job, release):
                 record['runtime']['production_grants_enabled'] is False and record['runtime']['i08_installed'] is False,
                 'runtime_owned_scope')
         record['runtime']['maintenance'] = refresh_maintenance()
+        from paw.core.owned_kernel_runtime import owned_validation
+        record['runtime']['owned_kernel'] = owned_validation(job, release)
+        require(record['runtime']['owned_kernel']['result'] == 'PASS' and
+                record['runtime']['owned_kernel']['vm_started'] is False and
+                type(record['runtime']['owned_kernel']['real_samples_executed']) is int and
+                record['runtime']['owned_kernel']['real_samples_executed'] == 0 and
+                record['runtime']['owned_kernel']['i08_installed'] is False and
+                record['runtime']['owned_kernel']['production_grants_enabled'] is False,
+                'runtime_owned_kernel_scope')
         from representation_producer import previous_owned_failure
         record['runtime']['previous_owned_failure'] = previous_owned_failure()
         from native_runtime import previous_owned_native_failure
