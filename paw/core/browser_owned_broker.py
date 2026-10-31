@@ -5,6 +5,7 @@ identities; every endpoint, source, certificate purpose and phase is fixed here.
 Owned fixture TLS trust is confined to the worker's private readonly root.
 """
 import argparse
+import base64
 import hashlib
 import json
 import os
@@ -153,7 +154,10 @@ class Mediation:
             self.observations.append({'operation':'http','slot':plan['slot'],'url_sha256':plan['url_sha256'],
                 'status':metadata['http_status'],'body_bytes':len(body),'body_sha256':metadata['body_sha256'],
                 'peer_ipv4':facts['peer_ipv4'],'tls_verified_by_broker':metadata['tls_verified_by_broker'],
-                'tls_fingerprint_source':metadata['tls_fingerprint_source']})
+                'tls_fingerprint_source':metadata['tls_fingerprint_source'],
+                'scope':'browser HTTPS resource'if plan['scheme']=='https'else'separate plain HTTP transport probe',
+                'request':dict(request),'response_headers':metadata['headers'],
+                'response_body_b64':base64.b64encode(body).decode('ascii')})
             allowed={k:metadata[k]for k in ['status','slot','http_status','headers','body_bytes','body_sha256']}
             return allowed,body
         except (OSError,ValueError,KeyError,TypeError):
@@ -205,6 +209,35 @@ def send_response(channel,nonce,slot,metadata,body):
             console.transfer(channel,{'kind':'part','nonce':nonce,'seq':slot,'section':section,'row':row})
 
 
+def collect_capture(channel,nonce,guest,out,committed=None):
+    """Read two finite committed streams only after the Chrome writers stopped."""
+    require(guest.get('writers_stopped')is True,'owned_capture_live_writers')
+    manifest=guest.get('capture_artifacts');require(type(manifest)is list and len(manifest)<=2,'owned_capture_manifest')
+    names=[]
+    if committed is None:committed=[]
+    require(type(committed)is list and not committed,'owned_capture_already_started')
+    for seq,item in enumerate(manifest):
+        require(type(item)is dict and set(item)=={'name','stream','bytes','sha256'}and
+            item['name']in {'dom.html','screenshot.png'}and item['name']not in names and
+            type(item['stream'])is int and item['stream']==seq and type(item['bytes'])is int and
+            0<item['bytes']<=256*1024 and type(item['sha256'])is str and
+            re.fullmatch('[0-9a-f]{64}',item['sha256']),'owned_capture_manifest_entry')
+        names.append(item['name']);assembler=cdp.ResponseAssembler(nonce,seq,item['bytes']);raw=None
+        for chunk in range(10):
+            reply=channel.call('artifact',value={'name':item['name'],'chunk':chunk},seconds=2)
+            require(type(reply)is dict and set(reply)=={'name','row'}and reply['name']==item['name'],
+                'owned_capture_response_name')
+            raw=assembler.feed(reply['row'])
+            if raw is not None:break
+        require(raw is not None and len(raw)==item['bytes']and hashlib.sha256(raw).hexdigest()==item['sha256'],
+            'owned_capture_response_binding')
+        path=out/('capture-'+item['name'])
+        fd=os.open(path,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o400)
+        with os.fdopen(fd,'wb')as stream:stream.write(raw);stream.flush();os.fsync(stream.fileno())
+        committed.append({k:item[k]for k in ['name','bytes','sha256']})
+    return committed
+
+
 def run_owned(job,release):
     require(os.geteuid()==0 and HERE==Path('/opt/paw-vm/releases')/release/'paw/core/browser_owned_broker.py',
             'owned_broker_immutable_root_only')
@@ -226,7 +259,7 @@ def run_owned(job,release):
     epoch=uuid.uuid4().hex;ids=kernel.policy.identity(job,epoch,release)
     record={'schema':'paw-owned-brokered-browser-v1','result':'FAIL','job':job,'release_sha':release,
         'real_connections':0,'real_samples_executed':0,'i08_installed':False,'production_grants_enabled':False,
-        'kernel_component':kernel_result,
+        'kernel_component':kernel_result,'fixture_nonce':epoch,'capture_artifacts':[],
         'scope':'owned private DNS, plain HTTP transport and actual HTTPS no-NIC Chrome; not full O3 fault/custody or public authority'}
     actors=[];gate=None;vm=None;partitioned=False;mediation=None
     with auth.fs.execution_lock():
@@ -240,7 +273,7 @@ def run_owned(job,release):
         gate.canary=out/'host-owned-canary.bin';gate.canary.write_bytes(os.urandom(32));gate.canary.chmod(0o600)
         canary=digest(gate.canary);before=gate.snapshot_host();network=network_state()
         try:
-            vm=gate.start('owned-brokered-browser')
+            vm=gate.start('owned-brokered-browser');record['vm_uuid']=vm['node']['uuid']
             inspected=vm['channel'].call('inspect',seconds=8)
             require(inspected['network_interfaces']==['lo'] and inspected['chrome_version']==context['chrome_version'] and
                 inspected['chrome_binary_sha256']==context['chrome_binary_sha256'],'owned_broker_exact_browser')
@@ -257,7 +290,8 @@ def run_owned(job,release):
                 request=value.get('network_request')
                 if request is not None and 'first_paused_request'not in record['timing_ns']:
                     record['timing_ns']['first_paused_request']=time.monotonic_ns()
-                if value.get('done')is True:break
+                if value.get('done')is True:
+                    record['guest']=value;break
                 # Align the existing keeper8s with the remaining part of the
                 # guest15s. Earlier requests start preparation immediately.
                 # Continue polling the same VM while PID1 roles initialize.
@@ -318,6 +352,10 @@ def run_owned(job,release):
             require(network_owner.get('reason')=='requested_stop'and network_owner.get('epoch')==epoch and
                 network_owner.get('namespace_inode')==inode,'owned_broker_network_owner_disposition')
             record['network_owner_disposition']=network_owner
+            # Network leases and roles have stopped before the bounded binary
+            # transfer. No extension of the keeper or browser execution budget.
+            record['capture_transfer_started']=True
+            collect_capture(vm['channel'],epoch,value,out,record['capture_artifacts'])
             record.update(result='PASS',guest=value,observations=mediation.observations,
                 ledger=mediation.ledger.close(),fixture_ca_sha256=cert_sha,
                 role_observations=[v.observation for v in actors],vm_uuid=vm['node']['uuid'],qemu_limits=dict(LIMITS))
@@ -331,6 +369,16 @@ def run_owned(job,release):
                 if partitioned:partition(ids['parent'],restore=True)
             except Exception as error:failures.append('budget:'+type(error).__name__)
             try:
+                if record.get('result')=='FAIL' and vm is not None and not record.get('capture_transfer_started'):
+                    try:
+                        terminal=record.get('guest')
+                        if terminal is None:terminal=vm['channel'].call('cancel',seconds=4)
+                        record['guest']=terminal
+                        if terminal.get('writers_stopped')is True:
+                            record['capture_transfer_started']=True
+                            collect_capture(vm['channel'],epoch,terminal,out,record['capture_artifacts'])
+                    except Exception as capture_error:
+                        record['capture_error']=type(capture_error).__name__+':'+str(capture_error)[:256]
                 if gate.active_vm is not None:gate.stop(gate.active_vm)
                 require(vm is not None and Path(vm['owner_result_path']).parent==gate.output,
                         'owned_broker_owner_result_path')
@@ -357,6 +405,8 @@ def run_owned(job,release):
                 record['observations']=mediation.observations
                 record['ledger_progress']={'requests_consumed':mediation.ledger.used,
                     'response_bytes':mediation.ledger.received,'closed':mediation.ledger.closed}
+            record['capture_missing_coverage']=[name for name in ['dom.html','screenshot.png']
+                if name not in {item['name']for item in record['capture_artifacts']}]
             record['role_observations']=[v.observation for v in actors if hasattr(v,'observation')]
             record['role_diagnostics']=[{'unit':v.unit,'launcher_returncode':v.process.poll(),
                 'stderr':bytes(v.errors).decode('utf-8','replace')}for v in actors]

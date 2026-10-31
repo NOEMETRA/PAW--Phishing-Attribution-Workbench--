@@ -3,13 +3,13 @@ from contextlib import nullcontext,ExitStack
 import hashlib,json,os,sys,tempfile,types,unittest
 from pathlib import Path
 from unittest.mock import patch,Mock
-from paw.core import browser_owned_broker as p,browser_mediator as mediator
+from paw.core import browser_owned_broker as p,browser_mediator as mediator,browser_owned_broker_guest as guest
 
 R='b'*40;J='c'*32;U='00000000-0000-4000-8000-000000000001'
 GOOD={'reason':'requested_stop','connection_closed':True,'vm_uuid':U}
 
 class Owner(unittest.TestCase):
-    def simulate(self,owner,*,cleanup_fail=False,guest_bad=False,worker_bad=False,bootstrap_delayed=False,proof_delayed=False,late_pause=False,prepare_bad=None):
+    def simulate(self,owner,*,cleanup_fail=False,guest_bad=False,worker_bad=False,bootstrap_delayed=False,proof_delayed=False,late_pause=False,prepare_bad=None,capture_bad=False):
         clock=[10**9];guest_ack=[];proof_armed=[False];proof_charged=[False]
         with tempfile.TemporaryDirectory()as directory:
             root=Path(directory);repo=root/'releases'/R;core=repo/'paw/core';core.mkdir(parents=True)
@@ -34,25 +34,32 @@ class Owner(unittest.TestCase):
                 canonical=lambda v:json.dumps(v,sort_keys=True,separators=(',',':')).encode(),
                 fs=types.SimpleNamespace(execution_lock=lambda:nullcontext(),root_directory=lambda p:nullcontext(p),
                     read=read,IMAGE_SHA256=digest(base)))
-            published=[];stops=[];partitions=[]
+            published=[];stops=[];partitions=[];channels=[]
             sandbox={k:True for k in ['renderer_seen','renderer_nnp','renderer_seccomp','renderer_pid_namespace','all_uids_nonroot']}
             if guest_bad:sandbox['all_uids_nonroot']=False
             class Channel:
-                def __init__(self,nonce):self.nonce=nonce;self.count=0;self.completed=0;self.refused=False
+                def __init__(self,nonce):
+                    self.nonce=nonce;self.count=0;self.completed=0;self.refused=False;self.capture_calls=[]
+                    self.capture=guest.Transfer(nonce,{'dom.html':b'owned DOM','screenshot.png':b'inert PNG'},True)
+                    channels.append(self)
                 def call(self,op,**kwargs):
+                    if op=='artifact':
+                        value=kwargs['value'];self.capture_calls.append(value)
+                        if value['name']=='screenshot.png':raise ValueError('inert later PNG transfer failure')
+                        return self.capture.read(value)
                     if op=='inspect':return {**context,'network_interfaces':['lo']}
                     if op=='start':
                         if bootstrap_delayed:clock[0]+=6500*10**6
                         guest_ack.append(clock[0]);return {'started':True}
                     self.count+=1
                     if late_pause:clock[0]+=250*10**6
-                    if self.refused:return {'done':True,'status':'failed','writers_stopped':True,'network_interfaces':['lo'],'sandbox':sandbox}
+                    if self.refused:return {'done':True,'status':'failed','writers_stopped':True,'network_interfaces':['lo'],'sandbox':sandbox,'capture_artifacts':[]}
                     if late_pause and clock[0]-guest_ack[0]<10528*10**6:return {'done':False,'stage':'setup'}
                     if bootstrap_delayed and self.count==1:clock[0]+=3*10**9
                     if self.completed<2:
                         return {'done':False,'network_request':{'nonce':self.nonce,'seq':self.completed,
                             'url':p.SEED,'method':'GET','resource':'Document'}}
-                    return {'done':True,'status':'completed','writers_stopped':True,'network_interfaces':['lo'],'sandbox':sandbox}
+                    return {'done':True,'status':'completed','writers_stopped':True,'network_interfaces':['lo'],'sandbox':sandbox,'capture_artifacts':self.capture.manifest if capture_bad else[]}
             class Gate:
                 def __init__(self,args,**kwargs):
                     self.output=args.output;self.output.mkdir();self.active_vm=None;self.nonce=kwargs['seed_config']['nonce']
@@ -123,7 +130,7 @@ class Owner(unittest.TestCase):
                 patch.object(p,'send_response',side_effect=lambda channel,*args:setattr(channel,'completed',channel.completed+1)), \
                 patch.object(p.console,'transfer',side_effect=lambda channel,*args:setattr(channel,'refused',True)))
                 for manager in managers:stack.enter_context(manager)
-                if owner==GOOD and owner.get('connection_closed')is True and not cleanup_fail and not guest_bad and not worker_bad and prepare_bad is None:
+                if owner==GOOD and owner.get('connection_closed')is True and not cleanup_fail and not guest_bad and not worker_bad and prepare_bad is None and not capture_bad:
                     try:answer=p.run_owned(J,R)
                     except ValueError as error:
                         record=json.loads(next(control.glob('*/results.json')).read_bytes())
@@ -136,9 +143,14 @@ class Owner(unittest.TestCase):
             self.assertEqual(len(published),1 if known else 0)
             if known:
                 attestation=json.loads((published[0]/'attestation.json').read_bytes())
-                self.assertEqual(attestation['result'],'FAIL'if guest_bad or worker_bad or prepare_bad else'PASS')
+                self.assertEqual(attestation['result'],'FAIL'if guest_bad or worker_bad or prepare_bad or capture_bad else'PASS')
                 self.assertTrue(attestation['writers_stopped']);self.assertEqual(attestation['real_connections'],0)
                 self.assertFalse(attestation['production_grants_enabled'])
+                if capture_bad:
+                    self.assertEqual(attestation['capture_artifacts'],[{'name':'dom.html','bytes':9,'sha256':hashlib.sha256(b'owned DOM').hexdigest()}])
+                    self.assertEqual(attestation['capture_missing_coverage'],['screenshot.png'])
+                    self.assertEqual(channels[0].capture_calls,[{'name':'dom.html','chunk':0},{'name':'dom.html','chunk':1},{'name':'screenshot.png','chunk':0}])
+                    self.assertEqual(next(control.glob('*/capture-dom.html')).read_bytes(),b'owned DOM')
                 if worker_bad:
                     self.assertEqual(attestation['broker_progress'],{'phase':'browser_request','slot':0,
                         'url_sha256':hashlib.sha256(p.SEED.encode()).hexdigest()})
@@ -146,6 +158,7 @@ class Owner(unittest.TestCase):
                     self.assertLess(attestation['stop_ns'],12*10**9,'post-stop hashing must not inflate the external stop measurement')
                     self.assertGreaterEqual(attestation['verification_ns'],16*10**9)
             else:self.assertEqual(list(exports.iterdir()),[])
+    def test_later_capture_failure_retains_DOM_and_never_restarts_consumed_stream(self):self.simulate(GOOD,capture_bad=True)
     def test_owned_complete_path_needs_expected_external_owner_before_pass(self):self.simulate(GOOD)
     def test_domain_absence_does_not_replace_missing_changed_or_unclosed_owner(self):
         for value in [None,{}, {**GOOD,'vm_uuid':'wrong'}, {**GOOD,'connection_closed':1},

@@ -47,6 +47,10 @@ class Server(unittest.TestCase):
     def test_actual_auth_header_unknown_method_and_path_are_refused(self):
         for method,path,extra in [(b'GET',b'/',b'Cookie: x=y\r\n'),(b'POST',b'/',b''),(b'GET',b'/unknown',b'')]:
             self.assertEqual(self.fetch('https',method,path,extra),b'')
+        # TLS EOF is observable before the handler's except block increments
+        # its refusal counter. Join the bounded server before reading totals.
+        self.server.closed=True;self.thread.join(timeout=2)
+        self.assertFalse(self.thread.is_alive())
         self.assertEqual(self.server.counts['refused'],3)
     def test_actual_head_has_no_body_and_redirect_remains_unfollowed(self):
         self.assertTrue(self.fetch('https',b'HEAD').endswith(b'\r\n\r\n'))
