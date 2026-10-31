@@ -26,6 +26,21 @@ def producer_names(auth):
     return {name for name in names if re.fullmatch('browser-acceptance-[0-9a-f]{32}', name)}
 
 
+def owned_browser_capture(job,release,record,announce):
+    from paw.core import owned_mail_channel
+    from paw.core.browser_owned_broker import run_owned as broker_probe
+    required=owned_mail_channel.admission_required(job,release)
+    record['mail_admission_required']=required
+    record['mail_capture_scope']=('owned email request and terminal sidecar'if required else
+        'protected native enrollment generated fixtures only; no email custody claim')
+    admission=owned_mail_channel.admit(job,release,announce)if required else None
+    try:record['owned_broker_probe']=broker_probe(job,release)
+    finally:
+        if admission is not None:record['owned_mail_capture']=owned_mail_channel.publish(admission)
+    if admission is not None:
+        require(record['owned_mail_capture']['status']=='completed','operator_owned_mail_capture_failed')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--recipe', required=True); parser.add_argument('--job', required=True); args = parser.parse_args()
@@ -58,19 +73,11 @@ def main():
     record = {'result': 'FAIL', 'job': args.job, 'recipe': args.recipe, 'release_sha': HERE.parents[1].name,
               'real_samples_executed': 0, 'guard_before': guard_fingerprint()}
     context = auth.capture(); auth.validate_context(context)
-    admission=None
     try:
-        from paw.core import owned_mail_channel
-        admission=owned_mail_channel.admit(args.job,HERE.parents[1].name,
+        # Native enrollment retains only its live one-use generated recipe;
+        # every enrolled ordinary run requires the fixed email handoff.
+        owned_browser_capture(args.job,HERE.parents[1].name,record,
             lambda value:print(json.dumps(value),flush=True))
-        # New owned-only DNS/TLS/private-wire/actual-Chrome component. The
-        # original CDP and nine HTML contracts still run afterwards.
-        from paw.core.browser_owned_broker import run_owned as broker_probe
-        try:record['owned_broker_probe'] = broker_probe(args.job, HERE.parents[1].name)
-        finally:
-            # publish() independently refuses absent attestation/unknown stop.
-            record['owned_mail_capture'] = owned_mail_channel.publish(admission)
-        require(record['owned_mail_capture']['status']=='completed','operator_owned_mail_capture_failed')
         # Fixed generated CDP fixtures in a no-NIC VM, before the existing nine
         # HTML cases. No URL/source/host network authority is accepted here.
         from paw.core.browser_owned_cdp_probe import run_owned as cdp_probe

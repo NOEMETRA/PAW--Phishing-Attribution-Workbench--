@@ -89,6 +89,15 @@ protected job and consumes the request ID with exclusive creation before any
 kernel or VM work. A reused ID, incorrect nonce or altered source refuses.
 Supplied paths, code, privilege rules and public URLs are never accepted.
 
+Native installation/repair retains its original generated-input acceptance
+protocol. The worker selects that branch only from protected private state:
+incomplete enrollment, current release equal to its enrolled anchor, consumed
+native one-use test, exact fixed recipe/release and a still-live Root native
+owner/admission lease. It creates no email receipt or claim of parent custody.
+An enrolled operator always requires the mail handoff; missing/invalid data never
+falls back to native mode. The native client and static privilege boundary need
+no new verb, dependency or credential operation.
+
 The existing guest launcher defaults to its original DOM-only CDP controller.
 Only the owned broker controller adds one bounded PNG screenshot after DOM
 snapshot, under the unchanged15s browser clock. After the Chrome cgroup is

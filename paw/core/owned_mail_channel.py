@@ -69,6 +69,35 @@ def _root(job,release):
     return trusted_directory
 
 
+def admission_required(job,release):
+    """Only a live protected native enrollment retains its generated-input recipe.
+
+    The enrolled ordinary operator always requires mail data. No caller flag or
+    missing/expired request can select the native branch or trigger fallback.
+    """
+    trusted=_root(job,release)
+    import vm_operator_host as host
+    state=Path('/var/lib/paw-vm')
+    with trusted(state)as fd:
+        policy=host.private_json(fd,'policy.json');host.contract.policy(policy)
+        require(not host.revoked(fd),'owned_mail_operator_revoked')
+        if host.enrollment_complete(policy):return True
+        active=host.active(host.private_json(fd,'active.json'))
+        require(active['release_sha']==release==policy['anchor_sha']and host.enrollment_test_consumed(fd),
+            'owned_mail_native_admission_missing')
+        grant=host.private_json(fd,'enrollment-test.json')
+        host.contract.shape(grant,{'schema','release_sha','recipe','token_sha256','owner_pid','owner_start',
+            'created_at','expires_at'},'owned_mail_native_grant_shape')
+        require(grant['schema']=='paw-vm-native-test-v1'and grant['release_sha']==release and
+            grant['recipe']=='browser-owned-v1'and custody.hex64(grant['token_sha256'])and
+            host.contract.positive(grant['owner_pid'])and grant['owner_pid']>1 and
+            type(grant['owner_start'])is str and grant['owner_start'].isdigit()and
+            type(grant['created_at'])is int and type(grant['expires_at'])is int,
+            'owned_mail_native_grant_identity')
+        host.native_test_live(grant)
+    return False
+
+
 def admit(job,release,announce):
     """One fixed-owned rendezvous; only the reviewed Root recipe may call it."""
     import uuid
