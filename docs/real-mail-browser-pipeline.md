@@ -149,6 +149,12 @@ Unknown cleanup or restoration prevents publication; an observed component
 failure stays FAIL and prevents the enclosing runtime recipe from passing.
 Bounded stderr from these fixed owned actors is included only after their
 writers are confirmed stopped, to diagnose partial startup without a repeat.
+The subsequent PR146 attempt reached the immutable bootstrap but refused its
+initial confinement conjunction before any socket. Its protected terminal
+record confirms restored host and collected role units. The unmet predicate
+was not identified by the old generic error: bounded diagnostics now name only
+the five checks and whitelisted process/interface values. Every check remains
+mandatory; no fix or actual kernel/credential acceptance is inferred yet.
 
 Inert lifecycle tests and installed systemd259 parser checks do not prove
 packet filtering, namespace joining or fault latency. Those remain unaccepted

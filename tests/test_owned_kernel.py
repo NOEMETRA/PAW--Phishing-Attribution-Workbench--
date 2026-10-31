@@ -107,6 +107,20 @@ class Boundaries(unittest.TestCase):
 
 
 class Credentials(unittest.TestCase):
+    def test_refusal_diagnostic_names_failed_predicate_without_dropping_or_opening(self):
+        before={'interfaces':['lo','owned-wrong-view'],'nnp':'1','seccomp':'2','groups':[0],
+            'cap_eff':'c0','cap_prm':'c0','cap_inh':'0','cap_amb':'0','namespace_inode':123,
+            'credential':'must never be included'}
+        with patch.object(r.os,'getresuid',return_value=(0,)*3),patch.object(r.os,'getresgid',return_value=(0,)*3), \
+             patch.object(r,'status',return_value=before),patch.object(r.os,'setgroups')as groups, \
+             patch.object(r.socket,'socket',side_effect=AssertionError('no socket')):
+            with self.assertRaisesRegex(ValueError,'bootstrap_confinement')as caught:r.drop_credentials('probe')
+            groups.assert_not_called()
+        payload=r.decode(str(caught.exception).split(':',1)[1].encode())
+        self.assertFalse(payload['checks']['interfaces'])
+        self.assertTrue(all(value for key,value in payload['checks'].items()if key!='interfaces'))
+        self.assertNotIn('credential',payload['observed']);self.assertNotIn('must never',str(caught.exception))
+
     def test_actual_unprivileged_capset_abi_cannot_add_a_capability(self):
         if os.geteuid()==0:self.skipTest('Root credential changes require immutable owned acceptance')
         # Clear only a disposable child's inherited bits, never the runner's.

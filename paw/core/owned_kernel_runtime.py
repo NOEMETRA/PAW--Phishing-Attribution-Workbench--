@@ -105,8 +105,17 @@ def drop_credentials(role):
     require(type(role)is str and role in {'fixture','probe'} and os.getresuid()==(0,0,0) and
         os.getresgid()==(0,0,0),'owned_kernel_credential_bootstrap')
     before=status();mask=(1<<6)|(1<<7)|((1<<10)if role=='fixture'else 0)
-    require(before['interfaces']==['lo'] and before['nnp']=='1' and before['seccomp']=='2' and
-        set(before['groups'])<={0} and int(before['cap_eff'],16)==mask,'owned_kernel_bootstrap_confinement')
+    checks={'interfaces':before['interfaces']==['lo'],'no_new_privileges':before['nnp']=='1',
+        'seccomp':before['seccomp']=='2','groups':set(before['groups'])<={0},
+        'capabilities':int(before['cap_eff'],16)==mask}
+    if not all(checks.values()):
+        # Fixed owned metadata only, never config/peer bytes, credentials or
+        # arbitrary /proc reads. Diagnose the refusal without weakening it.
+        observed={'interfaces':[v[:32]for v in before['interfaces'][:16]],'groups':before['groups'][:16],
+            **{key:before[key]for key in ['nnp','seccomp','cap_eff','cap_prm','cap_inh','cap_amb','namespace_inode']
+               if key in before}}
+        raise ValueError('owned_kernel_bootstrap_confinement:'+canonical({'checks':checks,
+            'observed':observed,'expected_cap_eff':mask}).decode('ascii'))
     libc=ctypes.CDLL(None,use_errno=True)
     if role=='fixture':require(libc.prctl(8,1,0,0,0)==0,'owned_kernel_keep_capabilities')
     uid=policy.FIXTURE_UID if role=='fixture'else policy.BROKER_UID
