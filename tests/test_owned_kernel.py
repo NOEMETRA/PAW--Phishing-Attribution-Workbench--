@@ -30,7 +30,7 @@ class Policy(unittest.TestCase):
         for role,uid in [('probe',65520),('fixture',65521)]:
             _,props,cmd=p.service(J,E,R,role,12345)
             self.assertEqual(props['User'],'root');self.assertEqual(props['Group'],'root')
-            self.assertEqual(props['AmbientCapabilities'],'')
+            self.assertEqual(props['AmbientCapabilities'],'CAP_SETUID')
             self.assertEqual(props['CapabilityBoundingSet'],
                 'CAP_SETUID CAP_SETGID'+(' CAP_NET_BIND_SERVICE'if role=='fixture'else''))
             self.assertEqual(props['SupplementaryGroups'],'')
@@ -107,6 +107,19 @@ class Boundaries(unittest.TestCase):
 
 
 class Credentials(unittest.TestCase):
+    def test_observed_systemd259_setuid_drop_is_prevented_only_for_fixed_bootstrap(self):
+        # Actual protected147 witness: every predicate except capabilities
+        # passed;0x4c0 configured ->0x440 observed. v259 exec-invoke.c drops
+        # SETUID during keep_seccomp_privileges unless it is ambient.
+        observed=0x440;configured=0x4c0;uid_bit=1<<7
+        self.assertEqual(configured&~uid_bit,observed)
+        for role in ['fixture','probe']:
+            _,props,_=p.service(J,E,R,role,12345)
+            self.assertEqual(props['AmbientCapabilities'],'CAP_SETUID')
+            self.assertEqual(props['NoNewPrivileges'],'yes')
+            self.assertEqual(props['SystemCallFilter'],'@system-service')
+            self.assertNotIn('CAP_SYS_ADMIN',props['CapabilityBoundingSet'])
+
     def test_refusal_diagnostic_names_failed_predicate_without_dropping_or_opening(self):
         before={'interfaces':['lo','owned-wrong-view'],'nnp':'1','seccomp':'2','groups':[0],
             'cap_eff':'c0','cap_prm':'c0','cap_inh':'0','cap_amb':'0','namespace_inode':123,

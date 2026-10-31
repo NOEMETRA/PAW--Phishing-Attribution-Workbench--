@@ -155,6 +155,16 @@ record confirms restored host and collected role units. The unmet predicate
 was not identified by the old generic error: bounded diagnostics now name only
 the five checks and whitelisted process/interface values. Every check remains
 mandatory; no fix or actual kernel/credential acceptance is inferred yet.
+The PR147 protected diagnostic identified only capabilities as failed:
+`0x440` received against `0x4c0` required, with `lo`, empty groups, NNP/seccomp
+and the verified keeper namespace all correct. This is exactly the removed
+`CAP_SETUID` bit. The installed259 behavior is explained by
+[systemd259's seccomp setup](https://github.com/systemd/systemd/blob/v259/src/core/exec-invoke.c):
+it drops SETUID unless requested in the ambient set. The fixed bootstrap now
+declares only that bit ambient; UID/GID lowering and the explicit capset clearing
+still occur before socket work, and readiness still requires every capability
+set zero. No host account, broad capability, budget or predicate is added.
+Actual credential/packet acceptance remains pending a fresh promoted job.
 
 Inert lifecycle tests and installed systemd259 parser checks do not prove
 packet filtering, namespace joining or fault latency. Those remain unaccepted
