@@ -9,7 +9,7 @@ R='b'*40;J='c'*32;U='00000000-0000-4000-8000-000000000001'
 GOOD={'reason':'requested_stop','connection_closed':True,'vm_uuid':U}
 
 class Owner(unittest.TestCase):
-    def simulate(self,owner,*,cleanup_fail=False,guest_bad=False,worker_bad=False,bootstrap_delayed=False,proof_delayed=False,late_pause=False,prepare_bad=None,capture_bad=False):
+    def simulate(self,owner,*,cleanup_fail=False,guest_bad=False,worker_bad=False,bootstrap_delayed=False,proof_delayed=False,late_pause=False,prepare_bad=None,capture_bad=False,late_capture=False,after_snapshot=False):
         clock=[10**9];guest_ack=[];proof_armed=[False];proof_charged=[False]
         with tempfile.TemporaryDirectory()as directory:
             root=Path(directory);repo=root/'releases'/R;core=repo/'paw/core';core.mkdir(parents=True)
@@ -39,7 +39,7 @@ class Owner(unittest.TestCase):
             if guest_bad:sandbox['all_uids_nonroot']=False
             class Channel:
                 def __init__(self,nonce):
-                    self.nonce=nonce;self.count=0;self.completed=0;self.refused=False;self.capture_calls=[]
+                    self.nonce=nonce;self.count=0;self.completed=0;self.refused=False;self.capture_calls=[];self.snapshot_seen=False
                     self.capture=guest.Transfer(nonce,{'dom.html':b'owned DOM','screenshot.png':b'inert PNG'},True)
                     channels.append(self)
                 def call(self,op,**kwargs):
@@ -59,6 +59,12 @@ class Owner(unittest.TestCase):
                     if self.completed<2:
                         return {'done':False,'network_request':{'nonce':self.nonce,'seq':self.completed,
                             'url':p.SEED,'method':'GET','resource':'Document'}}
+                    if not self.snapshot_seen:
+                        self.snapshot_seen=True
+                        if late_capture:clock[0]=guest_ack[0]+12700*10**6
+                        return {'done':False,'stage':'snapshot','network_quiescent':True}
+                    if late_capture:clock[0]=guest_ack[0]+13200*10**6
+                    if after_snapshot:return {'done':False,'network_request':{'nonce':self.nonce,'seq':2,'url':p.SEED,'method':'GET','resource':'Document'}}
                     return {'done':True,'status':'completed','writers_stopped':True,'network_interfaces':['lo'],'sandbox':sandbox,'capture_artifacts':self.capture.manifest if capture_bad else[]}
             class Gate:
                 def __init__(self,args,**kwargs):
@@ -85,17 +91,17 @@ class Owner(unittest.TestCase):
                 def poll_ready(self):return clock[0]>=self.ready_when
             class Mediation:
                 def __init__(self,*args):
-                    self.nonce=args[2];self.sequence=1;Mediation.latest=self
-                    self.ledger=(mediator.BrowserRequestLedger(p.SEED,self.nonce,args[3])if bootstrap_delayed or late_pause else
+                    self.owner,self.worker=args[:2];self.nonce=args[2];self.sequence=1;Mediation.latest=self
+                    self.ledger=(mediator.BrowserRequestLedger(p.SEED,self.nonce,args[3])if bootstrap_delayed or late_pause or late_capture else
                         types.SimpleNamespace(used=0,received=0,closed=False,close=lambda:{'owned':'inert stats'}))
                     self.observations=[{'operation':'http','tls_verified_by_broker':True}for _ in range(2)]
                 def response(self,request):
                     if worker_bad:
                         self.ledger.closed=True;raise ValueError('inert worker protocol loss')
-                    if bootstrap_delayed or late_pause:
+                    if bootstrap_delayed or late_pause or late_capture:
                         assert 0<=clock[0]-guest_ack[0]<15*10**9,'guest execution itself has not expired'
                         plan=self.ledger.admit(request,['93.184.216.34'],0,10**10,clock[0])
-                        if late_pause:p.kernel_lease_milliseconds(plan,clock[0])
+                        if late_pause or late_capture:p.kernel_lease_milliseconds(plan,clock[0])
                         self.ledger.complete(plan,200,[],b'owned','93.184.216.34',plan['scheme']=='https',clock[0])
                     else:self.ledger.used+=1
                     if request['url'].startswith('http:'):
@@ -130,7 +136,7 @@ class Owner(unittest.TestCase):
                 patch.object(p,'send_response',side_effect=lambda channel,*args:setattr(channel,'completed',channel.completed+1)), \
                 patch.object(p.console,'transfer',side_effect=lambda channel,*args:setattr(channel,'refused',True)))
                 for manager in managers:stack.enter_context(manager)
-                if owner==GOOD and owner.get('connection_closed')is True and not cleanup_fail and not guest_bad and not worker_bad and prepare_bad is None and not capture_bad:
+                if owner==GOOD and owner.get('connection_closed')is True and not cleanup_fail and not guest_bad and not worker_bad and prepare_bad is None and not capture_bad and not after_snapshot:
                     try:answer=p.run_owned(J,R)
                     except ValueError as error:
                         record=json.loads(next(control.glob('*/results.json')).read_bytes())
@@ -143,7 +149,7 @@ class Owner(unittest.TestCase):
             self.assertEqual(len(published),1 if known else 0)
             if known:
                 attestation=json.loads((published[0]/'attestation.json').read_bytes())
-                self.assertEqual(attestation['result'],'FAIL'if guest_bad or worker_bad or prepare_bad or capture_bad else'PASS')
+                self.assertEqual(attestation['result'],'FAIL'if guest_bad or worker_bad or prepare_bad or capture_bad or after_snapshot else'PASS')
                 self.assertTrue(attestation['writers_stopped']);self.assertEqual(attestation['real_connections'],0)
                 self.assertFalse(attestation['production_grants_enabled'])
                 if capture_bad:
@@ -154,10 +160,18 @@ class Owner(unittest.TestCase):
                 if worker_bad:
                     self.assertEqual(attestation['broker_progress'],{'phase':'browser_request','slot':0,
                         'url_sha256':hashlib.sha256(p.SEED.encode()).hexdigest()})
+                if late_capture:
+                    self.assertEqual(attestation['timing_ns']['network_quiescent']-guest_ack[0],12700*10**6)
+                    self.assertEqual(attestation['timing_ns']['network_roles_stopped']-guest_ack[0],12700*10**6)
+                    self.assertEqual(attestation['timing_ns']['guest_done']-guest_ack[0],13200*10**6)
+                    self.assertLess(attestation['timing_ns']['network_roles_stopped'],attestation['timing_ns']['guest_done'])
+                if after_snapshot:self.assertEqual(attestation['error'],'ValueError:owned_broker_network_after_snapshot')
                 if proof_delayed:
                     self.assertLess(attestation['stop_ns'],12*10**9,'post-stop hashing must not inflate the external stop measurement')
                     self.assertGreaterEqual(attestation['verification_ns'],16*10**9)
             else:self.assertEqual(list(exports.iterdir()),[])
+    def test_auxiliary_probe_stops_network_at_snapshot_before_late_PNG_under_same_lease(self):self.simulate(GOOD,late_capture=True)
+    def test_network_request_after_snapshot_closes_without_reopening_stopped_roles(self):self.simulate(GOOD,after_snapshot=True)
     def test_later_capture_failure_retains_DOM_and_never_restarts_consumed_stream(self):self.simulate(GOOD,capture_bad=True)
     def test_owned_complete_path_needs_expected_external_owner_before_pass(self):self.simulate(GOOD)
     def test_domain_absence_does_not_replace_missing_changed_or_unclosed_owner(self):

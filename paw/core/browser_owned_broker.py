@@ -238,6 +238,40 @@ def collect_capture(channel,nonce,guest,out,committed=None):
     return committed
 
 
+def finish_network(mediation,actors,folder,epoch,inode,record):
+    """Existing fixed HTTP check and typed stop, at the closed-network boundary."""
+    http=[r for r in mediation.observations if r['operation']=='http']
+    require(len(http)>=2 and all(r['tls_verified_by_broker']is True for r in http),
+            'owned_broker_actual_tls_resources_missing')
+    # Separate fixed transport probe: this does not claim Chrome
+    # executed mixed-content HTTP. The Chrome observations above use TLS.
+    record['broker_progress']={'phase':'plain_http_probe','slot':mediation.ledger.used,
+        'url_sha256':hashlib.sha256(b'http://paw-owned.invalid/owned-data').hexdigest()}
+    plain,plain_body=mediation.response({'nonce':epoch,'seq':mediation.ledger.used,
+        'url':'http://paw-owned.invalid/owned-data','method':'GET','resource':'Fetch'})
+    require(plain['http_status']==200 and plain_body==('PAW-OWNED-'+epoch).encode('ascii') and
+        mediation.observations[-1]['tls_verified_by_broker']is False,
+        'owned_broker_plain_http_transport_missing')
+    # A completed DOM and absent units cannot excuse an unexpected
+    # network-owner/worker exit. Observe live identities, then perform
+    # the typed worker stop and expected keeper stop explicitly.
+    for actor in actors:
+        state=kernel.unit_properties(actor.unit)
+        require(state['ActiveState']=='active'and state['MainPID']==str(actor.pid),
+                'owned_broker_unexpected_network_exit')
+    fields,body=mediation.transaction('stop',{})
+    require(fields=={'request_sequence':mediation.sequence-1,'operation':'stop','stopped':True}and
+        fields['stopped']is True and body==b''and mediation.worker.process.wait(timeout=2)==0,'owned_broker_worker_stop')
+    mediation.control('stop')
+    require(mediation.owner.process.wait(timeout=2)==0,'owned_broker_keeper_stop')
+    network_owner=kernel.private_json(folder/'owner-result.json')
+    require(network_owner.get('reason')=='requested_stop'and network_owner.get('epoch')==epoch and
+        network_owner.get('namespace_inode')==inode,'owned_broker_network_owner_disposition')
+    record['network_owner_disposition']=network_owner
+    record['ledger']=mediation.ledger.close()
+    record['timing_ns']['network_roles_stopped']=time.monotonic_ns()
+
+
 def run_owned(job,release):
     require(os.geteuid()==0 and HERE==Path('/opt/paw-vm/releases')/release/'paw/core/browser_owned_broker.py',
             'owned_broker_immutable_root_only')
@@ -284,13 +318,15 @@ def run_owned(job,release):
             # same15s execution clock begins at the successful start boundary,
             # not before those prerequisites. Guest15s/keeper8s/worker10s stay.
             began=time.monotonic_ns();record['timing_ns']['guest_start_ack']=began
-            end=time.monotonic()+18;preparation=None
+            end=time.monotonic()+18;preparation=None;network_closed=False
             while time.monotonic()<end:
                 value=vm['channel'].call('poll',seconds=5)
                 request=value.get('network_request')
+                require(not network_closed or request is None,'owned_broker_network_after_snapshot')
                 if request is not None and 'first_paused_request'not in record['timing_ns']:
                     record['timing_ns']['first_paused_request']=time.monotonic_ns()
                 if value.get('done')is True:
+                    record['timing_ns']['guest_done']=time.monotonic_ns()
                     record['guest']=value;break
                 # Align the existing keeper8s with the remaining part of the
                 # guest15s. Earlier requests start preparation immediately.
@@ -308,6 +344,10 @@ def run_owned(job,release):
                     inode=preparation.inode
                     record['timing_ns']['actors_ready']=time.monotonic_ns()
                     mediation=Mediation(owner,worker,epoch,began)
+                if value.get('network_quiescent')is True and not network_closed:
+                    require(mediation is not None and request is None,'owned_broker_snapshot_with_pending_network')
+                    record['timing_ns']['network_quiescent']=time.monotonic_ns()
+                    finish_network(mediation,actors,folder,epoch,inode,record);network_closed=True
                 if mediation is not None and request is not None:
                     record['broker_progress']={'phase':'browser_request','slot':request['seq'],
                         'url_sha256':hashlib.sha256(request['url'].encode('utf-8',errors='surrogatepass')).hexdigest()}
@@ -323,35 +363,7 @@ def run_owned(job,release):
                 value.get('network_interfaces')==['lo'] and type(value.get('sandbox'))is dict and
                 set(value['sandbox'])=={'renderer_seen','renderer_nnp','renderer_seccomp','renderer_pid_namespace','all_uids_nonroot'}and
                 all(v is True for v in value['sandbox'].values()),'owned_broker_actual_guest_failed')
-            http=[r for r in mediation.observations if r['operation']=='http']
-            require(len(http)>=2 and all(r['tls_verified_by_broker']is True for r in http),
-                    'owned_broker_actual_tls_resources_missing')
-            # Separate fixed transport probe: this does not claim Chrome
-            # executed mixed-content HTTP. The Chrome observations above use TLS.
-            record['guest']=value
-            record['broker_progress']={'phase':'plain_http_probe','slot':mediation.ledger.used,
-                'url_sha256':hashlib.sha256(b'http://paw-owned.invalid/owned-data').hexdigest()}
-            plain,plain_body=mediation.response({'nonce':epoch,'seq':mediation.ledger.used,
-                'url':'http://paw-owned.invalid/owned-data','method':'GET','resource':'Fetch'})
-            require(plain['http_status']==200 and plain_body==('PAW-OWNED-'+epoch).encode('ascii') and
-                mediation.observations[-1]['tls_verified_by_broker']is False,
-                'owned_broker_plain_http_transport_missing')
-            # A completed DOM and absent units cannot excuse an unexpected
-            # network-owner/worker exit. Observe live identities, then perform
-            # the typed worker stop and expected keeper stop explicitly.
-            for actor in actors:
-                state=kernel.unit_properties(actor.unit)
-                require(state['ActiveState']=='active'and state['MainPID']==str(actor.pid),
-                        'owned_broker_unexpected_network_exit')
-            fields,body=mediation.transaction('stop',{})
-            require(fields=={'request_sequence':mediation.sequence-1,'operation':'stop','stopped':True}and
-                fields['stopped']is True and body==b''and worker.process.wait(timeout=2)==0,'owned_broker_worker_stop')
-            mediation.control('stop')
-            require(owner.process.wait(timeout=2)==0,'owned_broker_keeper_stop')
-            network_owner=kernel.private_json(folder/'owner-result.json')
-            require(network_owner.get('reason')=='requested_stop'and network_owner.get('epoch')==epoch and
-                network_owner.get('namespace_inode')==inode,'owned_broker_network_owner_disposition')
-            record['network_owner_disposition']=network_owner
+            require(network_closed,'owned_broker_snapshot_boundary_missing')
             # Network leases and roles have stopped before the bounded binary
             # transfer. No extension of the keeper or browser execution budget.
             record['capture_transfer_started']=True
