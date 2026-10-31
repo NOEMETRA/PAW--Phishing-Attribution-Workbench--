@@ -14,6 +14,9 @@ def require(v,r):
     if not v:raise ValueError(r)
 def canonical(v):return json.dumps(v,sort_keys=True,separators=(',',':'),allow_nan=False).encode()
 def sha(v):return hashlib.sha256(v).hexdigest()
+def observe_renderer(witness,group):
+    try:witness.observe(group)
+    except FileNotFoundError:pass  # Collected between sampling and read; stop_unit still verifies termination.
 def stop_unit(unit,group):
     stopped=subprocess.run(['systemctl','stop',unit],capture_output=True,text=True,timeout=2)
     shown=subprocess.run(['systemctl','show',unit,'-p','LoadState','-p','MainPID','-p','ActiveState'],
@@ -159,7 +162,7 @@ def controller(nonce):
                     while child.poll()is None:
                         if time.monotonic()-began>20:raise TimeoutError('guest case external stop deadline')
                         if group.exists():
-                            witness.observe(group)
+                            observe_renderer(witness,group)
                             for metric in ['memory.peak','pids.peak']:
                                 try:observed_peaks[metric]=max(observed_peaks.get(metric,0),int((group/metric).read_text()))
                                 except FileNotFoundError:pass

@@ -91,6 +91,19 @@ class Protocol(unittest.TestCase):
             with patch.object(guest.subprocess,'run',side_effect=[stop,gone]),self.assertRaises(ValueError):guest.stop_unit('owned.service',group)
             missing=SimpleNamespace(returncode=1,stdout='')
             with patch.object(guest.subprocess,'run',side_effect=[stop,missing]),self.assertRaises(ValueError):guest.stop_unit('owned.service',group)
+    def test_renderer_sampling_tolerates_collection_but_not_unknown_read_errors(self):
+        spec=importlib.util.spec_from_file_location('actual_renderer_witness',ROOT/'lab/s14/browser_sandbox.py')
+        witness_module=importlib.util.module_from_spec(spec);spec.loader.exec_module(witness_module)
+        with tempfile.TemporaryDirectory()as d:
+            group=Path(d)/'collected.service';group.mkdir();(group/'cgroup.procs').write_text('')
+            self.assertTrue(group.exists());(group/'cgroup.procs').unlink();group.rmdir()
+            witness=witness_module.RendererWitness()
+            guest.observe_renderer(witness,group)
+            self.assertFalse(witness.flags()['renderer_seen'])
+            with patch.object(witness,'observe',side_effect=PermissionError('unknown read')),self.assertRaises(PermissionError):
+                guest.observe_renderer(witness,group)
+            with patch.object(witness,'observe',side_effect=ValueError('invalid PID')),self.assertRaises(ValueError):
+                guest.observe_renderer(witness,group)
     def test_fixed_fixtures_exercise_JS_resource_redirect_and_never_accept_real_target(self):
         n='a'*32;status,_,body=guest.fixture(n,'/')
         self.assertEqual(status,200);self.assertIn(b"fetch('/owned-data')",body)
