@@ -558,3 +558,17 @@ backend. A successful capture alone cannot establish better phishing analysis.
 The three uncalibrated offline `Inconclusive` results require a separate paired
 evaluation of added forensic evidence, coverage, correct conclusions and analyst
 effort; Spam-folder membership is still not a ground-truth label.
+
+The owner subsequently authorized the practical backend comparison. The
+[separate experiment](../experiments/capture_backends/README.md) uses ordinary
+UID QEMU/KVM, the existing readonly browser image and an ephemeral no-NIC
+guest. It does not promote a Root release, alter the frozen broker or install
+host packages/privileges. Dependencies and genuine upstream capture/API code
+are supplied on readonly, hash-inventoried media. Only guest-loopback synthetic
+fixtures are inputs; no real mailbox URL is used.
+
+This comparison deliberately records stock capture behavior, including missing
+sandbox or permissive TLS semantics, rather than silently claiming equivalence
+to the PAW production profile. Bounded experimental outputs, explicit failures,
+actual process observations and stop/image checks inform the reuse decision.
+It is not an enrolled production egress/custody gate or a classifier benchmark.
