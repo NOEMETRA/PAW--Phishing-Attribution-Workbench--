@@ -5,6 +5,7 @@ nonroot IDs and a Root-supplied minimal private filesystem. No real URL, source,
 interface, route, NAT, shell, caller-selected host path or generic Root command.
 """
 import hashlib
+import ctypes
 import json
 import os
 from pathlib import Path
@@ -85,18 +86,45 @@ def status():
     fields=dict(row.split(':',1) for row in Path('/proc/self/status').read_text().splitlines() if ':' in row)
     return {'pid':os.getpid(),'uid':os.getuid(),'euid':os.geteuid(),'gid':os.getgid(),
         'groups':os.getgroups(),'nnp':fields['NoNewPrivs'].strip(),'seccomp':fields['Seccomp'].strip(),
-        'cap_eff':fields['CapEff'].strip(),'namespace_inode':os.stat('/proc/self/ns/net').st_ino,
+        'cap_eff':fields['CapEff'].strip(),'cap_prm':fields['CapPrm'].strip(),
+        'cap_inh':fields['CapInh'].strip(),'cap_amb':fields['CapAmb'].strip(),
+        'namespace_inode':os.stat('/proc/self/ns/net').st_ino,
         'interfaces':sorted(os.listdir('/sys/class/net'))}
 
 
+def capabilities(mask):
+    require(type(mask)is int and mask in {0,1<<10},'owned_kernel_fixed_capabilities')
+    class Header(ctypes.Structure):_fields_=[('version',ctypes.c_uint32),('pid',ctypes.c_int)]
+    class Data(ctypes.Structure):
+        _fields_=[('effective',ctypes.c_uint32),('permitted',ctypes.c_uint32),('inheritable',ctypes.c_uint32)]
+    header=Header(0x20080522,0);data=(Data*2)(Data(mask,mask,0),Data(0,0,0))
+    require(ctypes.CDLL(None,use_errno=True).capset(ctypes.byref(header),data)==0,'owned_kernel_capset_failed')
+
+
+def drop_credentials(role):
+    require(type(role)is str and role in {'fixture','probe'} and os.getresuid()==(0,0,0) and
+        os.getresgid()==(0,0,0),'owned_kernel_credential_bootstrap')
+    before=status();mask=(1<<6)|(1<<7)|((1<<10)if role=='fixture'else 0)
+    require(before['interfaces']==['lo'] and before['nnp']=='1' and before['seccomp']=='2' and
+        set(before['groups'])<={0} and int(before['cap_eff'],16)==mask,'owned_kernel_bootstrap_confinement')
+    libc=ctypes.CDLL(None,use_errno=True)
+    if role=='fixture':require(libc.prctl(8,1,0,0,0)==0,'owned_kernel_keep_capabilities')
+    uid=policy.FIXTURE_UID if role=='fixture'else policy.BROKER_UID
+    os.setgroups([]);os.setresgid(uid,uid,uid);os.setresuid(uid,uid,uid)
+    capabilities((1<<10)if role=='fixture'else 0)
+    if role=='fixture':require(libc.prctl(8,0,0,0,0)==0,'owned_kernel_clear_keep_capabilities')
+    require(os.getresuid()==(uid,uid,uid) and os.getresgid()==(uid,uid,uid) and not os.getgroups(),
+            'owned_kernel_irreversible_identity_drop')
+
+
 def role_entry(job,epoch,release,role):
-    ids=policy.identity(job,epoch,release);uid=policy.FIXTURE_UID if role=='fixture' else policy.BROKER_UID
-    require(role in {'fixture','probe'} and os.getuid()==os.geteuid()==uid and os.getgid()==uid and
-            set(os.getgroups())<={uid},'owned_kernel_fixed_nonroot_identity')
-    require(HERE==Path('/opt/paw-code/owned_kernel_runtime.py'),'owned_kernel_private_root_code')
+    ids=policy.identity(job,epoch,release)
+    require(type(role)is str and role in {'fixture','probe'} and os.geteuid()==0 and
+            HERE==Path('/opt/paw-code/owned_kernel_runtime.py'),'owned_kernel_private_root_bootstrap_only')
     value=private_json(Path('/etc/paw-owned-kernel.json'))
     require(value=={'schema':'paw-owned-kernel-config-v1','job':job,'epoch':epoch,'release':release},
             'owned_kernel_private_root_config')
+    drop_credentials(role)
     witness=status()
     require(witness['interfaces']==['lo'] and witness['nnp']=='1' and witness['seccomp']=='2' and
             int(witness['cap_eff'],16)==(1<<10 if role=='fixture' else 0),
@@ -181,6 +209,12 @@ def fixture(job,epoch,release):
     tcp.bind((policy.FIXTURE,80));tcp.listen(4);tcp.setblocking(False);selector.register(tcp,selectors.EVENT_READ,'listen')
     udp=socket.socket(socket.AF_INET,socket.SOCK_DGRAM);udp.bind((policy.RESOLVER,53));udp.setblocking(False)
     selector.register(udp,selectors.EVENT_READ,'udp');selector.register(0,selectors.EVENT_READ,'control')
+    # Both sockets were created with the fixed nonroot UID, preserving skuid
+    # firewall checks. Low-port authority ends before readiness/peer processing.
+    capabilities(0);witness=status()
+    require(os.getresuid()==(policy.FIXTURE_UID,)*3 and os.getresgid()==(policy.FIXTURE_UID,)*3 and
+            not os.getgroups() and all(int(witness[k],16)==0 for k in ['cap_eff','cap_prm','cap_inh','cap_amb']),
+            'owned_kernel_fixture_capabilities_left')
     counts={'tcp':0,'udp':0,'stream_bytes':0};start=time.monotonic();emit({'ready':True,'role':'fixture','witness':witness})
     try:
         while time.monotonic()-start<10:
@@ -342,11 +376,13 @@ def live_role(child,role,namespace=None):
         'owned_kernel_unit_budget')
     fields=dict(row.split(':',1)for row in Path('/proc/'+str(child.pid)+'/status').read_text().splitlines()if':'in row)
     uid=0 if role=='keeper' else policy.FIXTURE_UID if role=='fixture' else policy.BROKER_UID
-    caps=(1<<12)if role=='keeper' else (1<<10)if role=='fixture' else 0
+    caps=(1<<12)if role=='keeper' else 0
     require(all(int(v)==uid for v in fields['Uid'].split()) and
         all(int(v)==uid for v in fields['Gid'].split()) and
-        set(map(int,fields['Groups'].split()))<={uid} and fields['NoNewPrivs'].strip()=='1' and
-        fields['Seccomp'].strip()=='2' and int(fields['CapEff'],16)==caps,
+        (set(map(int,fields['Groups'].split()))<={0}if role=='keeper'else not fields['Groups'].split()) and
+        fields['NoNewPrivs'].strip()=='1' and
+        fields['Seccomp'].strip()=='2' and int(fields['CapEff'],16)==caps and
+        int(fields['CapPrm'],16)==caps and int(fields['CapInh'],16)==int(fields['CapAmb'],16)==0,
             'owned_kernel_observed_uid')
     inode=os.stat('/proc/'+str(child.pid)+'/ns/net').st_ino
     require(inode==witness['namespace_inode'] and (namespace is None or inode==namespace),
@@ -364,6 +400,7 @@ def live_role(child,role,namespace=None):
         os.stat('/proc/'+str(child.pid)+'/ns/net').st_ino==inode,'owned_kernel_pid_changed')
     child.observation={'role':role,'pid':child.pid,'unit':child.unit,'uid':uid,'namespace_inode':inode,
         'no_new_privileges':True,'seccomp':2,'effective_capabilities':caps,
+        'supplementary_groups':list(map(int,fields['Groups'].split())),
         'memory_max':int(props['MemoryMax']),'swap_max':0,'tasks_max':int(props['TasksMax']),
         'cpu_max':[int(quota),int(period)]}
     return inode
@@ -477,6 +514,8 @@ def _owned_validation(job,release):
                 cleanup_actors(case_roles)
                 vacant_ids()
                 row['role_observations']=[child.observation for child in case_roles if hasattr(child,'observation')]
+                row['role_diagnostics']=[{'unit':child.unit,'launcher_returncode':child.process.poll(),
+                    'stderr':bytes(child.errors).decode('utf-8','replace')}for child in case_roles]
                 error=sys.exc_info()[1]
                 if error is not None:row['error']=type(error).__name__+':'+str(error)[:256]
                 report={'scope':'owned raw TCP/UDP kernel fixtures, not HTTP/TLS/DNS or full O3 acceptance',

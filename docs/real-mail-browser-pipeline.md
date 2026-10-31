@@ -115,9 +115,26 @@ scalar control operations, holds only `CAP_NET_ADMIN`, has an eight-second
 PID1 runtime ceiling and cannot restart using the same protected marker.
 
 The two network roles use reserved numeric identities65520/65521 only after
-exclusive NSS/process vacancy checks. They have a minimal readonly filesystem,
-no home or credentials, no new privileges, syscall/address-family restrictions
-and no capabilities except the fixture's low-port bind capability. Joining the
+exclusive NSS/process vacancy checks. PID1's static numeric `User=` admission
+requires an existing account: the first actual owned attempt refused the
+fixture with217/USER, after the keeper passed its namespace/cgroup/capability
+checks. Terminal reader reconciliation confirmed stopped writers, restored host
+and zero real/public work. That consumed attempt is retained and not replayed.
+
+To avoid modifying the host account database, PID1 now starts a small immutable
+credential bootstrap inside the role's readonly private root and network
+namespace. Its only initial capabilities are `SETUID`/`SETGID`, plus low-port
+bind for the fixture. Before any socket or peer input it clears supplementary
+groups and sets real/effective/saved UID and GID to the one fixed role identity.
+The probe retains no capabilities. The fixture retains only bind until both
+sockets exist, then clears effective/permitted/inheritable/ambient sets before
+readiness or peer processing. Each socket is created as the nonroot identity,
+preserving firewall `skuid` checks. Configuration is protected and exactly bound
+before dropping; no path, account, capability mask or command is caller-chosen.
+
+Roles have no home or credentials, no new privileges and syscall/address-family
+restrictions. Independently read process state must show nonroot UID/GID,
+empty groups and zero capability sets before work. Joining the
 keeper's verified namespace and `BindsTo`/`After` tie both to its life. The Root
 coordinator uses pidfds for the known owner fault and independently observes
 UID/GID/groups, capabilities, seccomp, namespace inode and actual cgroup limits.
@@ -130,6 +147,8 @@ earlier failure, restores the parent limit, checks stopped writers and compares
 the full host/network observations before publishing a terminal diagnostic.
 Unknown cleanup or restoration prevents publication; an observed component
 failure stays FAIL and prevents the enclosing runtime recipe from passing.
+Bounded stderr from these fixed owned actors is included only after their
+writers are confirmed stopped, to diagnose partial startup without a repeat.
 
 Inert lifecycle tests and installed systemd259 parser checks do not prove
 packet filtering, namespace joining or fault latency. Those remain unaccepted
