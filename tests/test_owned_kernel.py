@@ -104,6 +104,26 @@ class Boundaries(unittest.TestCase):
 
 
 class Lifecycle(unittest.TestCase):
+    def test_stop_error_requires_independent_inactive_zero_mainpid_readback(self):
+        from unittest.mock import Mock
+        actor=SimpleNamespace(unit='owned.service',threads=[],errors=b'',process=Mock())
+        with patch.object(r.subprocess,'run',return_value=SimpleNamespace(returncode=5))as stop:
+            with patch.object(r,'unit_properties',return_value={'ActiveState':'inactive','MainPID':'0'}):
+                r.Managed.stop(actor)
+            stop.assert_called_once();actor.process.wait.assert_called_once()
+            for state in [{'ActiveState':'active','MainPID':'12345'}, {'ActiveState':'failed','MainPID':'12345'}]:
+                with patch.object(r,'unit_properties',return_value=state),self.assertRaisesRegex(ValueError,'stop_failed'):
+                    r.Managed.stop(actor)
+
+    def test_exited_launcher_still_stops_its_independently_live_unit(self):
+        stopped=[];state={'ActiveState':'active','MainPID':'12345'}
+        def stop():stopped.append('service');state.update(ActiveState='inactive',MainPID='0')
+        actor=SimpleNamespace(unit='owned.service',pidfd=None,threads=[],errors=b'',stop=stop,
+            process=SimpleNamespace(poll=lambda:1,wait=lambda **kw:1))
+        with patch.object(r,'unit_properties',side_effect=lambda unit:dict(state)):
+            r.cleanup_actors([actor])
+        self.assertEqual(stopped,['service'])
+
     def actor(self, name, fail=False):
         process=SimpleNamespace(poll=lambda:None,wait=lambda **kw:None)
         actor=SimpleNamespace(unit=name,process=process,threads=[],errors=b'',pidfd=None)

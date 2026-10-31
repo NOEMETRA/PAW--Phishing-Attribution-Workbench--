@@ -290,7 +290,12 @@ class Managed:
         self.process.stdin.write(raw+b'\n');self.process.stdin.flush()
     def stop(self):
         value=subprocess.run(['/usr/bin/systemctl','stop',self.unit],capture_output=True,timeout=3)
-        require(value.returncode==0,'owned_kernel_role_stop_failed')
+        if value.returncode!=0:
+            # --collect may already have unloaded a terminated transient unit.
+            # A launcher exit is never evidence for this independent state.
+            state=unit_properties(self.unit)
+            require(state['MainPID']=='0' and state['ActiveState']in {'inactive','failed'},
+                    'owned_kernel_role_stop_failed')
         self.process.wait(timeout=3)
         for thread in self.threads:thread.join(timeout=1)
         require(all(not thread.is_alive()for thread in self.threads) and len(self.errors)<=8192,
@@ -302,8 +307,8 @@ def cleanup_actors(actors):
     failures=[]
     for child in reversed(actors):
         try:
-            if child.process.poll()is None:child.stop()
-            else:child.process.wait(timeout=3)
+            # The launcher and its detached PID1 service have separate lives.
+            child.stop()
         except Exception as error:failures.append(type(error).__name__+':stop')
     for child in actors:
         try:
