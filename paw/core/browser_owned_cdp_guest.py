@@ -132,9 +132,11 @@ class Runtime:
         for fd in [self.read_fd,self.write_fd,self.process.stderr.fileno()]:os.set_blocking(fd,False)
         self.selector.register(self.read_fd,selectors.EVENT_READ,'cdp')
         self.selector.register(self.process.stderr.fileno(),selectors.EVENT_READ,'stderr')
-        self.driver=cdp.GuestController(SEED,self.nonce,self._send,self._request)
+        self.driver=self._make_controller()
         self.started=time.monotonic();self.driver.start()
         return {'started':True,'purpose':'owned CDP only','pid':self.process.pid,'network_interfaces':['lo']}
+    def _make_controller(self):
+        return cdp.GuestController(SEED,self.nonce,self._send,self._request)
     def tick(self):
         require(self.process is not None,'owned_not_started')
         if self.done is not None:return self.done

@@ -4,6 +4,7 @@ Reuse the fixed sandboxed launcher and synthetic seed. Responses arrive only
 through strict nonce/sequence/phase-bound metadata and body transfers. Protocol
 loss or parent EOF stops the renderer; no socket or live continuation is added.
 """
+import base64
 import hashlib
 import re
 import time
@@ -28,10 +29,77 @@ def require(value,reason):
     if not value:raise ValueError(reason)
 
 
+class CaptureController(cdp.GuestController):
+    def __init__(self,*args):
+        super().__init__(*args);self.png=None;self.png_pending=False
+    def accept(self,message):
+        super().accept(message)
+        if self.stage=='snapshot_ready'and self.png is None and not self.png_pending:
+            self.stage='snapshot';self.png_pending=True
+            def screenshot(result):
+                value=result.get('data')
+                cdp.require(type(value)is str and len(value)<=4*((256*1024+2)//3),'owned_png_encoded_budget')
+                raw=base64.b64decode(value,validate=True)
+                cdp.require(33<=len(raw)<=256*1024 and raw.startswith(b'\x89PNG\r\n\x1a\n')and
+                    raw[12:16]==b'IHDR'and 0<int.from_bytes(raw[16:20],'big')<=2048 and
+                    0<int.from_bytes(raw[20:24],'big')<=2048 and
+                    base64.b64encode(raw).decode('ascii')==value,'owned_png_shape')
+                self.png=raw;self.png_pending=False;self.stage='snapshot_ready'
+            self._command('Page.captureScreenshot',{'format':'png','captureBeyondViewport':False},screenshot,self.session)
+
+
+CAPS={'dom.html':256*1024,'screenshot.png':256*1024}
+class Transfer:
+ def __init__(self,nonce,artifacts,writers_stopped):
+  cdp.require(type(nonce)is str and re.fullmatch('[0-9a-f]{32}',nonce),'owned_capture_nonce')
+  cdp.require(writers_stopped is True and type(artifacts)is dict and set(artifacts)<=set(CAPS),'owned_capture_known_stop')
+  self.manifest=[];self.streams=[];self.stream=0;self.chunk=0;self.closed=False
+  for name,cap in CAPS.items():
+   if name not in artifacts:continue
+   raw=artifacts[name];cdp.require(type(raw)is bytes and 0<len(raw)<=cap,'owned_capture_byte_cap')
+   seq=len(self.streams);self.streams.append((name,cdp.response_chunks(nonce,seq,raw)))
+   self.manifest.append({'name':name,'stream':seq,'bytes':len(raw),'sha256':hashlib.sha256(raw).hexdigest()})
+  if not self.streams:self.closed=True
+ def read(self,value):
+  try:
+   cdp.require(not self.closed and type(value)is dict and set(value)=={'name','chunk'}and
+    type(value['chunk'])is int and value['chunk']==self.chunk,'owned_capture_order')
+   name,rows=self.streams[self.stream];cdp.require(value['name']==name,'owned_capture_name')
+   row=rows[self.chunk];reply={'name':name,'row':row}
+   cdp.require(len(cdp.canonical(reply))<60000,'owned_capture_line_budget')
+   if row.get('done')is True:
+    self.stream+=1;self.chunk=0
+    if self.stream==len(self.streams):self.closed=True
+   else:self.chunk+=1
+   return reply
+  except (ValueError,TypeError,KeyError,IndexError):self.closed=True;raise ValueError('owned_capture_closed')from None
+
+
 class Runtime(fixed.Runtime):
     def __init__(self):
         super().__init__();self.network_pending=None;self.transfer_failed=False
-        self.network_bytes=0;self.metadata_bytes=0
+        self.network_bytes=0;self.metadata_bytes=0;self.capture_transfer=None
+
+    def _make_controller(self):
+        return CaptureController(fixed.SEED,self.nonce,self._send,self._request)
+
+    def finish(self,status,error=None):
+        result=super().finish(status,error)
+        if self.capture_transfer is None:
+            # The base finish has killed Chrome and proved its cgroup empty.
+            artifacts={}
+            if self.driver is not None:
+                for name,raw in [('dom.html',self.driver.dom),('screenshot.png',self.driver.png)]:
+                    if type(raw)is bytes and 0<len(raw)<=CAPS[name]:artifacts[name]=raw
+            self.capture_transfer=Transfer(self.nonce,artifacts,result.get('writers_stopped'))
+            result['capture_artifacts']=self.capture_transfer.manifest
+            result['missing_coverage']=[name for name in CAPS if name not in artifacts]
+        return result
+
+    def artifact(self,value):
+        require(self.done is not None and self.done.get('writers_stopped')is True and
+            self.capture_transfer is not None,'owned_capture_not_stopped')
+        return self.capture_transfer.read(value)
 
     def _request(self,frame):
         require(not self.transfer_failed and self.network_pending is None and
@@ -121,17 +189,20 @@ class ConsoleSession:
             value=cdp.strict_json(raw)
             require(type(value)is dict and type(value.get('id'))is int and value['id']==self.next and
                 self.next<=4096 and type(value.get('op'))is str and
-                value['op']in {'inspect','start','poll','network','cancel'},'owned_console_command')
+                value['op']in {'inspect','start','poll','network','artifact','cancel'},'owned_console_command')
             op=value['op'];self.next+=1
-            require(set(value)==({'id','op','value'}if op=='network'else{'id','op'})and
+            require(set(value)==({'id','op','value'}if op in {'network','artifact'}else{'id','op'})and
                 (op=='network'or len(raw)<=4096),'owned_console_shape')
+            require(type(self.runtime.done)is not dict or op in {'poll','artifact','cancel'},
+                'owned_console_terminal_operation')
             if op=='inspect':data=self.runtime.inspect()
             elif op=='start':data=self.runtime.start()
             elif op=='poll':data=self.runtime.tick()
             elif op=='network':data=self.runtime.network(value['value'])
+            elif op=='artifact':data=self.runtime.artifact(value['value'])
             else:
                 require(self.runtime.process is not None,'owned_console_cancel_before_start')
-                data=self.runtime.finish('cancelled');self.closed=True
+                data=self.runtime.finish('cancelled')
             result={'id':value['id'],'ok':True,'data':data}
             require(len(cdp.canonical(result))<60000,'owned_console_reply_budget')
             return result

@@ -40,6 +40,10 @@ jobs:
         run: |
           python -B -m unittest discover -s tests -p 'test_browser_cdp.py' -v
           python -B -m unittest discover -s tests -p 'test_owned_cdp*.py' -v
+      - name: Verify finite owned input and post-stop capture without Root or VM
+        run: |
+          python -B -m unittest discover -s tests -p 'test_owned_mail*.py' -v
+          python -B -m unittest discover -s tests -p 'test_owned_capture*.py' -v
       - name: Verify owned brokered guest and protocol lifecycle without Root or VM
         run: |
           python -B -m unittest discover -s tests -p 'test_owned_broker*.py' -v

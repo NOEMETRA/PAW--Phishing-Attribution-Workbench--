@@ -46,13 +46,13 @@ class Owner(unittest.TestCase):
                         guest_ack.append(clock[0]);return {'started':True}
                     self.count+=1
                     if late_pause:clock[0]+=250*10**6
-                    if self.refused:return {'done':True,'status':'failed','writers_stopped':True,'network_interfaces':['lo'],'sandbox':sandbox}
+                    if self.refused:return {'done':True,'status':'failed','writers_stopped':True,'network_interfaces':['lo'],'sandbox':sandbox,'capture_artifacts':[]}
                     if late_pause and clock[0]-guest_ack[0]<10528*10**6:return {'done':False,'stage':'setup'}
                     if bootstrap_delayed and self.count==1:clock[0]+=3*10**9
                     if self.completed<2:
                         return {'done':False,'network_request':{'nonce':self.nonce,'seq':self.completed,
                             'url':p.SEED,'method':'GET','resource':'Document'}}
-                    return {'done':True,'status':'completed','writers_stopped':True,'network_interfaces':['lo'],'sandbox':sandbox}
+                    return {'done':True,'status':'completed','writers_stopped':True,'network_interfaces':['lo'],'sandbox':sandbox,'capture_artifacts':[]}
             class Gate:
                 def __init__(self,args,**kwargs):
                     self.output=args.output;self.output.mkdir();self.active_vm=None;self.nonce=kwargs['seed_config']['nonce']

@@ -239,11 +239,15 @@ For help: paw help <command>
         p_lab_import.add_argument('--request', required=True, help='Previously prepared local request.json')
         p_lab_import.add_argument('--output', required=True, help='New result container outside the case')
 
-        p_owned_mail = sub.add_parser('lab-owned-mail-browser', help='Prepare/import fixed owned email browser custody; never launches a guest')
+        p_owned_mail = sub.add_parser('lab-owned-mail-browser', help='Prepare/submit/import fixed owned email browser custody; never launches a guest')
         owned_mail_actions = p_owned_mail.add_subparsers(dest='lab_action', required=True)
         owned_mail_prepare = owned_mail_actions.add_parser('prepare')
         owned_mail_prepare.add_argument('--case', required=True)
         owned_mail_prepare.add_argument('--output', required=True)
+        owned_mail_submit = owned_mail_actions.add_parser('submit')
+        owned_mail_submit.add_argument('--job', required=True)
+        owned_mail_submit.add_argument('--nonce', required=True)
+        owned_mail_submit.add_argument('--request', required=True)
         owned_mail_import = owned_mail_actions.add_parser('import')
         owned_mail_import.add_argument('--case', required=True)
         owned_mail_import.add_argument('--request', required=True)
@@ -431,8 +435,12 @@ For help: paw help <command>
 
         elif args.cmd == 'lab-owned-mail-browser':
             from .core.mail_browser_owned import prepare, import_result
-            value = (prepare(args.case, args.output) if args.lab_action == 'prepare' else
-                     import_result(args.case, args.request, args.output))
+            if args.lab_action == 'submit':
+                from .core.owned_mail_channel import submit
+                value = submit(args.job, args.nonce, args.request)
+            else:
+                value = (prepare(args.case, args.output) if args.lab_action == 'prepare' else
+                         import_result(args.case, args.request, args.output))
             print(json.dumps(value, indent=2))
 
         elif args.cmd == 'lab-representation':
