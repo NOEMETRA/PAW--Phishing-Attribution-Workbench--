@@ -29,7 +29,10 @@ class Policy(unittest.TestCase):
     def test_network_roles_use_fixed_vacant_nonroot_ids_and_validated_owner_pid(self):
         for role,uid in [('probe',65520),('fixture',65521)]:
             _,props,cmd=p.service(J,E,R,role,12345)
-            self.assertEqual(props['User'],str(uid));self.assertEqual(props['Group'],str(uid))
+            self.assertEqual(props['User'],'root');self.assertEqual(props['Group'],'root')
+            self.assertEqual(props['AmbientCapabilities'],'')
+            self.assertEqual(props['CapabilityBoundingSet'],
+                'CAP_SETUID CAP_SETGID'+(' CAP_NET_BIND_SERVICE'if role=='fixture'else''))
             self.assertEqual(props['SupplementaryGroups'],'')
             self.assertEqual(props['NetworkNamespacePath'],'/proc/12345/ns/net')
             self.assertEqual(props['RootDirectory'],p.identity(J,E,R)['directory']+'/'+role+'-root')
@@ -101,6 +104,83 @@ class Boundaries(unittest.TestCase):
         with patch.object(r.os,'open',side_effect=AssertionError('file open')):
             for path in [Path('relative.json'),Path('/tmp/../etc/config')]:
                 with self.assertRaises(ValueError):r.private_json(path)
+
+
+class Credentials(unittest.TestCase):
+    def test_actual_unprivileged_capset_abi_cannot_add_a_capability(self):
+        if os.geteuid()==0:self.skipTest('Root credential changes require immutable owned acceptance')
+        # Clear only a disposable child's inherited bits, never the runner's.
+        code="""import sys,os
+sys.path.insert(0,sys.argv[1])
+from paw.core import owned_kernel_runtime as r
+assert os.geteuid()!=0
+uid=os.getuid();r.capabilities(0)
+try:r.capabilities(1024)
+except ValueError as e:assert str(e)=='owned_kernel_capset_failed'
+else:raise AssertionError('unprivileged gain accepted')
+assert os.getuid()==uid
+assert all(int(r.status()[k],16)==0 for k in ['cap_eff','cap_prm','cap_inh','cap_amb'])
+"""
+        result=subprocess.run([sys.executable,'-I','-B','-c',code,str(r.HERE.parents[2])],
+            capture_output=True,text=True,timeout=5)
+        self.assertEqual(result.returncode,0,result.stderr)
+
+    def test_each_role_drops_all_ids_and_groups_before_returning(self):
+        from unittest.mock import Mock
+        for role,uid in [('probe',65520),('fixture',65521)]:
+            state={'uids':(0,0,0),'gids':(0,0,0),'groups':[0]};events=[]
+            witness={'interfaces':['lo'],'nnp':'1','seccomp':'2','groups':[0],
+                'cap_eff':hex(192+(1024 if role=='fixture'else 0))}
+            libc=Mock();libc.prctl.return_value=0
+            def groups(value):state['groups']=value;events.append('groups')
+            def gid(*value):state['gids']=value;events.append('gid')
+            def uids(*value):state['uids']=value;events.append('uid')
+            def caps(value):
+                self.assertEqual(state['uids'],(uid,)*3);self.assertEqual(state['gids'],(uid,)*3)
+                self.assertEqual(state['groups'],[]);events.append(('caps',value))
+            with patch.object(r.os,'getresuid',side_effect=lambda:state['uids']), \
+                 patch.object(r.os,'getresgid',side_effect=lambda:state['gids']), \
+                 patch.object(r.os,'getgroups',side_effect=lambda:state['groups']), \
+                 patch.object(r.os,'setgroups',side_effect=groups),patch.object(r.os,'setresgid',side_effect=gid), \
+                 patch.object(r.os,'setresuid',side_effect=uids),patch.object(r,'status',return_value=witness), \
+                 patch.object(r.ctypes,'CDLL',return_value=libc),patch.object(r,'capabilities',side_effect=caps):
+                r.drop_credentials(role)
+            self.assertEqual(events,['groups','gid','uid',('caps',1024 if role=='fixture'else 0)])
+            self.assertEqual(state['uids'],(uid,)*3)
+            self.assertEqual(libc.prctl.call_count,2 if role=='fixture'else 0)
+
+    def test_configuration_is_bound_before_credential_bootstrap(self):
+        with patch.object(r,'HERE',Path('/opt/paw-code/owned_kernel_runtime.py')), \
+             patch.object(r.os,'geteuid',return_value=0),patch.object(r,'private_json',return_value={}), \
+             patch.object(r,'drop_credentials')as drop:
+            with self.assertRaisesRegex(ValueError,'private_root_config'):r.role_entry(J,E,R,'fixture')
+            drop.assert_not_called()
+
+    def test_unprivileged_or_excessive_bootstrap_never_calls_identity_syscalls(self):
+        from unittest.mock import Mock
+        with patch.object(r.os,'getresuid',return_value=(1000,)*3),patch.object(r.os,'setresuid')as uid:
+            with self.assertRaisesRegex(ValueError,'credential_bootstrap'):r.drop_credentials('fixture')
+            uid.assert_not_called()
+        with patch.object(r.os,'getresuid',return_value=(0,)*3),patch.object(r.os,'getresgid',return_value=(0,)*3), \
+             patch.object(r,'status',return_value={'interfaces':['lo'],'nnp':'1','seccomp':'2','groups':[0],'cap_eff':'ffffffff'}), \
+             patch.object(r.os,'setgroups')as groups:
+            with self.assertRaisesRegex(ValueError,'bootstrap_confinement'):r.drop_credentials('probe')
+            groups.assert_not_called()
+
+    def test_fixture_sockets_are_created_after_bootstrap_and_all_caps_end_before_ready(self):
+        from unittest.mock import Mock
+        events=[];witness={'cap_eff':'0','cap_prm':'0','cap_inh':'0','cap_amb':'0'}
+        def bootstrap(*args):events.append('bootstrap');return None,witness
+        def create(*args):events.append('socket');return Mock()
+        def emitted(value):
+            self.assertEqual(events,['bootstrap','socket','socket',('caps',0)])
+            raise StopIteration('readiness reached inertly')
+        with patch.object(r,'role_entry',side_effect=bootstrap),patch.object(r.socket,'socket',side_effect=create), \
+             patch.object(r.selectors,'DefaultSelector',return_value=Mock()),patch.object(r,'status',return_value=witness), \
+             patch.object(r,'capabilities',side_effect=lambda mask:events.append(('caps',mask))), \
+             patch.object(r.os,'getresuid',return_value=(65521,)*3),patch.object(r.os,'getresgid',return_value=(65521,)*3), \
+             patch.object(r.os,'getgroups',return_value=[]),patch.object(r,'emit',side_effect=emitted):
+            with self.assertRaisesRegex(StopIteration,'readiness reached'):r.fixture(J,E,R)
 
 
 class Lifecycle(unittest.TestCase):

@@ -76,8 +76,10 @@ def service(job,epoch,release,role,keeper_pid=None,serial=0):
                  '/paw/core/owned_kernel_runtime.py','--keeper',job,epoch,release]
     else:
         require(type(keeper_pid) is int and keeper_pid>1,'owned_kernel_live_keeper_pid')
-        uid=FIXTURE_UID if role=='fixture' else BROKER_UID
-        props.update(User=str(uid),Group=str(uid),SupplementaryGroups='',
+        # PID1 requires a static account even for a numeric User=. Start only
+        # the immutable credential bootstrap; it drops all three UID/GID values
+        # before any socket or peer input, without modifying the host user DB.
+        props.update(User='root',Group='root',SupplementaryGroups='',
             RootDirectory=ids['directory']+'/'+role+'-root',WorkingDirectory='/',
             BindReadOnlyPaths='/usr /lib /lib64 '+ids['directory']+'/code:/opt/paw-code',
             NetworkNamespacePath='/proc/'+str(keeper_pid)+'/ns/net',
@@ -87,8 +89,8 @@ def service(job,epoch,release,role,keeper_pid=None,serial=0):
             ProtectControlGroups='yes',ProtectClock='yes',RestrictNamespaces='yes',
             RestrictSUIDSGID='yes',RestrictRealtime='yes',LockPersonality='yes',MemoryDenyWriteExecute='yes',
             RestrictAddressFamilies='AF_INET',SystemCallArchitectures='native',SystemCallFilter='@system-service',
-            CapabilityBoundingSet='CAP_NET_BIND_SERVICE' if role=='fixture' else '',
-            AmbientCapabilities='CAP_NET_BIND_SERVICE' if role=='fixture' else '',
+            CapabilityBoundingSet='CAP_SETUID CAP_SETGID'+(' CAP_NET_BIND_SERVICE' if role=='fixture' else ''),
+            AmbientCapabilities='',
             IPAddressDeny='any',IPAddressAllow=FIXTURE+'/32 '+RESOLVER+'/32')
         command=['/usr/bin/python3','-I','-S','-B','/opt/paw-code/owned_kernel_runtime.py',
                  '--'+role,job,epoch,release]
