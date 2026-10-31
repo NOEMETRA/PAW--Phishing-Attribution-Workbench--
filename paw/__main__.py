@@ -253,6 +253,26 @@ For help: paw help <command>
         owned_mail_import.add_argument('--request', required=True)
         owned_mail_import.add_argument('--output', required=True)
 
+        p_public_mail = sub.add_parser('lab-mail-browser', help='Prepare/import selected mail custody; never launches a guest or issues a grant')
+        public_mail_actions = p_public_mail.add_subparsers(dest='lab_action', required=True)
+        public_mail_prepare = public_mail_actions.add_parser('prepare')
+        public_mail_prepare.add_argument('--case', required=True)
+        public_mail_prepare.add_argument('--url-index', type=int, required=True)
+        public_mail_prepare.add_argument('--output', required=True)
+        public_mail_import = public_mail_actions.add_parser('import')
+        public_mail_import.add_argument('--case', required=True)
+        public_mail_import.add_argument('--batch', required=True)
+        public_mail_import.add_argument('--slot', type=lambda v: v if v == 'owned' else int(v), choices=['owned',0,1,2], required=True)
+        public_mail_import.add_argument('--output', required=True)
+        public_mail_ack = public_mail_actions.add_parser('prepare-ack')
+        public_mail_ack.add_argument('--batch', required=True)
+        public_mail_ack.add_argument('--result', required=True)
+        public_mail_ack.add_argument('--archive', required=True)
+        public_mail_ack.add_argument('--output', required=True)
+        public_mail_submit = public_mail_actions.add_parser('submit-ack')
+        public_mail_submit.add_argument('--batch', required=True)
+        public_mail_submit.add_argument('--request', required=True)
+
         p_rep = sub.add_parser('lab-representation', help='Prepare/import an explicit sealed forensic selection; never launches a guest')
         rep_actions = p_rep.add_subparsers(dest='lab_action', required=True)
         rep_prepare = rep_actions.add_parser('prepare')
@@ -441,6 +461,18 @@ For help: paw help <command>
             else:
                 value = (prepare(args.case, args.output) if args.lab_action == 'prepare' else
                          import_result(args.case, args.request, args.output))
+            print(json.dumps(value, indent=2))
+
+        elif args.cmd == 'lab-mail-browser':
+            from .core import mail_browser_public as mail
+            if args.lab_action == 'prepare':
+                value = mail.client_prepare(args.case, args.url_index, args.output)
+            elif args.lab_action == 'import':
+                value = mail.client_import(args.case, args.batch, args.slot, args.output)
+            elif args.lab_action == 'prepare-ack':
+                value = mail.client_ack(args.batch, args.result, args.archive, args.output)
+            else:
+                value = mail.client_submit_ack(args.batch, args.request)
             print(json.dumps(value, indent=2))
 
         elif args.cmd == 'lab-representation':

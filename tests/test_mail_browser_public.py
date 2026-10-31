@@ -1,0 +1,237 @@
+"""Inert public adapter boundaries; no Root, remote URL, DNS or socket work."""
+import copy
+import io
+import json
+from pathlib import Path
+import tempfile
+import threading
+import os
+import time
+import unittest
+from unittest.mock import patch
+from types import SimpleNamespace
+from paw.core import mail_browser_public as m
+from paw.core import owned_kernel_policy as old
+from paw.core import browser_broker_wire as wire
+
+J='1'*32; E='2'*32; R='3'*40
+SEEDS=['https://one.invalid/', 'http://two.invalid/', 'https://three.invalid/']
+
+class PublicBoundary(unittest.TestCase):
+    def test_owned_alias_commands_use_pinned_namespace_FD_and_close_it_on_failure(self):
+        from unittest.mock import Mock,MagicMock
+        for failure in [None,'dead','pidfd','host']:
+            with self.subTest(failure=failure),tempfile.TemporaryDirectory() as d:
+                folder=Path(d)
+                for role in ['fixture','probe']:(folder/(role+'-root')/'etc').mkdir(parents=True)
+                cfg={'mode':'owned-browser','namespace_inode':None}
+                ids=m.identity(J,E,R);ids['directory']=d
+                server=SimpleNamespace(pid=42,unit='inert-fixture.service',poll_ready=lambda:True,ready={
+                    'phase':'namespace-bootstrap','witness':{'namespace_inode':99}},send=Mock())
+                obj=object.__new__(m.NetworkPreparation)
+                obj.job=J;obj.epoch=E;obj.release=R;obj.actors=[];obj.mode='owned-browser';obj.protocol=True
+                obj.ready=False;obj.fixture_configured=False;obj.server=server;obj.inode=None
+                obj.owner=SimpleNamespace(poll_ready=lambda:False);obj._owner=lambda _:None
+                selector=MagicMock();selector.__enter__.return_value.select.return_value=[True] if failure=='dead' else []
+                stats=lambda path:SimpleNamespace(st_ino=1 if str(path)=='/proc/self/ns/net' else 99)
+                with patch.object(m.os,'stat',side_effect=stats),patch.object(m.os,'open',return_value=10), \
+                     patch.object(m.os,'pidfd_open',side_effect=OSError('inert dead') if failure=='pidfd' else None,return_value=11), \
+                     patch.object(m.os,'fstat',return_value=SimpleNamespace(st_ino=1 if failure=='host' else 99)), \
+                     patch.object(m.os,'close') as close,patch.object(m.kernel,'unit_properties',return_value={'MainPID':'42'}), \
+                     patch.object(m.selectors,'DefaultSelector',return_value=selector),patch.object(m.subprocess,'run') as run, \
+                     patch.object(m,'identity',return_value=ids),patch.object(m.kernel,'private_json',return_value=cfg):
+                    if failure:
+                        with self.assertRaises((ValueError,OSError)):obj.poll()
+                        run.assert_not_called();server.send.assert_not_called()
+                    else:
+                        self.assertFalse(obj.poll());self.assertEqual(run.call_count,3)
+                        for call in run.call_args_list:
+                            self.assertIn('--net=/proc/self/fd/10',call.args[0]);self.assertEqual(call.kwargs['pass_fds'],(10,))
+                        self.assertEqual(json.loads((folder/'public.json').read_bytes())['namespace_inode'],99)
+                        server.send.assert_called_once_with({'op':'continue'})
+                    closed={call.args[0] for call in close.call_args_list}
+                    self.assertIn(10,closed)
+                    if failure!='pidfd':self.assertIn(11,closed)
+
+    def test_actual_bounded_reader_observes_second_fixture_readiness_within_same_unit_lifetime(self):
+        from unittest.mock import Mock
+        read,write=os.pipe();ready=threading.Event()
+        process=Mock(stdin=io.BytesIO(),stdout=os.fdopen(read,'rb'),stderr=io.BytesIO())
+        process.wait.return_value=0
+        def produce():
+            with os.fdopen(write,'wb',buffering=0) as out:
+                out.write(b'{"ready":true,"phase":"namespace-bootstrap","witness":{"pid":123}}\n')
+                ready.wait(2)
+                out.write(b'{"ready":true,"role":"fixture","witness":{"pid":123}}\n')
+        thread=threading.Thread(target=produce);thread.start();registry=[]
+        with patch.object(m.kernel,'HERE',Path('/opt/paw-vm/releases')/R/'paw/core/owned_kernel_runtime.py'), \
+             patch.object(m.kernel.os,'geteuid',return_value=0), \
+             patch.object(m.kernel.subprocess,'Popen',return_value=process), \
+             patch.object(m.kernel.subprocess,'run',return_value=SimpleNamespace(returncode=0)), \
+             patch.object(m.kernel,'unit_properties',return_value={'MainPID':'0','ActiveState':'inactive'}):
+            try:
+                actor=m.kernel.Managed(J,E,R,'fixture',42,registry=registry)
+                self.assertEqual(actor.ready['phase'],'namespace-bootstrap')
+                actor.ready=None;actor._ready_received_at=None;actor._ready_deadline=time.monotonic()+2
+                ready.set()
+                while not actor.poll_ready():time.sleep(.001)
+                self.assertEqual(actor.ready['role'],'fixture')
+                self.assertIsNotNone(actor._ready_received_at)
+            finally:
+                ready.set();thread.join(2);m.kernel.cleanup_actors(registry);process.stdout.close()
+        self.assertFalse(thread.is_alive())
+    def test_actual_keeper_loop_records_deleted_guard_as_loss_then_revokes(self):
+        with tempfile.TemporaryDirectory() as d:
+            ids=m.identity(J,E,R);ids['directory']=d
+            cfg={'mode':'public','interface':'owned0','source_addresses':['192.168.1.137'],'namespace_inode':10}
+            packet=m.canonical({'op':'delete_one','epoch':E,'id':0})+b'\n'
+            selector=SimpleNamespace(register=lambda *a:None,select=lambda _: [True],close=lambda:None)
+            with patch.object(m,'root_config',return_value=(ids,cfg)), \
+                 patch.object(m.os,'stat',return_value=SimpleNamespace(st_ino=10)), \
+                 patch.object(m.kernel,'nft',return_value=''),patch.object(m.kernel,'status',return_value={}), \
+                 patch.object(m.kernel,'emit'),patch.object(m.signal,'signal'), \
+                 patch.object(m.selectors,'DefaultSelector',return_value=selector), \
+                 patch.object(m.sys,'stdin',SimpleNamespace(buffer=io.BytesIO(packet))), \
+                 patch.object(m,'guard_identity',side_effect=['same','same',ValueError('mail_public_guard_missing')]), \
+                 patch.object(m,'revoke_role') as revoke:
+                m.keeper(J,E,R)
+            self.assertEqual(json.loads((Path(d)/'owner-result.json').read_bytes())['reason'],'guard_changed')
+            revoke.assert_called_once_with(J,E,R)
+    def test_kernel_relative_timeout_is_recomputed_after_BPF_commit_latency(self):
+        from paw.core import browser_owned_broker as existing
+        obj=object.__new__(m.Mediation);obj.uplink=None;obj.approval=None;obj._existing=existing
+        obj.worker=SimpleNamespace(unit='inert.service');events=[];obj.control=lambda *a,**k:events.append((a,k))
+        with patch.object(m.subprocess,'run'),patch.object(m.time,'monotonic_ns',return_value=3*10**9):
+            obj.allow('https','93.184.216.34',3000,plan={'expires_ns':6*10**9})
+        self.assertEqual(events[0][1]['milliseconds'],1000)
+        events.clear()
+        with patch.object(m.subprocess,'run'),patch.object(m.time,'monotonic_ns',return_value=5*10**9):
+            with self.assertRaisesRegex(ValueError,'expired_kernel_lease'):
+                obj.allow('https','93.184.216.34',3000,plan={'expires_ns':6*10**9})
+        self.assertFalse(events)
+    def test_actual_shared_controller_denies_download_before_any_navigation(self):
+        runtime=m.PublicRuntime();runtime.seed=SEEDS[0];runtime.nonce=E
+        sent=[];runtime._send=sent.append;runtime._request=lambda _:self.fail('premature network')
+        driver=runtime._make_controller();driver.start()
+        self.assertEqual(driver.stage,'configuring')
+        self.assertEqual(sent[0]['method'],'Browser.setDownloadBehavior')
+        self.assertEqual(sent[0]['params']['behavior'],'deny')
+        driver.accept({'id':sent[0]['id'],'result':{}})
+        self.assertEqual(sent[-1]['method'],'Browser.grantPermissions')
+        self.assertFalse(any(v['method']=='Page.navigate' for v in sent))
+        with self.assertRaises(ValueError):driver.start()
+        runtime.selector.close()
+    def test_batch_counts_persist_across_three_serial_children(self):
+        previous=None
+        for slot in range(3):
+            b=m.BatchBudget(SEEDS,previous)
+            b.hostname('resource'+str(slot)+'.invalid')
+            for _ in range(m.CASE_REQUESTS):
+                b.request(slot)
+            with self.assertRaises(ValueError): b.request(slot)
+            b.reserve(slot); b.uncertain(slot)
+            with self.assertRaises(ValueError): b.reserve(slot)
+            previous=b.facts()
+        self.assertEqual(previous['request_slots'],[10,10,10])
+        self.assertEqual(sum(previous['response_bytes_or_unrecoverable_reservations']),4194303)
+        self.assertEqual(len(previous['hostname_slots']),6)
+        b=m.BatchBudget(SEEDS,previous)
+        b.hostname('extra.invalid'); b.hostname('last.invalid')
+        with self.assertRaises(ValueError): b.hostname('ninth.invalid')
+        self.assertEqual(b.facts()['request_slots'],[10,10,10])
+
+    def test_reservation_is_consumed_on_unknown_transport_and_never_lost_in_handoff(self):
+        b=m.BatchBudget(SEEDS); b.reserve(0)
+        self.assertEqual(m.BatchBudget(SEEDS,b.facts()).bytes[0],m.CASE_BYTES)
+        b.complete(0,100); self.assertEqual(b.reserve(0),m.CASE_BYTES-100)
+        b.uncertain(0)
+        with self.assertRaises(ValueError): b.complete(0,0)
+        with self.assertRaises(ValueError): b.uncertain(0)
+        for slot in [True,-1,3,'0']:
+            for method,args in [(b.request,()),(b.reserve,()),(b.complete,(0,)),(b.uncertain,())]:
+                with self.subTest(slot=slot,method=method),self.assertRaises(ValueError):method(slot,*args)
+
+    def test_handoff_cannot_replace_fixed_contract_or_initial_hosts(self):
+        facts=m.BatchBudget(SEEDS).facts()
+        for key,value in [('request_slots',[True,0,0]),('hostname_slots',['other.invalid']),
+                          ('effective_per_case_requests',32),('batch_response_ceiling',2**30),
+                          ('response_bytes_or_unrecoverable_reservations',[0,-1,0])]:
+            bad=copy.deepcopy(facts);bad[key]=value
+            with self.subTest(key=key),self.assertRaises(ValueError):m.BatchBudget(SEEDS,bad)
+        for bad in ['UPPER.invalid','127.0.0.1','bad.invalid/x','a.invalid:80']:
+            with self.subTest(host=bad),self.assertRaises(ValueError):m.BatchBudget(SEEDS).hostname(bad)
+
+    def test_packet_rules_bind_exact_service_interface_source_and_live_sets_both_ways(self):
+        group='/system.slice/'+m.identity(J,E,R,7)['probe']
+        script=m.rules(group,'wlp4s0',['192.168.1.137'])
+        self.assertEqual(script.count('socket cgroupv2 level 2'),2)
+        self.assertEqual(script.count('meta skuid 65520 jump egress'),2)
+        self.assertEqual(script.count('ct state established accept'),4)
+        self.assertIn('priority 0',script);self.assertIn('priority 10',script)
+        self.assertNotIn('mark',script);self.assertNotIn('forward',script)
+        for line in script.splitlines():
+            if 'ct state established accept' in line:self.assertRegex(line,r'@(tcp4|udp4)')
+        self.assertNotIn('socket cgroupv2',m.rules(None,'lo',['9.9.9.9','93.184.216.34']))
+        for bad in [group+'; accept', '/user.slice/'+group.split('/')[-1],
+                    group.replace('-probe-7','-probe-8')]:
+            with self.assertRaises(ValueError):m.rules(bad,'lo',['9.9.9.9'])
+        for bad in ['lo" accept','x'*16,'lo\n']:
+            with self.assertRaises(ValueError):m.rules(group,bad,['9.9.9.9'])
+
+    def test_leases_refuse_private_unbounded_and_foreign_resolver(self):
+        for kind,address,ms in [('http','127.0.0.1',1000),('dns','93.184.216.34',1000),
+                                ('https','93.184.216.34',3001),('http','93.184.216.34',True),
+                                ('ftp','93.184.216.34',1000),('http','192.168.1.1',1)]:
+            with self.subTest(kind=kind,address=address),self.assertRaises(ValueError):m.lease(kind,address,ms)
+        script=m.lease('http','93.184.216.34',3000)
+        self.assertEqual(script.count('flush set'),4)
+        self.assertEqual(script.count('timeout 3000ms'),2)
+
+    def test_fixed_profiles_and_old_defaults_preserved(self):
+        base=old.service(J,E,R,'probe',42,protocol=True)
+        cfg={'mode':'public'}
+        with patch.object(m.kernel,'private_json',return_value=cfg):
+            unit,p,c=m.service(J,E,R,'probe',42,3,protocol=True)
+            self.assertEqual(p['IPAddressDeny'],'any');self.assertEqual(p['IPAddressAllow'],'')
+            self.assertEqual(p['NetworkNamespacePath'],'/proc/42/ns/net')
+            self.assertEqual(p['MemoryMax'],'128M');self.assertEqual(p['TasksMax'],'16')
+            self.assertEqual(p['CPUQuota'],'25%');self.assertEqual(p['RuntimeMaxSec'],'10')
+            self.assertIn('-mail-probe-3.service',unit);self.assertEqual(c[-1],'wire')
+            _,p,_=m.service(J,E,R,'keeper')
+            self.assertEqual(p['PrivateNetwork'],'no');self.assertNotIn('NetworkNamespacePath',p)
+            self.assertEqual(p['CapabilityBoundingSet'],'CAP_NET_ADMIN')
+            self.assertEqual(p['RestrictAddressFamilies'],'AF_UNIX AF_NETLINK')
+            self.assertEqual(p['TimeoutStopSec'],'500ms')
+            self.assertEqual(p['ExecStopPost'],'/usr/sbin/nft -f '+m.identity(J,E,R)['directory']+'/revoke.nft')
+            with self.assertRaises(ValueError):m.service(J,E,R,'fixture',42)
+        self.assertEqual(base,old.service(J,E,R,'probe',42,protocol=True))
+
+    def session(self):
+        dns=lambda *_:b'\0'*12
+        http=lambda plan,remaining:({'body_bytes':1,'body_sha256':m.sha(b'x')},b'x')
+        return m.PublicTransport(E,time.monotonic_ns()+8*10**9,dns,http)
+
+    def test_transport_replay_and_fault_close_before_any_network_callback(self):
+        cases=[('f'*32,0,'stop',{},b''),(E,True,'stop',{},b''),(E,0,'shell',{},b''),
+               (E,0,'stop',{},b'input'),(E,0,'dns',{'host':'127.0.0.1','ident':1,
+                 'deadline_ns':time.monotonic_ns()+10**9},b'')]
+        for args in cases:
+            s=self.session()
+            with patch.object(s,'dns',side_effect=AssertionError('DNS called')), \
+                 patch.object(s,'http',side_effect=AssertionError('HTTP called')):
+                with self.assertRaises(ValueError):s.dispatch(*args)
+            self.assertTrue(s.closed)
+            with self.assertRaises(ValueError):s.dispatch(E,0,'stop',{},b'')
+
+    def test_valid_empty_http_body_and_private_wire_survive_actual_codec(self):
+        s=self.session();s.http=lambda *_:({'body_bytes':0,'body_sha256':m.sha(b'')},b'')
+        plan={'url':SEEDS[0],'nonce':E,'expires_ns':time.monotonic_ns()+10**9,
+              'all_ipv4':['93.184.216.34'],'peer_ipv4':'93.184.216.34'}
+        fields,body=s.dispatch(E,0,'http',{'plan':plan,'remaining_bytes':m.CASE_BYTES},b'')
+        decoder=wire.Decoder(E)
+        frames=decoder.feed(wire.frame(E,0,'reply',fields,body));decoder.eof()
+        self.assertEqual(frames[0][1],b'')
+        s.dispatch(E,1,'stop',{},b'')
+        with self.assertRaises(ValueError):s.dispatch(E,2,'stop',{},b'')
+
+if __name__=='__main__':unittest.main()

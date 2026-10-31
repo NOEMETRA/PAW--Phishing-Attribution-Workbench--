@@ -8,6 +8,7 @@ import sys
 import tempfile
 import unittest
 from unittest.mock import patch
+from paw.core.mail_browser_public import PROGRAMS
 
 REPO=Path(__file__).resolve().parents[1]
 CORE=REPO/'paw/core'
@@ -23,10 +24,11 @@ class Seed(unittest.TestCase):
             core=root/'paw/core';core.mkdir(parents=True);out=root/'seed';out.mkdir()
             for name in ['browser_guest.py','browser_build_guest.py','browser_policy.py','browser_sandbox.py']:
                 (here/name).write_bytes((REPO/'lab/s14'/name).read_bytes())
-            for name in ['browser_cdp.py','browser_owned_cdp_guest.py','browser_owned_broker_guest.py']:
+            for name in PROGRAMS:
                 (core/name).write_bytes((CORE/name).read_bytes())
             gate=object.__new__(vm.BrowserVM);gate.phase=phase
             gate.seed_config={'kind':'owned-cdp-probe-v1','nonce':'a'*32} if phase in {'owned_cdp','owned_brokered'} else {'owned':'inert seed fixture'}
+            if phase=='mail_public':gate.seed_config={'kind':'mail-public-browser-v1','nonce':'a'*32,'url':'https://selected.invalid/'}
             calls=[]
             def compile_iso(args):
                 calls.append(args);(out/'seed.iso').write_bytes(b'not an actual ISO')
@@ -36,6 +38,25 @@ class Seed(unittest.TestCase):
             files={r['path']:base64.b64decode(r['content']) for r in cloud['write_files']}
             network=json.loads((out/'network-config').read_text())
             return files,network,calls
+    def test_selected_mail_seed_imports_all_peers_without_native_authority_or_extra_budget(self):
+        files,network,_=self.compose('mail_public')
+        self.assertEqual(network,{'version':2,'ethernets':{}})
+        self.assertEqual(json.loads(files['/etc/paw-mail-browser.json'])['url'],'https://selected.invalid/')
+        unit=files['/etc/systemd/system/paw-browser.service'].decode()
+        self.assertIn('/mail_browser_public.py --guest\n',unit)
+        self.assertIn('MemoryMax=128M\n',unit);self.assertIn('TasksMax=32\n',unit)
+        self.assertEqual(vm.LIFETIME['mail_public'],vm.LIFETIME['job'])
+        self.assertEqual(vm.FILE_CAP['mail_public'],vm.FILE_CAP['job'])
+        self.assertNotIn('/usr/local/lib/paw-s14/mail_browser_native.py',files)
+        self.assertFalse(any(path.endswith('.eml') for path in files))
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            for path,raw in files.items():
+                if path.startswith('/usr/local/lib/paw-s14/'):(root/Path(path).name).write_bytes(raw)
+            result=subprocess.run([sys.executable,'-I','-S','-B','-c',
+                'import runpy,sys;v=runpy.run_path(sys.argv[1]);assert callable(v["guest_main"])',
+                str(root/'mail_browser_public.py')],capture_output=True,timeout=5)
+            self.assertEqual(result.returncode,0,result.stderr)
     def test_new_seed_has_only_fixed_probe_controller_and_bounded_service(self):
         files,network,calls=self.compose('owned_cdp')
         self.assertEqual(files['/usr/local/lib/paw-s14/browser_owned_cdp_guest.py'],(CORE/'browser_owned_cdp_guest.py').read_bytes())
