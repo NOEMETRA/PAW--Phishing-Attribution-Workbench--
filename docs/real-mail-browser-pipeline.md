@@ -481,3 +481,25 @@ CLI, preservation, seal and byte-exact ZIP checks, but this new Root component
 does not yet ingest it or produce a sealed installed PAW online sidecar. Full
 O3 combined fault/custody acceptance, a reviewed native real scope and concrete
 per-hash O4 approval remain open. Real targets and real website JS remain0.
+
+The first actual PR150 combined job `f21c1b84f5704a9cad08127c3b9aeba0`
+retains FAIL `broker_session_expired`; no combined acceptance was published.
+The fresh raw kernel cases passed. Protected producer readback and independent
+terminal checks confirmed restored host, expected VM owner disposition, no live
+VM/workers and collected network units. The three protocol roles terminated
+normally; their journal does not identify the full guest/controller timeline.
+The consumed attempt is preserved and must not be replayed.
+
+An inert test of the actual producer and ledger reproduces a clock-boundary
+mismatch: permitted guest preflight plus pending-request/role setup can consume
+the Root ledger's15s while actual guest execution is still inside15s. Root now
+anchors that execution admission clock at the successful start acknowledgement,
+matching the existing post-start poll boundary. The guest15s and independent
+keeper8s/worker10s/500ms stop ceilings are unchanged. Another producer regression
+reproduces post-stop image/context hashing inflating `stop_ns`; the external
+stop is now captured before that verification and verification time is separate.
+No stop or integrity predicate is relaxed. Bounded phase times, observed roles
+and request/counter progress are retained on diagnostic FAIL as well, so a fresh
+promoted attempt can establish the actual sequence. These regressions do not
+retroactively prove the complete historical timing cause or runtime success.
+Review, head/main CI and immutable promotion precede any new owned trial.
