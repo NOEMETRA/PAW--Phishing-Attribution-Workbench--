@@ -137,8 +137,7 @@ class Mediation:
         plan=self.ledger.lease(plan,time.monotonic_ns())
         # Reserve the complete bounded2s keeper transaction: a relative nft
         # timeout starts at commit, so it must not overrun the absolute lease.
-        milliseconds=min(3000,(plan['expires_ns']-time.monotonic_ns())//10**6-2000)
-        require(milliseconds>0,'owned_broker_expired_kernel_lease')
+        milliseconds=kernel_lease_milliseconds(plan,time.monotonic_ns())
         try:
             self.control('lease',kind=plan['scheme'],milliseconds=milliseconds)
             fields,body=self.transaction('http',{'plan':plan,'remaining_bytes':mediator.LIMITS['bytes']-self.ledger.received})
@@ -161,6 +160,40 @@ class Mediation:
             self.ledger.closed=True;self.ledger.received=mediator.LIMITS['bytes']
             raise ValueError('owned_broker_transport_closed') from None
 
+
+
+class NetworkPreparation:
+    """Advance the same three bounded roles without blocking guest polling."""
+    def __init__(self,job,epoch,release,actors):
+        self.job=job;self.epoch=epoch;self.release=release;self.actors=actors
+        self.owner=kernel.Managed(job,epoch,release,'keeper',registry=actors,defer_ready=True)
+        self.server=None;self.worker=None;self.inode=None;self.server_live=False;self.worker_live=False
+        self.ready=False
+
+    def poll(self):
+        if self.ready:return True
+        if self.inode is None:
+            if not self.owner.poll_ready():return False
+            self.inode=kernel.live_role(self.owner,'keeper')
+            require(self.inode!=os.stat('/proc/self/ns/net').st_ino,'owned_broker_host_namespace')
+            # These already-budgeted processes may initialize together. No
+            # request/lease can start until both independent live checks pass.
+            self.server=kernel.Managed(self.job,self.epoch,self.release,'fixture',self.owner.pid,
+                registry=self.actors,protocol=True,defer_ready=True)
+            self.worker=kernel.Managed(self.job,self.epoch,self.release,'probe',self.owner.pid,
+                registry=self.actors,protocol=True,defer_ready=True)
+        if not self.server_live and self.server.poll_ready():
+            kernel.live_role(self.server,'fixture',self.inode);self.server_live=True
+        if not self.worker_live and self.worker.poll_ready():
+            kernel.live_role(self.worker,'probe',self.inode);self.worker_live=True
+        self.ready=self.server_live and self.worker_live
+        return self.ready
+
+
+def kernel_lease_milliseconds(plan,now_ns):
+    milliseconds=min(3000,(plan['expires_ns']-now_ns)//10**6-2000)
+    require(milliseconds>0,'owned_broker_expired_kernel_lease')
+    return milliseconds
 
 
 def send_response(channel,nonce,slot,metadata,body):
@@ -218,39 +251,37 @@ def run_owned(job,release):
             # same15s execution clock begins at the successful start boundary,
             # not before those prerequisites. Guest15s/keeper8s/worker10s stay.
             began=time.monotonic_ns();record['timing_ns']['guest_start_ack']=began
-            end=time.monotonic()+18
+            end=time.monotonic()+18;preparation=None
             while time.monotonic()<end:
                 value=vm['channel'].call('poll',seconds=5)
-                if value.get('network_request')is not None:break
-                require(not value.get('done'),'owned_broker_guest_ended_before_network');time.sleep(.03)
-            else:raise ValueError('owned_broker_no_paused_request')
-            record['timing_ns']['first_paused_request']=time.monotonic_ns()
-            parent=kernel.unit_properties(ids['parent'])
-            require(parent['ActiveState']=='active'and parent['MainPID']==str(os.getpid())and
-                parent['MemoryMax']==str(512*1024**2)and parent['TasksMax']=='64','owned_broker_parent_budget')
-            partitioned=True;partition(ids['parent'])
-            owner=kernel.Managed(job,epoch,release,'keeper',registry=actors)
-            inode=kernel.live_role(owner,'keeper')
-            require(inode!=os.stat('/proc/self/ns/net').st_ino,'owned_broker_host_namespace')
-            server=kernel.Managed(job,epoch,release,'fixture',owner.pid,registry=actors,protocol=True)
-            kernel.live_role(server,'fixture',inode)
-            worker=kernel.Managed(job,epoch,release,'probe',owner.pid,registry=actors,protocol=True)
-            kernel.live_role(worker,'probe',inode)
-            record['timing_ns']['actors_ready']=time.monotonic_ns()
-            mediation=Mediation(owner,worker,epoch,began)
-            while time.monotonic()<end:
-                if value.get('done')is True:break
                 request=value.get('network_request')
-                if request is not None:
+                if request is not None and 'first_paused_request'not in record['timing_ns']:
+                    record['timing_ns']['first_paused_request']=time.monotonic_ns()
+                if value.get('done')is True:break
+                # Align the existing keeper8s with the remaining part of the
+                # guest15s. Earlier requests start preparation immediately.
+                # Continue polling the same VM while PID1 roles initialize.
+                if preparation is None and (request is not None or time.monotonic_ns()-began>=7*10**9):
+                    parent=kernel.unit_properties(ids['parent'])
+                    require(parent['ActiveState']=='active'and parent['MainPID']==str(os.getpid())and
+                        parent['MemoryMax']==str(512*1024**2)and parent['TasksMax']=='64',
+                        'owned_broker_parent_budget')
+                    partitioned=True;partition(ids['parent'])
+                    record['timing_ns']['network_preparation_start']=time.monotonic_ns()
+                    preparation=NetworkPreparation(job,epoch,release,actors)
+                if preparation is not None and mediation is None and preparation.poll():
+                    owner,server,worker=preparation.owner,preparation.server,preparation.worker
+                    inode=preparation.inode
+                    record['timing_ns']['actors_ready']=time.monotonic_ns()
+                    mediation=Mediation(owner,worker,epoch,began)
+                if mediation is not None and request is not None:
                     try:metadata,body=mediation.response(request)
                     except ValueError:
                         if mediation.ledger.closed:raise
-                        # URL/method/answer refusal is visible; revoke DNS too.
                         mediation.control('revoke')
                         console.transfer(vm['channel'],{'kind':'refusal','nonce':epoch,'seq':request['seq']})
                     else:send_response(vm['channel'],epoch,request['seq'],metadata,body)
-                value=vm['channel'].call('poll',seconds=5)
-                if not value.get('done'):time.sleep(.03)
+                time.sleep(.03)
             else:raise ValueError('owned_broker_poll_deadline')
             require(value.get('status')=='completed'and value.get('writers_stopped')is True and
                 value.get('network_interfaces')==['lo'] and type(value.get('sandbox'))is dict and

@@ -503,3 +503,29 @@ and request/counter progress are retained on diagnostic FAIL as well, so a fresh
 promoted attempt can establish the actual sequence. These regressions do not
 retroactively prove the complete historical timing cause or runtime success.
 Review, head/main CI and immutable promotion precede any new owned trial.
+
+PR151 merged as `b52f915a331a558e0c1682c44bd771a556fa7555`, with clear
+exact-head review, seven head/main checks, tree equivalence and passwordless
+immutable promotion. Its fresh no-VM kernel matrix passed. Combined job
+`1d0b7514c3e145b592162b6c23df647b` retained FAIL: the first Fetch pause
+arrived10.528s after the start acknowledgement and serial network preparation
+then consumed4.183s. DNS parsed the owned public-looking answer, but no HTTP
+body was received. External stop measured1.070s; subsequent integrity proof
+took14.170s. Protected readback independently confirmed stopped writers,
+expected owner disposition, collected units and exact restoration. This
+consumed failure is preserved and must not be replayed.
+
+The reproduced scheduling correction uses one serial controller to poll the
+same VM while the existing three network roles initialize. Preparation starts
+at the first pause or7s after guest acknowledgement, whichever is earlier;
+7s aligns the existing keeper8s with the guest15s window. After independently
+verified keeper readiness, the already-budgeted fixture and worker may prepare
+together. No lease or request dispatch occurs until both independently pass
+readiness and live-role checks. Deferred readiness keeps the original4s/2s
+arrival deadlines, including rejection of late queued headers. It adds no
+controller thread, second job, actor, budget, lifetime or execution authority.
+Partial preparation still enters the same registered cleanup and external VM
+stop path. An inert actual-producer/ledger regression uses the measured late
+pause and role costs and preserves the complete2s kernel-lease reserve.
+These passing software regressions do not establish a new runtime PASS;
+fresh review, head/main CI and immutable promotion remain required.
