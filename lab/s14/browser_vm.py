@@ -24,8 +24,8 @@ from gate_channel import GateChannel
 BROWSER_BASE = BASE.parent / 'browser-v1.qcow2'
 BROWSER_META = BASE.parent / 'browser-v1.json'
 LIMITS = {'memory.max': str(1536 * 1024**2), 'memory.swap.max': '0', 'pids.max': '64', 'cpu.max': '50000 100000'}
-LIFETIME = {'build': 1200, 'job': 360}
-FILE_CAP = {'build': 2 * 1024**3, 'job': 256 * 1024**2}
+LIFETIME = {'build': 1200, 'job': 360, 'owned_cdp': 360}
+FILE_CAP = {'build': 2 * 1024**3, 'job': 256 * 1024**2, 'owned_cdp': 256 * 1024**2}
 
 
 def require(value, reason):
@@ -153,7 +153,7 @@ class BrowserVM(HashGate):
         require(phase in LIFETIME and os.geteuid() == 0 and Path('/proc/self/attr/current').read_text().strip() == 'unconfined', 'browser_root_operator')
         super().__init__(args); self.phase = phase; self.media = Path(media); self.seed_config = seed_config
         platform.fs.trusted(self.media.stat()); require(not self.media.is_symlink() and not self.media.stat().st_mode & 0o222, 'browser_media_immutable')
-        if phase == 'job':
+        if phase in {'job', 'owned_cdp'}:
             import pwd
             group = pwd.getpwnam('libvirt-qemu').pw_gid
             require(self.media.stat().st_gid == group and self.media.stat().st_mode & 0o777 == 0o440 and
@@ -164,16 +164,22 @@ class BrowserVM(HashGate):
         self.report.update(scope='separate no-NIC Chrome HTML profile', vms=[], real_connections=0, phase=phase)
 
     def seed(self, folder, role, job_id, token):
-        worker = 'browser_build_guest.py' if self.phase == 'build' else 'browser_guest.py'
+        worker = ('browser_build_guest.py' if self.phase == 'build' else
+                  'browser_owned_cdp_guest.py' if self.phase == 'owned_cdp' else 'browser_guest.py')
+        worker_source = (HERE.parents[1]/'paw/core'/worker if self.phase == 'owned_cdp' else HERE/worker)
         service = ('[Unit]\nAfter=cloud-final.service\n[Service]\nExecStart=/usr/bin/python3 -I -u /usr/local/lib/paw-s14/' + worker + '\n'
                    'StandardInput=tty-force\nStandardOutput=tty\nStandardError=tty\nTTYPath=/dev/ttyS0\n'
                    + ('TasksMax=128\nMemoryMax=768M\n' if self.phase == 'build' else 'TasksMax=32\nMemoryMax=128M\n')
                    + 'MemorySwapMax=0\nCPUQuota=100%\n')
-        config_name = '/etc/paw-browser-build.json' if self.phase == 'build' else '/etc/paw-browser-job.json'
-        files = [('/usr/local/lib/paw-s14/' + worker, (HERE / worker).read_bytes()),
+        config_name = ('/etc/paw-browser-build.json' if self.phase == 'build' else
+                       '/etc/paw-owned-cdp.json' if self.phase == 'owned_cdp' else '/etc/paw-browser-job.json')
+        files = [('/usr/local/lib/paw-s14/' + worker, worker_source.read_bytes()),
                  ('/usr/local/lib/paw-s14/browser_policy.py', (HERE / 'browser_policy.py').read_bytes()),
                  ('/usr/local/lib/paw-s14/browser_sandbox.py', (HERE / 'browser_sandbox.py').read_bytes()),
                  (config_name, json.dumps(self.seed_config).encode()), ('/etc/systemd/system/paw-browser.service', service.encode())]
+        if self.phase == 'owned_cdp':
+            files.append(('/usr/local/lib/paw-s14/browser_cdp.py',
+                          (HERE.parents[1]/'paw/core/browser_cdp.py').read_bytes()))
         cloud = {'package_update': False, 'package_upgrade': False, 'ssh_pwauth': False,
                  'write_files': [{'path': p, 'encoding': 'b64', 'content': base64.b64encode(b).decode(), 'permissions': '0644'} for p, b in files],
                  'runcmd': [['systemctl', 'mask', '--now', 'ssh.service', 'ssh.socket', 'serial-getty@ttyS0.service', 'systemd-networkd-wait-online.service'],
@@ -186,7 +192,7 @@ class BrowserVM(HashGate):
 
     def descriptor(self, role, case, *args, **kwargs):
         node = super().descriptor(role, 'browser-' + case, *args, **kwargs)
-        if self.phase == 'job':
+        if self.phase in {'job', 'owned_cdp'}:
             platform.fs.trusted(BROWSER_BASE.stat()); require(BROWSER_BASE.stat().st_mode & 0o777 == 0o444, 'browser_base_readonly')
             node['overlay'].unlink()
             self.run(['/usr/bin/qemu-img', 'create', '-f', 'qcow2', '-F', 'qcow2', '-b', str(BROWSER_BASE), str(node['overlay'])])

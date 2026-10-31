@@ -133,8 +133,9 @@ successful execution, Spam placement and matching hashes do not supply labels.
 
 ## Current disposition
 
-O0 passed for three acquired originals; O1 merged with review, head/main CI and
-tree equivalence. O2–O4 are open. Zero real target connections or real website-script
+O0 passed for three acquired originals; O1 and the separate request mediator
+component in PR141 merged with review, head/main CI and tree equivalence.
+O2–O4 are open. Zero real target connections or real website-script
 executions have occurred in this new corpus test. The completed P0–P5 monitor
 stays disabled; this document does not silently recreate an automation, extend
 its closed goal or claim full online pipeline acceptance.
@@ -193,3 +194,57 @@ They do not constitute the owned VM acceptance matrix. Guest CDP interception,
 bounded serial transport, independently checked real custody/protected approval,
 immutable source integration, the confined runtime and external stop/restoration
 remain O2/O3 work before any concrete real-batch O4 approval is requested.
+
+### Owned no-NIC Chrome/CDP probe
+
+The next increment adds a fixed generated CDP probe to the existing
+`browser-owned-v1` recipe, before its nine existing HTML cases. Only the
+immutable reviewed release can supply its code. There is no new administrative
+verb, caller-selected URL/source, host network permission or real-source grant.
+The dispatcher, installed static helper and `IPAddressDeny=any` parent stay
+unchanged. Actual execution still requires this increment's review, head/main
+CI and independently verified Root promotion; software tests do not activate it.
+
+`BrowserVM`'s separate `owned_cdp` seed uses the same read-only Chrome image,
+no-NIC XML and existing job lifecycle/file/QEMU budgets. The guest service
+accepts only inspect/start/poll/cancel and a fixed kind plus generated nonce.
+Nonroot sandboxed Chrome starts on `about:blank`, with private descriptors3/4
+for NUL-delimited CDP. It exposes no TCP DevTools port and no host browser is
+launched. Downloads and permissions are denied before the controlled page is
+navigated; Fetch interception is enabled before navigation. Authentication is
+cancelled, child targets close without debugger resume, and requests after the
+DOM snapshot boundary fail with explicit missing coverage.
+
+The page and one JavaScript-requested text resource are generated fixture bytes
+for `https://paw-owned.invalid/` and `/owned-data`. The callback opens no socket
+or DNS connection; every other URL/method refuses. The script must change the
+DOM title and a body attribute using the returned nonce. The trusted controller
+retrieves actual DOM through CDP and checks that result plus the existing guest
+renderer NNP/seccomp/nonroot/PID-namespace witnesses. This proves only the
+measured owned Chrome/Fetch/DOM path when the Root trial passes. It is **not** a
+TLS, DNS, public routing or real-email-browser test.
+
+CDP decoding bounds each frame, aggregate bytes and event count; serial body
+chunks independently bind nonce, sequence, order, length and digest and stay
+below the existing60KiB console frame cap. The owned callback itself supplies
+only its two small fixed resources. The guest keeps512MiB/256 process limits,
+15 seconds,256KiB DOM and1MiB netlog. Its controller keeps128MiB/32 tasks;
+QEMU remains1536MiB/64 tasks/50%CPU with1024MiB guest memory. No resource ceiling
+is raised. CDP EOF/protocol loss requests immediate stop instead of waiting for
+the whole-job deadline.
+
+The Root producer reconciles external stop below12 seconds, absent domains,
+host restoration, immutable images/source/canary and exact Chrome identity
+before publishing a small Root-owned reader attestation. Raw VM audits stay
+Root-private. Ordinary readback must verify the protected attestation/source
+identity and distinguish producer verification from independent raw-audit
+inspection. Failure/unknown stop publishes no success. The nine pre-existing
+HTML cases still run after the probe; this does not reopen unrelated audits.
+
+Inert tests exercise the actual seed composer and preserve the original job
+seed, fixed fixture/launcher refusal, EOF handling, CDP state/order/budgets and
+bounded body transport. An ordinary harmless Python process also checked the
+Linux descriptor3/4 ABI. None of those software checks launches Chrome or
+establishes VM acceptance. Public broker namespace/leases, full owned online
+fault matrix, Root custody/protected hash approval and sealed real observations
+remain required O2–O4 work.
