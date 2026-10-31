@@ -30,6 +30,15 @@ class Protocol(unittest.TestCase):
             receiver=run.Receiver('a'*32,Path(d))
             with self.assertRaises(ValueError):receiver.feed({'event':'done','nonce':'a'*32,'runs':[]})
             with self.assertRaises(ValueError):receiver.feed({'event':'chunk','row':{}})
+    def test_terminal_cannot_be_followed_by_another_artifact(self):
+        n='a'*32
+        with tempfile.TemporaryDirectory()as d:
+            receiver=run.Receiver(n,Path(d));receiver.feed({'event':'done','nonce':n,
+                'schema':'paw-capture-backend-experiment-v1','network_interfaces':['lo'],
+                'production_acceptance':False,'real_connections':0,'guest_writers_stopped':True,
+                'runs':[{'mode':m,'case':c}for m in guest.MODES for c in guest.CASES]})
+            with self.assertRaises(ValueError):receiver.feed({'event':'file','nonce':n,'seq':0,
+                'name':'playwrightcapture-http-js/dom.html','bytes':0,'sha256':hashlib.sha256(b'').hexdigest()})
     def test_fixed_fixtures_exercise_JS_resource_redirect_and_never_accept_real_target(self):
         n='a'*32;status,_,body=guest.fixture(n,'/')
         self.assertEqual(status,200);self.assertIn(b"fetch('/owned-data')",body)

@@ -29,7 +29,7 @@ def command(overlay,iso):
 class Receiver:
     def __init__(self,nonce,folder):self.nonce=nonce;self.folder=folder;self.current=None;self.seq=0;self.total=0;self.files=[];self.done=None
     def feed(self,v):
-        require(type(v)is dict,'frame object')
+        require(type(v)is dict and self.done is None,'frame object or closed receiver')
         if v.get('event')=='file':
             require(set(v)=={'event','nonce','seq','name','bytes','sha256'}and self.current is None and
                 v.get('nonce')==self.nonce and type(v.get('seq'))is int and
