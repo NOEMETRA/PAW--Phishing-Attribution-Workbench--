@@ -53,33 +53,54 @@ class PublicBoundary(unittest.TestCase):
                     self.assertIn(10,closed)
                     if failure!='pidfd':self.assertIn(11,closed)
 
-    def test_actual_bounded_reader_observes_second_fixture_readiness_within_same_unit_lifetime(self):
-        from unittest.mock import Mock
-        read,write=os.pipe();ready=threading.Event()
-        process=Mock(stdin=io.BytesIO(),stdout=os.fdopen(read,'rb'),stderr=io.BytesIO())
+    def test_actual_preparation_resets_readiness_before_releasing_fast_pipe_fixture(self):
+        from unittest.mock import Mock,MagicMock
+        read,write=os.pipe();actors=[];test=self
+        class Input:
+            def write(self,raw):
+                test.assertEqual(json.loads(raw),{'op':'continue'})
+                os.write(write,b'{"ready":true,"role":"fixture","witness":{"pid":123,"namespace_inode":99}}\n')
+                until=time.monotonic()+1
+                while actors[0].output.empty() and time.monotonic()<until:time.sleep(.001)
+                test.assertFalse(actors[0].output.empty(),'Actual second header queues before send returns')
+                return len(raw)
+            def flush(self):pass
+        process=Mock(stdin=Input(),stdout=os.fdopen(read,'rb'),stderr=io.BytesIO())
         process.wait.return_value=0
-        def produce():
-            with os.fdopen(write,'wb',buffering=0) as out:
-                out.write(b'{"ready":true,"phase":"namespace-bootstrap","witness":{"pid":123}}\n')
-                ready.wait(2)
-                out.write(b'{"ready":true,"role":"fixture","witness":{"pid":123}}\n')
-        thread=threading.Thread(target=produce);thread.start();registry=[]
-        with patch.object(m.kernel,'HERE',Path('/opt/paw-vm/releases')/R/'paw/core/owned_kernel_runtime.py'), \
-             patch.object(m.kernel.os,'geteuid',return_value=0), \
-             patch.object(m.kernel.subprocess,'Popen',return_value=process), \
-             patch.object(m.kernel.subprocess,'run',return_value=SimpleNamespace(returncode=0)), \
-             patch.object(m.kernel,'unit_properties',return_value={'MainPID':'0','ActiveState':'inactive'}):
-            try:
-                actor=m.kernel.Managed(J,E,R,'fixture',42,registry=registry)
-                self.assertEqual(actor.ready['phase'],'namespace-bootstrap')
-                actor.ready=None;actor._ready_received_at=None;actor._ready_deadline=time.monotonic()+2
-                ready.set()
-                while not actor.poll_ready():time.sleep(.001)
+        os.write(write,b'{"ready":true,"phase":"namespace-bootstrap","witness":{"pid":123,"namespace_inode":99}}\n')
+        try:
+            with patch.object(m.kernel,'HERE',Path('/opt/paw-vm/releases')/R/'paw/core/owned_kernel_runtime.py'), \
+                 patch.object(m.kernel.os,'geteuid',return_value=0), \
+                 patch.object(m.kernel.subprocess,'Popen',return_value=process):
+                actor=m.kernel.Managed(J,E,R,'fixture',42);actors.append(actor)
+            with tempfile.TemporaryDirectory() as d:
+                folder=Path(d)
+                for role in ['fixture','probe']:(folder/(role+'-root')/'etc').mkdir(parents=True)
+                ids=m.identity(J,E,R);ids['directory']=d
+                obj=object.__new__(m.NetworkPreparation)
+                for name,value in {'job':J,'epoch':E,'release':R,'mode':'owned-raw','actors':actors,
+                    'protocol':False,'server':actor,'owner':SimpleNamespace(poll_ready=lambda:False),
+                    'worker':None,'inode':None,'ready':False,'fixture_configured':False}.items():setattr(obj,name,value)
+                obj._owner=lambda _:None
+                selector=MagicMock();selector.__enter__.return_value.select.return_value=[]
+                stats=lambda path:SimpleNamespace(st_ino=1 if str(path)=='/proc/self/ns/net' else 99)
+                with patch.object(m.os,'stat',side_effect=stats),patch.object(m.os,'open',return_value=42), \
+                     patch.object(m.os,'pidfd_open',return_value=43),patch.object(m.os,'fstat',return_value=SimpleNamespace(st_ino=99)), \
+                     patch.object(m.os,'close'),patch.object(m.kernel,'unit_properties',return_value={'MainPID':'123'}), \
+                     patch.object(m.selectors,'DefaultSelector',return_value=selector),patch.object(m.subprocess,'run'), \
+                     patch.object(m,'identity',return_value=ids),patch.object(m.kernel,'private_json',return_value={'namespace_inode':None}):
+                    self.assertFalse(obj.poll())
+                self.assertTrue(actor.poll_ready())
                 self.assertEqual(actor.ready['role'],'fixture')
                 self.assertIsNotNone(actor._ready_received_at)
-            finally:
-                ready.set();thread.join(2);m.kernel.cleanup_actors(registry);process.stdout.close()
-        self.assertFalse(thread.is_alive())
+                self.assertLessEqual(actor._ready_received_at,actor._ready_deadline)
+        finally:
+            os.close(write)
+            for actor in actors:
+                for thread in actor.threads:thread.join(2)
+                self.assertFalse(any(thread.is_alive() for thread in actor.threads))
+            process.stdout.close()
+
     def test_actual_keeper_loop_records_deleted_guard_as_loss_then_revokes(self):
         with tempfile.TemporaryDirectory() as d:
             ids=m.identity(J,E,R);ids['directory']=d

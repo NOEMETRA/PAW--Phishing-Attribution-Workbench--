@@ -612,11 +612,11 @@ class NetworkPreparation:
             finally:
                 if process is not None:os.close(process)
                 os.close(namespace)
-            self.server.send({'op':'continue'})
             # Second readiness is emitted only after the original fixture's
             # UID/capability drop and socket construction. Same PID1 lifetime.
             self.server.ready=None; self.server._ready_received_at=None
             self.server._ready_deadline=time.monotonic()+2
+            self.server.send({'op':'continue'})
             self.fixture_configured=True; self._owner(pid)
         if self.inode is None:
             if not self.owner.poll_ready():return False
