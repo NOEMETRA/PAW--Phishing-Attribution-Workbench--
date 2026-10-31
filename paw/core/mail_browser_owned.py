@@ -6,13 +6,13 @@ BLAKE3 seal verification. UID prepare/import independently verify the actual
 PAW seal and stopped writers. Caller metadata never grants execution authority.
 """
 import base64
-from contextlib import contextmanager, redirect_stdout
+from contextlib import contextmanager
 import hashlib
-import io
 import json
 import os
 from pathlib import Path
 import re
+import stat
 import time
 import uuid
 
@@ -99,6 +99,113 @@ def _case_snapshot(directory):
     return case,ref,pieces
 
 
+def _key(fd):
+    s=os.fstat(fd);return s.st_dev,s.st_ino
+
+
+def _outside(fd,case_key):
+    current=os.dup(fd)
+    try:
+        for _ in range(128):
+            here=_key(current);require(here!=case_key,'owned_mail_output_inside_parent')
+            parent=os.open('..',os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW,dir_fd=current)
+            if _key(parent)==here:os.close(parent);return
+            os.close(current);current=parent
+        raise ValueError('owned_mail_directory_depth')
+    finally:os.close(current)
+
+
+def _walk(path,create=False,case_key=None):
+    path=Path(path);require(path.is_absolute()and len(path.parts)<=64,'owned_mail_absolute_output')
+    fd=os.open('/',os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW)
+    try:
+        for name in path.parts[1:]:
+            require(name not in {'','.', '..'},'owned_mail_output_component')
+            try:child=os.open(name,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW,dir_fd=fd)
+            except FileNotFoundError:
+                require(create,'owned_mail_missing_output_directory')
+                if case_key is not None:_outside(fd,case_key)
+                try:os.mkdir(name,0o700,dir_fd=fd)
+                except FileExistsError:pass
+                child=os.open(name,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW,dir_fd=fd)
+            os.close(fd);fd=child
+            if case_key is not None:_outside(fd,case_key)
+        return fd
+    except BaseException:os.close(fd);raise
+
+
+def _new_directory(parent,name,case_key):
+    _outside(parent,case_key);os.mkdir(name,0o700,dir_fd=parent)
+    fd=os.open(name,os.O_RDONLY|os.O_DIRECTORY|os.O_NOFOLLOW,dir_fd=parent)
+    try:_outside(fd,case_key);return fd
+    except BaseException:os.close(fd);raise
+
+
+def _named_output(path,fd,case_key):
+    named=_walk(path,case_key=case_key)
+    try:require(_key(named)==_key(fd),'owned_mail_output_directory_changed')
+    finally:os.close(named)
+
+
+@contextmanager
+def _output(path,case):
+    case_fd=_walk(case)
+    try:case_key=_key(case_fd)
+    finally:os.close(case_fd)
+    parent=_walk(path.parent,create=True,case_key=case_key)
+    try:fd=_new_directory(parent,path.name,case_key)
+    finally:os.close(parent)
+    try:yield fd,case_key
+    finally:os.close(fd)
+
+
+def _write(fd,name,raw,case_key,mode=0o600):
+    require(type(name)is str and '/'not in name and name not in {'','.','..'},'owned_mail_output_name')
+    _outside(fd,case_key)
+    handle=os.open(name,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,mode,dir_fd=fd)
+    with os.fdopen(handle,'wb')as stream:stream.write(raw);stream.flush();os.fsync(stream.fileno())
+
+
+def _seal_fd(fd,contents,case_key):
+    """Same finite-file BLAKE3 case format, written/read via pinned directories."""
+    import blake3
+    from .evidence import EXCLUDED
+    evidence=_new_directory(fd,'evidence',case_key)
+    try:
+        scope=json.dumps({'policy':'all_case_files_v1','excluded':sorted(EXCLUDED),
+            'limitation':'Content integrity; no independent signature, origin or Rekor proof is established'},indent=2).encode()
+        _write(evidence,'inventory_scope.json',scope,case_key)
+        bodies={**contents,'evidence/inventory_scope.json':scope}
+        hashes={name:blake3.blake3(body).hexdigest()for name,body in sorted(bodies.items())}
+        index=json.dumps(hashes,indent=2).encode();root=blake3.blake3(''.join(hashes.values()).encode()).hexdigest().encode()
+        _write(evidence,'merkle_index.json',index,case_key);_write(evidence,'merkle_root.bin',root,case_key)
+        require(set(os.listdir(fd))==set(contents)|{'evidence'}and
+            set(os.listdir(evidence))=={'inventory_scope.json','merkle_index.json','merkle_root.bin'},'owned_mail_sidecar_inventory')
+        entry=os.stat('evidence',dir_fd=fd,follow_symlinks=False)
+        require(stat.S_ISDIR(entry.st_mode)and(entry.st_dev,entry.st_ino)==_key(evidence),'owned_mail_evidence_directory_changed')
+        for name,body in contents.items():
+            require(shared._read_regular(name,len(body),directory_fd=fd)==body,'owned_mail_sidecar_write_changed')
+        for name,body in [('inventory_scope.json',scope),('merkle_index.json',index),('merkle_root.bin',root)]:
+            require(shared._read_regular(name,len(body),directory_fd=evidence)==body,'owned_mail_sidecar_seal_changed')
+        os.fsync(evidence);os.fsync(fd)
+    finally:os.close(evidence)
+
+
+def _publish(fd,pending):
+    import ctypes
+    entry=os.stat('pending',dir_fd=fd,follow_symlinks=False)
+    require(stat.S_ISDIR(entry.st_mode)and(entry.st_dev,entry.st_ino)==_key(pending),'owned_mail_pending_changed')
+    libc=ctypes.CDLL(None,use_errno=True)
+    libc.renameat2.argtypes=[ctypes.c_int,ctypes.c_char_p,ctypes.c_int,ctypes.c_char_p,ctypes.c_uint]
+    libc.renameat2.restype=ctypes.c_int
+    # Linux RENAME_NOREPLACE: existing published evidence is never overwritten.
+    if libc.renameat2(fd,b'pending',fd,b'result',1)!=0:
+        error=ctypes.get_errno();raise OSError(error,os.strerror(error))
+    entry=os.stat('result',dir_fd=fd,follow_symlinks=False)
+    require(stat.S_ISDIR(entry.st_mode)and(entry.st_dev,entry.st_ino)==_key(pending),'owned_mail_publication_changed')
+    os.fsync(fd)
+
+
 @shared._offline
 def prepare(directory,output):
     shared._linux();case,ref,pieces=_case_snapshot(directory);dest=shared._destination(output,case)
@@ -113,9 +220,10 @@ def prepare(directory,output):
         'snapshot_sha256':{n:digest(data)for n,data in pieces.items()},'url_index':indices[0],'url':SEED,'limits':dict(LIMITS)}
     raw=canonical(v);validate_request(raw)
     require(_case_snapshot(case)[1:]==(ref,pieces),'owned_mail_case_changed')
-    dest.parent.mkdir(parents=True,exist_ok=True);dest.mkdir(mode=0o700)
-    with(dest/'request.json').open('xb')as f:f.write(raw)
-    (dest/'request.json').chmod(0o400)
+    with _output(dest,case)as(fd,case_key):
+        _write(fd,'request.json',raw,case_key,0o400)
+        require(_case_snapshot(case)[1:]==(ref,pieces),'owned_mail_case_changed_after_prepare')
+        _named_output(dest,fd,case_key)
     return {'status':'prepared','request':str(dest/'request.json'),'request_id':v['request_id'],
         'request_sha256':digest(raw),'execution_authorized':False,'scope':'fixed owned email only; no Root call or browser launch'}
 
@@ -185,18 +293,18 @@ def import_result(directory,request_path,output):
             body=shared._read_regular(a['name'],ARTIFACTS[a['name']],directory_fd=fd,root_owned=True)
             require(len(body)==a['bytes']and digest(body)==a['sha256'],'owned_mail_output_hash');artifacts[a['name']]=body
     require(_case_snapshot(case)[1:]==(ref,pieces),'owned_mail_case_changed_before_import')
-    dest.parent.mkdir(parents=True,exist_ok=True);dest.mkdir(mode=0o700);pending=dest/'pending';pending.mkdir(mode=0o700)
-    (pending/'request.json').write_bytes(raw);(pending/'receipt.json').write_bytes(receipt_raw)
-    for name,body in artifacts.items():(pending/name).write_bytes(body)
-    (pending/'result.json').write_bytes(canonical({'status':'collected','execution_status':receipt['status'],
+    contents={'request.json':raw,'receipt.json':receipt_raw,**artifacts}
+    contents['result.json']=canonical({'status':'collected','execution_status':receipt['status'],
         'case_reference':ref,'request_sha256':digest(raw),'original_case_modified':False,
         'producer_trust':'local Root-protected fixed-owned export; no remote attestation',
-        'parent_validation':PARENT_SCOPE,'meaning':'browser observations and custody only; no verdict or authentication claim'}))
-    from .evidence import seal_case
-    from .verify import verify_case
-    seal_case(pending)
-    with redirect_stdout(io.StringIO()):valid=verify_case(pending)
-    require(valid and _case_snapshot(case)[1:]==(ref,pieces),'owned_mail_publication_integrity')
-    os.rename(pending,dest/'result')
+        'parent_validation':PARENT_SCOPE,'meaning':'browser observations and custody only; no verdict or authentication claim'})
+    with _output(dest,case)as(fd,case_key):
+        pending=_new_directory(fd,'pending',case_key)
+        try:
+            for name,body in contents.items():_write(pending,name,body,case_key)
+            _seal_fd(pending,contents,case_key)
+            require(_case_snapshot(case)[1:]==(ref,pieces),'owned_mail_publication_integrity')
+            _named_output(dest,fd,case_key);_publish(fd,pending);_named_output(dest,fd,case_key)
+        finally:os.close(pending)
     return {'status':'collected','execution_status':receipt['status'],'result':str(dest/'result'),
         'request_id':request['request_id'],'case_unchanged':True,'scope':'separate sealed owned browser observations; scoring unchanged'}

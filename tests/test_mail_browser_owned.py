@@ -116,6 +116,69 @@ class OwnedMail(unittest.TestCase):
         sidecar=Path(result['result']);self.assertTrue(verify_case(sidecar));self.assertEqual(inventory(self.case),self.before)
         self.assertEqual((sidecar/'dom.html').read_bytes(),bodies['dom.html'])
         with self.assertRaises(ValueError):m.import_result(self.case,info['request'],self.root/'out')
+    def inert_import(self,request,raw,info,dest):
+        folder=self.root/'inert-export';folder.mkdir()
+        bodies={'dom.html':b'owned','screenshot.png':b'opaque PNG fixture','network.json':b'{}'}
+        for n,b in {**bodies,'request.json':raw,'receipt.json':m.canonical(receipt(request,bodies))}.items():(folder/n).write_bytes(b)
+        @contextmanager
+        def trusted(_):
+            fd=os.open(folder,os.O_RDONLY|os.O_DIRECTORY)
+            try:yield fd
+            finally:os.close(fd)
+        actual_read=m.shared._read_regular
+        def read(*args,**kwargs):kwargs.pop('root_owned',None);return actual_read(*args,**kwargs)
+        with patch.object(m,'trusted_export',trusted),patch.object(m.shared,'_read_regular',side_effect=read):
+            return m.import_result(self.case,info['request'],dest)
+    def test_prepare_pins_output_when_ancestor_becomes_a_symlink_before_creation(self):
+        outside=self.root/'outside';outside.mkdir();actual=m.shared._destination
+        def redirect(*args):
+            value=actual(*args);outside.rename(self.root/'moved');outside.symlink_to(self.case,target_is_directory=True);return value
+        with patch.object(m.shared,'_destination',side_effect=redirect),self.assertRaises((OSError,ValueError)):
+            m.prepare(self.case,outside/'slot')
+        self.assertEqual(inventory(self.case),self.before);self.assertFalse((self.case/'slot').exists())
+    def test_prepare_writes_only_to_pinned_inode_if_ancestor_moves_after_open(self):
+        outside=self.root/'outside';outside.mkdir();actual=m._write;changed=False
+        def redirect(*args,**kwargs):
+            nonlocal changed
+            if not changed:
+                changed=True;outside.rename(self.root/'moved');outside.symlink_to(self.case,target_is_directory=True)
+            return actual(*args,**kwargs)
+        with patch.object(m,'_write',side_effect=redirect),self.assertRaises((OSError,ValueError)):
+            m.prepare(self.case,outside/'slot')
+        self.assertEqual(inventory(self.case),self.before);self.assertFalse((self.case/'slot').exists())
+        self.assertTrue((self.root/'moved/slot/request.json').exists())
+    def test_import_ancestor_swap_before_creation_preserves_original(self):
+        v,raw,info=self.request();outside=self.root/'outside';outside.mkdir();actual=m.shared._destination
+        def redirect(*args):
+            value=actual(*args);outside.rename(self.root/'moved');outside.symlink_to(self.case,target_is_directory=True);return value
+        with patch.object(m.shared,'_destination',side_effect=redirect),self.assertRaises((OSError,ValueError)):
+            self.inert_import(v,raw,info,outside/'slot')
+        self.assertEqual(inventory(self.case),self.before);self.assertFalse((self.case/'slot').exists())
+    def test_import_pinned_writes_and_seal_survive_ancestor_swap_without_touching_parent(self):
+        v,raw,info=self.request();outside=self.root/'outside';outside.mkdir();actual=m._write;changed=False
+        def redirect(*args,**kwargs):
+            nonlocal changed
+            if not changed:
+                changed=True;outside.rename(self.root/'moved');outside.symlink_to(self.case,target_is_directory=True)
+            return actual(*args,**kwargs)
+        with patch.object(m,'_write',side_effect=redirect),self.assertRaises((OSError,ValueError)):
+            self.inert_import(v,raw,info,outside/'slot')
+        self.assertEqual(inventory(self.case),self.before);self.assertFalse((self.case/'slot').exists())
+        self.assertTrue(verify_case(self.root/'moved/slot/pending'));self.assertFalse((self.root/'moved/slot/result').exists())
+    def test_interrupted_publication_retains_sealed_pending_and_no_stable_result(self):
+        v,raw,info=self.request()
+        with patch.object(m,'_publish',side_effect=TimeoutError('inert publication loss')),self.assertRaises(TimeoutError):
+            self.inert_import(v,raw,info,self.root/'out')
+        self.assertTrue(verify_case(self.root/'out/pending'));self.assertFalse((self.root/'out/result').exists())
+        self.assertEqual(inventory(self.case),self.before)
+    def test_atomic_publish_never_overwrites_existing_evidence(self):
+        outside=self.root/'out';outside.mkdir();(outside/'pending').mkdir();(outside/'result').mkdir()
+        (outside/'result/kept').write_bytes(b'previous evidence')
+        fd=os.open(outside,os.O_RDONLY|os.O_DIRECTORY);pending=os.open('pending',os.O_RDONLY|os.O_DIRECTORY,dir_fd=fd)
+        try:
+            with self.assertRaises(FileExistsError):m._publish(fd,pending)
+        finally:os.close(pending);os.close(fd)
+        self.assertEqual((outside/'result/kept').read_bytes(),b'previous evidence')
     def test_prepare_and_import_apply_application_no_egress_policy(self):
         with patch.object(m,'_case_snapshot',side_effect=lambda *_:socket.socket()):
             for call in [lambda:m.prepare(self.case,self.root/'out'),lambda:m.import_result(self.case,'request',self.root/'out')]:

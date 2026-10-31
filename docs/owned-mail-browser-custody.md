@@ -48,6 +48,16 @@ The sidecar is sealed before its stable result directory is published. Reusing
 an output container refuses; copying existing evidence to another container is
 not an execution grant or a replay of the VM job.
 
+Directory creation, file writes, the finite-file BLAKE3 seal and publication use
+pinned no-follow directory descriptors. Renaming an output ancestor cannot
+redirect these writes into the original case. The named destination must still
+identify the pinned directory before success is reported. Linux atomic
+`RENAME_NOREPLACE` refuses an existing stable result. Interrupted or detached
+outputs remain unpublished outside the parent; this does not promise to prevent
+the filesystem owner independently modifying their own files afterwards. The
+seal uses the existing case index/root format and is checked by the ordinary
+case verifier in the regression tests.
+
 ## Separate authority and verification claims
 
 The future owned producer may authorize only the source and URL regenerated
