@@ -209,11 +209,13 @@ def send_response(channel,nonce,slot,metadata,body):
             console.transfer(channel,{'kind':'part','nonce':nonce,'seq':slot,'section':section,'row':row})
 
 
-def collect_capture(channel,nonce,guest,out):
+def collect_capture(channel,nonce,guest,out,committed=None):
     """Read two finite committed streams only after the Chrome writers stopped."""
     require(guest.get('writers_stopped')is True,'owned_capture_live_writers')
     manifest=guest.get('capture_artifacts');require(type(manifest)is list and len(manifest)<=2,'owned_capture_manifest')
-    names=[];committed=[]
+    names=[]
+    if committed is None:committed=[]
+    require(type(committed)is list and not committed,'owned_capture_already_started')
     for seq,item in enumerate(manifest):
         require(type(item)is dict and set(item)=={'name','stream','bytes','sha256'}and
             item['name']in {'dom.html','screenshot.png'}and item['name']not in names and
@@ -352,7 +354,8 @@ def run_owned(job,release):
             record['network_owner_disposition']=network_owner
             # Network leases and roles have stopped before the bounded binary
             # transfer. No extension of the keeper or browser execution budget.
-            record['capture_artifacts']=collect_capture(vm['channel'],epoch,value,out)
+            record['capture_transfer_started']=True
+            collect_capture(vm['channel'],epoch,value,out,record['capture_artifacts'])
             record.update(result='PASS',guest=value,observations=mediation.observations,
                 ledger=mediation.ledger.close(),fixture_ca_sha256=cert_sha,
                 role_observations=[v.observation for v in actors],vm_uuid=vm['node']['uuid'],qemu_limits=dict(LIMITS))
@@ -366,13 +369,14 @@ def run_owned(job,release):
                 if partitioned:partition(ids['parent'],restore=True)
             except Exception as error:failures.append('budget:'+type(error).__name__)
             try:
-                if record.get('result')=='FAIL' and vm is not None and not record['capture_artifacts']:
+                if record.get('result')=='FAIL' and vm is not None and not record.get('capture_transfer_started'):
                     try:
                         terminal=record.get('guest')
                         if terminal is None:terminal=vm['channel'].call('cancel',seconds=4)
                         record['guest']=terminal
                         if terminal.get('writers_stopped')is True:
-                            record['capture_artifacts']=collect_capture(vm['channel'],epoch,terminal,out)
+                            record['capture_transfer_started']=True
+                            collect_capture(vm['channel'],epoch,terminal,out,record['capture_artifacts'])
                     except Exception as capture_error:
                         record['capture_error']=type(capture_error).__name__+':'+str(capture_error)[:256]
                 if gate.active_vm is not None:gate.stop(gate.active_vm)
@@ -401,6 +405,8 @@ def run_owned(job,release):
                 record['observations']=mediation.observations
                 record['ledger_progress']={'requests_consumed':mediation.ledger.used,
                     'response_bytes':mediation.ledger.received,'closed':mediation.ledger.closed}
+            record['capture_missing_coverage']=[name for name in ['dom.html','screenshot.png']
+                if name not in {item['name']for item in record['capture_artifacts']}]
             record['role_observations']=[v.observation for v in actors if hasattr(v,'observation')]
             record['role_diagnostics']=[{'unit':v.unit,'launcher_returncode':v.process.poll(),
                 'stderr':bytes(v.errors).decode('utf-8','replace')}for v in actors]

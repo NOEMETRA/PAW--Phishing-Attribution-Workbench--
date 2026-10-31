@@ -40,10 +40,8 @@ jobs:
         run: |
           python -B -m unittest discover -s tests -p 'test_browser_cdp.py' -v
           python -B -m unittest discover -s tests -p 'test_owned_cdp*.py' -v
-      - name: Verify finite owned input and post-stop capture without Root or VM
-        run: |
-          python -B -m unittest discover -s tests -p 'test_owned_mail*.py' -v
-          python -B -m unittest discover -s tests -p 'test_owned_capture*.py' -v
+      - name: Verify post-stop capture streams without Root or VM
+        run: python -B -m unittest discover -s tests -p 'test_owned_capture*.py' -v
       - name: Verify owned brokered guest and protocol lifecycle without Root or VM
         run: |
           python -B -m unittest discover -s tests -p 'test_owned_broker*.py' -v
@@ -88,7 +86,9 @@ jobs:
       - name: Verify sealed opaque HTML attachment custody without browser execution
         run: python -B -m unittest discover -s tests -p 'test_browser_bridge.py' -v
       - name: Verify fixed owned email browser custody without Root or VM
-        run: python -B -m unittest discover -s tests -p 'test_mail_browser_owned.py' -v
+        run: |
+          python -B -m unittest discover -s tests -p 'test_mail_browser_owned.py' -v
+          python -B -m unittest discover -s tests -p 'test_owned_mail*.py' -v
       - name: Verify authentication and missing evidence contracts
         run: python -m unittest discover -s tests -p 'test_authentication_contracts.py' -v
       - name: Verify bounded local DKIM key evidence and unverified provenance

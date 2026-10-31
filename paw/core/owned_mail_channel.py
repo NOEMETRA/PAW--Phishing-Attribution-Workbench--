@@ -187,7 +187,8 @@ def bound_result(admission,attestation_raw,context,artifacts):
     network=custody.canonical({'schema':'paw-owned-mail-browser-network-v1','seed':custody.SEED,
         'fixture_nonce':a['fixture_nonce'],'raw_attestation_sha256':custody.digest(attestation_raw),
         'observations':observations,'ledger':a.get('ledger')or a.get('ledger_progress'),
-        'missing_coverage':guest.get('missing_coverage',[]),
+        'missing_coverage':{'guest':guest.get('missing_coverage',[]),
+            'transfer':[name for name in ['dom.html','screenshot.png']if name not in artifacts]},
         'scope':'filtered broker observations; not complete browser HAR, packet capture or browser TLS fingerprint',
         'tls_verifier':'broker with isolated owned CA; not browser TLS identity','real_connections':0})
     require(len(network)<=custody.ARTIFACTS['network.json'],'owned_mail_network_cap')

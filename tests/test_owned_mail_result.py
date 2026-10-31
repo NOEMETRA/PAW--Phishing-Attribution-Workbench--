@@ -99,6 +99,24 @@ class Result(unittest.TestCase):
             self.assertEqual(set(p.name for p in exported.iterdir()),{'request.json','receipt.json',*m.ARTIFACTS})
             with self.assertRaises(FileExistsError):c.publish(self.admission)
 
+    def test_later_png_timeout_keeps_committed_DOM_and_explicit_partial_network_coverage(self):
+        transfer=guest.Transfer('1'*32,self.artifacts,True);committed=[];calls=[]
+        class Channel:
+            def call(inner,op,**kw):
+                value=kw['value'];calls.append(value)
+                if value['name']=='screenshot.png':raise TimeoutError('inert PNG timeout')
+                return transfer.read(value)
+        with self.assertRaises(TimeoutError):broker.collect_capture(Channel(),'1'*32,
+            {'writers_stopped':True,'capture_artifacts':transfer.manifest},self.root,committed)
+        self.assertEqual(committed,[self.a['capture_artifacts'][0]])
+        self.assertEqual((self.root/'capture-dom.html').read_bytes(),self.artifacts['dom.html'])
+        a={**self.a,'result':'FAIL','capture_artifacts':committed}
+        receipt,bodies=c.bound_result(self.admission,cdp.canonical(a),self.context,{'dom.html':self.artifacts['dom.html']})
+        self.assertEqual(receipt['status'],'failed');self.assertEqual({v['name']for v in receipt['artifacts']},{'dom.html','network.json'})
+        missing=m.decode(bodies['network.json'],m.ARTIFACTS['network.json'])['missing_coverage']
+        self.assertEqual(missing,{'guest':[],'transfer':['screenshot.png']})
+        self.assertEqual(sum(v['name']=='dom.html'and v['chunk']==0 for v in calls),1)
+
     def test_guest_commits_only_after_known_stop_and_cancel_can_transfer_without_restart(self):
         runtime=guest.Runtime();self.addCleanup(runtime.selector.close);runtime.nonce='1'*32
         runtime.process=object();runtime.driver=type('Driver',(),{'dom':b'owned','png':PNG})()
