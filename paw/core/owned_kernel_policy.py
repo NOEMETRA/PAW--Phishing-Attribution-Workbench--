@@ -90,7 +90,10 @@ def service(job,epoch,release,role,keeper_pid=None,serial=0):
             RestrictSUIDSGID='yes',RestrictRealtime='yes',LockPersonality='yes',MemoryDenyWriteExecute='yes',
             RestrictAddressFamilies='AF_INET',SystemCallArchitectures='native',SystemCallFilter='@system-service',
             CapabilityBoundingSet='CAP_SETUID CAP_SETGID'+(' CAP_NET_BIND_SERVICE' if role=='fixture' else ''),
-            AmbientCapabilities='',
+            # systemd259 drops SETUID during seccomp setup unless explicitly
+            # ambient. The immutable bootstrap clears ambient/inheritable and
+            # every unneeded permitted/effective bit before socket/peer work.
+            AmbientCapabilities='CAP_SETUID',
             IPAddressDeny='any',IPAddressAllow=FIXTURE+'/32 '+RESOLVER+'/32')
         command=['/usr/bin/python3','-I','-S','-B','/opt/paw-code/owned_kernel_runtime.py',
                  '--'+role,job,epoch,release]
