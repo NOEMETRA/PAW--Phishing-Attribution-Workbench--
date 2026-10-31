@@ -294,10 +294,10 @@ def probe(job,epoch,release):
 
 class Managed:
     """Root coordinator's bounded private stdio; never a user-selected command."""
-    def __init__(self,job,epoch,release,role,keeper_pid=None,registry=None,serial=0):
+    def __init__(self,job,epoch,release,role,keeper_pid=None,registry=None,serial=0,*,protocol=False):
         require(os.geteuid()==0 and HERE==Path('/opt/paw-vm/releases')/release/'paw/core/owned_kernel_runtime.py',
                 'owned_kernel_immutable_root_only')
-        self.unit,props,command=policy.service(job,epoch,release,role,keeper_pid,serial)
+        self.unit,props,command=policy.service(job,epoch,release,role,keeper_pid,serial,protocol=protocol)
         argv=['/usr/bin/systemd-run','--quiet','--wait','--pipe','--collect','--unit='+self.unit]
         argv+=['--property='+k+'='+v for k,v in props.items()]
         self.threads=[];self.pidfd=None
@@ -308,6 +308,19 @@ class Managed:
         if registry is not None:registry.append(self)
         def read():
             try:
+                if protocol and role=='probe':
+                    if __package__:
+                        from . import browser_broker_wire as wire
+                    else:
+                        import browser_broker_wire as wire
+                    self.output.put(decode(self.process.stdout.readline(4097)),timeout=1)
+                    decoder=wire.Decoder(epoch)
+                    while True:
+                        raw=self.process.stdout.read1(32768)
+                        if not raw:break
+                        for header,body in decoder.feed(raw):
+                            self.output.put({'wire':header,'body':body},timeout=1)
+                    decoder.eof();self.output.put({'eof':True},timeout=1);return
                 for _ in range(128):
                     raw=self.process.stdout.readline(4097)
                     if not raw:break

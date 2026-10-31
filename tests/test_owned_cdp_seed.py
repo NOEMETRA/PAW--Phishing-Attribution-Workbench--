@@ -23,10 +23,10 @@ class Seed(unittest.TestCase):
             core=root/'paw/core';core.mkdir(parents=True);out=root/'seed';out.mkdir()
             for name in ['browser_guest.py','browser_build_guest.py','browser_policy.py','browser_sandbox.py']:
                 (here/name).write_bytes((REPO/'lab/s14'/name).read_bytes())
-            for name in ['browser_cdp.py','browser_owned_cdp_guest.py']:
+            for name in ['browser_cdp.py','browser_owned_cdp_guest.py','browser_owned_broker_guest.py']:
                 (core/name).write_bytes((CORE/name).read_bytes())
             gate=object.__new__(vm.BrowserVM);gate.phase=phase
-            gate.seed_config={'kind':'owned-cdp-probe-v1','nonce':'a'*32} if phase=='owned_cdp' else {'owned':'inert seed fixture'}
+            gate.seed_config={'kind':'owned-cdp-probe-v1','nonce':'a'*32} if phase in {'owned_cdp','owned_brokered'} else {'owned':'inert seed fixture'}
             calls=[]
             def compile_iso(args):
                 calls.append(args);(out/'seed.iso').write_bytes(b'not an actual ISO')
@@ -47,6 +47,23 @@ class Seed(unittest.TestCase):
         self.assertIn('MemorySwapMax=0\n',unit);self.assertIn('CPUQuota=100%\n',unit)
         self.assertEqual(network,{'version':2,'ethernets':{}})
         self.assertEqual(len(calls),1);self.assertEqual(calls[0][0],'/usr/bin/genisoimage')
+    def test_brokered_seed_preserves_no_nic_and_actual_isolated_dependency_lookup(self):
+        files,network,_=self.compose('owned_brokered')
+        unit=files['/etc/systemd/system/paw-browser.service'].decode()
+        self.assertIn('/browser_owned_broker_guest.py',unit)
+        self.assertIn('MemoryMax=128M\n',unit);self.assertIn('TasksMax=32\n',unit)
+        self.assertEqual(network,{'version':2,'ethernets':{}})
+        self.assertEqual(vm.LIFETIME['owned_brokered'],vm.LIFETIME['job'])
+        self.assertEqual(vm.FILE_CAP['owned_brokered'],vm.FILE_CAP['job'])
+        with tempfile.TemporaryDirectory()as folder:
+            root=Path(folder)
+            for name in ['browser_owned_broker_guest.py','browser_owned_cdp_guest.py','browser_cdp.py','browser_sandbox.py']:
+                (root/name).write_bytes(files['/usr/local/lib/paw-s14/'+name])
+            result=subprocess.run([sys.executable,'-I','-S','-B','-c',
+                'import runpy,sys;v=runpy.run_path(sys.argv[1]);assert callable(v["main"])',
+                str(root/'browser_owned_broker_guest.py')],capture_output=True,timeout=5)
+            self.assertEqual(result.returncode,0,result.stderr)
+
     def test_original_job_seed_still_uses_original_guest_and_config(self):
         files,network,_=self.compose('job')
         self.assertEqual(files['/usr/local/lib/paw-s14/browser_guest.py'],(REPO/'lab/s14/browser_guest.py').read_bytes())

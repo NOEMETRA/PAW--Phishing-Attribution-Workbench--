@@ -418,3 +418,66 @@ or namespace confinement. No sample hostname is resolved and no browser or
 Root job is started. Actual broker confinement, expiring kernel leases,
 owner/guard/established-flow stop and full VM/PAW custody integration remain
 O2/O3 work before real activation.
+
+
+### Owned kernel acceptance and brokered Chrome integration
+
+PR149 merged as `25f350e01b9a5f597af22dd21e5b8d098d0c9b4b`, after completed
+clear review of full head `ff54eabf1f73046babab6fdca6affb556cd5c898`,
+head/main seven green checks and tree equivalence. The fixed helper independently
+promoted it without a password. Actual job `d0ff865b20974506ac912f386304d0d3`
+passed all five raw kernel cases: default drop, DNS-port-only traffic, TCP tuple
+expiry and established-flow stop after keeper or both-guard loss. The measured
+fault stops were approximately0.067s and0.231s. Independent protected readback
+confirmed fixed nonroot work identities, empty supplementary groups, zero work
+capability sets, actual namespace/cgroup partitions, stopped/collected units and
+exact host restoration. The private17-member archive SHA256 is
+`19cc0e64455d043a5c0ecc2206181412d2c5c6e314784e2112e2c93295ec0a11`.
+These are raw TCP/UDP results, not DNS/TLS/VM or O3 acceptance.
+
+The next coherent owned-only increment wires the existing request ledger into
+separate confined protocol roles, a binary private channel and a new no-NIC
+Chrome seed. Root starts Chrome with the initial Fetch paused, then starts the
+same measured keeper and fixed nonroot fixture/transport roles. The fixture
+serves only generated `paw-owned.invalid` DNS and finite harmless resources at
+its loopback namespace aliases. Its generated owned CA exists only in the
+private worker root, at the fixed CA-file path. It never changes the host trust
+store or production trust behavior. Importing these modules starts nothing.
+
+Root consumes and validates each browser request before issuing a DNS-only
+lease. It parses the returned bounded A/CNAME bytes itself, uses conservative
+Root-observed query age, obtains a ledger lease and installs only the matching
+HTTP or HTTPS tuple. The relative tuple timeout reserves the complete bounded
+keeper transaction so it cannot overrun an accepted absolute ledger lease.
+The nonroot transport performs numeric-pinned HTTP/TLS with hostname checking;
+Root accounts and filters the raw response before transferring metadata and
+body separately to the paused guest. A fixed additional plain HTTP transport
+probe is labeled separately; Chrome's page and JavaScript resource use HTTPS.
+No page cookies, credentials, forms, arbitrary hosts or live request continuation
+are admitted. Broker TLS remains explicitly distinct from browser TLS.
+
+The guest retains the existing sandbox/renderer,15s,256KiB DOM,1MiB netlog and
+512MiB/256-task bounds. Its strict typed serial commands remain below60KiB.
+Unknown nonce/order/body hash/phase, EOF, worker loss or malformed private data
+close the session and request external stop. Failure cannot regain quota or be
+reinterpreted as a harmless page refusal. Existing small-command ABI, no-NIC
+XML, immutable images and1536MiB/64-task/50%CPU QEMU limits stay unchanged.
+Coordinator/keeper/transport/fixture partitions still total512MiB/64 tasks/100%CPU.
+Their8s/10s hard runtimes and500ms stop limits are unchanged.
+
+A completed DOM alone is insufficient: all network actors must still have their
+observed live identities before a typed worker stop and expected keeper stop.
+The exact keeper disposition and the external VM owner's requested-stop,
+closed-connection and UUID must match. Known stopped writers, restored budgets,
+images/context/canary and exact host/network restoration precede even bounded
+failure publication. Unknown stop publishes neither success nor diagnostics.
+The existing owned CDP and nine HTML recipe cases remain required afterwards.
+
+Software tests use inert supervisors, actual ordinary pipes, owned loopback
+DNS/HTTP/TLS and generated seed imports under isolated Python. They do not start
+Root services, namespaces or a VM. Actual promoted brokered acceptance is still
+pending. A genuine installed PAW harmless parent has separately passed offline
+CLI, preservation, seal and byte-exact ZIP checks, but this new Root component
+does not yet ingest it or produce a sealed installed PAW online sidecar. Full
+O3 combined fault/custody acceptance, a reviewed native real scope and concrete
+per-hash O4 approval remain open. Real targets and real website JS remain0.

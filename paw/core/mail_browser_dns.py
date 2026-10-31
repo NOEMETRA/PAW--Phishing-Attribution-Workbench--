@@ -10,7 +10,10 @@ import socket
 import struct
 import time
 
-from paw.core.browser_mediator import endpoint,public_answers
+if __package__:
+    from .browser_mediator import endpoint,public_answers
+else:
+    from browser_mediator import endpoint,public_answers
 
 RESOLVER=('9.9.9.9',53)
 

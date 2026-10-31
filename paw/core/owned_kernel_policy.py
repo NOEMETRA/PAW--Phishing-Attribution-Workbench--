@@ -58,8 +58,9 @@ def lease(kind,milliseconds):
     return revoke()+''.join(f'add element inet {table} {name} {{ {address} . {port} timeout {milliseconds}ms }}\n' for table in TABLES)
 
 
-def service(job,epoch,release,role,keeper_pid=None,serial=0):
+def service(job,epoch,release,role,keeper_pid=None,serial=0,*,protocol=False):
     ids=identity(job,epoch,release);require(type(role)is str and role in {'keeper','fixture','probe'},'owned_kernel_role')
+    require(type(protocol)is bool and (not protocol or role in {'fixture','probe'}),'owned_kernel_protocol_role')
     require(type(serial)is int and 0<=serial<8 and (role=='probe' or serial==0),'owned_kernel_role_serial')
     memory={'keeper':64,'fixture':64,'probe':128};tasks={'keeper':8,'fixture':8,'probe':16};cpu={'keeper':10,'fixture':15,'probe':25}
     props={'Type':'exec','Restart':'no','MemoryMax':str(memory[role])+'M','MemorySwapMax':'0',
@@ -97,5 +98,6 @@ def service(job,epoch,release,role,keeper_pid=None,serial=0):
             IPAddressDeny='any',IPAddressAllow=FIXTURE+'/32 '+RESOLVER+'/32')
         command=['/usr/bin/python3','-I','-S','-B','/opt/paw-code/owned_kernel_runtime.py',
                  '--'+role,job,epoch,release]
+        if protocol:command[4]='/opt/paw-code/browser_owned_protocol.py'
     unit=ids[role] if role!='probe' else ids[role][:-8]+'-'+str(serial)+'.service'
     return unit,props,command

@@ -312,50 +312,74 @@ def read_http_response(stream, method, remaining_bytes, deadline_ns):
     return status,headers,bytes(body)
 
 
-def exchange(ledger, plan):
-    """One pinned numeric connection, fixed safe headers, verified broker TLS.
+def transport_response(plan,remaining_bytes):
+    """One explicit numeric transport, without ledger or Root authority.
 
-    Not an activation API: only a future independently confined trusted broker
-    may call it. There is no DNS, proxy/environment configuration, retry, page
-    header forwarding or redirect following. A failed exchange exhausts the
-    session's remaining byte allowance because partial bytes may have arrived.
-    It closes its socket; kernel-wide external stop is a separate runtime gate.
+    For a future confined nonroot worker on a protected private channel only.
+    The caller must first validate the actual Root ledger lease and kernel gate.
+    This function cannot authenticate a lease_id/HMAC or approve a URL. Returned
+    raw headers/body are untrusted transport data: Root's ledger.complete must
+    account/filter them before a guest response or final observation is made.
     """
-    plan=ledger.lease(plan,time.monotonic_ns());stream=None
+    fields={'url','scheme','host','port','url_sha256','method','slot','peer_ipv4',
+            'all_ipv4','issued_ns','expires_ns','nonce','lease_id'}
+    require(type(plan) is dict and set(plan)==fields and type(remaining_bytes) is int and
+            0<=remaining_bytes<=LIMITS['bytes'],'broker_transport_plan_shape')
+    target=endpoint(plan['url']);pins=public_answers(plan['all_ipv4'])
+    require(all(plan[k]==value for k,value in target.items()) and type(plan['port']) is int and
+            type(plan['method']) is str and plan['method'] in {'GET','HEAD'} and
+            type(plan['slot']) is int and 0<=plan['slot']<LIMITS['requests'] and
+            plan['all_ipv4']==pins and plan['peer_ipv4']==pins[0] and
+            type(plan['nonce']) is str and re.fullmatch('[0-9a-f]{32}',plan['nonce']) and
+            type(plan['lease_id']) is str and re.fullmatch('[0-9a-f]{64}',plan['lease_id']),
+            'broker_transport_plan_binding')
+    def remaining():
+        now=time.monotonic_ns()
+        require(type(plan['issued_ns']) is int and type(plan['expires_ns']) is int and
+                0<=plan['issued_ns']<=now<plan['expires_ns'] and
+                plan['expires_ns']-plan['issued_ns']<=LIMITS['lease_seconds']*10**9,
+                'broker_transport_lease_time')
+        return (plan['expires_ns']-now)/10**9
+    remaining();stream=None
     try:
         stream=socket.socket(socket.AF_INET,socket.SOCK_STREAM)
-        stream.settimeout((plan['expires_ns']-time.monotonic_ns())/10**9)
-        stream.connect((plan['peer_ipv4'],plan['port']))
+        stream.settimeout(remaining());stream.connect((plan['peer_ipv4'],plan['port']))
         require(stream.getpeername()[0]==plan['peer_ipv4'],'broker_connected_peer')
         if plan['scheme']=='https':
-            # Do not use create_default_context(): SSL_CERT_FILE/SSL_CERT_DIR
-            # and SSLKEYLOGFILE can otherwise select caller-controlled trust or
-            # log keys. The future immutable runtime must bind this fixed CA
-            # artifact's actual bytes as part of its scoped context.
             context=ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
             context.minimum_version=ssl.TLSVersion.TLSv1_2
             context.verify_mode=ssl.CERT_REQUIRED;context.check_hostname=True
             context.load_verify_locations(cafile=TRUST_FILE)
-            ledger.lease(plan,time.monotonic_ns())
-            stream.settimeout((plan['expires_ns']-time.monotonic_ns())/10**9)
-            stream=context.wrap_socket(stream,server_hostname=plan['host'])
-        ledger.lease(plan,time.monotonic_ns())
+            stream.settimeout(remaining());stream=context.wrap_socket(stream,server_hostname=plan['host'])
         parsed=urllib.parse.urlsplit(plan['url'])
-        target=plan['url'][len(parsed.scheme)+3+len(parsed.netloc):]
-        if not target or target.startswith('?'):target='/'+target
-        request=(plan['method']+' '+target+' HTTP/1.1\r\nHost: '+plan['host']+
+        path=plan['url'][len(parsed.scheme)+3+len(parsed.netloc):]
+        if not path or path.startswith('?'):path='/'+path
+        request=(plan['method']+' '+path+' HTTP/1.1\r\nHost: '+plan['host']+
                  '\r\nUser-Agent: PAW-Mediated-Observation/1\r\nAccept: */*\r\n'+
                  'Accept-Encoding: identity\r\nConnection: close\r\n\r\n').encode('ascii')
-        stream.settimeout((plan['expires_ns']-time.monotonic_ns())/10**9);stream.sendall(request)
-        status,headers,body=read_http_response(stream,plan['method'],
-            LIMITS['bytes']-ledger.received,plan['expires_ns'])
-        return ledger.complete(plan,status,headers,body,plan['peer_ipv4'],
-                               plan['scheme']=='https',time.monotonic_ns())
+        stream.settimeout(remaining());stream.sendall(request)
+        status,headers,body=read_http_response(stream,plan['method'],remaining_bytes,plan['expires_ns'])
+        remaining()
+        return {'http_status':status,'headers':headers,'peer_ipv4':plan['peer_ipv4'],
+                'tls_verified_by_broker':plan['scheme']=='https','body_bytes':len(body),
+                'body_sha256':hashlib.sha256(body).hexdigest()},body
+    finally:
+        if stream is not None:stream.close()
+
+
+def exchange(ledger,plan):
+    """Existing one-lease wrapper; preserve ledger accounting and output shape.
+
+    Kernel confinement/approval remain separate runtime requirements. Partial
+    transport failures close/exhaust the ledger rather than restoring allowance.
+    """
+    plan=ledger.lease(plan,time.monotonic_ns())
+    try:
+        result,body=transport_response(plan,LIMITS['bytes']-ledger.received)
+        return ledger.complete(plan,result['http_status'],result['headers'],body,result['peer_ipv4'],
+                               result['tls_verified_by_broker'],time.monotonic_ns())
     except (OSError,ValueError) as error:
         ledger.received=LIMITS['bytes'];ledger.closed=True
-        # complete() may already have consumed the response slot.
         if ledger._pending is not None:
             ledger.fail(plan,'tls' if isinstance(error,ssl.SSLError) else 'io',time.monotonic_ns())
         raise
-    finally:
-        if stream is not None:stream.close()
