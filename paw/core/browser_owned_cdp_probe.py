@@ -72,6 +72,14 @@ def run_owned(job,release):
                 stop=time.monotonic()
                 if gate.active_vm is not None:gate.stop(gate.active_vm)
                 record['stop_seconds']=time.monotonic()-stop
+                require(vm is not None and type(vm.get('owner_result_path')) is str and
+                    Path(vm['owner_result_path']).parent==gate.output,'owned_cdp_owner_result_path')
+                with auth.fs.root_directory(gate.output) as fd:
+                    owner=json.loads(auth.fs.read(fd,Path(vm['owner_result_path']).name,65536))
+                require(type(owner) is dict and owner.get('reason')=='requested_stop' and
+                    owner.get('connection_closed') is True and owner.get('vm_uuid')==vm['node']['uuid'],
+                    'owned_cdp_unexpected_owner_exit_blocks_publication')
+                record['owner_result']=owner
                 require(record['stop_seconds']<12 and not gate.connection.listAllDomains(0) and
                     before==gate.snapshot_host() and digest(BASE)==auth.fs.IMAGE_SHA256 and
                     digest(BROWSER_BASE)==context['image_sha256'] and digest(gate.canary)==canary and
@@ -92,6 +100,7 @@ def run_owned(job,release):
             'protected_audit_sha256':hashlib.sha256((out/'results.json').read_bytes()).hexdigest(),
             'vm_uuid':record['actual_vm']['uuid'],'qemu_limits':dict(LIMITS),'guest':record['guest'],
             'host_restored':True,'writers_stopped':True,'stop_seconds':record['stop_seconds'],
+            'owner_disposition':{k:record['owner_result'][k] for k in ['reason','connection_closed','vm_uuid']},
             'real_samples':0,'real_connections':0,'meaning':record['purpose'],
             'trust':'Root producer verification; ordinary reader does not independently reread protected raw VM audits'}
         (published/'attestation.json').write_bytes(auth.canonical(attestation));publish_reader_tree(published)

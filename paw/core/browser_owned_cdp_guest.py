@@ -23,6 +23,9 @@ import tty
 if __package__:
     from . import browser_cdp as cdp
 else:
+    # The trusted guest service uses Python -I, which excludes the script
+    # directory. Restore only this Root-supplied immutable seed directory.
+    sys.path.insert(0,str(Path(__file__).resolve().parent))
     import browser_cdp as cdp
 
 GROUP=Path('/sys/fs/cgroup/paw-browser-job')

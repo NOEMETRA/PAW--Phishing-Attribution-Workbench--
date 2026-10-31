@@ -3,6 +3,7 @@ import base64
 import importlib.util
 import json
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -52,6 +53,20 @@ class Seed(unittest.TestCase):
         self.assertIn('/etc/paw-browser-job.json',files)
         self.assertNotIn('/etc/paw-owned-cdp.json',files)
         self.assertNotIn('/usr/local/lib/paw-s14/browser_cdp.py',files)
+    def test_actual_generated_guest_imports_in_isolated_interpreter(self):
+        files,_,_=self.compose('owned_cdp')
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder)
+            for name in ['browser_owned_cdp_guest.py','browser_cdp.py','browser_sandbox.py']:
+                (root/name).write_bytes(files['/usr/local/lib/paw-s14/'+name])
+            # Import with the service's -I shape but do not call guest main,
+            # inspect/start Chrome, create a cgroup or run a VM.
+            code=("import runpy,sys,importlib.util;"
+                  "runpy.run_path(sys.argv[1],run_name='owned_inert_import');"
+                  "assert importlib.util.find_spec('browser_sandbox') is not None")
+            completed=subprocess.run([sys.executable,'-I','-B','-u','-c',code,
+                str(root/'browser_owned_cdp_guest.py')],capture_output=True,text=True,timeout=5)
+            self.assertEqual(completed.returncode,0,completed.stderr)
     def test_owned_phase_preserves_existing_job_lifetime_file_and_qemu_bounds(self):
         self.assertEqual(vm.LIFETIME['owned_cdp'],vm.LIFETIME['job'])
         self.assertEqual(vm.FILE_CAP['owned_cdp'],vm.FILE_CAP['job'])

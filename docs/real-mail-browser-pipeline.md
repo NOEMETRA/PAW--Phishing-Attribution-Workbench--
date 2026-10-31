@@ -235,7 +235,11 @@ the whole-job deadline.
 
 The Root producer reconciles external stop below12 seconds, absent domains,
 host restoration, immutable images/source/canary and exact Chrome identity
-before publishing a small Root-owned reader attestation. Raw VM audits stay
+before publishing a small Root-owned reader attestation. It also reads the
+protected external owner's result: only requested stop, closed connection and
+the same VM UUID preserve PASS. Mere absence after a guard/limit/controller or
+unexpected QEMU exit is insufficient. Missing/unexpected results refuse
+publication. Raw VM audits stay
 Root-private. Ordinary readback must verify the protected attestation/source
 identity and distinguish producer verification from independent raw-audit
 inspection. Failure/unknown stop publishes no success. The nine pre-existing
@@ -244,7 +248,10 @@ HTML cases still run after the probe; this does not reopen unrelated audits.
 Inert tests exercise the actual seed composer and preserve the original job
 seed, fixed fixture/launcher refusal, EOF handling, CDP state/order/budgets and
 bounded body transport. An ordinary harmless Python process also checked the
-Linux descriptor3/4 ABI. None of those software checks launches Chrome or
+Linux descriptor3/4 ABI. The actual generated guest scripts are imported under
+Python `-I` without calling main; standalone lookup restores only the trusted
+seed directory. An inert fake-VM producer test rejects unexpected/missing owner
+dispositions even when domains are absent and snapshots match. None of those software checks launches Chrome or
 establishes VM acceptance. Public broker namespace/leases, full owned online
 fault matrix, Root custody/protected hash approval and sealed real observations
 remain required O2–O4 work.
