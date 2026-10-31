@@ -271,10 +271,14 @@ def maintenance_transition(previous, context, inventory):
             'runtime_inventory_delta')
     record['dpkg_inventory_sha256'] = current
     record['kernel'] = context['host']['kernel']
-    record['review_notes'] = ('Exact reviewed inventory transition' +
-        (' and host kernel38-to42 update' if current == INVENTORY_OCT30 else ' (Brotli only)') +
-        '; protected predecessor and unchanged hypervisor/image/host identity bindings retained. '
-        'No I08, grant, guest update or real specimen authorization.')
+    if current == INVENTORY_OCT30:
+        record['review_notes'] = ('Exact reviewed inventory and host kernel38-to42 transition; '
+            'protected predecessor and unchanged hypervisor/image/host identity bindings retained. '
+            'No I08, grant, guest update or real specimen authorization.')
+    else:
+        # Retain the already deployed Brotli receipt byte for byte.
+        record['review_notes'] = ('Exact reviewed Brotli-only inventory transition; prior protected maintenance and '
+            'unchanged hypervisor/image/host bindings retained. No I08, grant or real specimen authorization.')
     raw = platform.canonical(record); platform.validate_maintenance(raw, context)
     return raw
 
