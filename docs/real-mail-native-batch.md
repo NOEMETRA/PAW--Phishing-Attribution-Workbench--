@@ -329,3 +329,18 @@ coordinator allocation. It makes no libvirt connection, guest, tuple, source gra
 or native authority. Failure remains aggregate FAIL with stopped diagnostics.
 The actual ordinary-UID import now passes with unchanged sys.path, but immutable
 Root/helper acceptance and fresh native browser/custody gates remain necessary.
+
+The subsequent authenticated batch passed closed and DNS gates but reached the
+guard8s/fixture10s ceilings while stopping the HTTP-expiry gate, after its stream
+observation. No VM or real slot began; stopped-role/host/original reconciliation
+passed. That exact HTTP gate now also runs in the existing finite no-VM helper,
+after closed/DNS and before the isolated binding check, with a fresh epoch.
+It uses one unchanged confined probe and a fixed two-second stream observation
+starting after a one-second lease ACK. Acceptance requires positive matched
+bytes, the measured full window, socket timeouts after data, at least500ms
+without further replies and receiver counts proving continued fixture sending.
+Both fixture and guard must stop normally with zero exits and private revocation
+proof. Partial observations survive diagnostic failure. Native and no-VM paths
+share this gate; no public form, lease, role lifetime or resource budget expands.
+The generic three-second stream and abrupt-loss gates remain unchanged. Actual
+immutable helper acceptance is required before another protected native batch.

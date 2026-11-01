@@ -365,6 +365,15 @@ class OwnedDNSProbe(PublicActor):
         return unit,props,command
 
 
+class OwnedExpiryProbe(PublicActor):
+    """Fixed two-second stream observation, only in the private packet gate."""
+    def _service(self, job, epoch, release, role, keeper_pid, serial, *, protocol):
+        need(role=='probe' and serial==0 and protocol is False,'mail_public_expiry_probe_profile')
+        unit,props,command=service(job,epoch,release,role,keeper_pid,serial,protocol=False)
+        command[-1]='raw-expiry'
+        return unit,props,command
+
+
 def root_config(job, epoch, release):
     ids = identity(job, epoch, release)
     need(os.geteuid() == 0 and HERE == Path('/opt/paw-vm/releases')/release/
@@ -619,7 +628,7 @@ def dns_bytes(host, ident, deadline_ns):
 
 def probe_main(job, epoch, release, form):
     _, cfg = private_role(job, epoch, release, 'probe')
-    need(form in {'wire','raw','dns-matrix'} and (form == 'wire' or cfg['mode'] == 'owned-raw'),
+    need(form in {'wire','raw','dns-matrix','raw-expiry'} and (form == 'wire' or cfg['mode'] == 'owned-raw'),
          'mail_public_probe_form')
     if form == 'dns-matrix':
         _,witness=kernel.role_entry(job,epoch,release,'probe')
@@ -645,6 +654,8 @@ def probe_main(job, epoch, release, form):
         return
     if form == 'raw':
         kernel.probe(job, epoch, release); return
+    if form == 'raw-expiry':
+        kernel.probe(job,epoch,release,stream_seconds=2);return
     witness = drop_public()
     kernel.emit({'ready':True, 'role':'probe', 'witness':witness})
     session = PublicTransport(epoch, time.monotonic_ns()+8*10**9, dns_bytes, mediator.transport_response)
@@ -710,10 +721,13 @@ def prepare_network(job, epoch, release, mode, uplink):
 
 class NetworkPreparation:
     """Advance only the fixed roles while continuing to poll the same VM."""
-    def __init__(self, job, epoch, release, mode, actors, *, protocol=True, dns_probe=False):
+    def __init__(self, job, epoch, release, mode, actors, *, protocol=True, dns_probe=False, expiry_probe=False):
         need(type(dns_probe)is bool and (not dns_probe or mode=='owned-raw' and protocol is False),
              'mail_public_dns_probe_private_only')
         self.dns_probe=dns_probe
+        need(type(expiry_probe)is bool and (not expiry_probe or
+             mode=='owned-raw' and protocol is False and not dns_probe),'mail_public_expiry_probe_private_only')
+        self.expiry_probe=expiry_probe
         self.job=job; self.epoch=epoch; self.release=release; self.mode=mode; self.actors=actors
         self.protocol=protocol; self.owner=None; self.server=None; self.worker=None
         self.inode=None; self.server_live=mode == 'public'; self.worker_live=False; self.ready=False
@@ -737,7 +751,7 @@ class NetworkPreparation:
         need(pid>1 and props['ControlGroup']=='/system.slice/'+ids['keeper'] and
              os.stat('/proc/'+str(pid)+'/ns/net').st_ino==cfg['namespace_inode'],
              'mail_public_owned_active_guard_namespace')
-        actor=OwnedDNSProbe if self.dns_probe else PublicActor
+        actor=OwnedDNSProbe if self.dns_probe else OwnedExpiryProbe if getattr(self,'expiry_probe',False) else PublicActor
         self.worker=actor(self.job,self.epoch,self.release,'probe',pid,
             registry=self.actors,protocol=self.protocol,defer_ready=True)
     def poll(self):
@@ -791,7 +805,7 @@ class NetworkPreparation:
             if self.worker is None:
                 # Public mode has no private fixture and retains its original
                 # guard-ready-then-worker sequence and namespace source.
-                actor=OwnedDNSProbe if self.dns_probe else PublicActor
+                actor=OwnedDNSProbe if self.dns_probe else OwnedExpiryProbe if getattr(self,'expiry_probe',False) else PublicActor
                 self.worker=actor(self.job,self.epoch,self.release,'probe',self.owner.pid,
                     registry=self.actors,protocol=self.protocol,defer_ready=True)
         if not self.server_live and self.server.poll_ready():
@@ -1303,7 +1317,7 @@ def _cleanup_progress(folder):
 
 def _owned_preparation_case(job, release, case):
     """One fixed private case, inside the caller's budget and execution lock."""
-    need(case in {'closed','dns-only'},'mail_public_owned_preparation_case')
+    need(case in {'closed','dns-only','http-expiry'},'mail_public_owned_preparation_case')
     epoch=uuid.uuid4().hex;identity(job,epoch,release)
     from vm_runtime_revalidation import snapshot,network_state
     actors=[];prep=None;began=time.monotonic_ns()
@@ -1316,13 +1330,14 @@ def _owned_preparation_case(job, release, case):
     require_idle();before=snapshot();network=network_state()
     try:
         prepare_network(job,epoch,release,'owned-raw',{})
-        prep=NetworkPreparation(job,epoch,release,'owned-raw',actors,protocol=False,dns_probe=case=='dns-only')
+        prep=NetworkPreparation(job,epoch,release,'owned-raw',actors,protocol=False,
+            dns_probe=case=='dns-only',expiry_probe=case=='http-expiry')
         until=time.monotonic()+5
         while not prep.poll():
             need(time.monotonic()<until,'mail_public_raw_preparation');time.sleep(.02)
-        key='closed_packets' if case=='closed' else 'dns_packets'
+        key={'closed':'closed_packets','dns-only':'dns_packets','http-expiry':'expiry_packets'}[case]
         record[key]=[]
-        packets=closed_packets if case=='closed' else dns_only_packets
+        packets={'closed':closed_packets,'dns-only':dns_only_packets,'http-expiry':expiry_packets}[case]
         record[key]=packets(job,epoch,release,prep,actors,observations=record[key])
         record['result']='PASS'
     except Exception as error:
@@ -1340,6 +1355,8 @@ def _owned_preparation_case(job, release, case):
         record['closed_fixture_counts']=getattr(prep,'closed_fixture_counts',None)
         record['dns_fixture_counts']=getattr(prep,'dns_fixture_counts',None)
         record['bpf_lease_window']=getattr(prep,'bpf_lease_window',None)
+        record['expiry_fixture_counts']=getattr(prep,'expiry_fixture_counts',None)
+        record['expiry_window']=getattr(prep,'expiry_window',None)
         stop = Path(identity(job,epoch,release)['directory'])/'owner-result.json'
         if stop.exists():
             # Fixed protected path, bounded metadata, read only after the
@@ -1423,11 +1440,15 @@ def owned_preparation(job, release):
             if record['dns_only']['result']!='PASS':
                 record['result']='FAIL';record['error']=record['dns_only']['error']
         if record['result']=='PASS':
+            record['http_expiry']=_owned_preparation_case(job,release,'http-expiry')
+            if record['http_expiry']['result']!='PASS':
+                record['result']='FAIL';record['error']=record['http_expiry']['error']
+        if record['result']=='PASS':
             try:
                 record['isolated_bindings']=owned_binding_probe(job,release)
             except Exception as error:
                 record['result']='FAIL';record['error']=type(error).__name__+':'+str(error)[:512]
-    record['scope']='Sequential fixed closed and DNS-only private packet gates; no browser or public readiness'
+    record['scope']='Sequential fixed closed, DNS-only and HTTP-expiry private packet gates; no browser or public readiness'
     raw=canonical(record);need(len(raw)<=32768,'mail_public_owned_diagnostic_budget')
     target=EXPORT_ROOT/('owned-mail-preparation-'+job)
     target.mkdir(mode=0o700)
@@ -1539,6 +1560,57 @@ def dns_only_packets(job, epoch, release, prep, roles, *, observations=None):
     return observations
 
 
+def expiry_packets(job,epoch,release,prep,roles,*,observations=None):
+    """Positive stream then measured silence past a fixed one-second lease.
+
+    The same no-VM diagnostic and native gate share this exact private path.
+    Two seconds start after the lease ACK; guard8s/fixture10s stay unchanged.
+    """
+    need(prep.mode=='owned-raw' and prep.ready and prep.expiry_probe,'mail_public_expiry_probe_private_only')
+    if observations is None:observations=[]
+    need(type(observations)is list and not observations,'mail_public_expiry_observation_sink')
+    owner=prep.owner;worker=prep.worker
+    def control(op,number,**fields):
+        owner.send({'op':op,'epoch':epoch,'id':number,**fields});ack=owner.receive()
+        need(ack.get('accepted')is True and type(ack.get('id'))is int and ack['id']==number,
+             'mail_public_raw_guard_ack')
+    subprocess.run(['/usr/bin/systemctl','set-property','--runtime',worker.unit,
+        'IPAddressAllow=','IPAddressAllow=93.184.216.34/32 9.9.9.9/32'],
+        check=True,capture_output=True,timeout=2)
+    control('arm',0,serial=0)
+    issued=time.monotonic_ns();control('lease',1,kind='http',address='93.184.216.34',milliseconds=1000)
+    committed=time.monotonic_ns();worker.send({'op':'stream'})
+    while True:
+        value=worker.receive(4);observations.append(value)
+        if value.get('done')is True:break
+        need(value.get('progress')is True and value.get('matched')is True and
+             type(value.get('bytes'))is int and value['bytes']>0 and
+             type(value.get('last_byte_ns'))is int,'mail_public_stream_witness')
+    progress=observations[:-1]
+    need(progress and value.get('connected')is True and value.get('matched')is True and value.get('error')is None and
+         type(value.get('bytes'))is int and value['bytes']==progress[-1]['bytes'] and
+         all(type(value.get(k))is int for k in ['observation_started_ns','observation_finished_ns','timeouts_after_data']),
+         'mail_public_established_reply_expiry')
+    start=value['observation_started_ns'];finish=value['observation_finished_ns'];last=progress[-1]['last_byte_ns']
+    need(committed<=start<=progress[0]['last_byte_ns']<=last<=finish<=time.monotonic_ns() and
+         finish-start>=2*10**9 and finish-last>=500*10**6 and value['timeouts_after_data']>=1 and
+         last-progress[0]['last_byte_ns']<1300*10**6 and last<=committed+1300*10**6 and
+         all(a['bytes']<b['bytes'] and a['last_byte_ns']<=b['last_byte_ns'] for a,b in zip(progress,progress[1:])),
+         'mail_public_established_reply_expiry')
+    prep.expiry_window={'issued_ns':issued,'committed_ns':committed,'started_ns':start,
+                        'finished_ns':finish,'last_byte_ns':last}
+    need(worker.process.wait(timeout=2)==0,'mail_public_expiry_probe_exit')
+    prep.server.send({'op':'stop'});counts=prep.server.receive()
+    need(type(counts)is dict and set(counts)=={'counts'} and type(counts['counts'])is dict and
+         set(counts['counts'])=={'tcp','udp','stream_bytes'} and all(type(v)is int for v in counts['counts'].values()) and
+         counts['counts']['tcp']==1 and counts['counts']['udp']==0 and counts['counts']['stream_bytes']>value['bytes'] and
+         prep.server.process.wait(timeout=2)==0,'mail_public_expiry_fixture_witness')
+    prep.expiry_fixture_counts=counts['counts']
+    control('stop',2);need(owner.process.wait(timeout=2)==0,'mail_public_raw_guard_exit')
+    require_revoked(job,epoch,release)
+    return observations
+
+
 def run_raw(approval,binding):
     """Actual packets use only aliases on a loopback-only private namespace."""
     from . import mail_browser_native as native
@@ -1551,7 +1623,8 @@ def run_raw(approval,binding):
     with fs.execution_lock():
         folder,_=prepare_network(job,epoch,release,'owned-raw',approval['context']['uplink'])
         try:
-            prep=NetworkPreparation(job,epoch,release,'owned-raw',roles,protocol=False,dns_probe=case=='dns-only')
+            prep=NetworkPreparation(job,epoch,release,'owned-raw',roles,protocol=False,
+                dns_probe=case=='dns-only',expiry_probe=case=='http-expiry')
             until=time.monotonic()+5
             while not prep.poll():need(time.monotonic()<until,'mail_public_raw_preparation');time.sleep(.02)
             owner=prep.owner;server=prep.server;worker=prep.worker;sequence=0
@@ -1574,16 +1647,8 @@ def run_raw(approval,binding):
                 result['fixture_counts']=prep.dns_fixture_counts
                 result['bpf_lease_window']=prep.bpf_lease_window
             elif case=='http-expiry':
-                arm(worker,0);control('lease',kind='http',address='93.184.216.34',milliseconds=1000)
-                worker.send({'op':'stream'});progress=[]
-                while True:
-                    value=worker.receive(4)
-                    if value.get('done') is True:break
-                    need(value.get('progress') is True and value.get('matched') is True,'mail_public_stream_witness')
-                    progress.append(value)
-                need(progress and value['bytes']>0 and progress[-1]['last_byte_ns']-progress[0]['last_byte_ns']<
-                     1300*10**6,'mail_public_established_reply_expiry')
-                worker.process.wait(timeout=2);result['observations']=progress+[value]
+                result['observations']=expiry_packets(job,epoch,release,prep,roles,observations=result['observations'])
+                result['fixture_counts']=prep.expiry_fixture_counts;result['expiry_window']=prep.expiry_window
             else:
                 arm(worker,0);control('lease',kind='http',address='93.184.216.34',milliseconds=3000)
                 worker.send({'op':'stream'});value=worker.receive()
@@ -1603,9 +1668,6 @@ def run_raw(approval,binding):
                 owner.process.wait(timeout=3);worker.process.wait(timeout=3)
                 stopped=kernel.private_json(folder/'owner-result.json')
                 need(stopped['reason']=='guard_changed','mail_public_guard_loss_disposition')
-            if case not in {'closed','dns-only','owner-loss','guard-loss'}:
-                control('stop');need(owner.process.wait(timeout=2)==0,'mail_public_raw_guard_exit')
-                require_revoked(job,epoch,release)
             result['result']='PASS'
         finally:
             kernel.cleanup_actors(roles);kernel.vacant_ids()
