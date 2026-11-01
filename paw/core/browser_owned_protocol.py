@@ -52,6 +52,11 @@ def http_response(raw,nonce):
     if path in {b'/',b'/owned-data'}:
         meta,body=fixed.fixture(nonce,{'nonce':nonce,'seq':0,'url':fixed.SEED+path[1:].decode(),
             'method':'GET','resource':'Document'if path==b'/'else'Fetch'})
+        if path==b'/':
+            # This owned fixture needs the document and its scripted Fetch.
+            # Suppress Chrome's unrelated implicit favicon HTTP/TLS exchange
+            # so it cannot consume the remaining fixed browser/lease window.
+            body=body.replace(b'<title>',b'<link rel="icon" href="data:,"><title>',1)
         content=next(v['value']for v in meta['headers']if v['name']=='Content-Type')
     elif path in {b'/redirect',b'/loop'}:
         status=302;reason='Found';body=b'';content='text/plain'

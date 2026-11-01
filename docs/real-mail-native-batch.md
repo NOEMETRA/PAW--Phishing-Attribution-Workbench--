@@ -200,6 +200,28 @@ failure, and expose only a fixed guard-check error code after known cleanup.
 These local regressions do not establish the previous private failure's complete
 cause; actual immutable owned acceptance remains required.
 
+Current packet/rearm acceptance passed with requested guard stop and known host
+restoration, but its launcher returned nonzero because the redundant nft
+`ExecStopPost` exceeded the existing500ms stop budget. A real ordinary-user
+service reproduces successful-main/failed-post behavior and the conditional
+fallback. The guard now creates a Root-private per-job marker only after both
+tables' sets were successfully flushed in its finalizer. The fixed stop hook
+skips redundant work only with that proof; otherwise it executes the unchanged
+nft backstop, including abrupt loss and incomplete revocation. No table is
+removed early, no unknown stop is accepted and the500ms/10%CPU limits stay.
+The owned packet gate now also requires the guard launcher's zero exit status,
+as the public mediation path already did.
+
+The following owned browser trial observed HTTPS document/scripted Fetch and an
+implicit favicon request, but the separate final plain-HTTP check reached the
+remaining guest window with less than its required2s commit reserve. It failed
+closed; no DOM/PNG or real-source acceptance was published. Only the synthetic
+HTTP fixture now declares an inline empty icon, avoiding that unrelated implicit
+exchange while retaining the required HTTPS document/Fetch and distinct plain
+HTTP check. Real target rendering, browser15s, guard8s, transport10s, lease
+expirations and commit reserves are unchanged. Actual current browser/custody
+and native gates still precede any real capture.
+
 Inert source/installed tests are not operational acceptance. Exact-head review
 (with the owner's minimum10min wait), seven required head/main checks, normal
 merge/tree equivalence, immutable promotion, refreshed original owned baseline,

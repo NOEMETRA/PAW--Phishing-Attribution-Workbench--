@@ -303,10 +303,11 @@ def service(job, epoch, release, role, keeper_pid=None, serial=0, *, protocol=Fa
         if config['mode'] != 'public':
             need(type(keeper_pid) is int and keeper_pid > 1, 'mail_public_fixture_namespace')
             props['NetworkNamespacePath'] = '/proc/'+str(keeper_pid)+'/ns/net'
-        # Keep the inherited500ms stop budget: no second Python interpreter
-        # startup under the guard's10% CPU allocation. This fixed Root-owned
-        # data file only flushes the four job guard sets; it never removes them.
-        props.update(ExecStopPost='/usr/sbin/nft -f '+str(folder/'revoke.nft'))
+        # Keep500ms and10%CPU. A Root-private proof is written only after both
+        # tables' sets were successfully flushed in the finalizer. Otherwise
+        # retain the exact fixed nft backstop, including abrupt guard loss.
+        props.update(ExecStopPost="/bin/sh -c 'test -f "+str(folder/'revoked-complete')+
+                     ' || exec /usr/sbin/nft -f '+str(folder/'revoke.nft')+"'")
     else:
         need(type(keeper_pid) is int and keeper_pid > 1, 'mail_public_guard_namespace')
         props.update(RootDirectory=str(folder/'probe-root'),
@@ -423,6 +424,7 @@ def keeper_action(value, epoch, sequence, ids):
 def revoke_role(job, epoch, release):
     ids, _ = root_config(job, epoch, release)
     marker = Path(ids['directory'])/'guard-created'
+    flushed=0
     if marker.exists():
         # Leave default-drop tables in place until the Root coordinator has
         # independently proved every worker stopped. Removing them here would
@@ -433,6 +435,8 @@ def revoke_role(job, epoch, release):
             if present.returncode == 0:
                 kernel.nft('-f', '-', text=''.join('flush set inet '+table+' '+name+'\n'
                     for name in ['tcp4','udp4']))
+                flushed+=1
+    return flushed==2
 
 
 def keeper(job, epoch, release):
@@ -490,7 +494,9 @@ def keeper(job, epoch, release):
         (folder/'owner-result.json').write_bytes(canonical({'schema':'paw-mail-network-stop-v1',
             'epoch':epoch, 'reason':reason, 'namespace_inode':os.stat('/proc/self/ns/net').st_ino,
             'elapsed_ns':time.monotonic_ns()-began, 'check_error':check_error}))
-        revoke_role(job,epoch,release)
+        if revoke_role(job,epoch,release) is True:
+            fd=os.open(folder/'revoked-complete',os.O_CREAT|os.O_EXCL|os.O_WRONLY|os.O_NOFOLLOW,0o600)
+            os.close(fd)
 
 
 def private_role(job, epoch, release, role):
@@ -1293,7 +1299,7 @@ def closed_packets(job, epoch, release, prep, roles, *, observations=None):
     owner.send({'op':'stop','epoch':epoch,'id':2});ack=owner.receive()
     need(ack.get('accepted') is True and type(ack.get('id')) is int and ack['id']==2,
          'mail_public_raw_guard_ack')
-    owner.process.wait(timeout=2)
+    need(owner.process.wait(timeout=2)==0,'mail_public_raw_guard_exit')
     return observations
 
 

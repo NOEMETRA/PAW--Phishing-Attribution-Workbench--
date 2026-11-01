@@ -7,6 +7,20 @@ from paw.core import browser_owned_protocol as broker
 
 N='a'*32
 class Transport(unittest.TestCase):
+    def test_owned_document_declares_inline_icon_without_an_extra_HTTP_request(self):
+        from html.parser import HTMLParser
+        class Page(HTMLParser):
+            def __init__(self):super().__init__();self.icons=[]
+            def handle_starttag(self,tag,attrs):
+                data=dict(attrs)
+                if tag=='link'and data.get('rel')=='icon':self.icons.append(data.get('href'))
+        raw,_=fixture.http_response(b'GET / HTTP/1.1\r\nHost: paw-owned.invalid\r\n\r\n',N)
+        headers,body=raw.split(b'\r\n\r\n',1)
+        page=Page();page.feed(body.decode('ascii'))
+        self.assertEqual(page.icons,['data:,'])
+        self.assertIn(b'Content-Length: '+str(len(body)).encode(),headers)
+        self.assertIn(b"fetch('/owned-data')",body)
+
     def session(self):
         dns_transport=Mock(side_effect=lambda host,ident,deadline:fixture.dns_response(dns.question(host,ident)))
         body=b'owned response'
