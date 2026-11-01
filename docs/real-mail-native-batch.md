@@ -275,3 +275,17 @@ no native scope, public tuple or browser is added. The diagnostic preserves
 partial observations and per-case cleanup on failure. Actual immutable owned
 acceptance, refreshed browser/custody and the new native packet gates remain
 required; local tests do not establish live filtering or public readiness.
+
+The promoted two-phase DNS probe observed its positive UDP and BPF denial within
+the fresh lease. It then lost the guard before the TCP check: protected metadata
+records `guard_snapshot_unavailable`, with later PID1 guard8s/fixture10s expiry.
+Closed had passed; aggregate FAIL had overwritten its top-level result, so the
+diagnostic now preserves `closed_result` separately. The same-job terminal
+readback proved stopped roles and restored host. No new native batch was used.
+The generic guard-read code does not distinguish a failed nft subprocess from
+invalid JSON. The nft wrapper now retains its existing ValueError failure and
+no-retry behavior while carrying bounded return-code/stderr-prefix/hash metadata.
+Only the private owned-raw guard stop can expose that detail. Invalid JSON gets
+a separate fixed error code. Neither condition becomes a pass or retries the
+read, and revocation/lifetimes/authority stay unchanged. This is diagnosis of
+the observed failure, not a claimed correction of its still-unknown cause.

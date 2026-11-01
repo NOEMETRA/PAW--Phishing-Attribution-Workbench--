@@ -5,6 +5,7 @@ nonroot IDs and a Root-supplied minimal private filesystem. No real URL, source,
 interface, route, NAT, shell, caller-selected host path or generic Root command.
 """
 import hashlib
+import base64
 import ctypes
 import json
 import os
@@ -141,9 +142,20 @@ def role_entry(job,epoch,release,role):
     return ids,witness
 
 
+class NftFailure(ValueError):
+    """Keep the old failure reason, with bounded evidence for private diagnosis."""
+    def __init__(self,result):
+        super().__init__('owned_kernel_nft_failed')
+        raw=result.stderr.encode('utf-8','backslashreplace')
+        self.detail={'returncode':result.returncode,'stderr_bytes':len(raw),
+            'stderr_sha256':hashlib.sha256(raw).hexdigest(),
+            'stderr_prefix_b64':base64.b64encode(raw[:512]).decode('ascii')}
+
+
 def nft(*args,text=None):
     value=subprocess.run(['/usr/sbin/nft',*args],input=text,capture_output=True,text=True,timeout=2)
-    require(value.returncode==0,'owned_kernel_nft_failed');return value.stdout
+    if value.returncode!=0:raise NftFailure(value)
+    return value.stdout
 
 
 def filter_identity():
