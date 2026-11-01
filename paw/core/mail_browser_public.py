@@ -328,12 +328,11 @@ def service(job, epoch, release, role, keeper_pid=None, serial=0, *, protocol=Fa
         if config['mode'] != 'public':
             need(type(keeper_pid) is int and keeper_pid > 1, 'mail_public_fixture_namespace')
             props['NetworkNamespacePath'] = '/proc/'+str(keeper_pid)+'/ns/net'
-        # Keep500ms and10%CPU. A Root-private proof is written only after both
-        # tables' sets were successfully flushed in the finalizer. Otherwise
-        # retain the exact fixed nft backstop, including abrupt guard loss.
-        props.update(ExecStopPost="/bin/sh -c 'printf x > "+str(folder/'stop-hook-entered')+
-                     '; test -f '+str(folder/'revoked-complete')+
-                     ' || exec /usr/sbin/nft -f '+str(folder/'revoke.nft')+"'")
+        # Final revocation runs inside the existing guard process. A second
+        # sandboxed post command cannot even start inside500ms under10%CPU.
+        # Normal stop requires its private proof and a zero launcher exit.
+        # Abrupt loss still stops BindsTo/After transports under their500ms
+        # control-group policy; coordinator/master stop hooks remain in force.
     else:
         need(type(keeper_pid) is int and keeper_pid > 1, 'mail_public_guard_namespace')
         props.update(RootDirectory=str(folder/'probe-root'),
@@ -349,6 +348,10 @@ def service(job, epoch, release, role, keeper_pid=None, serial=0, *, protocol=Fa
 
 
 class PublicActor(kernel.Managed):
+    def __init__(self, job, epoch, release, *args, **kwargs):
+        self.binding=(job,epoch,release)
+        super().__init__(job,epoch,release,*args,**kwargs)
+
     def _service(self, job, epoch, release, role, keeper_pid, serial, *, protocol):
         return service(job, epoch, release, role, keeper_pid, serial, protocol=protocol)
 
@@ -470,6 +473,15 @@ def revoke_role(job, epoch, release):
                     for name in ['tcp4','udp4']))
                 flushed+=1
     return flushed==2
+
+
+def require_revoked(job, epoch, release):
+    """Direct private producer proof after normal exit; no exported UID claim."""
+    ids,_=root_config(job,epoch,release)
+    try:info=(Path(ids['directory'])/'revoked-complete').lstat()
+    except FileNotFoundError:raise ValueError('mail_public_revocation_proof_missing')from None
+    need(stat.S_ISREG(info.st_mode) and info.st_uid==0 and info.st_nlink==1 and
+         info.st_mode&0o777==0o600 and info.st_size==0,'mail_public_revocation_proof_metadata')
 
 
 def keeper(job, epoch, release):
@@ -840,6 +852,7 @@ class Mediation:
         need(fields == {'request_sequence':self.sequence-1,'operation':'stop','stopped':True} and
              body==b'' and self.worker.process.wait(timeout=2)==0,'mail_public_transport_stop')
         self.control('stop');need(self.owner.process.wait(timeout=2)==0,'mail_public_guard_stop')
+        require_revoked(*self.owner.binding)
         self.ledger.close()
 
 
@@ -1257,6 +1270,7 @@ def owned_preparation(job, release):
         'epoch':epoch,'vm_started':False,'real_samples_executed':0,'real_connections':0,
         'production_grants_enabled':False,'i08_installed':False,
         'scope':'Fixed private loopback preparation and two default-denied packets; no browser or public readiness',
+        'guard_stop_policy':'in-process-revocation-dependent-transport-and-parent-backstops',
         'programs':{name:sha(HERE.with_name(name).read_bytes()) for name in PROGRAMS}}
     with _owned_preparation_budget(job),fs.execution_lock():
         require_idle();before=snapshot();network=network_state()
@@ -1282,6 +1296,7 @@ def owned_preparation(job, release):
                           root_partition_cpu_percent=[35,10,25,15])
             record['preparation']={} if prep is None else {
                 name:getattr(prep,name) for name in ['fixture_configured','server_live','worker_live','ready']}
+            record['closed_fixture_counts']=getattr(prep,'closed_fixture_counts',None)
             stop = Path(identity(job,epoch,release)['directory'])/'owner-result.json'
             if stop.exists():
                 # Fixed protected path, bounded metadata, read only after the
@@ -1342,10 +1357,19 @@ def closed_packets(job, epoch, release, prep, roles, *, observations=None):
         worker.process.wait(timeout=2);observations.append(value)
     need(not observations[0]['matched'] and not observations[1]['connected'],
          'mail_public_actual_default_drop')
+    # No probe remains and this closed case needs no further fixture I/O.
+    # Finish it cooperatively before its independent10s lifetime expires.
+    prep.server.send({'op':'stop'});counts=prep.server.receive()
+    need(type(counts)is dict and set(counts)=={'counts'} and type(counts['counts'])is dict and
+         set(counts['counts'])=={'tcp','udp','stream_bytes'} and
+         all(type(v)is int and v==0 for v in counts['counts'].values()) and
+         prep.server.process.wait(timeout=2)==0,'mail_public_closed_fixture_stop')
+    prep.closed_fixture_counts=counts['counts']
     owner.send({'op':'stop','epoch':epoch,'id':2});ack=owner.receive()
     need(ack.get('accepted') is True and type(ack.get('id')) is int and ack['id']==2,
          'mail_public_raw_guard_ack')
     need(owner.process.wait(timeout=2)==0,'mail_public_raw_guard_exit')
+    require_revoked(job,epoch,release)
     return observations
 
 
@@ -1393,6 +1417,7 @@ def run_raw(approval,binding):
                 result['observations'].append(value);return value
             if case=='closed':
                 result['observations']=closed_packets(job,epoch,release,prep,roles)
+                result['fixture_counts']=prep.closed_fixture_counts
             elif case=='dns-only':
                 need(packet('udp','dns')['matched'] and not packet('tcp','dns')['connected'],
                      'mail_public_actual_dns_only')
@@ -1431,7 +1456,8 @@ def run_raw(approval,binding):
                 stopped=kernel.private_json(folder/'owner-result.json')
                 need(stopped['reason']=='guard_changed','mail_public_guard_loss_disposition')
             if case not in {'closed','owner-loss','guard-loss'}:
-                control('stop');owner.process.wait(timeout=2)
+                control('stop');need(owner.process.wait(timeout=2)==0,'mail_public_raw_guard_exit')
+                require_revoked(job,epoch,release)
             result['result']='PASS'
         finally:
             kernel.cleanup_actors(roles);kernel.vacant_ids()
