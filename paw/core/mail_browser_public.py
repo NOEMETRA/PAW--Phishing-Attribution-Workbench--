@@ -519,7 +519,12 @@ def keeper(job, epoch, release):
                 if isinstance(error,kernel.NftFailure):
                     check_error='guard_nft_failed'
                     if cfg['mode']=='owned-raw':check_detail=error.detail
-                elif isinstance(error,json.JSONDecodeError):check_error='guard_json_invalid'
+                elif isinstance(error,json.JSONDecodeError):
+                    check_error='guard_json_invalid'
+                    if cfg['mode']=='owned-raw':
+                        raw=error.doc.encode('utf-8','backslashreplace')
+                        check_detail={'json_bytes':len(raw),'json_sha256':sha(raw),
+                            'json_prefix_b64':base64.b64encode(raw[:512]).decode('ascii'),'position':error.pos}
                 else:check_error=code if code in {'mail_public_guard_missing','mail_public_unarmed_cgroup_selector',
                     'mail_public_cgroup_replaced','mail_public_cgroup_path_not_live','mail_public_cgroup_id_changed',
                     'mail_public_cgroup_expression','mail_public_cgroup_selector_count',
@@ -1349,7 +1354,16 @@ def _owned_preparation_case(job, release, case):
                  'mail_public_owned_stop_metadata')
             if 'check_detail'in stopped:
                 detail=stopped['check_detail']
-                need(stopped['check_error']=='guard_nft_failed' and type(detail)is dict and
+                need(type(detail)is dict,'mail_public_owned_stop_detail')
+                if stopped['check_error']=='guard_json_invalid':
+                    need(set(detail)=={'json_bytes','json_sha256','json_prefix_b64','position'} and
+                         type(detail['json_bytes'])is int and detail['json_bytes']>=0 and
+                         type(detail['position'])is int and 0<=detail['position']<=detail['json_bytes'] and
+                         type(detail['json_sha256'])is str and re.fullmatch('[0-9a-f]{64}',detail['json_sha256']) and
+                         type(detail['json_prefix_b64'])is str and
+                         len(base64.b64decode(detail['json_prefix_b64'],validate=True))==min(512,detail['json_bytes']),
+                         'mail_public_owned_stop_detail')
+                else:need(stopped['check_error']=='guard_nft_failed' and
                      set(detail)=={'returncode','stderr_bytes','stderr_sha256','stderr_prefix_b64'} and
                      type(detail['returncode'])is int and -255<=detail['returncode']<=255 and detail['returncode']!=0 and
                      type(detail['stderr_bytes'])is int and detail['stderr_bytes']>=0 and

@@ -57,8 +57,14 @@ class GuardDiagnostic(unittest.TestCase):
                 if mode=='owned-raw':self.assertEqual(value['check_detail'],e.detail)
                 else:self.assertNotIn('check_detail',value)
     def test_invalid_json_is_separate_from_unavailable_nft_or_changed_identity(self):
-        value=self.exercise('owned-raw',json.JSONDecodeError('inert malformed reply','{',1))
-        self.assertEqual(value['check_error'],'guard_json_invalid')
-        self.assertNotIn('check_detail',value)
+        for mode in ['owned-raw','public']:
+            value=self.exercise(mode,json.JSONDecodeError('inert malformed reply','{',1))
+            self.assertEqual(value['check_error'],'guard_json_invalid')
+            if mode=='public':self.assertNotIn('check_detail',value)
+            else:
+                detail=value['check_detail']
+                self.assertEqual(detail['position'],1);self.assertEqual(detail['json_bytes'],1)
+                self.assertEqual(detail['json_sha256'],hashlib.sha256(b'{').hexdigest())
+                self.assertEqual(base64.b64decode(detail['json_prefix_b64']),b'{')
 
 if __name__=='__main__':unittest.main()

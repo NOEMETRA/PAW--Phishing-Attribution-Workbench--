@@ -286,6 +286,6 @@ The generic guard-read code does not distinguish a failed nft subprocess from
 invalid JSON. The nft wrapper now retains its existing ValueError failure and
 no-retry behavior while carrying bounded return-code/stderr-prefix/hash metadata.
 Only the private owned-raw guard stop can expose that detail. Invalid JSON gets
-a separate fixed error code. Neither condition becomes a pass or retries the
+a separate fixed error code and private bounded prefix/hash/parse-position evidence. Neither condition becomes a pass or retries the
 read, and revocation/lifetimes/authority stay unchanged. This is diagnosis of
 the observed failure, not a claimed correction of its still-unknown cause.
