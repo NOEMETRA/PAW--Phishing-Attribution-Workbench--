@@ -18,6 +18,60 @@ J='1'*32; E='2'*32; R='3'*40
 SEEDS=['https://one.invalid/', 'http://two.invalid/', 'https://three.invalid/']
 
 class PublicBoundary(unittest.TestCase):
+    def test_guard_identity_pins_cgroup_ID_across_unit_collection_without_masking_changes(self):
+        group='/system.slice/'+m.identity(J,E,R)['probe']; inode=12345
+        def dump(right):
+            return {'nftables':sum(([{'table':{'family':'inet','name':table}},
+                {'rule':{'family':'inet','table':table,'chain':'input','expr':[
+                    {'match':{'op':'==','left':{'socket':{'key':'cgroupv2'}},'right':right}},
+                    {'jump':{'target':'ingress'}}]}}] for table in m.TABLES),[])}
+        named=dump(group.lstrip('/')); numeric=dump(str(inode)); binding=(group,inode)
+        with patch.object(m.kernel,'nft',return_value=json.dumps(named)), \
+             patch.object(m.Path,'stat',return_value=SimpleNamespace(st_ino=inode)):
+            expected=m.guard_identity(binding)
+            with self.assertRaisesRegex(ValueError,'unarmed_cgroup'):m.guard_identity()
+        with patch.object(m.Path,'stat',side_effect=FileNotFoundError):
+            for right in [str(inode),inode]:
+                with patch.object(m.kernel,'nft',return_value=json.dumps(dump(right))):
+                    self.assertEqual(m.guard_identity(binding),expected)
+            with patch.object(m.kernel,'nft',return_value=json.dumps(named)):
+                with self.assertRaisesRegex(ValueError,'path_not_live'):m.guard_identity(binding)
+            for right in [True,inode+1,str(inode+1),'0'+str(inode),'other/path']:
+                with self.subTest(right=right),patch.object(m.kernel,'nft',return_value=json.dumps(dump(right))):
+                    with self.assertRaises(ValueError):m.guard_identity(binding)
+            changed=copy.deepcopy(numeric);changed['nftables'][1]['rule']['expr'][1]['jump']['target']='other'
+            with patch.object(m.kernel,'nft',return_value=json.dumps(changed)):
+                self.assertNotEqual(m.guard_identity(binding),expected)
+            for change in ['table','selector','operator']:
+                changed=copy.deepcopy(numeric)
+                if change=='table':changed['nftables'].pop(0)
+                elif change=='selector':changed['nftables'][1]['rule']['expr'].pop(0)
+                else:changed['nftables'][1]['rule']['expr'][0]['match']['op']='!='
+                with self.subTest(change=change),patch.object(m.kernel,'nft',return_value=json.dumps(changed)):
+                    with self.assertRaises(ValueError):m.guard_identity(binding)
+        with patch.object(m.kernel,'nft',return_value=json.dumps(numeric)), \
+             patch.object(m.Path,'stat',return_value=SimpleNamespace(st_ino=inode+1)):
+            with self.assertRaisesRegex(ValueError,'cgroup_replaced'):m.guard_identity(binding)
+
+    def test_closed_owned_probe_rearms_second_actor_without_lease_or_public_scope(self):
+        from unittest.mock import Mock
+        owner=Mock(pid=42); owner.receive.side_effect=[{'accepted':True,'id':v} for v in range(3)]
+        first=Mock(unit='first.service');first.receive.return_value={'done':True,'matched':False}
+        second=Mock(unit='second.service');second.receive.return_value={'done':True,'connected':False}
+        prep=SimpleNamespace(mode='owned-raw',ready=True,owner=owner,worker=first,inode=99)
+        roles=[]
+        with patch.object(m,'PublicActor',return_value=second) as new, \
+             patch.object(m.kernel,'live_role') as live,patch.object(m.subprocess,'run') as run:
+            self.assertEqual(len(m.closed_packets(J,E,R,prep,roles)),2)
+        new.assert_called_once_with(J,E,R,'probe',42,registry=roles,serial=1)
+        live.assert_called_once_with(second,'probe',99)
+        self.assertEqual([c.args[0]['op'] for c in owner.send.call_args_list],['arm','arm','stop'])
+        self.assertEqual([c.args[0]['serial'] for c in owner.send.call_args_list[:2]],[0,1])
+        first.send.assert_called_once_with({'op':'udp'});second.send.assert_called_once_with({'op':'tcp'})
+        self.assertEqual(run.call_count,2)
+        prep.mode='public'
+        with self.assertRaisesRegex(ValueError,'closed_owned_only'):m.closed_packets(J,E,R,prep,roles)
+
     def test_owned_alias_commands_use_pinned_namespace_FD_and_close_it_on_failure(self):
         from unittest.mock import Mock,MagicMock
         for failure in [None,'dead','pidfd','host']:
