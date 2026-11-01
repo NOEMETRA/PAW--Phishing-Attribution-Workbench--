@@ -339,6 +339,17 @@ def run_owned(job, release):
                 record['runtime']['owned_kernel']['i08_installed'] is False and
                 record['runtime']['owned_kernel']['production_grants_enabled'] is False,
                 'runtime_owned_kernel_scope')
+        # This fixed private preparation probe can diagnose the new adapter
+        # through the existing no-prompt owned recipe, without real authority.
+        from paw.core.mail_browser_public import owned_preparation
+        record['runtime']['owned_mail_preparation'] = owned_preparation(job, release)
+        probe = record['runtime']['owned_mail_preparation']
+        require(probe['result'] == 'PASS' and probe['vm_started'] is False and
+                type(probe['real_samples_executed']) is int and probe['real_samples_executed'] == 0 and
+                type(probe['real_connections']) is int and probe['real_connections'] == 0 and
+                probe['production_grants_enabled'] is False and probe['i08_installed'] is False and
+                probe['writers_stopped'] is True and probe['host_restored'] is True,
+                'runtime_owned_mail_preparation_failed')
         from representation_producer import previous_owned_failure
         record['runtime']['previous_owned_failure'] = previous_owned_failure()
         from native_runtime import previous_owned_native_failure

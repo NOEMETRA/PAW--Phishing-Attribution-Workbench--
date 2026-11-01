@@ -116,6 +116,32 @@ The paired report must distinguish added observations from changed conclusions.
 
 ## Acceptance still required
 
+The first actual native batch stopped at its first private owned preparation,
+before any browser or real navigation. Terminal readback found stopped roles and
+restored host state. This does not accept the new packet/browser/public gates.
+An actual keeper-path reproducer, with only its protected configuration mocked,
+fails on the denied `/proc/1/ns/net` lookup before any nft command or readiness.
+The guard now compares its own namespace against a host inode recorded earlier
+by the Root coordinator in the protected configuration. Its NET_ADMIN-only
+capabilities, namespace pins and service ceilings remain unchanged. The original
+confined role's stderr was not published, so the precise complete startup cause
+must still be confirmed by actual diagnostics, not inferred from the reproducer.
+
+The existing `vm-acceptance-v1` no-VM recipe now also runs one fixed private
+loopback preparation probe. It cannot select a public mode, URL, sample or native
+scope, launch a browser, or open a public tuple. It keeps the existing5s observer
+deadline and role profiles. Its coordinator temporarily uses the native coordinator’s192MiB/24tasks/35%
+profile, so coordinator/guard/transport/fixture total448MiB/56tasks/85%, within
+the enrolled512MiB/64tasks/100% ceiling. No native master is present in this
+owned probe. The parent is restored even after an error. Only known
+stopped writers and restored host state
+permit a bounded Root-owned diagnostic, including per-role exit/stderr metadata.
+A failed probe remains FAIL and cannot publish a runtime PASS. This enables
+subsequent owned startup diagnosis through the already-enrolled limited operator,
+without authenticating a real-source batch for each diagnostic attempt. Review,
+main CI and immutable promotion still precede every changed Root version. The
+ended native authority cannot be reused for changed code or real navigation.
+
 Inert source/installed tests are not operational acceptance. Exact-head review
 (with the owner's minimum10min wait), seven required head/main checks, normal
 merge/tree equivalence, immutable promotion, refreshed original owned baseline,
