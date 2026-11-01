@@ -306,7 +306,8 @@ def service(job, epoch, release, role, keeper_pid=None, serial=0, *, protocol=Fa
         # Keep500ms and10%CPU. A Root-private proof is written only after both
         # tables' sets were successfully flushed in the finalizer. Otherwise
         # retain the exact fixed nft backstop, including abrupt guard loss.
-        props.update(ExecStopPost="/bin/sh -c 'test -f "+str(folder/'revoked-complete')+
+        props.update(ExecStopPost="/bin/sh -c 'printf x > "+str(folder/'stop-hook-entered')+
+                     '; test -f '+str(folder/'revoked-complete')+
                      ' || exec /usr/sbin/nft -f '+str(folder/'revoke.nft')+"'")
     else:
         need(type(keeper_pid) is int and keeper_pid > 1, 'mail_public_guard_namespace')
@@ -1201,6 +1202,17 @@ def _owned_preparation_budget(job):
         need(all(after.get(k)==v for k,v in expected.items()),'mail_public_owned_parent_not_restored')
 
 
+def _cleanup_progress(folder):
+    """Stopped diagnostic telemetry only; never an acceptance or authority gate."""
+    result={}
+    for name,size in [('revoked-complete',0),('stop-hook-entered',1)]:
+        try:info=(folder/name).lstat()
+        except FileNotFoundError:result[name]=False;continue
+        result[name]=(stat.S_ISREG(info.st_mode) and info.st_uid==os.geteuid() and
+                      info.st_nlink==1 and not info.st_mode&0o077 and info.st_size==size)
+    return result
+
+
 def owned_preparation(job, release):
     """Fixed no-VM preparation probe, called only by the enrolled owned recipe.
 
@@ -1260,6 +1272,7 @@ def owned_preparation(job, release):
                      all(type(stopped[k]) is int and stopped[k]>=0 for k in ['namespace_inode','elapsed_ns']),
                      'mail_public_owned_stop_metadata')
                 record['guard_stop'] = stopped
+            record['guard_cleanup_progress']=_cleanup_progress(stop.parent)
             record['roles']=[{'unit':actor.unit,'launcher_returncode':actor.process.poll(),
                 'stderr_bytes':len(actor.errors),'stderr_sha256':sha(bytes(actor.errors)),
                 'stderr':bytes(actor.errors[:4096]).decode('utf-8','replace'),
