@@ -6,6 +6,7 @@ IPv4 sockets; the guest continues to have no NIC. HTTP/TLS parsing is reused.
 """
 import argparse
 import base64
+from contextlib import contextmanager
 import hashlib
 import json
 import os
@@ -1103,6 +1104,25 @@ def _client_import(directory,batch,slot,output):
             'batch_id':batch,'slot':slot,'case_unchanged':True,'scope':'Separate sealed observations; original score unchanged'}
 
 
+@contextmanager
+def _owned_preparation_budget(job):
+    """Retain the enrolled recipe's512MiB/64-task/100% aggregate partition."""
+    parent='paw-vm-owned-'+job+'.service';before=kernel.unit_properties(parent)
+    expected={'ActiveState':'active','MainPID':str(os.getpid()),'MemoryMax':str(512*1024**2),
+              'MemorySwapMax':'0','TasksMax':'64','CPUQuotaPerSecUSec':'1s'}
+    need(all(before.get(k)==v for k,v in expected.items()),'mail_public_owned_parent_budget')
+    def limit(memory,tasks,cpu):
+        subprocess.run(['/usr/bin/systemctl','set-property','--runtime',parent,
+            'MemoryMax='+memory,'TasksMax='+tasks,'CPUQuota='+cpu],check=True,capture_output=True,timeout=2)
+    try:
+        limit('256M','32','50%')
+        yield
+    finally:
+        limit('512M','64','100%')
+        after=kernel.unit_properties(parent)
+        need(all(after.get(k)==v for k,v in expected.items()),'mail_public_owned_parent_not_restored')
+
+
 def owned_preparation(job, release):
     """Fixed no-VM preparation probe, called only by the enrolled owned recipe.
 
@@ -1122,7 +1142,7 @@ def owned_preparation(job, release):
         'production_grants_enabled':False,'i08_installed':False,
         'scope':'Fixed private loopback preparation only; no packet matrix, browser or public readiness',
         'programs':{name:sha(HERE.with_name(name).read_bytes()) for name in PROGRAMS}}
-    with fs.execution_lock():
+    with _owned_preparation_budget(job),fs.execution_lock():
         require_idle();before=snapshot();network=network_state()
         try:
             prepare_network(job,epoch,release,'owned-raw',{})
@@ -1139,6 +1159,8 @@ def owned_preparation(job, release):
             kernel.cleanup_actors(actors);kernel.vacant_ids()
             need(snapshot()==before and network_state()==network,'mail_public_owned_preparation_restore')
             record.update(writers_stopped=True,host_restored=True,elapsed_ns=time.monotonic_ns()-began)
+            record.update(root_partition_mib=[256,64,128,64],root_partition_tasks=[32,8,16,8],
+                          root_partition_cpu_percent=[50,10,25,15])
             record['preparation']={} if prep is None else {
                 name:getattr(prep,name) for name in ['fixture_configured','server_live','worker_live','ready']}
             record['roles']=[{'unit':actor.unit,'launcher_returncode':actor.process.poll(),

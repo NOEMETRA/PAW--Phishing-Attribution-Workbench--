@@ -13,6 +13,20 @@ from paw.core import mail_browser_public as m
 
 J='1'*32;E='2'*32;R='3'*40
 class Preparation(unittest.TestCase):
+    def test_actual_budget_partition_restores_after_error_and_refuses_foreign_parent(self):
+        expected={'ActiveState':'active','MainPID':str(os.getpid()),'MemoryMax':str(512*1024**2),
+                  'MemorySwapMax':'0','TasksMax':'64','CPUQuotaPerSecUSec':'1s'}
+        with patch.object(m.kernel,'unit_properties',return_value=expected),patch.object(m.subprocess,'run')as run:
+            with self.assertRaisesRegex(ValueError,'inert probe failure'):
+                with m._owned_preparation_budget(J):raise ValueError('inert probe failure')
+            self.assertEqual(run.call_count,2)
+            self.assertEqual(run.call_args_list[0].args[0][-3:],['MemoryMax=256M','TasksMax=32','CPUQuota=50%'])
+            self.assertEqual(run.call_args_list[1].args[0][-3:],['MemoryMax=512M','TasksMax=64','CPUQuota=100%'])
+        with patch.object(m.kernel,'unit_properties',return_value=dict(expected,MainPID='1')),patch.object(m.subprocess,'run')as run:
+            with self.assertRaisesRegex(ValueError,'parent_budget'):
+                with m._owned_preparation_budget(J):self.fail('Foreign controller accepted')
+            run.assert_not_called()
+
     def test_guard_never_inspects_denied_PID1_link_and_still_refuses_wrong_namespace(self):
         for mode,observed,expected in [('public',10,10),('owned-raw',99,99),('public',99,10),('owned-raw',10,99)]:
             with self.subTest(mode=mode,observed=observed),tempfile.TemporaryDirectory()as d:
@@ -51,6 +65,7 @@ class Preparation(unittest.TestCase):
             with patch.dict(sys.modules,modules),patch.object(m,'HERE',Path('/opt/paw-vm/releases')/R/'paw/core/mail_browser_public.py'), \
                  patch.object(m.os,'geteuid',return_value=0),patch.object(m,'PROGRAMS',()), \
                  patch.object(m,'EXPORT_ROOT',Path(d)),patch.object(m,'require_idle'), \
+                 patch.object(m,'_owned_preparation_budget',return_value=nullcontext()), \
                  patch.object(m,'prepare_network')as prepare,patch.object(m,'NetworkPreparation',side_effect=create), \
                  patch.object(m.kernel,'cleanup_actors',side_effect=ValueError('unknown stop')if cleanup_failure else None)as cleanup, \
                  patch.object(m.kernel,'vacant_ids'):
