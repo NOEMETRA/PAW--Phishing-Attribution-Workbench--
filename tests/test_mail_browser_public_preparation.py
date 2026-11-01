@@ -43,10 +43,11 @@ class Preparation(unittest.TestCase):
                      patch.object(m.kernel,'nft')as nft,patch.object(m,'guard_identity',return_value='same'), \
                      patch.object(m.kernel,'status',return_value={}),patch.object(m.kernel,'emit'), \
                      patch.object(m.signal,'signal'),patch.object(m.sys,'stdin',value), \
-                     patch.object(m.selectors,'DefaultSelector',return_value=selector),patch.object(m,'revoke_role'):
+                     patch.object(m.selectors,'DefaultSelector',return_value=selector),patch.object(m,'revoke_role',return_value=True):
                     if observed==expected and (observed==10)==(mode=='public'):
                         m.keeper(J,E,R)
                         self.assertEqual(json.loads((Path(d)/'owner-result.json').read_bytes())['reason'],'requested_stop')
+                        self.assertIn('revoked-complete',os.listdir(d))
                     else:
                         with self.assertRaisesRegex(ValueError,'exact_namespace'):m.keeper(J,E,R)
                         nft.assert_not_called()

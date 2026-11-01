@@ -18,6 +18,19 @@ J='1'*32; E='2'*32; R='3'*40
 SEEDS=['https://one.invalid/', 'http://two.invalid/', 'https://three.invalid/']
 
 class PublicBoundary(unittest.TestCase):
+    def test_revocation_proof_is_written_only_after_both_guard_sets_are_flushed(self):
+        with tempfile.TemporaryDirectory()as d:
+            folder=Path(d);(folder/'guard-created').touch();ids=m.identity(J,E,R);ids['directory']=d
+            for failure in [None,'absent','flush']:
+                with self.subTest(failure=failure),patch.object(m,'root_config',return_value=(ids,{})), \
+                     patch.object(m.subprocess,'run',return_value=SimpleNamespace(returncode=1 if failure=='absent'else 0)), \
+                     patch.object(m.kernel,'nft',side_effect=ValueError('inert flush failure')if failure=='flush'else None)as nft:
+                    if failure=='flush':
+                        with self.assertRaisesRegex(ValueError,'inert flush failure'):m.revoke_role(J,E,R)
+                    else:
+                        self.assertIs(m.revoke_role(J,E,R),failure is None)
+                        self.assertEqual(nft.call_count,2 if failure is None else 0)
+
     def test_stale_name_cannot_hide_a_later_foreign_selector_that_then_heals(self):
         group='/system.slice/'+m.identity(J,E,R)['probe'];inode=12345
         def dump(rights):
@@ -102,7 +115,8 @@ class PublicBoundary(unittest.TestCase):
 
     def test_closed_owned_probe_rearms_second_actor_without_lease_or_public_scope(self):
         from unittest.mock import Mock
-        owner=Mock(pid=42); owner.receive.side_effect=[{'accepted':True,'id':v} for v in range(3)]
+        owner=Mock(pid=42);owner.process.wait.return_value=0
+        owner.receive.side_effect=[{'accepted':True,'id':v} for v in range(3)]
         first=Mock(unit='first.service');first.receive.return_value={'done':True,'matched':False}
         second=Mock(unit='second.service');second.receive.return_value={'done':True,'connected':False}
         prep=SimpleNamespace(mode='owned-raw',ready=True,owner=owner,worker=first,inode=99)
@@ -131,6 +145,17 @@ class PublicBoundary(unittest.TestCase):
                 m.closed_packets(J,E,R,prep,[],observations=observations)
         self.assertEqual(observations,[{'done':True,'matched':False}])
         second.send.assert_not_called()
+
+    def test_successful_packet_frames_cannot_hide_a_guard_launcher_failure(self):
+        from unittest.mock import Mock
+        owner=Mock(pid=42);owner.receive.side_effect=[{'accepted':True,'id':v}for v in range(3)]
+        owner.process.wait.return_value=1
+        first=Mock(unit='first.service');first.receive.return_value={'done':True,'matched':False}
+        second=Mock(unit='second.service');second.receive.return_value={'done':True,'connected':False}
+        prep=SimpleNamespace(mode='owned-raw',ready=True,owner=owner,worker=first,inode=99)
+        with patch.object(m,'PublicActor',return_value=second),patch.object(m.kernel,'live_role'), \
+             patch.object(m.subprocess,'run'):
+            with self.assertRaisesRegex(ValueError,'raw_guard_exit'):m.closed_packets(J,E,R,prep,[])
 
     def test_owned_alias_commands_use_pinned_namespace_FD_and_close_it_on_failure(self):
         from unittest.mock import Mock,MagicMock
@@ -235,6 +260,7 @@ class PublicBoundary(unittest.TestCase):
             result=json.loads((Path(d)/'owner-result.json').read_bytes())
             self.assertEqual(result['reason'],'guard_changed')
             self.assertEqual(result['check_error'],'mail_public_guard_missing')
+            self.assertFalse((Path(d)/'revoked-complete').exists())
             revoke.assert_called_once_with(J,E,R)
     def test_kernel_relative_timeout_is_recomputed_after_BPF_commit_latency(self):
         from paw.core import browser_owned_broker as existing
@@ -341,7 +367,9 @@ class PublicBoundary(unittest.TestCase):
             self.assertEqual(p['CapabilityBoundingSet'],'CAP_NET_ADMIN')
             self.assertEqual(p['RestrictAddressFamilies'],'AF_UNIX AF_NETLINK')
             self.assertEqual(p['TimeoutStopSec'],'500ms')
-            self.assertEqual(p['ExecStopPost'],'/usr/sbin/nft -f '+m.identity(J,E,R)['directory']+'/revoke.nft')
+            directory=m.identity(J,E,R)['directory']
+            self.assertEqual(p['ExecStopPost'],"/bin/sh -c 'test -f "+directory+
+                '/revoked-complete || exec /usr/sbin/nft -f '+directory+"/revoke.nft'")
             with self.assertRaises(ValueError):m.service(J,E,R,'fixture',42)
         self.assertEqual(base,old.service(J,E,R,'probe',42,protocol=True))
 
