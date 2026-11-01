@@ -212,6 +212,22 @@ removed early, no unknown stop is accepted and the500ms/10%CPU limits stay.
 The owned packet gate now also requires the guard launcher's zero exit status,
 as the public mediation path already did.
 
+The following immutable diagnostic distinguished the remaining stop timeout:
+both revocations completed, but the stop shell did not reach its first fixed
+one-byte marker before PID1's500ms deadline. Its Type=exec start job had also
+taken734ms; that is not a separate measurement of stop setup. The guard now uses
+a small readonly RootDirectory instead of starting with the host filesystem
+view. It binds only system binaries/libraries, readonly cgroup and PID1 runtime
+interfaces, the exact immutable code directory, and its one writable epoch.
+The root directory is a sibling of that epoch, avoiding a recursive data bind.
+The fixed SYSTEMD_IGNORE_CHROOT setting preserves the existing read-only PID1
+property queries; systemctl must not silently skip them as offline/chroot work.
+ProtectSystem/ProtectHome, syscall/address-family/capability confinement,
+500ms/8s/10%CPU limits, default-drop tables and the fallback stay in force.
+Diagnostic marker presence cannot turn a failed launcher into acceptance.
+Actual immutable startup/stop and owned packet/browser/custody acceptance remain
+required; source tests alone do not establish that this fits the deadline.
+
 The following owned browser trial observed HTTPS document/scripted Fetch and an
 implicit favicon request, but the separate final plain-HTTP check reached the
 remaining guest window with less than its required2s commit reserve. It failed
