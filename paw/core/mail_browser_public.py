@@ -356,6 +356,15 @@ class PublicActor(kernel.Managed):
         return service(job, epoch, release, role, keeper_pid, serial, protocol=protocol)
 
 
+class OwnedDNSPair(PublicActor):
+    """Two fixed UDP operations in one private probe; no public wire mode."""
+    def _service(self, job, epoch, release, role, keeper_pid, serial, *, protocol):
+        need(role=='probe' and serial==0 and protocol is False,'mail_public_dns_pair_profile')
+        unit,props,command=service(job,epoch,release,role,keeper_pid,serial,protocol=False)
+        command[-1]='udp-bpf'
+        return unit,props,command
+
+
 def root_config(job, epoch, release):
     ids = identity(job, epoch, release)
     need(os.geteuid() == 0 and HERE == Path('/opt/paw-vm/releases')/release/
@@ -599,8 +608,28 @@ def dns_bytes(host, ident, deadline_ns):
 
 def probe_main(job, epoch, release, form):
     _, cfg = private_role(job, epoch, release, 'probe')
-    need(form in {'wire','raw'} and (form != 'raw' or cfg['mode'] == 'owned-raw'),
+    need(form in {'wire','raw','udp-bpf'} and (form == 'wire' or cfg['mode'] == 'owned-raw'),
          'mail_public_probe_form')
+    if form == 'udp-bpf':
+        _,witness=kernel.role_entry(job,epoch,release,'probe')
+        kernel.emit({'ready':True,'role':'probe','witness':witness})
+        for phase in range(2):
+            value=kernel.decode(sys.stdin.buffer.readline(4097))
+            need(type(value)is dict and set(value)=={'op','epoch','id'} and value['op']=='udp-bpf' and
+                 value['epoch']==epoch and type(value['id'])is int and value['id']==phase,
+                 'mail_public_dns_pair_operation')
+            result={'phase':phase,'done':phase==1,'connected':False,'bytes':0,'matched':False,'error':None,
+                    'started_ns':time.monotonic_ns()}
+            # Fresh sockets prevent a retained positive connection masking BPF.
+            with socket.socket(socket.AF_INET,socket.SOCK_DGRAM)as stream:
+                stream.settimeout(.35)
+                try:
+                    stream.connect(('9.9.9.9',53));result['connected']=True
+                    stream.sendall(('OWNED-UDP '+epoch).encode());raw=stream.recv(128)
+                    result['bytes']=len(raw);result['matched']=raw==('PAW-UDP-'+epoch).encode()
+                except OSError as error:result['error']=type(error).__name__
+            result['finished_ns']=time.monotonic_ns();kernel.emit(result)
+        return
     if form == 'raw':
         kernel.probe(job, epoch, release); return
     witness = drop_public()
@@ -668,7 +697,10 @@ def prepare_network(job, epoch, release, mode, uplink):
 
 class NetworkPreparation:
     """Advance only the fixed roles while continuing to poll the same VM."""
-    def __init__(self, job, epoch, release, mode, actors, *, protocol=True):
+    def __init__(self, job, epoch, release, mode, actors, *, protocol=True, dns_pair=False):
+        need(type(dns_pair)is bool and (not dns_pair or mode=='owned-raw' and protocol is False),
+             'mail_public_dns_pair_private_only')
+        self.dns_pair=dns_pair
         self.job=job; self.epoch=epoch; self.release=release; self.mode=mode; self.actors=actors
         self.protocol=protocol; self.owner=None; self.server=None; self.worker=None
         self.inode=None; self.server_live=mode == 'public'; self.worker_live=False; self.ready=False
@@ -692,7 +724,8 @@ class NetworkPreparation:
         need(pid>1 and props['ControlGroup']=='/system.slice/'+ids['keeper'] and
              os.stat('/proc/'+str(pid)+'/ns/net').st_ino==cfg['namespace_inode'],
              'mail_public_owned_active_guard_namespace')
-        self.worker=PublicActor(self.job,self.epoch,self.release,'probe',pid,
+        actor=OwnedDNSPair if self.dns_pair else PublicActor
+        self.worker=actor(self.job,self.epoch,self.release,'probe',pid,
             registry=self.actors,protocol=self.protocol,defer_ready=True)
     def poll(self):
         if self.ready:return True
@@ -745,7 +778,8 @@ class NetworkPreparation:
             if self.worker is None:
                 # Public mode has no private fixture and retains its original
                 # guard-ready-then-worker sequence and namespace source.
-                self.worker=PublicActor(self.job,self.epoch,self.release,'probe',self.owner.pid,
+                actor=OwnedDNSPair if self.dns_pair else PublicActor
+                self.worker=actor(self.job,self.epoch,self.release,'probe',self.owner.pid,
                     registry=self.actors,protocol=self.protocol,defer_ready=True)
         if not self.server_live and self.server.poll_ready():
             kernel.live_role(self.server,'fixture',self.inode);self.server_live=True
@@ -1252,73 +1286,87 @@ def _cleanup_progress(folder):
     return result
 
 
-def owned_preparation(job, release):
-    """Fixed no-VM preparation probe, called only by the enrolled owned recipe.
+def _owned_preparation_case(job, release, case):
+    """One fixed private case, inside the caller's budget and execution lock."""
+    need(case in {'closed','dns-only'},'mail_public_owned_preparation_case')
+    epoch=uuid.uuid4().hex;identity(job,epoch,release)
+    from vm_runtime_revalidation import snapshot,network_state
+    actors=[];prep=None;began=time.monotonic_ns()
+    record={'schema':'paw-mail-owned-preparation-v1','result':'FAIL','job':job,'release_sha':release,
+        'epoch':epoch,'case':case,'vm_started':False,'real_samples_executed':0,'real_connections':0,
+        'production_grants_enabled':False,'i08_installed':False,
+        'scope':'Fixed private '+case+' packet case; no browser or public readiness',
+        'guard_stop_policy':'in-process-revocation-dependent-transport-and-parent-backstops',
+        'programs':{name:sha(HERE.with_name(name).read_bytes()) for name in PROGRAMS}}
+    require_idle();before=snapshot();network=network_state()
+    try:
+        prepare_network(job,epoch,release,'owned-raw',{})
+        prep=NetworkPreparation(job,epoch,release,'owned-raw',actors,protocol=False,dns_pair=case=='dns-only')
+        until=time.monotonic()+5
+        while not prep.poll():
+            need(time.monotonic()<until,'mail_public_raw_preparation');time.sleep(.02)
+        key='closed_packets' if case=='closed' else 'dns_packets'
+        record[key]=[]
+        packets=closed_packets if case=='closed' else dns_only_packets
+        record[key]=packets(job,epoch,release,prep,actors,observations=record[key])
+        record['result']='PASS'
+    except Exception as error:
+        record['error']=type(error).__name__+':'+str(error)[:512]
+    finally:
+        # Diagnostic publication never substitutes a failing launcher for
+        # independent stopped-role/host readback, even on a failed probe.
+        kernel.cleanup_actors(actors);kernel.vacant_ids()
+        need(snapshot()==before and network_state()==network,'mail_public_owned_preparation_restore')
+        record.update(writers_stopped=True,host_restored=True,elapsed_ns=time.monotonic_ns()-began)
+        record.update(root_partition_mib=[192,64,128,64],root_partition_tasks=[24,8,16,8],
+                      root_partition_cpu_percent=[35,10,25,15])
+        record['preparation']={} if prep is None else {
+            name:getattr(prep,name) for name in ['fixture_configured','server_live','worker_live','ready']}
+        record['closed_fixture_counts']=getattr(prep,'closed_fixture_counts',None)
+        record['dns_fixture_counts']=getattr(prep,'dns_fixture_counts',None)
+        record['bpf_lease_window']=getattr(prep,'bpf_lease_window',None)
+        stop = Path(identity(job,epoch,release)['directory'])/'owner-result.json'
+        if stop.exists():
+            # Fixed protected path, bounded metadata, read only after the
+            # independent role stop/host restore checks above succeeded.
+            stopped = kernel.private_json(stop)
+            need(set(stopped)=={'schema','epoch','reason','namespace_inode','elapsed_ns','check_error'} and
+                 stopped['schema']=='paw-mail-network-stop-v1' and stopped['epoch']==epoch and
+                 stopped['reason'] in {'unknown','guard_changed','controller_lost','external_stop',
+                                      'requested_stop','deadline'} and
+                 stopped['check_error'] in {None,'mail_public_guard_missing','mail_public_unarmed_cgroup_selector',
+                    'mail_public_cgroup_replaced','mail_public_cgroup_path_not_live','mail_public_cgroup_id_changed',
+                    'mail_public_cgroup_expression','mail_public_cgroup_selector_count',
+                    'mail_public_guard_snapshot_changed','guard_snapshot_unavailable','guard_digest_changed'} and
+                 all(type(stopped[k]) is int and stopped[k]>=0 for k in ['namespace_inode','elapsed_ns']),
+                 'mail_public_owned_stop_metadata')
+            record['guard_stop'] = stopped
+        record['guard_cleanup_progress']=_cleanup_progress(stop.parent)
+        record['roles']=[{'unit':actor.unit,'launcher_returncode':actor.process.poll(),
+            'stderr_bytes':len(actor.errors),'stderr_sha256':sha(bytes(actor.errors)),
+            'stderr':bytes(actor.errors[:4096]).decode('utf-8','replace'),
+            'stderr_truncated':len(actor.errors)>4096,
+            'witness':getattr(actor,'observation',None)} for actor in actors]
+    return record
 
-    No native/public authority is constructed or consumed here. This probe
-    always uses loopback aliases in a private namespace, with unchanged roles,
-    observer deadlines and PID1 budgets; it opens no public tuple or browser.
+
+def owned_preparation(job, release):
+    """Sequential closed and DNS-only cases through the same finite no-VM recipe.
+
+    Neither case constructs native/public authority. Each has a fresh private
+    namespace/epoch, unchanged lifetimes and independently stopped roles.
     """
     need(os.geteuid()==0 and HERE==Path('/opt/paw-vm/releases')/release/'paw/core/mail_browser_public.py',
          'mail_public_owned_preparation_snapshot')
-    epoch=uuid.uuid4().hex;identity(job,epoch,release)
-    from vm_runtime_revalidation import snapshot,network_state
     import one_use_authorization as fs
     from reader_export import publish_reader_tree
-    actors=[];prep=None;began=time.monotonic_ns()
-    record={'schema':'paw-mail-owned-preparation-v1','result':'FAIL','job':job,'release_sha':release,
-        'epoch':epoch,'vm_started':False,'real_samples_executed':0,'real_connections':0,
-        'production_grants_enabled':False,'i08_installed':False,
-        'scope':'Fixed private loopback preparation and two default-denied packets; no browser or public readiness',
-        'guard_stop_policy':'in-process-revocation-dependent-transport-and-parent-backstops',
-        'programs':{name:sha(HERE.with_name(name).read_bytes()) for name in PROGRAMS}}
     with _owned_preparation_budget(job),fs.execution_lock():
-        require_idle();before=snapshot();network=network_state()
-        try:
-            prepare_network(job,epoch,release,'owned-raw',{})
-            prep=NetworkPreparation(job,epoch,release,'owned-raw',actors,protocol=False)
-            until=time.monotonic()+5
-            while not prep.poll():
-                need(time.monotonic()<until,'mail_public_raw_preparation');time.sleep(.02)
-            record['closed_packets'] = []
-            record['closed_packets'] = closed_packets(job, epoch, release, prep, actors,
-                                                     observations=record['closed_packets'])
-            record['result']='PASS'
-        except Exception as error:
-            record['error']=type(error).__name__+':'+str(error)[:512]
-        finally:
-            # Diagnostic publication never substitutes a failing launcher for
-            # independent stopped-role/host readback, even on a failed probe.
-            kernel.cleanup_actors(actors);kernel.vacant_ids()
-            need(snapshot()==before and network_state()==network,'mail_public_owned_preparation_restore')
-            record.update(writers_stopped=True,host_restored=True,elapsed_ns=time.monotonic_ns()-began)
-            record.update(root_partition_mib=[192,64,128,64],root_partition_tasks=[24,8,16,8],
-                          root_partition_cpu_percent=[35,10,25,15])
-            record['preparation']={} if prep is None else {
-                name:getattr(prep,name) for name in ['fixture_configured','server_live','worker_live','ready']}
-            record['closed_fixture_counts']=getattr(prep,'closed_fixture_counts',None)
-            stop = Path(identity(job,epoch,release)['directory'])/'owner-result.json'
-            if stop.exists():
-                # Fixed protected path, bounded metadata, read only after the
-                # independent role stop/host restore checks above succeeded.
-                stopped = kernel.private_json(stop)
-                need(set(stopped)=={'schema','epoch','reason','namespace_inode','elapsed_ns','check_error'} and
-                     stopped['schema']=='paw-mail-network-stop-v1' and stopped['epoch']==epoch and
-                     stopped['reason'] in {'unknown','guard_changed','controller_lost','external_stop',
-                                          'requested_stop','deadline'} and
-                     stopped['check_error'] in {None,'mail_public_guard_missing','mail_public_unarmed_cgroup_selector',
-                        'mail_public_cgroup_replaced','mail_public_cgroup_path_not_live','mail_public_cgroup_id_changed',
-                        'mail_public_cgroup_expression','mail_public_cgroup_selector_count',
-                        'mail_public_guard_snapshot_changed','guard_snapshot_unavailable','guard_digest_changed'} and
-                     all(type(stopped[k]) is int and stopped[k]>=0 for k in ['namespace_inode','elapsed_ns']),
-                     'mail_public_owned_stop_metadata')
-                record['guard_stop'] = stopped
-            record['guard_cleanup_progress']=_cleanup_progress(stop.parent)
-            record['roles']=[{'unit':actor.unit,'launcher_returncode':actor.process.poll(),
-                'stderr_bytes':len(actor.errors),'stderr_sha256':sha(bytes(actor.errors)),
-                'stderr':bytes(actor.errors[:4096]).decode('utf-8','replace'),
-                'stderr_truncated':len(actor.errors)>4096,
-                'witness':getattr(actor,'observation',None)} for actor in actors]
+        record=_owned_preparation_case(job,release,'closed')
+        if record['result']=='PASS':
+            record['dns_only']=_owned_preparation_case(job,release,'dns-only')
+            if record['dns_only']['result']!='PASS':
+                record['result']='FAIL';record['error']=record['dns_only']['error']
+    record['scope']='Sequential fixed closed and DNS-only private packet gates; no browser or public readiness'
     raw=canonical(record);need(len(raw)<=32768,'mail_public_owned_diagnostic_budget')
     target=EXPORT_ROOT/('owned-mail-preparation-'+job)
     target.mkdir(mode=0o700)
@@ -1373,6 +1421,68 @@ def closed_packets(job, epoch, release, prep, roles, *, observations=None):
     return observations
 
 
+def dns_only_packets(job, epoch, release, prep, roles, *, observations=None):
+    """Positive DNS, BPF denial during a fresh DNS lease, then TCP denial.
+
+    Only two probe processes start. The UDP pair keeps its cgroup but opens
+    fresh sockets; its positive fixture count cannot be hidden by tuple expiry.
+    """
+    need(prep.mode=='owned-raw' and prep.ready and prep.dns_pair,
+         'mail_public_dns_pair_private_only')
+    if observations is None:observations=[]
+    need(type(observations)is list and not observations,'mail_public_dns_observation_sink')
+    owner=prep.owner;worker=prep.worker;sequence=0
+    def control(op,**fields):
+        nonlocal sequence
+        owner.send({'op':op,'epoch':epoch,'id':sequence,**fields});ack=owner.receive()
+        need(ack.get('accepted')is True and type(ack.get('id'))is int and ack['id']==sequence,
+             'mail_public_raw_guard_ack');sequence+=1
+    def bpf(child,allow):
+        args=['/usr/bin/systemctl','set-property','--runtime',child.unit,'IPAddressAllow=']
+        if allow:args.append('IPAddressAllow=93.184.216.34/32 9.9.9.9/32')
+        subprocess.run(args,check=True,capture_output=True,timeout=2)
+    bpf(worker,True);control('arm',serial=0)
+    for phase in range(2):
+        if phase:bpf(worker,False)
+        issued=time.monotonic_ns()
+        control('lease',kind='dns',address='9.9.9.9',milliseconds=1000)
+        worker.send({'op':'udp-bpf','epoch':epoch,'id':phase});value=worker.receive()
+        observations.append(value)
+        need(type(value.get('phase'))is int and value['phase']==phase and
+             value.get('done')is (phase==1) and type(value.get('matched'))is bool and
+             type(value.get('bytes'))is int and type(value.get('started_ns'))is int and
+             type(value.get('finished_ns'))is int and
+             issued<=value['started_ns']<=value['finished_ns']<=time.monotonic_ns(),
+             'mail_public_dns_pair_reply')
+        if not phase:
+            need(value['matched']is True and value['bytes']==len(('PAW-UDP-'+epoch).encode()),
+                 'mail_public_actual_dns_only')
+        else:
+            need(value['matched']is False and value['bytes']==0 and
+                 value['finished_ns']<issued+10**9,'mail_public_BPF_lease_window')
+            prep.bpf_lease_window={'issued_ns':issued,'not_before_expiry_ns':issued+10**9,
+                                  'started_ns':value['started_ns'],'finished_ns':value['finished_ns']}
+    need(worker.process.wait(timeout=2)==0,'mail_public_dns_pair_exit')
+    # Collected paired worker before another128MiB transport is constructed.
+    worker=PublicActor(job,epoch,release,'probe',owner.pid,registry=roles,serial=1)
+    kernel.live_role(worker,'probe',prep.inode)
+    bpf(worker,True);control('arm',serial=1)
+    control('lease',kind='dns',address='9.9.9.9',milliseconds=1000)
+    worker.send({'op':'tcp'});value=worker.receive();observations.append(value)
+    need(value.get('done')is True and value.get('connected')is False and
+         worker.process.wait(timeout=2)==0,'mail_public_actual_dns_only')
+    prep.server.send({'op':'stop'});counts=prep.server.receive()
+    need(type(counts)is dict and set(counts)=={'counts'} and type(counts['counts'])is dict and
+         set(counts['counts'])=={'tcp','udp','stream_bytes'} and
+         all(type(v)is int for v in counts['counts'].values()) and
+         counts['counts']=={'tcp':0,'udp':1,'stream_bytes':0} and
+         prep.server.process.wait(timeout=2)==0,'mail_public_BPF_packet_reached_fixture')
+    prep.dns_fixture_counts=counts['counts']
+    control('stop');need(owner.process.wait(timeout=2)==0,'mail_public_raw_guard_exit')
+    require_revoked(job,epoch,release)
+    return observations
+
+
 def run_raw(approval,binding):
     """Actual packets use only aliases on a loopback-only private namespace."""
     from . import mail_browser_native as native
@@ -1385,10 +1495,10 @@ def run_raw(approval,binding):
     with fs.execution_lock():
         folder,_=prepare_network(job,epoch,release,'owned-raw',approval['context']['uplink'])
         try:
-            prep=NetworkPreparation(job,epoch,release,'owned-raw',roles,protocol=False)
+            prep=NetworkPreparation(job,epoch,release,'owned-raw',roles,protocol=False,dns_pair=case=='dns-only')
             until=time.monotonic()+5
             while not prep.poll():need(time.monotonic()<until,'mail_public_raw_preparation');time.sleep(.02)
-            owner=prep.owner;server=prep.server;worker=prep.worker;serial=0;sequence=0
+            owner=prep.owner;server=prep.server;worker=prep.worker;sequence=0
             def control(op,**fields):
                 nonlocal sequence
                 owner.send({'op':op,'epoch':epoch,'id':sequence,**fields});ack=owner.receive()
@@ -1399,32 +1509,14 @@ def run_raw(approval,binding):
                     'IPAddressAllow=', 'IPAddressAllow=93.184.216.34/32 9.9.9.9/32'],
                     check=True,capture_output=True,timeout=2)
                 control('arm',serial=number)
-            def packet(op,lease_kind=None,expired=False,bpf_closed=False):
-                nonlocal worker,serial
-                if serial:
-                    worker=PublicActor(job,epoch,release,'probe',owner.pid,registry=roles,serial=serial)
-                    kernel.live_role(worker,'probe',prep.inode)
-                arm(worker,serial);serial+=1
-                if bpf_closed:
-                    subprocess.run(['/usr/bin/systemctl','set-property','--runtime',worker.unit,
-                        'IPAddressAllow='],check=True,capture_output=True,timeout=2)
-                if lease_kind:
-                    control('lease',kind=lease_kind,address='9.9.9.9' if lease_kind=='dns' else '93.184.216.34',
-                            milliseconds=1000)
-                    if expired:time.sleep(1.1)
-                worker.send({'op':op});value=worker.receive()
-                need(value.get('done') is True,'mail_public_raw_not_done');worker.process.wait(timeout=2)
-                result['observations'].append(value);return value
             if case=='closed':
                 result['observations']=closed_packets(job,epoch,release,prep,roles)
                 result['fixture_counts']=prep.closed_fixture_counts
             elif case=='dns-only':
-                need(packet('udp','dns')['matched'] and not packet('tcp','dns')['connected'],
-                     'mail_public_actual_dns_only')
-                need(not packet('udp','dns',bpf_closed=True)['matched'],
-                     'mail_public_BPF_deny_not_effective')
-                server.send({'op':'counts'});counts=server.receive()
-                need(counts.get('counts',{}).get('udp')==1,'mail_public_BPF_packet_reached_fixture')
+                result['observations']=dns_only_packets(job,epoch,release,prep,roles,
+                                                       observations=result['observations'])
+                result['fixture_counts']=prep.dns_fixture_counts
+                result['bpf_lease_window']=prep.bpf_lease_window
             elif case=='http-expiry':
                 arm(worker,0);control('lease',kind='http',address='93.184.216.34',milliseconds=1000)
                 worker.send({'op':'stream'});progress=[]
@@ -1455,7 +1547,7 @@ def run_raw(approval,binding):
                 owner.process.wait(timeout=3);worker.process.wait(timeout=3)
                 stopped=kernel.private_json(folder/'owner-result.json')
                 need(stopped['reason']=='guard_changed','mail_public_guard_loss_disposition')
-            if case not in {'closed','owner-loss','guard-loss'}:
+            if case not in {'closed','dns-only','owner-loss','guard-loss'}:
                 control('stop');need(owner.process.wait(timeout=2)==0,'mail_public_raw_guard_exit')
                 require_revoked(job,epoch,release)
             result['result']='PASS'

@@ -258,3 +258,20 @@ real capture. Only actual protected captures, installed imports/exact ZIPs and
 unchanged original inventories may establish this three-email result. No real
 connection, site JS execution or native/public grant has occurred during code
 preparation. P0–P5's earlier owned closure remains separate and unchanged.
+
+A later authenticated batch passed the closed private case but reached the
+unchanged8s guard lifetime while arming the third DNS-only probe. The Root
+journal records that runtime expiry and lost control channel; independent
+terminal readback found stopped roles, restored host and unchanged originals.
+No browser or real URL was reached. DNS-only now runs its positive UDP and
+BPF-denied UDP in one fixed two-phase private probe, opening a fresh socket for
+each, then starts one TCP-denial probe after the first process exits. It still
+observes all three outcomes. The denied UDP must finish before a conservative
+lower bound on the fresh DNS tuple's expiry, and the actual fixture must count
+exactly one UDP and zero TCP/stream bytes. An expired tuple cannot stand in for
+BPF denial. The existing no-VM recipe runs closed then DNS-only in fresh serial
+private epochs, with the same guard/worker/fixture deadlines and allocations;
+no native scope, public tuple or browser is added. The diagnostic preserves
+partial observations and per-case cleanup on failure. Actual immutable owned
+acceptance, refreshed browser/custody and the new native packet gates remain
+required; local tests do not establish live filtering or public readiness.
