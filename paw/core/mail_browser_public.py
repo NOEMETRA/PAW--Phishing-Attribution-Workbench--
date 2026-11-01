@@ -606,8 +606,16 @@ class NetworkPreparation:
             self.server=PublicActor(job,epoch,release,'fixture',registry=actors,defer_ready=True)
         else: self._owner(None)
     def _owner(self, fixture_pid):
+        need((fixture_pid is None)==(self.mode=='public'), 'mail_public_bootstrap_namespace_source')
         self.owner=PublicActor(self.job,self.epoch,self.release,'keeper',fixture_pid,
                                registry=self.actors,defer_ready=True)
+        if fixture_pid is not None:
+            # Owned-only: both roles join the already pinned fixture namespace.
+            # PID1 still orders/binds the worker to the keeper, while Python/nft
+            # readiness can overlap. The worker starts with BPF deny-all and
+            # receives no operation until all three roles pass live_role below.
+            self.worker=PublicActor(self.job,self.epoch,self.release,'probe',fixture_pid,
+                registry=self.actors,protocol=self.protocol,defer_ready=True)
     def poll(self):
         if self.ready:return True
         if self.server is not None and not self.fixture_configured:
@@ -655,8 +663,11 @@ class NetworkPreparation:
             self.inode=kernel.live_role(self.owner,'keeper')
             need((self.inode == os.stat('/proc/self/ns/net').st_ino) == (self.mode == 'public'),
                  'mail_public_observed_namespace')
-            self.worker=PublicActor(self.job,self.epoch,self.release,'probe',self.owner.pid,
-                registry=self.actors,protocol=self.protocol,defer_ready=True)
+            if self.worker is None:
+                # Public mode has no private fixture and retains its original
+                # guard-ready-then-worker sequence and namespace source.
+                self.worker=PublicActor(self.job,self.epoch,self.release,'probe',self.owner.pid,
+                    registry=self.actors,protocol=self.protocol,defer_ready=True)
         if not self.server_live and self.server.poll_ready():
             kernel.live_role(self.server,'fixture',self.inode);self.server_live=True
         if not self.worker_live and self.worker.poll_ready():
