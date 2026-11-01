@@ -974,11 +974,13 @@ def run_capture(approval, binding, request, budget):
     job=binding['job'];epoch=binding['epoch'];release=approval['release_sha'];slot=binding['slot']
     mode='owned-browser' if slot=='owned' else 'public';budget_slot=0 if slot=='owned' else slot
     need(native.scope(release,approval['batch_id'])==approval,'mail_public_live_batch_changed')
+    _,system_bindings=native.system_libvirt()
     context=auth.capture();auth.validate_context(context)
     need(context==approval['context']['browser'],'mail_public_browser_context_changed')
     need(available_memory()>=2*1024**3,'mail_public_host_memory')
     actors=[];gate=None;vm=None;mediation=None;preparation=None;network_closed=False
     record={'schema':'paw-real-mail-browser-capture-v1','status':'failed','job':job,
+        'system_libvirt_bindings':system_bindings,
         'batch_id':approval['batch_id'],'slot':slot,'release_sha':release,'nonce':epoch,
         'source_sha256':request['source_sha256'],'request_sha256':sha(canonical(request)),
         'scope':'No-NIC main-page browser and filtered broker observations; broker TLS, no browser fingerprint',
@@ -1383,6 +1385,26 @@ def _owned_preparation_case(job, release, case):
     return record
 
 
+def owned_binding_probe(job,release):
+    """Same isolated interpreter as capture; fixed import only, no VM or grant."""
+    result=subprocess.run(['/usr/bin/python3','-I','-S','-B',
+        str(HERE.with_name('mail_browser_native.py')),'--owned-bindings',job,release],
+        capture_output=True,timeout=10)
+    need(result.returncode==0 and len(result.stdout)<=4096 and len(result.stderr)<=4096,
+         'mail_public_isolated_bindings_failed:'+result.stderr[:512].decode('utf-8','replace'))
+    checked=kernel.decode(result.stdout.strip())
+    need(checked.get('schema')=='paw-mail-owned-bindings-v1' and checked.get('result')=='PASS' and
+         checked.get('job')==job and checked.get('release_sha')==release and
+         checked.get('vm_started')is False and checked.get('native_authority_created')is False,
+         'mail_public_isolated_bindings_scope')
+    need(checked.get('interpreter_isolated')is True and checked.get('site_disabled')is True and
+         checked.get('site_hooks_executed')is False and type(checked.get('real_connections'))is int and
+         checked['real_connections']==0 and
+         checked.get('loader_sha256')==sha(HERE.with_name('mail_browser_native.py').read_bytes()),
+         'mail_public_isolated_binding_identity')
+    return checked
+
+
 def owned_preparation(job, release):
     """Sequential closed and DNS-only cases through the same finite no-VM recipe.
 
@@ -1400,6 +1422,11 @@ def owned_preparation(job, release):
             record['dns_only']=_owned_preparation_case(job,release,'dns-only')
             if record['dns_only']['result']!='PASS':
                 record['result']='FAIL';record['error']=record['dns_only']['error']
+        if record['result']=='PASS':
+            try:
+                record['isolated_bindings']=owned_binding_probe(job,release)
+            except Exception as error:
+                record['result']='FAIL';record['error']=type(error).__name__+':'+str(error)[:512]
     record['scope']='Sequential fixed closed and DNS-only private packet gates; no browser or public readiness'
     raw=canonical(record);need(len(raw)<=32768,'mail_public_owned_diagnostic_budget')
     target=EXPORT_ROOT/('owned-mail-preparation-'+job)

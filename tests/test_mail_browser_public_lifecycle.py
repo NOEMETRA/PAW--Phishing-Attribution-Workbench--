@@ -114,6 +114,7 @@ class Lifecycle(unittest.TestCase):
                     patch.object(p,'NetworkPreparation',Prep),patch.object(p,'Mediation',Mediation),
                     patch.object(p,'remove_tables',side_effect=lambda *a:events.append('guard-remove')),
                     patch.object(p.kernel,'cleanup_actors',side_effect=cleanup),patch.object(p.kernel,'vacant_ids'),
+                    patch.object(native,'system_libvirt',return_value=(None,{})),
                     patch.object(native,'scope',return_value=approval),patch.object(native,'context',return_value=approval['context']),
                     patch.object(native,'_mkdir',side_effect=lambda path:path.mkdir(mode=0o700)),
                     patch.object(existing,'send_response',side_effect=lambda ch,*a:setattr(ch,'completed',ch.completed+1)),
