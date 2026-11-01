@@ -118,7 +118,7 @@ class Preparation(unittest.TestCase):
 
     def test_owned_early_worker_requires_registered_exact_guard_and_private_namespace(self):
         obj=object.__new__(m.NetworkPreparation)
-        obj.mode='owned-raw';obj.dns_pair=False;obj.job=J;obj.epoch=E;obj.release=R;obj.protocol=False
+        obj.mode='owned-raw';obj.dns_probe=False;obj.job=J;obj.epoch=E;obj.release=R;obj.protocol=False
         obj.owner=SimpleNamespace(unit=m.identity(J,E,R)['keeper']);obj.worker=None;obj.actors=[]
         valid={'ActiveState':'active','MainPID':'42','ControlGroup':'/system.slice/'+obj.owner.unit}
         for changes,inode in [({'ActiveState':'activating','MainPID':'0'},99),
