@@ -18,6 +18,17 @@ J='1'*32; E='2'*32; R='3'*40
 SEEDS=['https://one.invalid/', 'http://two.invalid/', 'https://three.invalid/']
 
 class PublicBoundary(unittest.TestCase):
+    def test_cleanup_telemetry_records_only_private_regular_markers(self):
+        with tempfile.TemporaryDirectory()as d:
+            folder=Path(d);proof=folder/'revoked-complete';entered=folder/'stop-hook-entered'
+            self.assertEqual(m._cleanup_progress(folder),{'revoked-complete':False,'stop-hook-entered':False})
+            proof.touch(mode=0o600);entered.write_bytes(b'x');entered.chmod(0o600)
+            self.assertEqual(m._cleanup_progress(folder),{'revoked-complete':True,'stop-hook-entered':True})
+            proof.chmod(0o644)
+            self.assertFalse(m._cleanup_progress(folder)['revoked-complete'])
+            entered.unlink();entered.symlink_to(proof)
+            self.assertFalse(m._cleanup_progress(folder)['stop-hook-entered'])
+
     def test_normal_final_revocation_uses_one_atomic_nft_process(self):
         with tempfile.TemporaryDirectory()as d:
             (Path(d)/'guard-created').touch();ids=m.identity(J,E,R);ids['directory']=d
@@ -388,7 +399,8 @@ class PublicBoundary(unittest.TestCase):
             self.assertEqual(p['RestrictAddressFamilies'],'AF_UNIX AF_NETLINK')
             self.assertEqual(p['TimeoutStopSec'],'500ms')
             directory=m.identity(J,E,R)['directory']
-            self.assertEqual(p['ExecStopPost'],"/bin/sh -c 'test -f "+directory+
+            self.assertEqual(p['ExecStopPost'],"/bin/sh -c 'printf x > "+directory+
+                '/stop-hook-entered; test -f '+directory+
                 '/revoked-complete || exec /usr/sbin/nft -f '+directory+"/revoke.nft'")
             with self.assertRaises(ValueError):m.service(J,E,R,'fixture',42)
         self.assertEqual(base,old.service(J,E,R,'probe',42,protocol=True))

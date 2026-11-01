@@ -152,6 +152,7 @@ class Preparation(unittest.TestCase):
                  patch.object(m.os,'geteuid',return_value=0),patch.object(m,'PROGRAMS',()), \
                  patch.object(m,'EXPORT_ROOT',Path(d)),patch.object(m,'require_idle'), \
                  patch.object(m,'_owned_preparation_budget',return_value=nullcontext()), \
+                 patch.object(m,'_cleanup_progress',return_value={'revoked-complete':True,'stop-hook-entered':True}), \
                  patch.object(m,'prepare_network')as prepare,patch.object(m,'NetworkPreparation',side_effect=create), \
                  patch.object(m,'closed_packets',side_effect=ValueError('inert rearm failure')if rearm_failure else None,
                               return_value=[{'done':True,'matched':False},{'done':True,'connected':False}])as closed, \
@@ -167,6 +168,7 @@ class Preparation(unittest.TestCase):
                 report=json.loads((Path(value['export'])/'attestation.json').read_bytes())
                 self.assertEqual(report['roles'][0]['stderr'],'actual bounded role stderr')
                 self.assertEqual(report['result'],'FAIL'if failure or rearm_failure else 'PASS')
+                self.assertEqual(report['guard_cleanup_progress'],{'revoked-complete':True,'stop-hook-entered':True})
                 if failure:closed.assert_not_called()
                 else:closed.assert_called_once_with(J,report['epoch'],R,prepared,[actor],observations=[])
                 if not failure and not rearm_failure:
