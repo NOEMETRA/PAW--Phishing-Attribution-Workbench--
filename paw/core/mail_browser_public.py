@@ -429,6 +429,13 @@ def revoke_role(job, epoch, release):
         # Leave default-drop tables in place until the Root coordinator has
         # independently proved every worker stopped. Removing them here would
         # race PID1's asynchronous BindsTo stop of the dependent transport.
+        try:
+            kernel.nft('-f', '-', text=revoke())
+            return True
+        except ValueError:
+            # A deliberately removed table invalidates the whole transaction.
+            # Still revoke any surviving table, without claiming full proof.
+            pass
         for table in TABLES:
             present = subprocess.run(['/usr/sbin/nft', 'list', 'table', 'inet', table],
                 capture_output=True, timeout=2)

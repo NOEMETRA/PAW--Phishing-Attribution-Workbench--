@@ -18,18 +18,38 @@ J='1'*32; E='2'*32; R='3'*40
 SEEDS=['https://one.invalid/', 'http://two.invalid/', 'https://three.invalid/']
 
 class PublicBoundary(unittest.TestCase):
+    def test_normal_final_revocation_uses_one_atomic_nft_process(self):
+        with tempfile.TemporaryDirectory()as d:
+            (Path(d)/'guard-created').touch();ids=m.identity(J,E,R);ids['directory']=d
+            with patch.object(m,'root_config',return_value=(ids,{})), \
+                 patch.object(m.kernel,'nft')as nft, \
+                 patch.object(m.subprocess,'run',return_value=SimpleNamespace(returncode=0))as listed:
+                self.assertTrue(m.revoke_role(J,E,R))
+            nft.assert_called_once_with('-f','-',text=m.revoke())
+            listed.assert_not_called()
+
     def test_revocation_proof_is_written_only_after_both_guard_sets_are_flushed(self):
         with tempfile.TemporaryDirectory()as d:
             folder=Path(d);(folder/'guard-created').touch();ids=m.identity(J,E,R);ids['directory']=d
-            for failure in [None,'absent','flush']:
+            for failure in [None,'absent','flush','retry']:
                 with self.subTest(failure=failure),patch.object(m,'root_config',return_value=(ids,{})), \
                      patch.object(m.subprocess,'run',return_value=SimpleNamespace(returncode=1 if failure=='absent'else 0)), \
-                     patch.object(m.kernel,'nft',side_effect=ValueError('inert flush failure')if failure=='flush'else None)as nft:
+                     patch.object(m.kernel,'nft',side_effect=(ValueError('inert flush failure')if failure=='flush'else
+                         [ValueError('inert atomic failure'),None,None]if failure in {'absent','retry'}else None))as nft:
                     if failure=='flush':
                         with self.assertRaisesRegex(ValueError,'inert flush failure'):m.revoke_role(J,E,R)
                     else:
-                        self.assertIs(m.revoke_role(J,E,R),failure is None)
-                        self.assertEqual(nft.call_count,2 if failure is None else 0)
+                        self.assertIs(m.revoke_role(J,E,R),failure in {None,'retry'})
+                        self.assertEqual(nft.call_count,3 if failure=='retry'else 1)
+
+    def test_partial_final_revocation_never_proves_both_tables(self):
+        with tempfile.TemporaryDirectory()as d:
+            (Path(d)/'guard-created').touch();ids=m.identity(J,E,R);ids['directory']=d
+            with patch.object(m,'root_config',return_value=(ids,{})), \
+                 patch.object(m.subprocess,'run',side_effect=[SimpleNamespace(returncode=0),SimpleNamespace(returncode=1)]), \
+                 patch.object(m.kernel,'nft',side_effect=[ValueError('inert atomic failure'),None])as nft:
+                self.assertFalse(m.revoke_role(J,E,R))
+                self.assertEqual(nft.call_count,2)
 
     def test_stale_name_cannot_hide_a_later_foreign_selector_that_then_heals(self):
         group='/system.slice/'+m.identity(J,E,R)['probe'];inode=12345
