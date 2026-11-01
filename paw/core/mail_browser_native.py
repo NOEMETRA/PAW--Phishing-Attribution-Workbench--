@@ -23,6 +23,76 @@ STATE = Path('/var/lib/paw-vm')
 NATIVE = STATE/'mail-batches'
 DEB = '2e13134c19b913b531c5050e34a625184c371707dffbcf6b46c59bbdae8149c9'
 DEPENDENCY = STATE/'mail-dependencies'/DEB
+SYSTEM_BINDINGS = Path('/usr/lib/python3/dist-packages')
+_libvirt_binding = None
+
+
+def system_libvirt():
+    """Only the two fixed Root-owned distro bindings, without site or pyc hooks.
+
+    This import alone grants nothing and opens no libvirt connection. The
+    native capture still requires its live protected master/source scope.
+    """
+    global _libvirt_binding
+    need(sys.flags.isolated==1 and sys.flags.no_site==1 and sys.platform=='linux' and
+         sys.implementation.name=='cpython','mail_native_binding_isolated_interpreter')
+    if _libvirt_binding is not None:
+        module,extension,record=_libvirt_binding
+        need(sys.modules.get('libvirt')is module and sys.modules.get('libvirtmod')is extension,
+             'mail_native_binding_module_changed')
+        return module,record
+    need('libvirt'not in sys.modules and 'libvirtmod'not in sys.modules,'mail_native_binding_preloaded_module')
+    tag=sys.implementation.cache_tag;arch=getattr(sys.implementation,'_multiarch',None)
+    need(type(tag)is str and re.fullmatch('cpython-[0-9]{2,3}',tag) and
+         type(arch)is str and re.fullmatch('[A-Za-z0-9_]+-[A-Za-z0-9_-]+',arch),'mail_native_binding_abi')
+    source=SYSTEM_BINDINGS/'libvirt.py';binary=SYSTEM_BINDINGS/('libvirtmod.'+tag+'-'+arch+'.so')
+    paths=[source,binary]
+    raw={p:protected(p,2*1024**2,mode=0o644)for p in paths}
+    record={p.name:{'path':str(p),'bytes':len(raw[p]),'sha256':hashlib.sha256(raw[p]).hexdigest()}for p in paths}
+    before=list(sys.path)
+    from importlib.util import module_from_spec,spec_from_file_location
+    extension=None;module=None
+    try:
+        spec=spec_from_file_location('libvirtmod',binary)
+        need(spec is not None and spec.loader is not None,'mail_native_binding_extension_loader')
+        extension=module_from_spec(spec);sys.modules['libvirtmod']=extension;spec.loader.exec_module(extension)
+        spec=spec_from_file_location('libvirt',source)
+        need(spec is not None and spec.loader is not None,'mail_native_binding_source_loader')
+        module=module_from_spec(spec);module.__cached__=None;sys.modules['libvirt']=module
+        # Compile the checked source bytes directly. Never consume a possibly
+        # unrelated pycache or add a whole package directory to sys.path.
+        exec(compile(raw[source],str(source),'exec'),module.__dict__)
+        need(sys.path==before and module.__file__==str(source) and extension.__file__==str(binary),
+             'mail_native_binding_import_paths')
+        need(all(protected(p,2*1024**2,mode=0o644)==raw[p]for p in paths),'mail_native_binding_files_changed')
+        _libvirt_binding=(module,extension,record)
+        return module,record
+    except BaseException:
+        sys.path[:]=before
+        if sys.modules.get('libvirt')is module:sys.modules.pop('libvirt',None)
+        if sys.modules.get('libvirtmod')is extension:sys.modules.pop('libvirtmod',None)
+        raise
+
+
+def owned_bindings(job,release):
+    """Read-only no-VM check, only beneath the fixed enrolled owned recipe."""
+    root(release);need(hex_value(job,32),'mail_native_binding_job')
+    from . import owned_kernel_runtime as kernel
+    parent='paw-vm-owned-'+job+'.service';props=kernel.unit_properties(parent)
+    expected={'ActiveState':'active','MainPID':str(os.getppid()),'ControlGroup':'/system.slice/'+parent,
+              'MemoryMax':str(192*1024**2),'MemorySwapMax':'0','TasksMax':'24','CPUQuotaPerSecUSec':'350ms'}
+    need(all(props.get(k)==v for k,v in expected.items()),'mail_native_binding_owned_parent')
+    argv=Path('/proc',str(os.getppid()),'cmdline').read_bytes().split(b'\0')
+    expected_argv=['/usr/bin/python3','-I','-B',str(HERE.parents[2]/'lab/s14/vm_operator_worker.py'),
+                   '--recipe','vm-acceptance-v1','--job',job]
+    need(argv==[x.encode()for x in expected_argv]+[b''],'mail_native_binding_owned_recipe')
+    module,files=system_libvirt();version=module.getVersion()
+    need(type(version)is int and version>0,'mail_native_binding_library_version')
+    return {'schema':'paw-mail-owned-bindings-v1','result':'PASS','job':job,'release_sha':release,
+        'interpreter_isolated':True,'site_disabled':True,'site_hooks_executed':False,
+        'libvirt_version':version,'files':files,'loader_sha256':hashlib.sha256(HERE.read_bytes()).hexdigest(),
+        'vm_started':False,'real_connections':0,'native_authority_created':False,
+        'scope':'Fixed trusted system binding import/version only; no connection, guest or native scope'}
 ASSETS = {
     'COPYRIGHT': (1349, '75d6f0b04c912205ff4a6f7d924e910511991192bbb577506ded8e08d1f54416'),
     'blake3/__init__.py': (107, '8b919729adf98380edfe138af0e98214663eeb10edce64c01a57a9485bffd27b'),
@@ -388,6 +458,8 @@ def master(path, expected, release, batch):
 
 def main():
     import argparse
+    if len(sys.argv)==4 and sys.argv[1]=='--owned-bindings':
+        print(canonical(owned_bindings(sys.argv[2],sys.argv[3])).decode('ascii'),flush=True);return
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--master', action='store_true', required=True)
     parser.add_argument('--bundle', type=Path, required=True); parser.add_argument('--sha256', required=True)

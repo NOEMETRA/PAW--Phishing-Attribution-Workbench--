@@ -304,3 +304,28 @@ receiver counts and normal-stop proof/zero exits remain mandatory. The separate
 closed case retains its actual second-worker rearm check. No guard/fixture/worker
 lifetime, capability, namespace, resource ceiling, public wire form or native
 authority changes. Actual immutable owned and fresh native gates remain required.
+
+The next authenticated native batch passed all five actual private packet gates,
+including the exact signal9 owner-loss cleanup. Its owned browser child then
+failed in the VM constructor with `ModuleNotFoundError: libvirt`, before a VM or
+real slot existed. Independent terminal readback confirmed six stopped children,
+master cleanup and unchanged38/38/39-file original cases. A separate ordinary-UID
+`python3 -I -S` reproducer fails identically although the distro binding is
+installed. The previous owned browser recipe uses isolated Python with site
+processing; this native interpreter deliberately disables it.
+
+Native capture now loads only the fixed Root-owned distro `libvirt.py` and the
+matching CPython-ABI `libvirtmod` extension. Ancestors/files are checked without
+following links, with exact readonly-to-user modes, regular/single-link type,
+size and stable-byte checks. The checked Python bytes are compiled directly;
+no pycache, site hook, package-directory addition or UID dependency is used.
+Preloaded/replaced bindings, changed files or altered import paths refuse. Both
+file hashes are retained with capture evidence. `-I -S` stays in force.
+
+The existing no-VM recipe also invokes one fixed isolated/no-site import/version
+check beneath its protected parent, after the private packet probes. It verifies
+the exact parent PID1 unit/recipe and shares the existing192MiB/24tasks/35%
+coordinator allocation. It makes no libvirt connection, guest, tuple, source grant
+or native authority. Failure remains aggregate FAIL with stopped diagnostics.
+The actual ordinary-UID import now passes with unchanged sys.path, but immutable
+Root/helper acceptance and fresh native browser/custody gates remain necessary.
