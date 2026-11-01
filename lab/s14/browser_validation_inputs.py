@@ -22,10 +22,11 @@ def make(nonce):
         'timeout': b'<title>owned-timeout</title><script>for(;;){}</script>',
         'cancel': b'<title>owned-cancel</title><script>for(;;){}</script>',
         'overflow': b'<title>owned-output</title><body><script>document.body.textContent="X".repeat(300000)</script>',
-        # One retained allocation larger than the unchanged512MiB job cgroup,
-        # with a store to every page. Repeated64MiB fill allocations can spend
-        # the15s deadline reclaiming without ever producing an OOM kill.
-        'memory': b'<title>owned-memory</title><script>const a=new Uint8Array(1024*1024*1024);for(let i=0;i<a.length;i+=4096){a[i]=7;}for(;;){}</script>',
+        # Retain one allocation larger than the unchanged512MiB job cgroup.
+        # Bulk fill replaces the page-stride JS loop that timed out under
+        # memory pressure without an OOM kill. OOM evidence stays mandatory;
+        # neither memory.max events nor a timeout may substitute for it.
+        'memory': b'<title>owned-memory</title><script>const a=new Uint8Array(1024*1024*1024);a.fill(7);for(;;){}</script>',
         'paused-refusal': positive,
         **{case: b'<title>owned-fault-loop</title><script>for(;;){}</script>' for case in ['owner-loss', 'protocol-loss']},
     }
