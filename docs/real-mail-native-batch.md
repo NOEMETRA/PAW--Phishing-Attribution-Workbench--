@@ -162,6 +162,25 @@ preparation,8s guard and aggregate budgets are unchanged. Actual success of this
 diagnostic, refreshed owned browser/custody acceptance and a fresh native gate
 remain necessary; the local reproduction and tests do not establish them.
 
+The first promoted rearm diagnostic instead stopped before its first worker was
+ready: protected metadata records a5s preparation timeout and an externally
+stopped guard, with known role cleanup and restored host state. It did not reach
+the rearm check or any real target. A controlled-readiness reproduction using
+the actual preparation class shows that serial fixture, guard application and
+worker initialization can exceed the existing5s observer. Owned preparation now
+overlaps worker initialization with guard application readiness. Both join the
+same pinned private fixture namespace; PID1 still orders and binds the worker
+to the guard, and initial BPF deny-all remains in place. The coordinator first
+observes the exact guard unit active in PID1 and verifies its cgroup and namespace
+before using that guard PID as the worker's namespace source. A merely spawned
+`systemd-run` client is insufficient; an unregistered/activating unit cannot
+start the worker. The coordinator sends
+no worker operation before all three live namespace/credential/resource checks.
+Public preparation retains its original guard-ready-then-worker sequence. Role
+hard lifetimes, readiness-arrival deadlines and resource ceilings are unchanged.
+This scheduling correction still requires exact review/CI, immutable promotion
+and actual protected owned acceptance before a new native real-source batch.
+
 Inert source/installed tests are not operational acceptance. Exact-head review
 (with the owner's minimum10min wait), seven required head/main checks, normal
 merge/tree equivalence, immutable promotion, refreshed original owned baseline,

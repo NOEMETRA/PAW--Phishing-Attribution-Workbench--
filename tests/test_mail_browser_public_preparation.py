@@ -51,6 +51,91 @@ class Preparation(unittest.TestCase):
                         with self.assertRaisesRegex(ValueError,'exact_namespace'):m.keeper(J,E,R)
                         nft.assert_not_called()
 
+    def test_owned_bootstrap_overlaps_app_readiness_with_initially_denied_worker(self):
+        from unittest.mock import MagicMock
+        # PID1 activation precedes the keeper's Python/nft readiness. Sequential
+        # application startup (1+.5+3+1) misses the unchanged5s observer.
+        clock=[0.0];starts=[];live=[]
+        with tempfile.TemporaryDirectory()as d:
+            folder=Path(d)
+            for role in ['fixture','probe']:(folder/(role+'-root')/'etc').mkdir(parents=True)
+            ids=m.identity(J,E,R);ids['directory']=d
+            class Actor:
+                def __init__(self,*args,**kwargs):
+                    self.role=args[3];self.pid={'fixture':42,'keeper':43,'probe':44}[self.role]
+                    if self.role=='probe':assert clock[0]>=1.6,'Keeper unit not yet registered/active in PID1'
+                    self.unit=self.role+'.service';self.ready=None
+                    self.at=clock[0]+{'fixture':1,'keeper':3,'probe':1}[self.role]
+                    starts.append((self.role,clock[0],args[4]if len(args)>4 else None))
+                def poll_ready(self):
+                    if clock[0]<self.at:return False
+                    if self.ready is None:self.ready={'ready':True,'role':self.role,
+                        'witness':{'pid':self.pid,'namespace_inode':99}}
+                    if self.role=='fixture'and not getattr(self,'continued',False):self.ready['phase']='namespace-bootstrap'
+                    return True
+                def send(self,value):
+                    assert self.role=='fixture'and value=={'op':'continue'}
+                    self.continued=True;self.at=clock[0]+.01
+            selector=MagicMock();selector.__enter__.return_value.select.return_value=[]
+            def configure(*a,**k):clock[0]+=1/6
+            def witness(actor,*args):live.append((actor.role,clock[0]));return 99
+            def properties(unit):
+                if unit=='fixture.service':return {'MainPID':'42'}
+                assert unit=='keeper.service'
+                return {'ActiveState':'activating'if clock[0]<1.6 else 'active',
+                        'MainPID':'0'if clock[0]<1.6 else '43',
+                        'ControlGroup':'/system.slice/'+ids['keeper']}
+            with patch.object(m,'PublicActor',side_effect=Actor),patch.object(m,'identity',return_value=ids), \
+                 patch.object(m.os,'stat',side_effect=lambda path:SimpleNamespace(st_ino=10 if str(path)=='/proc/self/ns/net'else 99)), \
+                 patch.object(m.os,'open',return_value=10),patch.object(m.os,'pidfd_open',return_value=11), \
+                 patch.object(m.os,'fstat',return_value=SimpleNamespace(st_ino=99)),patch.object(m.os,'close'), \
+                 patch.object(m.kernel,'unit_properties',side_effect=properties), \
+                 patch.object(m.kernel,'private_json',return_value={'namespace_inode':99}), \
+                 patch.object(m.kernel,'live_role',side_effect=witness),patch.object(m.subprocess,'run',side_effect=configure), \
+                 patch.object(m.selectors,'DefaultSelector',return_value=selector),patch.object(m.time,'monotonic',side_effect=lambda:clock[0]):
+                prep=m.NetworkPreparation(J,E,R,'owned-raw',[],protocol=False)
+                while clock[0]<5:
+                    if prep.poll():break
+                    clock[0]+=.02
+            self.assertTrue(prep.ready,starts)
+            self.assertLess(clock[0],5)
+            self.assertEqual([r[0]for r in starts],['fixture','keeper','probe'])
+            self.assertLess(starts[2][1],starts[1][1]+3)
+            self.assertEqual(starts[2][2],43,'Owned worker joins the verified active keeper namespace')
+            self.assertEqual([r[0]for r in live],['keeper','fixture','probe'])
+            self.assertGreaterEqual(live[-1][1],starts[1][1]+3)
+
+    def test_public_bootstrap_still_waits_for_guard_and_cannot_use_a_fixture_namespace(self):
+        owner=SimpleNamespace(poll_ready=lambda:False)
+        with patch.object(m,'PublicActor',return_value=owner)as actor:
+            prep=m.NetworkPreparation(J,E,R,'public',[])
+            self.assertFalse(prep.poll())
+            self.assertIsNone(prep.worker)
+            self.assertEqual(actor.call_count,1)
+            with self.assertRaisesRegex(ValueError,'namespace_source'):prep._owner(42)
+            self.assertEqual(actor.call_count,1)
+
+    def test_owned_early_worker_requires_registered_exact_guard_and_private_namespace(self):
+        obj=object.__new__(m.NetworkPreparation)
+        obj.mode='owned-raw';obj.job=J;obj.epoch=E;obj.release=R;obj.protocol=False
+        obj.owner=SimpleNamespace(unit=m.identity(J,E,R)['keeper']);obj.worker=None;obj.actors=[]
+        valid={'ActiveState':'active','MainPID':'42','ControlGroup':'/system.slice/'+obj.owner.unit}
+        for changes,inode in [({'ActiveState':'activating','MainPID':'0'},99),
+                              ({'ControlGroup':'/system.slice/other.service'},99),({},10),({},99)]:
+            with self.subTest(changes=changes,inode=inode), \
+                 patch.object(m.kernel,'unit_properties',return_value={**valid,**changes}), \
+                 patch.object(m.kernel,'private_json',return_value={'namespace_inode':99}), \
+                 patch.object(m.os,'stat',return_value=SimpleNamespace(st_ino=inode)), \
+                 patch.object(m,'PublicActor')as actor:
+                if changes.get('ActiveState')=='activating':
+                    obj._start_owned_worker();actor.assert_not_called()
+                elif changes or inode!=99:
+                    with self.assertRaisesRegex(ValueError,'active_guard_namespace'):obj._start_owned_worker()
+                    actor.assert_not_called()
+                else:
+                    obj._start_owned_worker()
+                    actor.assert_called_once_with(J,E,R,'probe',42,registry=obj.actors,protocol=False,defer_ready=True)
+
     def exercise(self,failure=False,cleanup_failure=False,rearm_failure=False):
         with tempfile.TemporaryDirectory()as d:
             actor=SimpleNamespace(unit=m.identity(J,E,R)['keeper'],process=SimpleNamespace(poll=lambda:1),

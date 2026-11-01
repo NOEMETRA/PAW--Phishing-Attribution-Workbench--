@@ -606,8 +606,23 @@ class NetworkPreparation:
             self.server=PublicActor(job,epoch,release,'fixture',registry=actors,defer_ready=True)
         else: self._owner(None)
     def _owner(self, fixture_pid):
+        need((fixture_pid is None)==(self.mode=='public'), 'mail_public_bootstrap_namespace_source')
         self.owner=PublicActor(self.job,self.epoch,self.release,'keeper',fixture_pid,
                                registry=self.actors,defer_ready=True)
+    def _start_owned_worker(self):
+        if self.mode=='public' or self.worker is not None:return
+        # Popen is not PID1 registration. Wait for the exact Type=exec unit to
+        # be active before constructing a dependent worker, without waiting for
+        # the guard's later Python/nft readiness. Initial BPF stays deny-all.
+        props=kernel.unit_properties(self.owner.unit)
+        if props['ActiveState']!='active':return
+        ids=identity(self.job,self.epoch,self.release);pid=int(props['MainPID'])
+        cfg=kernel.private_json(Path(ids['directory'])/'public.json')
+        need(pid>1 and props['ControlGroup']=='/system.slice/'+ids['keeper'] and
+             os.stat('/proc/'+str(pid)+'/ns/net').st_ino==cfg['namespace_inode'],
+             'mail_public_owned_active_guard_namespace')
+        self.worker=PublicActor(self.job,self.epoch,self.release,'probe',pid,
+            registry=self.actors,protocol=self.protocol,defer_ready=True)
     def poll(self):
         if self.ready:return True
         if self.server is not None and not self.fixture_configured:
@@ -651,12 +666,16 @@ class NetworkPreparation:
             self.server.send({'op':'continue'})
             self.fixture_configured=True; self._owner(pid)
         if self.inode is None:
+            self._start_owned_worker()
             if not self.owner.poll_ready():return False
             self.inode=kernel.live_role(self.owner,'keeper')
             need((self.inode == os.stat('/proc/self/ns/net').st_ino) == (self.mode == 'public'),
                  'mail_public_observed_namespace')
-            self.worker=PublicActor(self.job,self.epoch,self.release,'probe',self.owner.pid,
-                registry=self.actors,protocol=self.protocol,defer_ready=True)
+            if self.worker is None:
+                # Public mode has no private fixture and retains its original
+                # guard-ready-then-worker sequence and namespace source.
+                self.worker=PublicActor(self.job,self.epoch,self.release,'probe',self.owner.pid,
+                    registry=self.actors,protocol=self.protocol,defer_ready=True)
         if not self.server_live and self.server.poll_ready():
             kernel.live_role(self.server,'fixture',self.inode);self.server_live=True
         if not self.worker_live and self.worker.poll_ready():
