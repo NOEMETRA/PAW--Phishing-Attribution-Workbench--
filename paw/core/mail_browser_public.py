@@ -282,6 +282,24 @@ class PublicTransport:
             self.closed = True; raise
 
 
+def _keeper_root(folder):
+    # A sibling of mail-network, so binding the writable epoch cannot recurse
+    # into its own root directory.
+    return folder.parent.parent/'mail-keeper-roots'/folder.name
+
+
+def _prepare_keeper_root(folder, release):
+    root=_keeper_root(folder)
+    root.parent.mkdir(mode=0o700,exist_ok=True)
+    root.mkdir(mode=0o700)
+    for name in ['usr','lib','lib64','etc','proc','sys/fs/cgroup','dev','tmp',
+                 'run/systemd','home','root',str(folder).lstrip('/'),
+                 'opt/paw-vm/releases/'+release+'/paw/core']:
+        (root/name).mkdir(mode=0o755,parents=True,exist_ok=True)
+    (root/'bin').symlink_to('usr/bin')
+    root.chmod(0o555)
+
+
 def service(job, epoch, release, role, keeper_pid=None, serial=0, *, protocol=False):
     """Finite PID1 role profiles, never caller-provided properties or commands."""
     ids = identity(job, epoch, release, serial)
@@ -299,6 +317,9 @@ def service(job, epoch, release, role, keeper_pid=None, serial=0, *, protocol=Fa
                      IPAddressAllow='93.184.216.34/32 9.9.9.9/32')
     elif role == 'keeper':
         props.update(PrivateNetwork='no', ReadWritePaths=str(folder),
+                     RootDirectory=str(_keeper_root(folder)),MountAPIVFS='yes',BindPaths=str(folder),
+                     BindReadOnlyPaths='/usr /lib /lib64 /sys/fs/cgroup /run/systemd '+
+                         '/opt/paw-vm/releases/'+release+'/paw/core',
                      SystemCallFilter='@system-service', SystemCallArchitectures='native')
         if config['mode'] != 'public':
             need(type(keeper_pid) is int and keeper_pid > 1, 'mail_public_fixture_namespace')
@@ -596,6 +617,7 @@ def prepare_network(job, epoch, release, mode, uplink):
     # Reuse the existing bounded private root/config construction, never bind a
     # workspace file or real email into a privileged process or the guest.
     kernel.prepare_case(folder, job, epoch, release)
+    _prepare_keeper_root(folder,release)
     (folder/'public.json').write_bytes(canonical(cfg)); (folder/'public.json').chmod(0o600)
     (folder/'revoke.nft').write_text(revoke());(folder/'revoke.nft').chmod(0o444)
     for name in PROGRAMS:

@@ -18,6 +18,35 @@ J='1'*32; E='2'*32; R='3'*40
 SEEDS=['https://one.invalid/', 'http://two.invalid/', 'https://three.invalid/']
 
 class PublicBoundary(unittest.TestCase):
+    def test_guard_filesystem_is_small_readonly_root_with_one_writable_epoch(self):
+        ids=m.identity(J,E,R);folder=Path(ids['directory'])
+        with patch.object(m.kernel,'private_json',return_value={'mode':'public'}):
+            _,props,command=m.service(J,E,R,'keeper')
+        self.assertEqual(props['RootDirectory'],str(folder.parent.parent/'mail-keeper-roots'/E))
+        self.assertEqual(props['BindPaths'],str(folder))
+        self.assertEqual(props['ReadWritePaths'],str(folder))
+        self.assertEqual(props['ProtectSystem'],'strict')
+        self.assertEqual(props['MountAPIVFS'],'yes')
+        self.assertEqual(props['BindReadOnlyPaths'].split(),['/usr','/lib','/lib64','/sys/fs/cgroup',
+            '/run/systemd','/opt/paw-vm/releases/'+R+'/paw/core'])
+        self.assertEqual(props['CPUQuota'],'10%');self.assertEqual(props['TimeoutStopSec'],'500ms')
+        self.assertEqual(props['RuntimeMaxSec'],'8');self.assertEqual(props['CapabilityBoundingSet'],'CAP_NET_ADMIN')
+        self.assertEqual(command[4],'/opt/paw-vm/releases/'+R+'/paw/core/mail_browser_public.py')
+
+    def test_guard_root_mountpoints_do_not_contain_the_writable_epoch(self):
+        with tempfile.TemporaryDirectory()as d:
+            folder=Path(d)/'mail-network'/E;folder.mkdir(parents=True)
+            m._prepare_keeper_root(folder,R);root=m._keeper_root(folder)
+            try:
+                self.assertNotIn(folder,root.parents)
+                self.assertNotIn(root,folder.parents)
+                self.assertEqual(root.stat().st_mode&0o777,0o555)
+                self.assertEqual((root/'bin').readlink(),Path('usr/bin'))
+                self.assertTrue((root/str(folder).lstrip('/')).is_dir())
+                self.assertTrue((root/'opt/paw-vm/releases'/R/'paw/core').is_dir())
+                with self.assertRaises(FileExistsError):m._prepare_keeper_root(folder,R)
+            finally:root.chmod(0o700)
+
     def test_cleanup_telemetry_records_only_private_regular_markers(self):
         with tempfile.TemporaryDirectory()as d:
             folder=Path(d);proof=folder/'revoked-complete';entered=folder/'stop-hook-entered'
