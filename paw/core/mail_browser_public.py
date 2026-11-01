@@ -343,7 +343,19 @@ def root_config(job, epoch, release):
     return ids, config
 
 
+class _StaleCgroupRendering(ValueError):
+    """A rendered live name vanished before its identity could be checked."""
+
+
 def guard_identity(binding=None):
+    try:return _guard_identity_once(binding)
+    except _StaleCgroupRendering:
+        # One fresh read of the SAME rules, with no policy write/lease renewal.
+        # The next numeric ID must match the pin; a second stale name refuses.
+        return _guard_identity_once(binding)
+
+
+def _guard_identity_once(binding):
     value = json.loads(kernel.nft('-j', 'list', 'ruleset'))
     selectors_seen = []
     def cgroup_id(right):
@@ -357,7 +369,7 @@ def guard_identity(binding=None):
         except FileNotFoundError: current = None
         need(current is None or current == inode, 'mail_public_cgroup_replaced')
         if right == group.lstrip('/'):
-            need(current == inode, 'mail_public_cgroup_path_not_live')
+            if current is None:raise _StaleCgroupRendering('mail_public_cgroup_path_not_live')
         else:
             need((type(right) is int and right == inode) or
                  (type(right) is str and right == str(inode)), 'mail_public_cgroup_id_changed')
@@ -437,14 +449,18 @@ def keeper(job, epoch, release):
     selected = selectors.DefaultSelector(); selected.register(0, selectors.EVENT_READ)
     stopped = []; signal.signal(signal.SIGTERM, lambda *_: stopped.append('external_stop'))
     kernel.emit({'ready':True, 'role':'keeper', 'witness':kernel.status(), 'filter_sha256':expected})
-    reason = 'unknown'
+    reason = 'unknown';check_error = None
     try:
         while time.monotonic_ns()-began < 8*10**9:
             if stopped: reason = stopped[0]; break
             try:observed=guard_identity(binding)
-            except ValueError:
+            except ValueError as error:
+                code=str(error)
+                check_error=code if code in {'mail_public_guard_missing','mail_public_unarmed_cgroup_selector',
+                    'mail_public_cgroup_replaced','mail_public_cgroup_path_not_live','mail_public_cgroup_id_changed',
+                    'mail_public_cgroup_expression','mail_public_cgroup_selector_count'}else 'guard_snapshot_unavailable'
                 reason='guard_changed';break
-            if observed != expected: reason = 'guard_changed'; break
+            if observed != expected: reason = 'guard_changed';check_error = 'guard_digest_changed';break
             if not selected.select(.08): continue
             raw = sys.stdin.buffer.readline(4097)
             if not raw: reason = 'controller_lost'; break
@@ -470,7 +486,7 @@ def keeper(job, epoch, release):
         selected.close()
         (folder/'owner-result.json').write_bytes(canonical({'schema':'paw-mail-network-stop-v1',
             'epoch':epoch, 'reason':reason, 'namespace_inode':os.stat('/proc/self/ns/net').st_ino,
-            'elapsed_ns':time.monotonic_ns()-began}))
+            'elapsed_ns':time.monotonic_ns()-began, 'check_error':check_error}))
         revoke_role(job,epoch,release)
 
 
@@ -1196,7 +1212,9 @@ def owned_preparation(job, release):
             until=time.monotonic()+5
             while not prep.poll():
                 need(time.monotonic()<until,'mail_public_raw_preparation');time.sleep(.02)
-            record['closed_packets'] = closed_packets(job, epoch, release, prep, actors)
+            record['closed_packets'] = []
+            record['closed_packets'] = closed_packets(job, epoch, release, prep, actors,
+                                                     observations=record['closed_packets'])
             record['result']='PASS'
         except Exception as error:
             record['error']=type(error).__name__+':'+str(error)[:512]
@@ -1215,10 +1233,14 @@ def owned_preparation(job, release):
                 # Fixed protected path, bounded metadata, read only after the
                 # independent role stop/host restore checks above succeeded.
                 stopped = kernel.private_json(stop)
-                need(set(stopped)=={'schema','epoch','reason','namespace_inode','elapsed_ns'} and
+                need(set(stopped)=={'schema','epoch','reason','namespace_inode','elapsed_ns','check_error'} and
                      stopped['schema']=='paw-mail-network-stop-v1' and stopped['epoch']==epoch and
                      stopped['reason'] in {'unknown','guard_changed','controller_lost','external_stop',
                                           'requested_stop','deadline'} and
+                     stopped['check_error'] in {None,'mail_public_guard_missing','mail_public_unarmed_cgroup_selector',
+                        'mail_public_cgroup_replaced','mail_public_cgroup_path_not_live','mail_public_cgroup_id_changed',
+                        'mail_public_cgroup_expression','mail_public_cgroup_selector_count',
+                        'guard_snapshot_unavailable','guard_digest_changed'} and
                      all(type(stopped[k]) is int and stopped[k]>=0 for k in ['namespace_inode','elapsed_ns']),
                      'mail_public_owned_stop_metadata')
                 record['guard_stop'] = stopped
@@ -1238,7 +1260,7 @@ def owned_preparation(job, release):
             'attestation_sha256':sha(raw),'export':str(target),'scope':record['scope']}
 
 
-def closed_packets(job, epoch, release, prep, roles):
+def closed_packets(job, epoch, release, prep, roles, *, observations=None):
     """The same fixed denied UDP→collected worker→denied TCP path in both gates.
 
     Only the loopback-only owned namespace is admissible. No lease is issued.
@@ -1246,7 +1268,9 @@ def closed_packets(job, epoch, release, prep, roles):
     and cgroup rearm failures do not require another real-source approval.
     """
     need(prep.mode=='owned-raw' and prep.ready, 'mail_public_closed_owned_only')
-    owner=prep.owner; worker=prep.worker; observations=[]
+    owner=prep.owner; worker=prep.worker
+    if observations is None:observations=[]
+    need(type(observations) is list and not observations,'mail_public_closed_observation_sink')
     for serial, op in enumerate(['udp','tcp']):
         if serial:
             worker=PublicActor(job,epoch,release,'probe',owner.pid,registry=roles,serial=serial)
