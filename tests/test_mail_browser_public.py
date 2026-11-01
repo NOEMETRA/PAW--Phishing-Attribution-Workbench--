@@ -85,13 +85,14 @@ class PublicBoundary(unittest.TestCase):
                 obj=object.__new__(m.NetworkPreparation)
                 obj.job=J;obj.epoch=E;obj.release=R;obj.actors=[];obj.mode='owned-browser';obj.protocol=True
                 obj.ready=False;obj.fixture_configured=False;obj.server=server;obj.inode=None
-                obj.owner=SimpleNamespace(poll_ready=lambda:False);obj._owner=lambda _:None
+                obj.owner=SimpleNamespace(poll_ready=lambda:False,unit='inert-keeper.service')
+                obj.worker=None;obj._owner=lambda _:None
                 selector=MagicMock();selector.__enter__.return_value.select.return_value=[True] if failure=='dead' else []
                 stats=lambda path:SimpleNamespace(st_ino=1 if str(path)=='/proc/self/ns/net' else 99)
                 with patch.object(m.os,'stat',side_effect=stats),patch.object(m.os,'open',return_value=10), \
                      patch.object(m.os,'pidfd_open',side_effect=OSError('inert dead') if failure=='pidfd' else None,return_value=11), \
                      patch.object(m.os,'fstat',return_value=SimpleNamespace(st_ino=1 if failure=='host' else 99)), \
-                     patch.object(m.os,'close') as close,patch.object(m.kernel,'unit_properties',return_value={'MainPID':'42'}), \
+                     patch.object(m.os,'close') as close,patch.object(m.kernel,'unit_properties',return_value={'MainPID':'42','ActiveState':'activating'}), \
                      patch.object(m.selectors,'DefaultSelector',return_value=selector),patch.object(m.subprocess,'run') as run, \
                      patch.object(m,'identity',return_value=ids),patch.object(m.kernel,'private_json',return_value=cfg):
                     if failure:
@@ -133,14 +134,14 @@ class PublicBoundary(unittest.TestCase):
                 ids=m.identity(J,E,R);ids['directory']=d
                 obj=object.__new__(m.NetworkPreparation)
                 for name,value in {'job':J,'epoch':E,'release':R,'mode':'owned-raw','actors':actors,
-                    'protocol':False,'server':actor,'owner':SimpleNamespace(poll_ready=lambda:False),
+                    'protocol':False,'server':actor,'owner':SimpleNamespace(poll_ready=lambda:False,unit='inert-keeper.service'),
                     'worker':None,'inode':None,'ready':False,'fixture_configured':False}.items():setattr(obj,name,value)
                 obj._owner=lambda _:None
                 selector=MagicMock();selector.__enter__.return_value.select.return_value=[]
                 stats=lambda path:SimpleNamespace(st_ino=1 if str(path)=='/proc/self/ns/net' else 99)
                 with patch.object(m.os,'stat',side_effect=stats),patch.object(m.os,'open',return_value=42), \
                      patch.object(m.os,'pidfd_open',return_value=43),patch.object(m.os,'fstat',return_value=SimpleNamespace(st_ino=99)), \
-                     patch.object(m.os,'close'),patch.object(m.kernel,'unit_properties',return_value={'MainPID':'123'}), \
+                     patch.object(m.os,'close'),patch.object(m.kernel,'unit_properties',return_value={'MainPID':'123','ActiveState':'activating'}), \
                      patch.object(m.selectors,'DefaultSelector',return_value=selector),patch.object(m.subprocess,'run'), \
                      patch.object(m,'identity',return_value=ids),patch.object(m.kernel,'private_json',return_value={'namespace_inode':None}):
                     self.assertFalse(obj.poll())

@@ -609,13 +609,20 @@ class NetworkPreparation:
         need((fixture_pid is None)==(self.mode=='public'), 'mail_public_bootstrap_namespace_source')
         self.owner=PublicActor(self.job,self.epoch,self.release,'keeper',fixture_pid,
                                registry=self.actors,defer_ready=True)
-        if fixture_pid is not None:
-            # Owned-only: both roles join the already pinned fixture namespace.
-            # PID1 still orders/binds the worker to the keeper, while Python/nft
-            # readiness can overlap. The worker starts with BPF deny-all and
-            # receives no operation until all three roles pass live_role below.
-            self.worker=PublicActor(self.job,self.epoch,self.release,'probe',fixture_pid,
-                registry=self.actors,protocol=self.protocol,defer_ready=True)
+    def _start_owned_worker(self):
+        if self.mode=='public' or self.worker is not None:return
+        # Popen is not PID1 registration. Wait for the exact Type=exec unit to
+        # be active before constructing a dependent worker, without waiting for
+        # the guard's later Python/nft readiness. Initial BPF stays deny-all.
+        props=kernel.unit_properties(self.owner.unit)
+        if props['ActiveState']!='active':return
+        ids=identity(self.job,self.epoch,self.release);pid=int(props['MainPID'])
+        cfg=kernel.private_json(Path(ids['directory'])/'public.json')
+        need(pid>1 and props['ControlGroup']=='/system.slice/'+ids['keeper'] and
+             os.stat('/proc/'+str(pid)+'/ns/net').st_ino==cfg['namespace_inode'],
+             'mail_public_owned_active_guard_namespace')
+        self.worker=PublicActor(self.job,self.epoch,self.release,'probe',pid,
+            registry=self.actors,protocol=self.protocol,defer_ready=True)
     def poll(self):
         if self.ready:return True
         if self.server is not None and not self.fixture_configured:
@@ -659,6 +666,7 @@ class NetworkPreparation:
             self.server.send({'op':'continue'})
             self.fixture_configured=True; self._owner(pid)
         if self.inode is None:
+            self._start_owned_worker()
             if not self.owner.poll_ready():return False
             self.inode=kernel.live_role(self.owner,'keeper')
             need((self.inode == os.stat('/proc/self/ns/net').st_ino) == (self.mode == 'public'),

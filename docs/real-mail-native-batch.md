@@ -170,7 +170,11 @@ the actual preparation class shows that serial fixture, guard application and
 worker initialization can exceed the existing5s observer. Owned preparation now
 overlaps worker initialization with guard application readiness. Both join the
 same pinned private fixture namespace; PID1 still orders and binds the worker
-to the guard, and initial BPF deny-all remains in place. The coordinator sends
+to the guard, and initial BPF deny-all remains in place. The coordinator first
+observes the exact guard unit active in PID1 and verifies its cgroup and namespace
+before using that guard PID as the worker's namespace source. A merely spawned
+`systemd-run` client is insufficient; an unregistered/activating unit cannot
+start the worker. The coordinator sends
 no worker operation before all three live namespace/credential/resource checks.
 Public preparation retains its original guard-ready-then-worker sequence. Role
 hard lifetimes, readiness-arrival deadlines and resource ceilings are unchanged.
