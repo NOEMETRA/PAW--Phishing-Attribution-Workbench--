@@ -104,7 +104,8 @@ class PublicBoundary(unittest.TestCase):
     def test_actual_keeper_loop_records_deleted_guard_as_loss_then_revokes(self):
         with tempfile.TemporaryDirectory() as d:
             ids=m.identity(J,E,R);ids['directory']=d
-            cfg={'mode':'public','interface':'owned0','source_addresses':['192.168.1.137'],'namespace_inode':10}
+            cfg={'mode':'public','interface':'owned0','source_addresses':['192.168.1.137'],
+                 'namespace_inode':10,'host_namespace_inode':10}
             packet=m.canonical({'op':'delete_one','epoch':E,'id':0})+b'\n'
             selector=SimpleNamespace(register=lambda *a:None,select=lambda _: [True],close=lambda:None)
             with patch.object(m,'root_config',return_value=(ids,cfg)), \

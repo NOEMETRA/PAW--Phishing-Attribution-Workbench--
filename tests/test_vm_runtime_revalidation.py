@@ -217,7 +217,8 @@ class Runtime(unittest.TestCase):
             with mock.patch.object(runtime.os, 'geteuid', return_value=0), self.assertRaises(ValueError):
                 runtime.run_owned(job, release)
 
-    def owned(self, *, fail=False, unsafe=False, fail_native=False, fail_javascript=False, fail_kernel=False, unsafe_kernel=False):
+    def owned(self, *, fail=False, unsafe=False, fail_native=False, fail_javascript=False, fail_kernel=False, unsafe_kernel=False,
+              preparation='PASS', preparation_public=False):
         import native_runtime
         job, release = 'a'*32, 'b'*40; states = []; writes = []; published = []
         value = {'result': 'PASS', 'vm_started': unsafe, 'real_samples_executed': 0,
@@ -232,6 +233,9 @@ class Runtime(unittest.TestCase):
              mock.patch.object(runtime, 'revalidate', **({'side_effect': ValueError('owned injected failure')} if fail else {'return_value': value})), \
              mock.patch.object(runtime, 'refresh_maintenance', return_value={'result': 'PASS', 'vm_started': False}), \
              mock.patch('paw.core.owned_kernel_runtime.owned_validation', **({'side_effect': ValueError('owned kernel diagnostic failure')} if fail_kernel else {'return_value': dict(value, vm_started=unsafe_kernel)})), \
+             mock.patch('paw.core.mail_browser_public.owned_preparation', return_value={
+                 'result':preparation,'vm_started':False,'real_samples_executed':0,'real_connections':int(preparation_public),
+                 'production_grants_enabled':False,'i08_installed':False,'writers_stopped':True,'host_restored':True}), \
              mock.patch('representation_producer.previous_owned_failure', return_value={'source_result': 'FAIL', 'vm_started': False}), \
              mock.patch('representation_producer.previous_owned_javascript_failure', **({'side_effect': ValueError('owned JS diagnostic failure')} if fail_javascript else {'return_value': {'source_result': 'FAIL', 'vm_started': False}})), \
              mock.patch.object(native_runtime, 'previous_owned_native_failure', **({'side_effect': ValueError('owned native diagnostic failure')} if fail_native else {'return_value': {'source_result': 'FAIL', 'vm_started': False}})), \
@@ -253,6 +257,12 @@ class Runtime(unittest.TestCase):
             states, writes, published = self.owned(**kwargs)
             self.assertEqual(states[-1]['result'], 'FAIL')
             self.assertEqual(writes, []); self.assertEqual(published, [])
+
+    def test_failed_mail_preparation_or_any_public_work_cannot_publish_runtime_pass(self):
+        for kwargs in [{'preparation':'FAIL'},{'preparation_public':True}]:
+            states,writes,published=self.owned(**kwargs)
+            self.assertEqual(states[-1]['result'],'FAIL')
+            self.assertEqual(writes,[]);self.assertEqual(published,[])
 
     def test_failed_or_unsafe_runtime_is_recorded_and_never_exported_as_pass(self):
         for kwargs in [{'fail': True}, {'unsafe': True}, {'fail_native': True}, {'fail_javascript': True}]:

@@ -331,11 +331,12 @@ def root_config(job, epoch, release):
          'paw/core/mail_browser_public.py', 'mail_public_immutable_root_only')
     config = kernel.private_json(Path(ids['directory'])/'public.json')
     need(set(config) == {'schema', 'job', 'epoch', 'release', 'mode', 'interface', 'source_addresses',
-                        'controller_pid', 'controller_identity', 'namespace_inode'} and
+                        'controller_pid', 'controller_identity', 'namespace_inode', 'host_namespace_inode'} and
          config['schema'] == 'paw-mail-network-v1' and
          all(config[k] == ids[k] for k in ['job', 'epoch', 'release']) and
          config['mode'] in {'owned-raw', 'owned-browser', 'public'} and
-         type(config['namespace_inode']) is int and config['namespace_inode']>0,
+         type(config['namespace_inode']) is int and config['namespace_inode']>0 and
+         type(config['host_namespace_inode']) is int and config['host_namespace_inode']>0,
          'mail_public_protected_config')
     rules(None, config['interface'], config['source_addresses'])
     return ids, config
@@ -396,7 +397,9 @@ def revoke_role(job, epoch, release):
 def keeper(job, epoch, release):
     ids, cfg = root_config(job, epoch, release)
     folder = Path(ids['directory'])
-    host_ns = os.stat('/proc/1/ns/net').st_ino
+    # The NET_ADMIN-only guard cannot inspect PID1's namespace link. The Root
+    # coordinator records its host namespace before joining the private one.
+    host_ns = cfg['host_namespace_inode']
     need(os.stat('/proc/self/ns/net').st_ino==cfg['namespace_inode'] and
          (cfg['namespace_inode'] == host_ns) == (cfg['mode'] == 'public'),
          'mail_public_exact_namespace')
@@ -527,7 +530,8 @@ def prepare_network(job, epoch, release, mode, uplink):
            'mode':mode, 'interface':uplink['interface'] if mode == 'public' else 'lo',
            'source_addresses':[uplink['host_ipv4']] if mode == 'public' else ['9.9.9.9','93.184.216.34'],
            'controller_pid':os.getpid(), 'controller_identity':process_identity(os.getpid())}
-    cfg['namespace_inode']=os.stat('/proc/self/ns/net').st_ino if mode=='public' else None
+    cfg['host_namespace_inode']=os.stat('/proc/self/ns/net').st_ino
+    cfg['namespace_inode']=cfg['host_namespace_inode'] if mode=='public' else None
     # Reuse the existing bounded private root/config construction, never bind a
     # workspace file or real email into a privileged process or the guest.
     kernel.prepare_case(folder, job, epoch, release)
@@ -1097,6 +1101,60 @@ def _client_import(directory,batch,slot,output):
         finally:os.close(pending)
     return {'status':'collected','execution_status':receipt['status'],'result':str(dest/'result'),
             'batch_id':batch,'slot':slot,'case_unchanged':True,'scope':'Separate sealed observations; original score unchanged'}
+
+
+def owned_preparation(job, release):
+    """Fixed no-VM preparation probe, called only by the enrolled owned recipe.
+
+    No native/public authority is constructed or consumed here. This probe
+    always uses loopback aliases in a private namespace, with unchanged roles,
+    observer deadlines and PID1 budgets; it opens no public tuple or browser.
+    """
+    need(os.geteuid()==0 and HERE==Path('/opt/paw-vm/releases')/release/'paw/core/mail_browser_public.py',
+         'mail_public_owned_preparation_snapshot')
+    epoch=uuid.uuid4().hex;identity(job,epoch,release)
+    from vm_runtime_revalidation import snapshot,network_state
+    import one_use_authorization as fs
+    from reader_export import publish_reader_tree
+    actors=[];prep=None;began=time.monotonic_ns()
+    record={'schema':'paw-mail-owned-preparation-v1','result':'FAIL','job':job,'release_sha':release,
+        'epoch':epoch,'vm_started':False,'real_samples_executed':0,'real_connections':0,
+        'production_grants_enabled':False,'i08_installed':False,
+        'scope':'Fixed private loopback preparation only; no packet matrix, browser or public readiness',
+        'programs':{name:sha(HERE.with_name(name).read_bytes()) for name in PROGRAMS}}
+    with fs.execution_lock():
+        require_idle();before=snapshot();network=network_state()
+        try:
+            prepare_network(job,epoch,release,'owned-raw',{})
+            prep=NetworkPreparation(job,epoch,release,'owned-raw',actors,protocol=False)
+            until=time.monotonic()+5
+            while not prep.poll():
+                need(time.monotonic()<until,'mail_public_raw_preparation');time.sleep(.02)
+            record['result']='PASS'
+        except Exception as error:
+            record['error']=type(error).__name__+':'+str(error)[:512]
+        finally:
+            # Diagnostic publication never substitutes a failing launcher for
+            # independent stopped-role/host readback, even on a failed probe.
+            kernel.cleanup_actors(actors);kernel.vacant_ids()
+            need(snapshot()==before and network_state()==network,'mail_public_owned_preparation_restore')
+            record.update(writers_stopped=True,host_restored=True,elapsed_ns=time.monotonic_ns()-began)
+            record['preparation']={} if prep is None else {
+                name:getattr(prep,name) for name in ['fixture_configured','server_live','worker_live','ready']}
+            record['roles']=[{'unit':actor.unit,'launcher_returncode':actor.process.poll(),
+                'stderr_bytes':len(actor.errors),'stderr_sha256':sha(bytes(actor.errors)),
+                'stderr':bytes(actor.errors[:4096]).decode('utf-8','replace'),
+                'stderr_truncated':len(actor.errors)>4096,
+                'witness':getattr(actor,'observation',None)} for actor in actors]
+    raw=canonical(record);need(len(raw)<=32768,'mail_public_owned_diagnostic_budget')
+    target=EXPORT_ROOT/('owned-mail-preparation-'+job)
+    target.mkdir(mode=0o700)
+    fd=os.open(target/'attestation.json',os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o600)
+    with os.fdopen(fd,'wb') as stream:stream.write(raw);stream.flush();os.fsync(stream.fileno())
+    publish_reader_tree(target)
+    return {'result':record['result'],'vm_started':False,'real_samples_executed':0,'real_connections':0,
+            'production_grants_enabled':False,'i08_installed':False,'writers_stopped':True,'host_restored':True,
+            'attestation_sha256':sha(raw),'export':str(target),'scope':record['scope']}
 
 
 def run_raw(approval,binding):
