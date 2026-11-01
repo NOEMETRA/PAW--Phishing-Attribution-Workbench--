@@ -18,6 +18,53 @@ J='1'*32; E='2'*32; R='3'*40
 SEEDS=['https://one.invalid/', 'http://two.invalid/', 'https://three.invalid/']
 
 class PublicBoundary(unittest.TestCase):
+    def test_stale_name_cannot_hide_a_later_foreign_selector_that_then_heals(self):
+        group='/system.slice/'+m.identity(J,E,R)['probe'];inode=12345
+        def dump(rights):
+            return json.dumps({'nftables':sum(([{'table':{'family':'inet','name':table}},
+                {'rule':{'family':'inet','table':table,'chain':'input','expr':[
+                    {'match':{'op':'==','left':{'socket':{'key':'cgroupv2'}},'right':right}},
+                    {'jump':{'target':'ingress'}}]}}]for table,right in zip(m.TABLES,rights)),[])})
+        first=dump([group[1:],str(inode+1)]);healed=dump([str(inode),str(inode)])
+        with patch.object(m.Path,'stat',side_effect=FileNotFoundError):
+            with patch.object(m.kernel,'nft',return_value=healed):expected=m.guard_identity((group,inode))
+            with patch.object(m.kernel,'nft',side_effect=[first,healed])as nft:
+                with self.assertRaisesRegex(ValueError,'cgroup_id_changed'):
+                    m.guard_identity((group,inode),expected=expected)
+                self.assertEqual(nft.call_count,1)
+            changed=json.loads(dump([group[1:],group[1:]]))
+            changed['nftables'][3]['rule']['expr'][1]['jump']['target']='foreign'
+            with patch.object(m.kernel,'nft',side_effect=[json.dumps(changed),healed])as nft:
+                with self.assertRaisesRegex(ValueError,'guard_snapshot_changed'):
+                    m.guard_identity((group,inode),expected=expected)
+                self.assertEqual(nft.call_count,1,'Observed structural changes cannot heal on a retry')
+
+    def test_guard_requeries_only_stale_rendering_and_never_accepts_a_foreign_ID(self):
+        group='/system.slice/'+m.identity(J,E,R)['probe'];inode=12345
+        def dump(right):
+            return json.dumps({'nftables':sum(([{'table':{'family':'inet','name':table}},
+                {'rule':{'family':'inet','table':table,'chain':'input','expr':[
+                    {'match':{'op':'==','left':{'socket':{'key':'cgroupv2'}},'right':right}},
+                    {'jump':{'target':'ingress'}}]}}]for table in m.TABLES),[])})
+        with patch.object(m.Path,'stat',side_effect=FileNotFoundError), \
+             patch.object(m.kernel,'nft',return_value=dump(str(inode))):
+            expected=m.guard_identity((group,inode))
+        # nft can render a live name, then PID1 removes it before our stat.
+        # Require a fresh numeric kernel read, never trust the vanished name.
+        with patch.object(m.Path,'stat',side_effect=FileNotFoundError):
+            with patch.object(m.kernel,'nft',side_effect=[dump(group[1:]),dump(str(inode))])as nft:
+                self.assertEqual(m.guard_identity((group,inode),expected=expected),expected)
+                self.assertEqual(nft.call_count,2)
+            for second in [dump(str(inode+1)),dump(group[1:]),json.dumps({'nftables':[]})]:
+                with self.subTest(second=second), \
+                     patch.object(m.kernel,'nft',side_effect=[dump(group[1:]),second])as nft:
+                    with self.assertRaises(ValueError):m.guard_identity((group,inode),expected=expected)
+                    self.assertEqual(nft.call_count,2)
+            for bad in [dump(str(inode+1)),json.dumps({'nftables':[]})]:
+                with patch.object(m.kernel,'nft',return_value=bad)as nft:
+                    with self.assertRaises(ValueError):m.guard_identity((group,inode))
+                    self.assertEqual(nft.call_count,1,'A real guard change is not retried')
+
     def test_guard_identity_pins_cgroup_ID_across_unit_collection_without_masking_changes(self):
         group='/system.slice/'+m.identity(J,E,R)['probe']; inode=12345
         def dump(right):
@@ -71,6 +118,19 @@ class PublicBoundary(unittest.TestCase):
         self.assertEqual(run.call_count,2)
         prep.mode='public'
         with self.assertRaisesRegex(ValueError,'closed_owned_only'):m.closed_packets(J,E,R,prep,roles)
+
+    def test_failed_second_arm_retains_first_measured_owned_packet(self):
+        from unittest.mock import Mock
+        owner=Mock(pid=42);owner.receive.side_effect=[{'accepted':True,'id':0},ValueError('inert lost arm')]
+        first=Mock(unit='first.service');first.receive.return_value={'done':True,'matched':False}
+        second=Mock(unit='second.service');observations=[]
+        prep=SimpleNamespace(mode='owned-raw',ready=True,owner=owner,worker=first,inode=99)
+        with patch.object(m,'PublicActor',return_value=second),patch.object(m.kernel,'live_role'), \
+             patch.object(m.subprocess,'run'):
+            with self.assertRaisesRegex(ValueError,'inert lost arm'):
+                m.closed_packets(J,E,R,prep,[],observations=observations)
+        self.assertEqual(observations,[{'done':True,'matched':False}])
+        second.send.assert_not_called()
 
     def test_owned_alias_commands_use_pinned_namespace_FD_and_close_it_on_failure(self):
         from unittest.mock import Mock,MagicMock
@@ -172,7 +232,9 @@ class PublicBoundary(unittest.TestCase):
                  patch.object(m,'guard_identity',side_effect=['same','same',ValueError('mail_public_guard_missing')]), \
                  patch.object(m,'revoke_role') as revoke:
                 m.keeper(J,E,R)
-            self.assertEqual(json.loads((Path(d)/'owner-result.json').read_bytes())['reason'],'guard_changed')
+            result=json.loads((Path(d)/'owner-result.json').read_bytes())
+            self.assertEqual(result['reason'],'guard_changed')
+            self.assertEqual(result['check_error'],'mail_public_guard_missing')
             revoke.assert_called_once_with(J,E,R)
     def test_kernel_relative_timeout_is_recomputed_after_BPF_commit_latency(self):
         from paw.core import browser_owned_broker as existing

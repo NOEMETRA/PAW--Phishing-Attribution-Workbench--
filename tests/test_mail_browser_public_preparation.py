@@ -167,7 +167,7 @@ class Preparation(unittest.TestCase):
                 self.assertEqual(report['roles'][0]['stderr'],'actual bounded role stderr')
                 self.assertEqual(report['result'],'FAIL'if failure or rearm_failure else 'PASS')
                 if failure:closed.assert_not_called()
-                else:closed.assert_called_once_with(J,report['epoch'],R,prepared,[actor])
+                else:closed.assert_called_once_with(J,report['epoch'],R,prepared,[actor],observations=[])
                 if not failure and not rearm_failure:
                     self.assertEqual(report['closed_packets'],[{'done':True,'matched':False},{'done':True,'connected':False}])
                 self.assertEqual(len(exported),1)

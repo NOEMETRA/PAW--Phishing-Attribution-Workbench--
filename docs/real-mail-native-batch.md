@@ -181,6 +181,25 @@ hard lifetimes, readiness-arrival deadlines and resource ceilings are unchanged.
 This scheduling correction still requires exact review/CI, immutable promotion
 and actual protected owned acceptance before a new native real-source batch.
 
+That promoted preparation subsequently reached all three live-role checks, but
+the owned packet path stopped with protected `guard_changed` metadata. Cleanup
+and host restoration were independently reconciled; no real target was reached.
+The old stop record does not expose the specific failed identity check. A
+separate regression reproduces a remaining snapshot race: nft can render the
+live cgroup pathname, then PID1 collects that group before the verifier's stat.
+The verifier now makes at most one fresh read of the same rules for this exact
+stale-name condition. It never accepts a vanished name alone: the fresh numeric
+ID must match the existing pin. A foreign ID, missing guard or repeated stale
+name still refuses. No rule write, lease renewal or lifetime increase occurs.
+Every selector and other rule field in the first snapshot is validated before
+that re-query. Its tentative digest must match the already established guard
+identity; tentative normalization never establishes an initial pin. A genuine
+change later in the first snapshot cannot be hidden by a repaired second one.
+Bounded owned diagnostics retain already measured denied packets on later
+failure, and expose only a fixed guard-check error code after known cleanup.
+These local regressions do not establish the previous private failure's complete
+cause; actual immutable owned acceptance remains required.
+
 Inert source/installed tests are not operational acceptance. Exact-head review
 (with the owner's minimum10min wait), seven required head/main checks, normal
 merge/tree equivalence, immutable promotion, refreshed original owned baseline,
