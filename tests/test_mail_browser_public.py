@@ -27,6 +27,7 @@ class PublicBoundary(unittest.TestCase):
         self.assertEqual(props['ReadWritePaths'],str(folder))
         self.assertEqual(props['ProtectSystem'],'strict')
         self.assertEqual(props['MountAPIVFS'],'yes')
+        self.assertEqual(props['Environment'],'SYSTEMD_IGNORE_CHROOT=1')
         self.assertEqual(props['BindReadOnlyPaths'].split(),['/usr','/lib','/lib64','/sys/fs/cgroup',
             '/run/systemd','/opt/paw-vm/releases/'+R+'/paw/core'])
         self.assertEqual(props['CPUQuota'],'10%');self.assertEqual(props['TimeoutStopSec'],'500ms')

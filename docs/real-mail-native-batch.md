@@ -220,6 +220,8 @@ a small readonly RootDirectory instead of starting with the host filesystem
 view. It binds only system binaries/libraries, readonly cgroup and PID1 runtime
 interfaces, the exact immutable code directory, and its one writable epoch.
 The root directory is a sibling of that epoch, avoiding a recursive data bind.
+The fixed SYSTEMD_IGNORE_CHROOT setting preserves the existing read-only PID1
+property queries; systemctl must not silently skip them as offline/chroot work.
 ProtectSystem/ProtectHome, syscall/address-family/capability confinement,
 500ms/8s/10%CPU limits, default-drop tables and the fallback stay in force.
 Diagnostic marker presence cannot turn a failed launcher into acceptance.

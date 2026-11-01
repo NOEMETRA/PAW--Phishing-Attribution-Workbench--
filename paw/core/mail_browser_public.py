@@ -318,6 +318,10 @@ def service(job, epoch, release, role, keeper_pid=None, serial=0, *, protocol=Fa
     elif role == 'keeper':
         props.update(PrivateNetwork='no', ReadWritePaths=str(folder),
                      RootDirectory=str(_keeper_root(folder)),MountAPIVFS='yes',BindPaths=str(folder),
+                     # The filesystem-only root still queries the existing
+                     # PID1 with fixed systemctl show arguments. Do not let
+                     # systemctl silently treat that query as offline.
+                     Environment='SYSTEMD_IGNORE_CHROOT=1',
                      BindReadOnlyPaths='/usr /lib /lib64 /sys/fs/cgroup /run/systemd '+
                          '/opt/paw-vm/releases/'+release+'/paw/core',
                      SystemCallFilter='@system-service', SystemCallArchitectures='native')
