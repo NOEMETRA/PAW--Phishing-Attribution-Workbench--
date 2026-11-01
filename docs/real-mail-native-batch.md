@@ -358,3 +358,26 @@ the observed loop/reclaim path; actual immutable OOM acceptance is still needed.
 The512MiB job limit,15s deadline, OOM requirement and outcome classification
 remain unchanged. Previous memory fixture bytes are refused even with an
 otherwise self-consistent manifest hash. No real source is admitted by this test.
+
+That fixture subsequently passed with actual memcg OOM evidence; all nine HTML
+cases, CDP/broker, installed sidecar/ZIP and terminal checks passed on the exact
+release. Its next native batch passed closed but failed the DNS/BPF lease-window
+predicate before any VM or real slot. The exact native subpredicate was not
+exported, so no claim is made about whether that failed probe received bytes.
+A separate same-release no-VM diagnostic observed BPF PermissionError/zero bytes
+with only20ms left in the conservative window, then PID1 killed final guard
+revocation at the unchanged8s/500ms ceilings. Both attempts stopped/restored and
+all originals remained unchanged.
+
+The private DNS gate now proves positive DNS, BPF-denied fresh UDP and denied
+fresh TCP on one SAME live1000ms DNS lease, with BPF restored for TCP. Two
+redundant lease/validation round trips disappear. A private-owned-raw DNS ACK
+stamps a monotonic lower bound immediately before the nft transaction, after
+guard validation; the coordinator rejects missing/boolean/future/stale clocks.
+Kernel expiry cannot precede that bound plus1000ms. BPF negative completion and
+TCP negative start must still precede it, with strict zero-byte/matched/receiver
+checks. The partial window is recorded before a failed predicate. Public and
+owned-browser ACKs, rules, periodic guard verification, role budgets/lifetimes,
+zero-exit/private-revocation requirements and all authority remain unchanged.
+An inert old/new producer replay demonstrates the pre-install scheduling false
+failure; actual immutable packet/stop acceptance remains required.

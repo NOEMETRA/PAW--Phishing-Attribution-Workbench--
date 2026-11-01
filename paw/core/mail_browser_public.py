@@ -328,11 +328,8 @@ def service(job, epoch, release, role, keeper_pid=None, serial=0, *, protocol=Fa
         if config['mode'] != 'public':
             need(type(keeper_pid) is int and keeper_pid > 1, 'mail_public_fixture_namespace')
             props['NetworkNamespacePath'] = '/proc/'+str(keeper_pid)+'/ns/net'
-        # Final revocation runs inside the existing guard process. A second
-        # sandboxed post command cannot even start inside500ms under10%CPU.
-        # Normal stop requires its private proof and a zero launcher exit.
-        # Abrupt loss still stops BindsTo/After transports under their500ms
-        # control-group policy; coordinator/master stop hooks remain in force.
+        # Normal stop requires in-process revocation proof and zero exit;
+        # BindsTo/500ms and coordinator/master backstops cover abrupt loss.
     else:
         need(type(keeper_pid) is int and keeper_pid > 1, 'mail_public_guard_namespace')
         props.update(RootDirectory=str(folder/'probe-root'),
@@ -556,9 +553,12 @@ def keeper(job, epoch, release):
                 script = ''.join('delete table inet '+v+'\n' for v in TABLES)+rules(
                     armed, cfg['interface'], cfg['source_addresses'])
             if op == 'lease': need(armed is not None, 'mail_public_lease_before_arm')
+            ack={'accepted':True,'id':value['id'],'op':op}
+            if cfg['mode']=='owned-raw' and op=='lease' and value['kind']=='dns':
+                ack['lease_not_before_ns']=time.monotonic_ns()
             if script is not None: kernel.nft('-f', '-', text=script)
             if op == 'arm': expected = guard_identity(binding)
-            kernel.emit({'accepted':True, 'id':value['id'], 'op':op})
+            kernel.emit(ack)
             if op == 'stop': reason = 'requested_stop'; break
         else: reason = 'deadline'
     finally:
@@ -1504,7 +1504,7 @@ def closed_packets(job, epoch, release, prep, roles, *, observations=None):
 
 
 def dns_only_packets(job, epoch, release, prep, roles, *, observations=None):
-    """Positive DNS, BPF denial during a fresh DNS lease, then TCP denial.
+    """Positive DNS, BPF denial, then TCP denial on the SAME live DNS lease.
 
     One probe keeps its cgroup and opens three fresh sockets. The separate
     closed gate still tests rearming after worker collection; no budget grows.
@@ -1519,15 +1519,18 @@ def dns_only_packets(job, epoch, release, prep, roles, *, observations=None):
         owner.send({'op':op,'epoch':epoch,'id':sequence,**fields});ack=owner.receive()
         need(ack.get('accepted')is True and type(ack.get('id'))is int and ack['id']==sequence,
              'mail_public_raw_guard_ack');sequence+=1
+        return ack
     def bpf(child,allow):
         args=['/usr/bin/systemctl','set-property','--runtime',child.unit,'IPAddressAllow=']
         if allow:args.append('IPAddressAllow=93.184.216.34/32 9.9.9.9/32')
         subprocess.run(args,check=True,capture_output=True,timeout=2)
     bpf(worker,True);control('arm',serial=0)
+    requested=time.monotonic_ns()
+    ack=control('lease',kind='dns',address='9.9.9.9',milliseconds=1000)
+    issued=ack.get('lease_not_before_ns')
+    need(type(issued)is int and requested<=issued<=time.monotonic_ns(),'mail_public_dns_lease_clock')
     for phase in range(3):
         if phase:bpf(worker,phase==2)
-        issued=time.monotonic_ns()
-        control('lease',kind='dns',address='9.9.9.9',milliseconds=1000)
         worker.send({'op':'dns-matrix','epoch':epoch,'id':phase});value=worker.receive()
         observations.append(value)
         need(type(value.get('phase'))is int and value['phase']==phase and
@@ -1540,10 +1543,10 @@ def dns_only_packets(job, epoch, release, prep, roles, *, observations=None):
             need(value['matched']is True and value['bytes']==len(('PAW-UDP-'+epoch).encode()),
                  'mail_public_actual_dns_only')
         elif phase==1:
+            prep.bpf_lease_window={'requested_ns':requested,'issued_ns':issued,'not_before_expiry_ns':issued+10**9,
+                                  'started_ns':value['started_ns'],'finished_ns':value['finished_ns']}
             need(value['matched']is False and value['bytes']==0 and
                  value['finished_ns']<issued+10**9,'mail_public_BPF_lease_window')
-            prep.bpf_lease_window={'issued_ns':issued,'not_before_expiry_ns':issued+10**9,
-                                  'started_ns':value['started_ns'],'finished_ns':value['finished_ns']}
         else:
             need(value.get('connected')is False and value['matched']is False and value['bytes']==0 and
                  value['started_ns']<issued+10**9,'mail_public_actual_dns_only')
