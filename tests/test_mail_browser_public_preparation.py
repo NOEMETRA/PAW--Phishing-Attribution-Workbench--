@@ -51,7 +51,7 @@ class Preparation(unittest.TestCase):
                         with self.assertRaisesRegex(ValueError,'exact_namespace'):m.keeper(J,E,R)
                         nft.assert_not_called()
 
-    def exercise(self,failure=False,cleanup_failure=False):
+    def exercise(self,failure=False,cleanup_failure=False,rearm_failure=False):
         with tempfile.TemporaryDirectory()as d:
             actor=SimpleNamespace(unit=m.identity(J,E,R)['keeper'],process=SimpleNamespace(poll=lambda:1),
                                   errors=bytearray(b'actual bounded role stderr'),observation=None)
@@ -67,6 +67,8 @@ class Preparation(unittest.TestCase):
                  patch.object(m,'EXPORT_ROOT',Path(d)),patch.object(m,'require_idle'), \
                  patch.object(m,'_owned_preparation_budget',return_value=nullcontext()), \
                  patch.object(m,'prepare_network')as prepare,patch.object(m,'NetworkPreparation',side_effect=create), \
+                 patch.object(m,'closed_packets',side_effect=ValueError('inert rearm failure')if rearm_failure else None,
+                              return_value=[{'done':True,'matched':False},{'done':True,'connected':False}])as closed, \
                  patch.object(m.kernel,'cleanup_actors',side_effect=ValueError('unknown stop')if cleanup_failure else None)as cleanup, \
                  patch.object(m.kernel,'vacant_ids'):
                 if cleanup_failure:
@@ -78,11 +80,16 @@ class Preparation(unittest.TestCase):
                 self.assertEqual(value['real_connections'],0);self.assertFalse(value['production_grants_enabled'])
                 report=json.loads((Path(value['export'])/'attestation.json').read_bytes())
                 self.assertEqual(report['roles'][0]['stderr'],'actual bounded role stderr')
-                self.assertEqual(report['result'],'FAIL'if failure else 'PASS')
+                self.assertEqual(report['result'],'FAIL'if failure or rearm_failure else 'PASS')
+                if failure:closed.assert_not_called()
+                else:closed.assert_called_once_with(J,report['epoch'],R,prepared,[actor])
+                if not failure and not rearm_failure:
+                    self.assertEqual(report['closed_packets'],[{'done':True,'matched':False},{'done':True,'connected':False}])
                 self.assertEqual(len(exported),1)
                 self.assertTrue(report['writers_stopped']);self.assertTrue(report['host_restored'])
     def test_fixed_owned_success_is_not_public_readiness(self):self.exercise()
     def test_failed_preparation_preserves_stopped_role_diagnostic(self):self.exercise(failure=True)
+    def test_failed_rearm_preserves_stopped_role_diagnostic(self):self.exercise(rearm_failure=True)
     def test_unknown_cleanup_cannot_publish_even_a_diagnostic(self):self.exercise(cleanup_failure=True)
     def test_unprivileged_probe_refuses_before_any_namespace_or_service(self):
         with patch.object(m.os,'geteuid',return_value=1000),patch.object(m,'prepare_network')as prepare:
