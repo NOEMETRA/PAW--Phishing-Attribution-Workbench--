@@ -20,7 +20,7 @@ class Preparation(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'inert probe failure'):
                 with m._owned_preparation_budget(J):raise ValueError('inert probe failure')
             self.assertEqual(run.call_count,2)
-            self.assertEqual(run.call_args_list[0].args[0][-3:],['MemoryMax=256M','TasksMax=32','CPUQuota=50%'])
+            self.assertEqual(run.call_args_list[0].args[0][-3:],['MemoryMax=192M','TasksMax=24','CPUQuota=35%'])
             self.assertEqual(run.call_args_list[1].args[0][-3:],['MemoryMax=512M','TasksMax=64','CPUQuota=100%'])
         with patch.object(m.kernel,'unit_properties',return_value=dict(expected,MainPID='1')),patch.object(m.subprocess,'run')as run:
             with self.assertRaisesRegex(ValueError,'parent_budget'):

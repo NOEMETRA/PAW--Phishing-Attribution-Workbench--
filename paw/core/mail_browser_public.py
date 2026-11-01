@@ -1106,7 +1106,7 @@ def _client_import(directory,batch,slot,output):
 
 @contextmanager
 def _owned_preparation_budget(job):
-    """Retain the enrolled recipe's512MiB/64-task/100% aggregate partition."""
+    """Match the native coordinator inside the enrolled aggregate ceiling."""
     parent='paw-vm-owned-'+job+'.service';before=kernel.unit_properties(parent)
     expected={'ActiveState':'active','MainPID':str(os.getpid()),'MemoryMax':str(512*1024**2),
               'MemorySwapMax':'0','TasksMax':'64','CPUQuotaPerSecUSec':'1s'}
@@ -1115,7 +1115,7 @@ def _owned_preparation_budget(job):
         subprocess.run(['/usr/bin/systemctl','set-property','--runtime',parent,
             'MemoryMax='+memory,'TasksMax='+tasks,'CPUQuota='+cpu],check=True,capture_output=True,timeout=2)
     try:
-        limit('256M','32','50%')
+        limit('192M','24','35%')
         yield
     finally:
         limit('512M','64','100%')
@@ -1159,8 +1159,8 @@ def owned_preparation(job, release):
             kernel.cleanup_actors(actors);kernel.vacant_ids()
             need(snapshot()==before and network_state()==network,'mail_public_owned_preparation_restore')
             record.update(writers_stopped=True,host_restored=True,elapsed_ns=time.monotonic_ns()-began)
-            record.update(root_partition_mib=[256,64,128,64],root_partition_tasks=[32,8,16,8],
-                          root_partition_cpu_percent=[50,10,25,15])
+            record.update(root_partition_mib=[192,64,128,64],root_partition_tasks=[24,8,16,8],
+                          root_partition_cpu_percent=[35,10,25,15])
             record['preparation']={} if prep is None else {
                 name:getattr(prep,name) for name in ['fixture_configured','server_live','worker_live','ready']}
             record['roles']=[{'unit':actor.unit,'launcher_returncode':actor.process.poll(),

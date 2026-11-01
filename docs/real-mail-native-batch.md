@@ -130,9 +130,10 @@ must still be confirmed by actual diagnostics, not inferred from the reproducer.
 The existing `vm-acceptance-v1` no-VM recipe now also runs one fixed private
 loopback preparation probe. It cannot select a public mode, URL, sample or native
 scope, launch a browser, or open a public tuple. It keeps the existing5s observer
-deadline and role profiles. As in the existing kernel recipe, its coordinator
-temporarily uses256MiB/32tasks/50% so the coordinator/guard/transport/fixture total
-stays512MiB/64tasks/100%; the parent is restored even after an error. Only known
+deadline and role profiles. Its coordinator temporarily uses the native coordinator’s192MiB/24tasks/35%
+profile, so coordinator/guard/transport/fixture total448MiB/56tasks/85%, within
+the enrolled512MiB/64tasks/100% ceiling. No native master is present in this
+owned probe. The parent is restored even after an error. Only known
 stopped writers and restored host state
 permit a bounded Root-owned diagnostic, including per-role exit/stderr metadata.
 A failed probe remains FAIL and cannot publish a runtime PASS. This enables
