@@ -137,7 +137,7 @@ class Preparation(unittest.TestCase):
                     obj._start_owned_worker()
                     actor.assert_called_once_with(J,E,R,'probe',42,registry=obj.actors,protocol=False,defer_ready=True)
 
-    def exercise(self,failure=False,cleanup_failure=False,rearm_failure=False,dns_failure=False,bindings_failure=False):
+    def exercise(self,failure=False,cleanup_failure=False,rearm_failure=False,dns_failure=False,expiry_failure=False,bindings_failure=False):
         with tempfile.TemporaryDirectory()as d:
             actor=SimpleNamespace(unit=m.identity(J,E,R)['keeper'],process=SimpleNamespace(poll=lambda:1),
                                   errors=bytearray(b'actual bounded role stderr'),observation=None)
@@ -157,6 +157,7 @@ class Preparation(unittest.TestCase):
                  patch.object(m,'closed_packets',side_effect=ValueError('inert rearm failure')if rearm_failure else None,
                               return_value=[{'done':True,'matched':False},{'done':True,'connected':False}])as closed, \
                  patch.object(m,'dns_only_packets',side_effect=ValueError('inert DNS failure')if dns_failure else None,return_value=[{'phase':0},{'phase':1},{'done':True}])as dns, \
+                 patch.object(m,'expiry_packets',side_effect=ValueError('inert expiry failure')if expiry_failure else None,return_value=[{'done':True}])as expiry, \
                  patch.object(m,'owned_binding_probe',side_effect=ValueError('inert isolated binding failure')if bindings_failure else None,return_value={'result':'PASS','vm_started':False})as bindings, \
                  patch.object(m.kernel,'cleanup_actors',side_effect=ValueError('unknown stop')if cleanup_failure else None)as cleanup, \
                  patch.object(m.kernel,'vacant_ids'):
@@ -165,11 +166,11 @@ class Preparation(unittest.TestCase):
                     self.assertEqual(exported,[]);return
                 value=m.owned_preparation(J,R)
                 self.assertEqual(prepare.call_args.args[3:],('owned-raw',{}))
-                self.assertEqual(cleanup.call_count,1 if failure or rearm_failure else 2);self.assertFalse(value['vm_started'])
+                self.assertEqual(cleanup.call_count,1 if failure or rearm_failure else 2 if dns_failure else 3);self.assertFalse(value['vm_started'])
                 self.assertEqual(value['real_connections'],0);self.assertFalse(value['production_grants_enabled'])
                 report=json.loads((Path(value['export'])/'attestation.json').read_bytes())
                 self.assertEqual(report['roles'][0]['stderr'],'actual bounded role stderr')
-                self.assertEqual(report['result'],'FAIL'if failure or rearm_failure or dns_failure or bindings_failure else 'PASS')
+                self.assertEqual(report['result'],'FAIL'if failure or rearm_failure or dns_failure or expiry_failure or bindings_failure else 'PASS')
                 self.assertEqual(report['guard_cleanup_progress'],{'revoked-complete':True,'stop-hook-entered':True})
                 if failure:closed.assert_not_called()
                 else:closed.assert_called_once_with(J,report['epoch'],R,prepared,[actor],observations=[])
@@ -181,14 +182,22 @@ class Preparation(unittest.TestCase):
                         self.assertEqual(report['error'],report['dns_only']['error'])
                         self.assertEqual(report['closed_result'],'PASS')
                     dns.assert_called_once()
-                    if dns_failure:bindings.assert_not_called()
-                    else:bindings.assert_called_once_with(J,R)
+                    if dns_failure:
+                        expiry.assert_not_called();bindings.assert_not_called()
+                    else:
+                        expiry.assert_called_once()
+                        self.assertEqual(report['http_expiry']['result'],'FAIL'if expiry_failure else 'PASS')
+                        self.assertEqual(len({report['epoch'],report['dns_only']['epoch'],report['http_expiry']['epoch']}),3)
+                        if expiry_failure:
+                            bindings.assert_not_called();self.assertEqual(report['error'],report['http_expiry']['error'])
+                        else:bindings.assert_called_once_with(J,R)
                 self.assertEqual(len(exported),1)
                 self.assertTrue(report['writers_stopped']);self.assertTrue(report['host_restored'])
     def test_fixed_owned_success_is_not_public_readiness(self):self.exercise()
     def test_failed_preparation_preserves_stopped_role_diagnostic(self):self.exercise(failure=True)
     def test_failed_rearm_preserves_stopped_role_diagnostic(self):self.exercise(rearm_failure=True)
     def test_second_case_failure_cannot_inherit_first_case_pass(self):self.exercise(dns_failure=True)
+    def test_expiry_failure_cannot_inherit_previous_packet_pass(self):self.exercise(expiry_failure=True)
     def test_isolated_binding_failure_cannot_inherit_packet_pass(self):self.exercise(bindings_failure=True)
     def test_unknown_cleanup_cannot_publish_even_a_diagnostic(self):self.exercise(cleanup_failure=True)
     def test_unprivileged_probe_refuses_before_any_namespace_or_service(self):

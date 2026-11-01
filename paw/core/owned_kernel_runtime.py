@@ -275,11 +275,13 @@ def fixture(job,epoch,release):
         tcp.close();udp.close();selector.close()
 
 
-def probe(job,epoch,release):
+def probe(job,epoch,release,*,stream_seconds=3):
+    require(type(stream_seconds)is int and stream_seconds in {2,3},'owned_probe_stream_duration')
     _,witness=role_entry(job,epoch,release,'probe');emit({'ready':True,'role':'probe','witness':witness})
     value=decode(sys.stdin.buffer.readline(4097))
     require(set(value)=={'op'} and value['op']in{'udp','tcp','udp-other','tcp-other','private','stream'},'owned_probe_operation')
     op=value['op'];datagram=op.startswith('udp');address=policy.RESOLVER if datagram else policy.FIXTURE
+    require(stream_seconds==3 or op=='stream','owned_probe_expiry_operation')
     port=(53 if op=='udp' else 54) if datagram else (81 if op=='tcp-other' else 80)
     if op=='private':address='127.0.0.1'
     result={'done':True,'connected':False,'bytes':0,'matched':False,'error':None}
@@ -290,14 +292,19 @@ def probe(job,epoch,release):
             kind='UDP' if datagram else 'STREAM' if op=='stream' else 'TCP'
             stream.sendall(('OWNED-'+kind+' '+epoch).encode())
             if op=='stream':
-                end=time.monotonic()+3
+                if stream_seconds==2:
+                    result.update(observation_started_ns=time.monotonic_ns(),timeouts_after_data=0)
+                end=time.monotonic()+stream_seconds
                 while time.monotonic()<end:
                     try:raw=stream.recv(128)
-                    except socket.timeout:continue
+                    except socket.timeout:
+                        if stream_seconds==2 and result['bytes']:result['timeouts_after_data']+=1
+                        continue
                     if not raw:break
                     result['bytes']+=len(raw);result['matched']=raw==('PAW-STREAM-'+epoch).encode()
                     emit({'progress':True,'bytes':result['bytes'],'last_byte_ns':time.monotonic_ns(),
                           'matched':result['matched']})
+                if stream_seconds==2:result['observation_finished_ns']=time.monotonic_ns()
             else:
                 raw=stream.recv(128);result['bytes']=len(raw);result['matched']=raw==('PAW-'+kind+'-'+epoch).encode()
         except OSError as error:result['error']=type(error).__name__
