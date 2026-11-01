@@ -344,3 +344,17 @@ proof. Partial observations survive diagnostic failure. Native and no-VM paths
 share this gate; no public form, lease, role lifetime or resource budget expands.
 The generic three-second stream and abrupt-loss gates remain unchanged. Actual
 immutable helper acceptance is required before another protected native batch.
+
+The updated private HTTP-expiry gate passed in the immutable no-VM helper:
+2.307s observation,1.401s without later replies, continued receiver sending,
+normal guard exit at5.104s and independent stopped-host/original reconciliation.
+The subsequent unchanged nine-case HTML baseline passed its first five cases,
+then its memory fixture timed out with memory.max pressure but zero OOM kills.
+Execution/custody verification and cleanup passed for all six attempted VMs;
+the baseline correctly remained FAIL. No native batch or real visit followed.
+Only the finite owned memory source now uses a retained1GiB typed array with
+bulk fill instead of a page-stride JavaScript loop. This targets time spent in
+the observed loop/reclaim path; actual immutable OOM acceptance is still needed.
+The512MiB job limit,15s deadline, OOM requirement and outcome classification
+remain unchanged. Previous memory fixture bytes are refused even with an
+otherwise self-consistent manifest hash. No real source is admitted by this test.
