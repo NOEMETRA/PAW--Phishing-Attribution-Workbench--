@@ -18,6 +18,68 @@ J='1'*32; E='2'*32; R='3'*40
 SEEDS=['https://one.invalid/', 'http://two.invalid/', 'https://three.invalid/']
 
 class PublicBoundary(unittest.TestCase):
+    def test_normal_revocation_proof_requires_root_private_empty_single_link_regular_file(self):
+        info={'st_mode':m.stat.S_IFREG|0o600,'st_uid':0,'st_nlink':1,'st_size':0}
+        ids=m.identity(J,E,R)
+        with patch.object(m,'root_config',return_value=(ids,{}))as cfg:
+            with patch.object(m.Path,'lstat',return_value=SimpleNamespace(**info)):
+                m.require_revoked(J,E,R)
+            for change in [{'st_uid':1000},{'st_mode':m.stat.S_IFLNK|0o600},
+                           {'st_mode':m.stat.S_IFREG|0o644},{'st_size':1},{'st_nlink':2}]:
+                with self.subTest(change=change),patch.object(m.Path,'lstat',return_value=SimpleNamespace(**{**info,**change})):
+                    with self.assertRaisesRegex(ValueError,'revocation_proof_metadata'):m.require_revoked(J,E,R)
+            self.assertTrue(all(c.args==(J,E,R)for c in cfg.call_args_list))
+
+    def test_mediation_cannot_close_network_without_direct_normal_stop_proof(self):
+        from unittest.mock import Mock
+        for failure in [False,True]:
+            obj=object.__new__(m.Mediation);obj.sequence=1;obj.ledger=Mock()
+            obj.owner=Mock(unit='keeper',pid=42,binding=(J,E,R));obj.owner.process.wait.return_value=0
+            obj.worker=Mock(unit='worker',pid=43);obj.worker.process.wait.return_value=0
+            obj.transaction=Mock(return_value=({'request_sequence':0,'operation':'stop','stopped':True},b''))
+            obj.control=Mock()
+            with patch.object(m.kernel,'unit_properties',side_effect=[{'ActiveState':'active','MainPID':'42'},
+                 {'ActiveState':'active','MainPID':'43'}]),patch.object(m,'require_revoked',
+                 side_effect=ValueError('inert missing proof')if failure else None)as proof:
+                if failure:
+                    with self.assertRaisesRegex(ValueError,'inert missing proof'):obj.stop()
+                    obj.ledger.close.assert_not_called()
+                else:obj.stop();obj.ledger.close.assert_called_once_with()
+                proof.assert_called_once_with(J,E,R)
+
+    def test_zero_guard_exit_without_protected_revocation_proof_is_rejected(self):
+        from unittest.mock import Mock
+        with tempfile.TemporaryDirectory()as d:
+            ids=m.identity(J,E,R);ids['directory']=d
+            owner=Mock(pid=42);owner.process.wait.return_value=0
+            owner.receive.side_effect=[{'accepted':True,'id':v}for v in range(3)]
+            first=Mock(unit='first.service');first.receive.return_value={'done':True,'matched':False}
+            second=Mock(unit='second.service');second.receive.return_value={'done':True,'connected':False}
+            server=Mock();server.receive.return_value={'counts':{'tcp':0,'udp':0,'stream_bytes':0}}
+            server.process.wait.return_value=0
+            prep=SimpleNamespace(mode='owned-raw',ready=True,owner=owner,worker=first,inode=99,server=server)
+            with patch.object(m,'root_config',return_value=(ids,{})), \
+                 patch.object(m,'PublicActor',return_value=second),patch.object(m.kernel,'live_role'), \
+                 patch.object(m.subprocess,'run'):
+                with self.assertRaisesRegex(ValueError,'revocation_proof_missing'):
+                    m.closed_packets(J,E,R,prep,[])
+
+    def test_closed_fixture_must_finish_with_typed_zero_receiver_counts(self):
+        from unittest.mock import Mock
+        for counts,exit_code in [({'tcp':1,'udp':0,'stream_bytes':0},0),
+                                 ({'tcp':False,'udp':0,'stream_bytes':0},0),
+                                 ({'tcp':0,'udp':0,'stream_bytes':0},1)]:
+            owner=Mock(pid=42);owner.receive.side_effect=[{'accepted':True,'id':v}for v in range(2)]
+            first=Mock(unit='first');first.receive.return_value={'done':True,'matched':False}
+            second=Mock(unit='second');second.receive.return_value={'done':True,'connected':False}
+            server=Mock();server.receive.return_value={'counts':counts};server.process.wait.return_value=exit_code
+            prep=SimpleNamespace(mode='owned-raw',ready=True,owner=owner,worker=first,inode=99,server=server)
+            with self.subTest(counts=counts,exit_code=exit_code),patch.object(m,'PublicActor',return_value=second), \
+                 patch.object(m.kernel,'live_role'),patch.object(m.subprocess,'run'), \
+                 patch.object(m,'require_revoked')as proof:
+                with self.assertRaisesRegex(ValueError,'closed_fixture_stop'):m.closed_packets(J,E,R,prep,[])
+                proof.assert_not_called();owner.process.wait.assert_not_called()
+
     def test_guard_filesystem_is_small_readonly_root_with_one_writable_epoch(self):
         ids=m.identity(J,E,R);folder=Path(ids['directory'])
         with patch.object(m.kernel,'private_json',return_value={'mode':'public'}):
@@ -180,11 +242,16 @@ class PublicBoundary(unittest.TestCase):
         owner.receive.side_effect=[{'accepted':True,'id':v} for v in range(3)]
         first=Mock(unit='first.service');first.receive.return_value={'done':True,'matched':False}
         second=Mock(unit='second.service');second.receive.return_value={'done':True,'connected':False}
-        prep=SimpleNamespace(mode='owned-raw',ready=True,owner=owner,worker=first,inode=99)
+        server=Mock();server.receive.return_value={'counts':{'tcp':0,'udp':0,'stream_bytes':0}}
+        server.process.wait.return_value=0
+        prep=SimpleNamespace(mode='owned-raw',ready=True,owner=owner,worker=first,inode=99,server=server)
         roles=[]
         with patch.object(m,'PublicActor',return_value=second) as new, \
-             patch.object(m.kernel,'live_role') as live,patch.object(m.subprocess,'run') as run:
+             patch.object(m.kernel,'live_role') as live,patch.object(m.subprocess,'run') as run, \
+             patch.object(m,'require_revoked')as proof:
             self.assertEqual(len(m.closed_packets(J,E,R,prep,roles)),2)
+        proof.assert_called_once_with(J,E,R);server.send.assert_called_once_with({'op':'stop'})
+        self.assertEqual(prep.closed_fixture_counts,{'tcp':0,'udp':0,'stream_bytes':0})
         new.assert_called_once_with(J,E,R,'probe',42,registry=roles,serial=1)
         live.assert_called_once_with(second,'probe',99)
         self.assertEqual([c.args[0]['op'] for c in owner.send.call_args_list],['arm','arm','stop'])
@@ -213,7 +280,9 @@ class PublicBoundary(unittest.TestCase):
         owner.process.wait.return_value=1
         first=Mock(unit='first.service');first.receive.return_value={'done':True,'matched':False}
         second=Mock(unit='second.service');second.receive.return_value={'done':True,'connected':False}
-        prep=SimpleNamespace(mode='owned-raw',ready=True,owner=owner,worker=first,inode=99)
+        server=Mock();server.receive.return_value={'counts':{'tcp':0,'udp':0,'stream_bytes':0}}
+        server.process.wait.return_value=0
+        prep=SimpleNamespace(mode='owned-raw',ready=True,owner=owner,worker=first,inode=99,server=server)
         with patch.object(m,'PublicActor',return_value=second),patch.object(m.kernel,'live_role'), \
              patch.object(m.subprocess,'run'):
             with self.assertRaisesRegex(ValueError,'raw_guard_exit'):m.closed_packets(J,E,R,prep,[])
@@ -428,10 +497,13 @@ class PublicBoundary(unittest.TestCase):
             self.assertEqual(p['CapabilityBoundingSet'],'CAP_NET_ADMIN')
             self.assertEqual(p['RestrictAddressFamilies'],'AF_UNIX AF_NETLINK')
             self.assertEqual(p['TimeoutStopSec'],'500ms')
-            directory=m.identity(J,E,R)['directory']
-            self.assertEqual(p['ExecStopPost'],"/bin/sh -c 'printf x > "+directory+
-                '/stop-hook-entered; test -f '+directory+
-                '/revoked-complete || exec /usr/sbin/nft -f '+directory+"/revoke.nft'")
+            self.assertNotIn('ExecStopPost',p)
+            self.assertEqual(p['KillMode'],'control-group')
+            _,worker,_=m.service(J,E,R,'probe',42)
+            self.assertEqual(worker['BindsTo'],m.identity(J,E,R)['keeper'])
+            self.assertEqual(worker['After'],worker['BindsTo'])
+            self.assertEqual(worker['TimeoutStopSec'],'500ms')
+            self.assertEqual(worker['KillMode'],'control-group')
             with self.assertRaises(ValueError):m.service(J,E,R,'fixture',42)
         self.assertEqual(base,old.service(J,E,R,'probe',42,protocol=True))
 

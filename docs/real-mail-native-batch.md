@@ -200,17 +200,27 @@ failure, and expose only a fixed guard-check error code after known cleanup.
 These local regressions do not establish the previous private failure's complete
 cause; actual immutable owned acceptance remains required.
 
-Current packet/rearm acceptance passed with requested guard stop and known host
-restoration, but its launcher returned nonzero because the redundant nft
+An earlier packet/rearm probe observed denials, requested guard stop and host
+restoration, but failed full acceptance because the redundant nft
 `ExecStopPost` exceeded the existing500ms stop budget. A real ordinary-user
 service reproduces successful-main/failed-post behavior and the conditional
-fallback. The guard now creates a Root-private per-job marker only after both
-tables' sets were successfully flushed in its finalizer. The fixed stop hook
-skips redundant work only with that proof; otherwise it executes the unchanged
-nft backstop, including abrupt loss and incomplete revocation. No table is
-removed early, no unknown stop is accepted and the500ms/10%CPU limits stay.
-The owned packet gate now also requires the guard launcher's zero exit status,
-as the public mediation path already did.
+fallback. A conditional proof-only fast path still failed before its shell
+started. The guard creates a Root-private per-job marker only after both tables'
+sets were successfully flushed in its existing process. Normal raw/browser stop
+now requires both a zero guard launcher exit and a direct check of that private
+empty0600 Root-owned regular single-link proof, bound to the exact job/epoch/
+immutable release. Exported diagnostic booleans remain non-authoritative.
+
+The redundant guard-specific post process is removed. Abrupt guard loss still
+stops its BindsTo/After transports with the existing500ms control-group policy;
+the coordinator and master retain their independent12s stop backstops. Default-
+drop tables remain until every transport is independently stopped, and numeric
+leases still expire. All five actual private packet/failure gates, including
+established-stream guard/controller loss, still precede any real navigation.
+No launcher failure or unknown stop is accepted as normal success. In the closed
+private probe, the fixture now stops cooperatively after both probes exit;
+its typed final UDP/TCP/stream counts must all be zero. This also avoids the
+observed fixture10s expiration while waiting for redundant guard stop work.
 
 The following immutable diagnostic distinguished the remaining stop timeout:
 both revocations completed, but the stop shell did not reach its first fixed
@@ -223,7 +233,9 @@ The root directory is a sibling of that epoch, avoiding a recursive data bind.
 The fixed SYSTEMD_IGNORE_CHROOT setting preserves the existing read-only PID1
 property queries; systemctl must not silently skip them as offline/chroot work.
 ProtectSystem/ProtectHome, syscall/address-family/capability confinement,
-500ms/8s/10%CPU limits, default-drop tables and the fallback stay in force.
+500ms/8s/10%CPU limits and default-drop tables stay in force. The smaller root
+did not by itself resolve the measured pre-command timeout; it remains filesystem
+confinement rather than a claim of successful stop performance.
 Diagnostic marker presence cannot turn a failed launcher into acceptance.
 Actual immutable startup/stop and owned packet/browser/custody acceptance remain
 required; source tests alone do not establish that this fits the deadline.
