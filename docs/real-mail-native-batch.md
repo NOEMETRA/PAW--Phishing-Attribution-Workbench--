@@ -191,6 +191,10 @@ The verifier now makes at most one fresh read of the same rules for this exact
 stale-name condition. It never accepts a vanished name alone: the fresh numeric
 ID must match the existing pin. A foreign ID, missing guard or repeated stale
 name still refuses. No rule write, lease renewal or lifetime increase occurs.
+Every selector and other rule field in the first snapshot is validated before
+that re-query. Its tentative digest must match the already established guard
+identity; tentative normalization never establishes an initial pin. A genuine
+change later in the first snapshot cannot be hidden by a repaired second one.
 Bounded owned diagnostics retain already measured denied packets on later
 failure, and expose only a fixed guard-check error code after known cleanup.
 These local regressions do not establish the previous private failure's complete

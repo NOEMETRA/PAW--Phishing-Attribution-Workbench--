@@ -343,21 +343,23 @@ def root_config(job, epoch, release):
     return ids, config
 
 
-class _StaleCgroupRendering(ValueError):
-    """A rendered live name vanished before its identity could be checked."""
-
-
-def guard_identity(binding=None):
-    try:return _guard_identity_once(binding)
-    except _StaleCgroupRendering:
-        # One fresh read of the SAME rules, with no policy write/lease renewal.
-        # The next numeric ID must match the pin; a second stale name refuses.
-        return _guard_identity_once(binding)
+def guard_identity(binding=None, *, expected=None):
+    digest,stale = _guard_identity_once(binding)
+    if not stale:return digest
+    # The whole first snapshot, including later selectors and other rule
+    # fields, must match the established identity before a fresh read is safe.
+    # The tentative normalization of a stale name never establishes a pin.
+    need(expected is not None,'mail_public_cgroup_path_not_live')
+    need(digest==expected,'mail_public_guard_snapshot_changed')
+    observed,again = _guard_identity_once(binding)
+    need(not again,'mail_public_cgroup_path_not_live')
+    need(observed==expected,'mail_public_guard_snapshot_changed')
+    return observed
 
 
 def _guard_identity_once(binding):
     value = json.loads(kernel.nft('-j', 'list', 'ruleset'))
-    selectors_seen = []
+    selectors_seen = [];stale_names = []
     def cgroup_id(right):
         need(binding is not None, 'mail_public_unarmed_cgroup_selector')
         group, inode = binding
@@ -369,7 +371,7 @@ def _guard_identity_once(binding):
         except FileNotFoundError: current = None
         need(current is None or current == inode, 'mail_public_cgroup_replaced')
         if right == group.lstrip('/'):
-            if current is None:raise _StaleCgroupRendering('mail_public_cgroup_path_not_live')
+            if current is None:stale_names.append(True)
         else:
             need((type(right) is int and right == inode) or
                  (type(right) is str and right == str(inode)), 'mail_public_cgroup_id_changed')
@@ -394,7 +396,7 @@ def _guard_identity_once(binding):
     need(sum(1 for row in selected if 'table' in row) == 2, 'mail_public_guard_missing')
     cleaned = clean(selected)
     need(len(selectors_seen) == (0 if binding is None else 2), 'mail_public_cgroup_selector_count')
-    return sha(canonical(cleaned))
+    return sha(canonical(cleaned)),bool(stale_names)
 
 
 def keeper_action(value, epoch, sequence, ids):
@@ -453,12 +455,13 @@ def keeper(job, epoch, release):
     try:
         while time.monotonic_ns()-began < 8*10**9:
             if stopped: reason = stopped[0]; break
-            try:observed=guard_identity(binding)
+            try:observed=guard_identity(binding,expected=expected)
             except ValueError as error:
                 code=str(error)
                 check_error=code if code in {'mail_public_guard_missing','mail_public_unarmed_cgroup_selector',
                     'mail_public_cgroup_replaced','mail_public_cgroup_path_not_live','mail_public_cgroup_id_changed',
-                    'mail_public_cgroup_expression','mail_public_cgroup_selector_count'}else 'guard_snapshot_unavailable'
+                    'mail_public_cgroup_expression','mail_public_cgroup_selector_count',
+                    'mail_public_guard_snapshot_changed'}else 'guard_snapshot_unavailable'
                 reason='guard_changed';break
             if observed != expected: reason = 'guard_changed';check_error = 'guard_digest_changed';break
             if not selected.select(.08): continue
@@ -1240,7 +1243,7 @@ def owned_preparation(job, release):
                      stopped['check_error'] in {None,'mail_public_guard_missing','mail_public_unarmed_cgroup_selector',
                         'mail_public_cgroup_replaced','mail_public_cgroup_path_not_live','mail_public_cgroup_id_changed',
                         'mail_public_cgroup_expression','mail_public_cgroup_selector_count',
-                        'guard_snapshot_unavailable','guard_digest_changed'} and
+                        'mail_public_guard_snapshot_changed','guard_snapshot_unavailable','guard_digest_changed'} and
                      all(type(stopped[k]) is int and stopped[k]>=0 for k in ['namespace_inode','elapsed_ns']),
                      'mail_public_owned_stop_metadata')
                 record['guard_stop'] = stopped

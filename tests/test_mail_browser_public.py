@@ -18,6 +18,27 @@ J='1'*32; E='2'*32; R='3'*40
 SEEDS=['https://one.invalid/', 'http://two.invalid/', 'https://three.invalid/']
 
 class PublicBoundary(unittest.TestCase):
+    def test_stale_name_cannot_hide_a_later_foreign_selector_that_then_heals(self):
+        group='/system.slice/'+m.identity(J,E,R)['probe'];inode=12345
+        def dump(rights):
+            return json.dumps({'nftables':sum(([{'table':{'family':'inet','name':table}},
+                {'rule':{'family':'inet','table':table,'chain':'input','expr':[
+                    {'match':{'op':'==','left':{'socket':{'key':'cgroupv2'}},'right':right}},
+                    {'jump':{'target':'ingress'}}]}}]for table,right in zip(m.TABLES,rights)),[])})
+        first=dump([group[1:],str(inode+1)]);healed=dump([str(inode),str(inode)])
+        with patch.object(m.Path,'stat',side_effect=FileNotFoundError):
+            with patch.object(m.kernel,'nft',return_value=healed):expected=m.guard_identity((group,inode))
+            with patch.object(m.kernel,'nft',side_effect=[first,healed])as nft:
+                with self.assertRaisesRegex(ValueError,'cgroup_id_changed'):
+                    m.guard_identity((group,inode),expected=expected)
+                self.assertEqual(nft.call_count,1)
+            changed=json.loads(dump([group[1:],group[1:]]))
+            changed['nftables'][3]['rule']['expr'][1]['jump']['target']='foreign'
+            with patch.object(m.kernel,'nft',side_effect=[json.dumps(changed),healed])as nft:
+                with self.assertRaisesRegex(ValueError,'guard_snapshot_changed'):
+                    m.guard_identity((group,inode),expected=expected)
+                self.assertEqual(nft.call_count,1,'Observed structural changes cannot heal on a retry')
+
     def test_guard_requeries_only_stale_rendering_and_never_accepts_a_foreign_ID(self):
         group='/system.slice/'+m.identity(J,E,R)['probe'];inode=12345
         def dump(right):
@@ -32,12 +53,12 @@ class PublicBoundary(unittest.TestCase):
         # Require a fresh numeric kernel read, never trust the vanished name.
         with patch.object(m.Path,'stat',side_effect=FileNotFoundError):
             with patch.object(m.kernel,'nft',side_effect=[dump(group[1:]),dump(str(inode))])as nft:
-                self.assertEqual(m.guard_identity((group,inode)),expected)
+                self.assertEqual(m.guard_identity((group,inode),expected=expected),expected)
                 self.assertEqual(nft.call_count,2)
             for second in [dump(str(inode+1)),dump(group[1:]),json.dumps({'nftables':[]})]:
                 with self.subTest(second=second), \
                      patch.object(m.kernel,'nft',side_effect=[dump(group[1:]),second])as nft:
-                    with self.assertRaises(ValueError):m.guard_identity((group,inode))
+                    with self.assertRaises(ValueError):m.guard_identity((group,inode),expected=expected)
                     self.assertEqual(nft.call_count,2)
             for bad in [dump(str(inode+1)),json.dumps({'nftables':[]})]:
                 with patch.object(m.kernel,'nft',return_value=bad)as nft:
