@@ -356,12 +356,12 @@ class PublicActor(kernel.Managed):
         return service(job, epoch, release, role, keeper_pid, serial, protocol=protocol)
 
 
-class OwnedDNSPair(PublicActor):
-    """Two fixed UDP operations in one private probe; no public wire mode."""
+class OwnedDNSProbe(PublicActor):
+    """Three fixed socket checks in one private probe; no public wire mode."""
     def _service(self, job, epoch, release, role, keeper_pid, serial, *, protocol):
-        need(role=='probe' and serial==0 and protocol is False,'mail_public_dns_pair_profile')
+        need(role=='probe' and serial==0 and protocol is False,'mail_public_dns_probe_profile')
         unit,props,command=service(job,epoch,release,role,keeper_pid,serial,protocol=False)
-        command[-1]='udp-bpf'
+        command[-1]='dns-matrix'
         return unit,props,command
 
 
@@ -619,25 +619,27 @@ def dns_bytes(host, ident, deadline_ns):
 
 def probe_main(job, epoch, release, form):
     _, cfg = private_role(job, epoch, release, 'probe')
-    need(form in {'wire','raw','udp-bpf'} and (form == 'wire' or cfg['mode'] == 'owned-raw'),
+    need(form in {'wire','raw','dns-matrix'} and (form == 'wire' or cfg['mode'] == 'owned-raw'),
          'mail_public_probe_form')
-    if form == 'udp-bpf':
+    if form == 'dns-matrix':
         _,witness=kernel.role_entry(job,epoch,release,'probe')
         kernel.emit({'ready':True,'role':'probe','witness':witness})
-        for phase in range(2):
+        for phase in range(3):
             value=kernel.decode(sys.stdin.buffer.readline(4097))
-            need(type(value)is dict and set(value)=={'op','epoch','id'} and value['op']=='udp-bpf' and
+            need(type(value)is dict and set(value)=={'op','epoch','id'} and value['op']=='dns-matrix' and
                  value['epoch']==epoch and type(value['id'])is int and value['id']==phase,
-                 'mail_public_dns_pair_operation')
-            result={'phase':phase,'done':phase==1,'connected':False,'bytes':0,'matched':False,'error':None,
+                 'mail_public_dns_probe_operation')
+            result={'phase':phase,'done':phase==2,'connected':False,'bytes':0,'matched':False,'error':None,
                     'started_ns':time.monotonic_ns()}
             # Fresh sockets prevent a retained positive connection masking BPF.
-            with socket.socket(socket.AF_INET,socket.SOCK_DGRAM)as stream:
+            datagram=phase<2
+            with socket.socket(socket.AF_INET,socket.SOCK_DGRAM if datagram else socket.SOCK_STREAM)as stream:
                 stream.settimeout(.35)
                 try:
-                    stream.connect(('9.9.9.9',53));result['connected']=True
-                    stream.sendall(('OWNED-UDP '+epoch).encode());raw=stream.recv(128)
-                    result['bytes']=len(raw);result['matched']=raw==('PAW-UDP-'+epoch).encode()
+                    stream.connect(('9.9.9.9',53)if datagram else('93.184.216.34',80));result['connected']=True
+                    kind='UDP'if datagram else'TCP'
+                    stream.sendall(('OWNED-'+kind+' '+epoch).encode());raw=stream.recv(128)
+                    result['bytes']=len(raw);result['matched']=raw==('PAW-'+kind+'-'+epoch).encode()
                 except OSError as error:result['error']=type(error).__name__
             result['finished_ns']=time.monotonic_ns();kernel.emit(result)
         return
@@ -708,10 +710,10 @@ def prepare_network(job, epoch, release, mode, uplink):
 
 class NetworkPreparation:
     """Advance only the fixed roles while continuing to poll the same VM."""
-    def __init__(self, job, epoch, release, mode, actors, *, protocol=True, dns_pair=False):
-        need(type(dns_pair)is bool and (not dns_pair or mode=='owned-raw' and protocol is False),
-             'mail_public_dns_pair_private_only')
-        self.dns_pair=dns_pair
+    def __init__(self, job, epoch, release, mode, actors, *, protocol=True, dns_probe=False):
+        need(type(dns_probe)is bool and (not dns_probe or mode=='owned-raw' and protocol is False),
+             'mail_public_dns_probe_private_only')
+        self.dns_probe=dns_probe
         self.job=job; self.epoch=epoch; self.release=release; self.mode=mode; self.actors=actors
         self.protocol=protocol; self.owner=None; self.server=None; self.worker=None
         self.inode=None; self.server_live=mode == 'public'; self.worker_live=False; self.ready=False
@@ -735,7 +737,7 @@ class NetworkPreparation:
         need(pid>1 and props['ControlGroup']=='/system.slice/'+ids['keeper'] and
              os.stat('/proc/'+str(pid)+'/ns/net').st_ino==cfg['namespace_inode'],
              'mail_public_owned_active_guard_namespace')
-        actor=OwnedDNSPair if self.dns_pair else PublicActor
+        actor=OwnedDNSProbe if self.dns_probe else PublicActor
         self.worker=actor(self.job,self.epoch,self.release,'probe',pid,
             registry=self.actors,protocol=self.protocol,defer_ready=True)
     def poll(self):
@@ -789,7 +791,7 @@ class NetworkPreparation:
             if self.worker is None:
                 # Public mode has no private fixture and retains its original
                 # guard-ready-then-worker sequence and namespace source.
-                actor=OwnedDNSPair if self.dns_pair else PublicActor
+                actor=OwnedDNSProbe if self.dns_probe else PublicActor
                 self.worker=actor(self.job,self.epoch,self.release,'probe',self.owner.pid,
                     registry=self.actors,protocol=self.protocol,defer_ready=True)
         if not self.server_live and self.server.poll_ready():
@@ -1312,7 +1314,7 @@ def _owned_preparation_case(job, release, case):
     require_idle();before=snapshot();network=network_state()
     try:
         prepare_network(job,epoch,release,'owned-raw',{})
-        prep=NetworkPreparation(job,epoch,release,'owned-raw',actors,protocol=False,dns_pair=case=='dns-only')
+        prep=NetworkPreparation(job,epoch,release,'owned-raw',actors,protocol=False,dns_probe=case=='dns-only')
         until=time.monotonic()+5
         while not prep.poll():
             need(time.monotonic()<until,'mail_public_raw_preparation');time.sleep(.02)
@@ -1456,11 +1458,11 @@ def closed_packets(job, epoch, release, prep, roles, *, observations=None):
 def dns_only_packets(job, epoch, release, prep, roles, *, observations=None):
     """Positive DNS, BPF denial during a fresh DNS lease, then TCP denial.
 
-    Only two probe processes start. The UDP pair keeps its cgroup but opens
-    fresh sockets; its positive fixture count cannot be hidden by tuple expiry.
+    One probe keeps its cgroup and opens three fresh sockets. The separate
+    closed gate still tests rearming after worker collection; no budget grows.
     """
-    need(prep.mode=='owned-raw' and prep.ready and prep.dns_pair,
-         'mail_public_dns_pair_private_only')
+    need(prep.mode=='owned-raw' and prep.ready and prep.dns_probe,
+         'mail_public_dns_probe_private_only')
     if observations is None:observations=[]
     need(type(observations)is list and not observations,'mail_public_dns_observation_sink')
     owner=prep.owner;worker=prep.worker;sequence=0
@@ -1474,35 +1476,30 @@ def dns_only_packets(job, epoch, release, prep, roles, *, observations=None):
         if allow:args.append('IPAddressAllow=93.184.216.34/32 9.9.9.9/32')
         subprocess.run(args,check=True,capture_output=True,timeout=2)
     bpf(worker,True);control('arm',serial=0)
-    for phase in range(2):
-        if phase:bpf(worker,False)
+    for phase in range(3):
+        if phase:bpf(worker,phase==2)
         issued=time.monotonic_ns()
         control('lease',kind='dns',address='9.9.9.9',milliseconds=1000)
-        worker.send({'op':'udp-bpf','epoch':epoch,'id':phase});value=worker.receive()
+        worker.send({'op':'dns-matrix','epoch':epoch,'id':phase});value=worker.receive()
         observations.append(value)
         need(type(value.get('phase'))is int and value['phase']==phase and
-             value.get('done')is (phase==1) and type(value.get('matched'))is bool and
+             value.get('done')is (phase==2) and type(value.get('matched'))is bool and
              type(value.get('bytes'))is int and type(value.get('started_ns'))is int and
              type(value.get('finished_ns'))is int and
              issued<=value['started_ns']<=value['finished_ns']<=time.monotonic_ns(),
-             'mail_public_dns_pair_reply')
+             'mail_public_dns_probe_reply')
         if not phase:
             need(value['matched']is True and value['bytes']==len(('PAW-UDP-'+epoch).encode()),
                  'mail_public_actual_dns_only')
-        else:
+        elif phase==1:
             need(value['matched']is False and value['bytes']==0 and
                  value['finished_ns']<issued+10**9,'mail_public_BPF_lease_window')
             prep.bpf_lease_window={'issued_ns':issued,'not_before_expiry_ns':issued+10**9,
                                   'started_ns':value['started_ns'],'finished_ns':value['finished_ns']}
-    need(worker.process.wait(timeout=2)==0,'mail_public_dns_pair_exit')
-    # Collected paired worker before another128MiB transport is constructed.
-    worker=PublicActor(job,epoch,release,'probe',owner.pid,registry=roles,serial=1)
-    kernel.live_role(worker,'probe',prep.inode)
-    bpf(worker,True);control('arm',serial=1)
-    control('lease',kind='dns',address='9.9.9.9',milliseconds=1000)
-    worker.send({'op':'tcp'});value=worker.receive();observations.append(value)
-    need(value.get('done')is True and value.get('connected')is False and
-         worker.process.wait(timeout=2)==0,'mail_public_actual_dns_only')
+        else:
+            need(value.get('connected')is False and value['matched']is False and value['bytes']==0 and
+                 value['started_ns']<issued+10**9,'mail_public_actual_dns_only')
+    need(worker.process.wait(timeout=2)==0,'mail_public_dns_probe_exit')
     prep.server.send({'op':'stop'});counts=prep.server.receive()
     need(type(counts)is dict and set(counts)=={'counts'} and type(counts['counts'])is dict and
          set(counts['counts'])=={'tcp','udp','stream_bytes'} and
@@ -1527,7 +1524,7 @@ def run_raw(approval,binding):
     with fs.execution_lock():
         folder,_=prepare_network(job,epoch,release,'owned-raw',approval['context']['uplink'])
         try:
-            prep=NetworkPreparation(job,epoch,release,'owned-raw',roles,protocol=False,dns_pair=case=='dns-only')
+            prep=NetworkPreparation(job,epoch,release,'owned-raw',roles,protocol=False,dns_probe=case=='dns-only')
             until=time.monotonic()+5
             while not prep.poll():need(time.monotonic()<until,'mail_public_raw_preparation');time.sleep(.02)
             owner=prep.owner;server=prep.server;worker=prep.worker;sequence=0

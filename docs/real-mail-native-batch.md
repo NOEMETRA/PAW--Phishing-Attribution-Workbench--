@@ -289,3 +289,18 @@ Only the private owned-raw guard stop can expose that detail. Invalid JSON gets
 a separate fixed error code and private bounded prefix/hash/parse-position evidence. Neither condition becomes a pass or retries the
 read, and revocation/lifetimes/authority stay unchanged. This is diagnosis of
 the observed failure, not a claimed correction of its still-unknown cause.
+
+The next protected diagnostic identifies the failed nft read as signal15
+(returncode-15, empty stderr), alongside PID1's guard8s and fixture10s expiry.
+Closed again passed; DNS positive UDP and BPF-denied UDP were observed before
+expiry, but TCP was not reached. This establishes a killed read during the
+expired role, not a demonstrated filter mutation. Host/role cleanup was verified.
+DNS-only now keeps one confined probe for all three fixed phases: fresh UDP,
+fresh UDP with BPF deny-all, then fresh TCP with BPF restored and DNS-only tuples.
+Each phase has a fixed epoch/id, destination, payload, timeout and one reply;
+no fourth command is read. The BPF negative must finish before the conservative
+fresh-lease expiry bound, and TCP must start before that phase's bound. Exact
+receiver counts and normal-stop proof/zero exits remain mandatory. The separate
+closed case retains its actual second-worker rearm check. No guard/fixture/worker
+lifetime, capability, namespace, resource ceiling, public wire form or native
+authority changes. Actual immutable owned and fresh native gates remain required.
