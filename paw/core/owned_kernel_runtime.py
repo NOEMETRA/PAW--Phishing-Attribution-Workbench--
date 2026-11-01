@@ -297,7 +297,7 @@ class Managed:
     def __init__(self,job,epoch,release,role,keeper_pid=None,registry=None,serial=0,*,protocol=False,defer_ready=False):
         require(os.geteuid()==0 and HERE==Path('/opt/paw-vm/releases')/release/'paw/core/owned_kernel_runtime.py',
                 'owned_kernel_immutable_root_only')
-        self.unit,props,command=policy.service(job,epoch,release,role,keeper_pid,serial,protocol=protocol)
+        self.unit,props,command=self._service(job,epoch,release,role,keeper_pid,serial,protocol=protocol)
         require(type(defer_ready)is bool,'owned_kernel_readiness_mode')
         argv=['/usr/bin/systemd-run','--quiet','--wait','--pipe','--collect','--unit='+self.unit]
         argv+=['--property='+k+'='+v for k,v in props.items()]
@@ -327,7 +327,8 @@ class Managed:
                     raw=self.process.stdout.readline(4097)
                     if not raw:break
                     value=decode(raw)
-                    if index==0:self._ready_received_at=time.monotonic()
+                    if value.get('ready')is True and self._ready_received_at is None:
+                        self._ready_received_at=time.monotonic()
                     self.output.put(value,timeout=1)
                 self.output.put({'eof':True},timeout=1)
             except Exception as error:
@@ -343,6 +344,10 @@ class Managed:
         seconds=4 if role=='keeper'else 2
         self._ready_deadline=time.monotonic()+seconds
         if not defer_ready:self._accept_ready(self.receive(seconds))
+    def _service(self,job,epoch,release,role,keeper_pid,serial,*,protocol):
+        # Trusted immutable subclasses may supply another finite profile. No
+        # service property, command or callback arrives from an ordinary RPC.
+        return policy.service(job,epoch,release,role,keeper_pid,serial,protocol=protocol)
     def _accept_ready(self,value):
         require(type(value)is dict and value.get('ready')is True,'owned_kernel_role_not_ready')
         self.ready=value;self.pid=value['witness']['pid']

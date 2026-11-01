@@ -100,11 +100,7 @@ class Runtime:
         from browser_sandbox import RendererWitness
         self.witness=RendererWitness()
         self.used=True;MARKER.write_text('used\n');MARKER.chmod(0o600)
-        config=json.loads(Path('/etc/paw-owned-cdp.json').read_text())
-        require(type(config) is dict and set(config)=={'kind','nonce'} and
-            config['kind']=='owned-cdp-probe-v1' and type(config['nonce']) is str and
-            re.fullmatch('[0-9a-f]{32}',config['nonce']),'owned_fixed_config')
-        self.nonce=config['nonce'];WORK.mkdir(mode=0o700);os.chown(WORK,65534,65534)
+        self.nonce=self._start_nonce();WORK.mkdir(mode=0o700);os.chown(WORK,65534,65534)
         Path('/sys/fs/cgroup/cgroup.subtree_control').write_text('+cpu +memory +pids');GROUP.mkdir()
         for name,value in {'memory.max':str(512*1024**2),'memory.swap.max':'0','pids.max':'256','memory.oom.group':'1'}.items():
             (GROUP/name).write_text(value)
@@ -137,6 +133,18 @@ class Runtime:
         return {'started':True,'purpose':'owned CDP only','pid':self.process.pid,'network_interfaces':['lo']}
     def _make_controller(self):
         return cdp.GuestController(SEED,self.nonce,self._send,self._request)
+    def _start_nonce(self):
+        config=json.loads(Path('/etc/paw-owned-cdp.json').read_text())
+        require(type(config) is dict and set(config)=={'kind','nonce'} and
+            config['kind']=='owned-cdp-probe-v1' and type(config['nonce']) is str and
+            re.fullmatch('[0-9a-f]{32}',config['nonce']),'owned_fixed_config')
+        return config['nonce']
+    def _snapshot_due(self):
+        return self.driver.stage=='running' and self.requests>=2 and self.driver.fetch.pending is None and not self.driver.queue and time.monotonic()-self.started>=3
+    def _validate_completed(self):
+        dom=self.driver.dom or b''
+        require(('PAW-OWNED-'+self.nonce).encode() in dom and b'data-owned="done"' in dom and
+            all(self.witness.flags().values()),'owned_actual_js_or_sandbox_missing')
     def tick(self):
         require(self.process is not None,'owned_not_started')
         if self.done is not None:return self.done
@@ -163,7 +171,7 @@ class Runtime:
             require(not netlog.exists() or netlog.stat().st_size<=1024**2,'owned_netlog_budget')
             require(time.monotonic()-self.started<15,'owned_whole_deadline')
             require(self.process.poll() is None,'owned_chrome_exited')
-            if self.driver.stage=='running' and self.requests>=2 and self.driver.fetch.pending is None and not self.driver.queue and time.monotonic()-self.started>=3:
+            if self._snapshot_due():
                 self.driver.snapshot()
             if self.driver.stage=='snapshot_ready':return self.finish('completed')
             return {'done':False,'requests':self.requests,'stage':self.driver.stage}
@@ -175,9 +183,7 @@ class Runtime:
         while (GROUP/'pids.current').read_text().strip()!='0' and time.monotonic()<end:time.sleep(.02)
         require((GROUP/'pids.current').read_text().strip()=='0','owned_guest_writers_alive')
         if status=='completed':
-            dom=self.driver.dom or b''
-            require(('PAW-OWNED-'+self.nonce).encode() in dom and b'data-owned="done"' in dom and
-                all(self.witness.flags().values()),'owned_actual_js_or_sandbox_missing')
+            self._validate_completed()
         self.driver.stop()
         self.done={'done':True,'status':status,'error':error,'writers_stopped':True,
             'sandbox':self.witness.flags(),'network_interfaces':['lo'],'requests':self.requests,'refused':self.refused,

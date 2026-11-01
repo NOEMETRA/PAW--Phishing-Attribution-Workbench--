@@ -90,6 +90,10 @@ jobs:
           python -B -m unittest discover -s tests -p 'test_mail_browser_owned.py' -v
           python -B -m unittest discover -s tests -p 'test_owned_mail*.py' -v
           python -B -m unittest discover -s tests -p 'test_mail_browser_custody.py' -v
+      - name: Verify finite native mail adapter and exact owned ZIP acknowledgement without Root or egress
+        run: |
+          python -B -m unittest discover -s tests -p 'test_mail_browser_native.py' -v
+          python -B -m unittest discover -s tests -p 'test_mail_browser_public*.py' -v
       - name: Verify authentication and missing evidence contracts
         run: python -m unittest discover -s tests -p 'test_authentication_contracts.py' -v
       - name: Verify bounded local DKIM key evidence and unverified provenance
