@@ -509,14 +509,23 @@ def keeper(job, epoch, release):
     selected = selectors.DefaultSelector(); selected.register(0, selectors.EVENT_READ)
     stopped = []; signal.signal(signal.SIGTERM, lambda *_: stopped.append('external_stop'))
     kernel.emit({'ready':True, 'role':'keeper', 'witness':kernel.status(), 'filter_sha256':expected})
-    reason = 'unknown';check_error = None
+    reason = 'unknown';check_error = None;check_detail = None
     try:
         while time.monotonic_ns()-began < 8*10**9:
             if stopped: reason = stopped[0]; break
             try:observed=guard_identity(binding,expected=expected)
             except ValueError as error:
                 code=str(error)
-                check_error=code if code in {'mail_public_guard_missing','mail_public_unarmed_cgroup_selector',
+                if isinstance(error,kernel.NftFailure):
+                    check_error='guard_nft_failed'
+                    if cfg['mode']=='owned-raw':check_detail=error.detail
+                elif isinstance(error,json.JSONDecodeError):
+                    check_error='guard_json_invalid'
+                    if cfg['mode']=='owned-raw':
+                        raw=error.doc.encode('utf-8','backslashreplace')
+                        check_detail={'json_bytes':len(raw),'json_sha256':sha(raw),
+                            'json_prefix_b64':base64.b64encode(raw[:512]).decode('ascii'),'position':error.pos}
+                else:check_error=code if code in {'mail_public_guard_missing','mail_public_unarmed_cgroup_selector',
                     'mail_public_cgroup_replaced','mail_public_cgroup_path_not_live','mail_public_cgroup_id_changed',
                     'mail_public_cgroup_expression','mail_public_cgroup_selector_count',
                     'mail_public_guard_snapshot_changed'}else 'guard_snapshot_unavailable'
@@ -545,9 +554,11 @@ def keeper(job, epoch, release):
         else: reason = 'deadline'
     finally:
         selected.close()
-        (folder/'owner-result.json').write_bytes(canonical({'schema':'paw-mail-network-stop-v1',
+        stop={'schema':'paw-mail-network-stop-v1',
             'epoch':epoch, 'reason':reason, 'namespace_inode':os.stat('/proc/self/ns/net').st_ino,
-            'elapsed_ns':time.monotonic_ns()-began, 'check_error':check_error}))
+            'elapsed_ns':time.monotonic_ns()-began, 'check_error':check_error}
+        if check_detail is not None:stop['check_detail']=check_detail
+        (folder/'owner-result.json').write_bytes(canonical(stop))
         if revoke_role(job,epoch,release) is True:
             fd=os.open(folder/'revoked-complete',os.O_CREAT|os.O_EXCL|os.O_WRONLY|os.O_NOFOLLOW,0o600)
             os.close(fd)
@@ -1330,16 +1341,36 @@ def _owned_preparation_case(job, release, case):
             # Fixed protected path, bounded metadata, read only after the
             # independent role stop/host restore checks above succeeded.
             stopped = kernel.private_json(stop)
-            need(set(stopped)=={'schema','epoch','reason','namespace_inode','elapsed_ns','check_error'} and
+            need(set(stopped)-{'check_detail'}=={'schema','epoch','reason','namespace_inode','elapsed_ns','check_error'} and
                  stopped['schema']=='paw-mail-network-stop-v1' and stopped['epoch']==epoch and
                  stopped['reason'] in {'unknown','guard_changed','controller_lost','external_stop',
                                       'requested_stop','deadline'} and
                  stopped['check_error'] in {None,'mail_public_guard_missing','mail_public_unarmed_cgroup_selector',
                     'mail_public_cgroup_replaced','mail_public_cgroup_path_not_live','mail_public_cgroup_id_changed',
                     'mail_public_cgroup_expression','mail_public_cgroup_selector_count',
-                    'mail_public_guard_snapshot_changed','guard_snapshot_unavailable','guard_digest_changed'} and
+                    'mail_public_guard_snapshot_changed','guard_snapshot_unavailable','guard_digest_changed',
+                    'guard_nft_failed','guard_json_invalid'} and
                  all(type(stopped[k]) is int and stopped[k]>=0 for k in ['namespace_inode','elapsed_ns']),
                  'mail_public_owned_stop_metadata')
+            if 'check_detail'in stopped:
+                detail=stopped['check_detail']
+                need(type(detail)is dict,'mail_public_owned_stop_detail')
+                if stopped['check_error']=='guard_json_invalid':
+                    need(set(detail)=={'json_bytes','json_sha256','json_prefix_b64','position'} and
+                         type(detail['json_bytes'])is int and detail['json_bytes']>=0 and
+                         type(detail['position'])is int and 0<=detail['position']<=detail['json_bytes'] and
+                         type(detail['json_sha256'])is str and re.fullmatch('[0-9a-f]{64}',detail['json_sha256']) and
+                         type(detail['json_prefix_b64'])is str and
+                         len(base64.b64decode(detail['json_prefix_b64'],validate=True))==min(512,detail['json_bytes']),
+                         'mail_public_owned_stop_detail')
+                else:need(stopped['check_error']=='guard_nft_failed' and
+                     set(detail)=={'returncode','stderr_bytes','stderr_sha256','stderr_prefix_b64'} and
+                     type(detail['returncode'])is int and -255<=detail['returncode']<=255 and detail['returncode']!=0 and
+                     type(detail['stderr_bytes'])is int and detail['stderr_bytes']>=0 and
+                     type(detail['stderr_sha256'])is str and re.fullmatch('[0-9a-f]{64}',detail['stderr_sha256']) and
+                     type(detail['stderr_prefix_b64'])is str and
+                     len(base64.b64decode(detail['stderr_prefix_b64'],validate=True))==min(512,detail['stderr_bytes']),
+                     'mail_public_owned_stop_detail')
             record['guard_stop'] = stopped
         record['guard_cleanup_progress']=_cleanup_progress(stop.parent)
         record['roles']=[{'unit':actor.unit,'launcher_returncode':actor.process.poll(),
@@ -1362,6 +1393,7 @@ def owned_preparation(job, release):
     from reader_export import publish_reader_tree
     with _owned_preparation_budget(job),fs.execution_lock():
         record=_owned_preparation_case(job,release,'closed')
+        record['closed_result']=record['result']
         if record['result']=='PASS':
             record['dns_only']=_owned_preparation_case(job,release,'dns-only')
             if record['dns_only']['result']!='PASS':

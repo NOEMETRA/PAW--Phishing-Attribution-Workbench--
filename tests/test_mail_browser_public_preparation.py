@@ -176,7 +176,9 @@ class Preparation(unittest.TestCase):
                     self.assertEqual(report['closed_packets'],[{'done':True,'matched':False},{'done':True,'connected':False}])
                     self.assertNotEqual(report['epoch'],report['dns_only']['epoch'])
                     self.assertEqual(report['dns_only']['result'],'FAIL'if dns_failure else 'PASS')
-                    if dns_failure:self.assertEqual(report['error'],report['dns_only']['error'])
+                    if dns_failure:
+                        self.assertEqual(report['error'],report['dns_only']['error'])
+                        self.assertEqual(report['closed_result'],'PASS')
                     dns.assert_called_once()
                 self.assertEqual(len(exported),1)
                 self.assertTrue(report['writers_stopped']);self.assertTrue(report['host_restored'])
