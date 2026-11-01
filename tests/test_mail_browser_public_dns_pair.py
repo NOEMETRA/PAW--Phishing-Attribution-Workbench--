@@ -27,6 +27,18 @@ class DNSPair(unittest.TestCase):
         for role,serial,protocol in [('fixture',0,False),('probe',1,False),('probe',0,True)]:
             with self.assertRaisesRegex(ValueError,'pair_profile'):obj._service(J,E,R,role,42,serial,protocol=protocol)
 
+    def test_ready_guard_fallback_keeps_the_fixed_private_pair(self):
+        obj=object.__new__(m.NetworkPreparation)
+        obj.job=J;obj.epoch=E;obj.release=R;obj.mode='owned-raw';obj.protocol=False;obj.dns_pair=True
+        obj.actors=[];obj.server=None;obj.fixture_configured=True;obj.server_live=True
+        obj.inode=None;obj.ready=False;obj.worker_live=False;obj.worker=None
+        obj.owner=NS(pid=42,poll_ready=lambda:True)
+        worker=NS(poll_ready=lambda:True)
+        with patch.object(obj,'_start_owned_worker'),patch.object(m.kernel,'live_role',return_value=99), \
+             patch.object(m.os,'stat',return_value=NS(st_ino=10)), \
+             patch.object(m,'OwnedDNSPair',return_value=worker)as pair,patch.object(m,'PublicActor')as public:
+            self.assertTrue(obj.poll());pair.assert_called_once();public.assert_not_called()
+
     def probe(self,commands):
         output=[];sockets=[]
         def sock(*a):

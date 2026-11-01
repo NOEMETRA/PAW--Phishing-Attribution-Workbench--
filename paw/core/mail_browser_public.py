@@ -778,7 +778,8 @@ class NetworkPreparation:
             if self.worker is None:
                 # Public mode has no private fixture and retains its original
                 # guard-ready-then-worker sequence and namespace source.
-                self.worker=PublicActor(self.job,self.epoch,self.release,'probe',self.owner.pid,
+                actor=OwnedDNSPair if self.dns_pair else PublicActor
+                self.worker=actor(self.job,self.epoch,self.release,'probe',self.owner.pid,
                     registry=self.actors,protocol=self.protocol,defer_ready=True)
         if not self.server_live and self.server.poll_ready():
             kernel.live_role(self.server,'fixture',self.inode);self.server_live=True
