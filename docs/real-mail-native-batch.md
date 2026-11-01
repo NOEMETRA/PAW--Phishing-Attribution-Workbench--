@@ -128,7 +128,7 @@ confined role's stderr was not published, so the precise complete startup cause
 must still be confirmed by actual diagnostics, not inferred from the reproducer.
 
 The existing `vm-acceptance-v1` no-VM recipe now also runs one fixed private
-loopback preparation probe. It cannot select a public mode, URL, sample or native
+loopback preparation/default-denied rearm probe. It cannot select a public mode, URL, sample or native
 scope, launch a browser, or open a public tuple. It keeps the existing5s observer
 deadline and role profiles. Its coordinator temporarily uses the native coordinator’s192MiB/24tasks/35%
 profile, so coordinator/guard/transport/fixture total448MiB/56tasks/85%, within
@@ -141,6 +141,26 @@ subsequent owned startup diagnosis through the already-enrolled limited operator
 without authenticating a real-source batch for each diagnostic attempt. Review,
 main CI and immutable promotion still precede every changed Root version. The
 ended native authority cannot be reused for changed code or real navigation.
+
+The next native attempt passed preparation but lost the guard channel while
+arming its second default-denied worker, before any real navigation. Terminal
+readback confirmed the protected cleanup hook and unchanged38/38/39-file parent
+inventories. A separate ordinary-user reproduction with nftables1.1.6's exact
+read-only cgroup formatter and a collected user service demonstrates a concrete
+digest defect: one unchanged kernel cgroup ID renders first as its pathname,
+then as a decimal JSON string. The prior guard hash treats those as different
+rules. This reproduces the mechanism; the failed confined guard's private stop
+reason has not independently established it as that run's complete cause.
+
+The guard now pins the live cgroup inode when arming each worker and canonicalizes
+only that exact socket selector to its numeric ID. Foreign IDs, a recreated path,
+missing selectors, changed operators and other guard changes still refuse. The
+fixed owned diagnostic exercises the same denied UDP, exited worker, second arm
+and denied TCP path as the native closed case, without issuing any lease. It
+exports bounded protected stop metadata only after known cleanup. Existing5s
+preparation,8s guard and aggregate budgets are unchanged. Actual success of this
+diagnostic, refreshed owned browser/custody acceptance and a fresh native gate
+remain necessary; the local reproduction and tests do not establish them.
 
 Inert source/installed tests are not operational acceptance. Exact-head review
 (with the owner's minimum10min wait), seven required head/main checks, normal

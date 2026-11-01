@@ -343,12 +343,36 @@ def root_config(job, epoch, release):
     return ids, config
 
 
-def guard_identity():
+def guard_identity(binding=None):
     value = json.loads(kernel.nft('-j', 'list', 'ruleset'))
+    selectors_seen = []
+    def cgroup_id(right):
+        need(binding is not None, 'mail_public_unarmed_cgroup_selector')
+        group, inode = binding
+        # nft1.1.6 renders the SAME kernel ID as a pathname while its cgroup
+        # exists, then as a decimal JSON string after PID1 collects the unit.
+        # Pin the live inode at arm time; never discard the selector itself.
+        path = Path('/sys/fs/cgroup'+group)
+        try: current = path.stat().st_ino
+        except FileNotFoundError: current = None
+        need(current is None or current == inode, 'mail_public_cgroup_replaced')
+        if right == group.lstrip('/'):
+            need(current == inode, 'mail_public_cgroup_path_not_live')
+        else:
+            need((type(right) is int and right == inode) or
+                 (type(right) is str and right == str(inode)), 'mail_public_cgroup_id_changed')
+        selectors_seen.append(inode)
+        return inode
     def clean(v):
         if type(v) is list:
             return [clean(x) for x in v if not (type(x) is dict and 'metainfo' in x)]
         if type(v) is dict:
+            if set(v) == {'match'} and type(v['match']) is dict:
+                match = v['match']
+                if match.get('left') == {'socket':{'key':'cgroupv2'}}:
+                    need(set(match) == {'op','left','right'} and match['op'] == '==',
+                         'mail_public_cgroup_expression')
+                    return {'match':{**match, 'right':cgroup_id(match['right'])}}
             return {k:clean(x) for k,x in v.items() if k != 'handle' and
                     not (k == 'elem' and v.get('name') in {'tcp4', 'udp4'})}
         return v
@@ -356,7 +380,9 @@ def guard_identity():
         type(body) is dict and (body.get('table') in TABLES or
         kind == 'table' and body.get('name') in TABLES) for kind,body in row.items())]
     need(sum(1 for row in selected if 'table' in row) == 2, 'mail_public_guard_missing')
-    return sha(canonical(clean(selected)))
+    cleaned = clean(selected)
+    need(len(selectors_seen) == (0 if binding is None else 2), 'mail_public_cgroup_selector_count')
+    return sha(canonical(cleaned))
 
 
 def keeper_action(value, epoch, sequence, ids):
@@ -407,7 +433,7 @@ def keeper(job, epoch, release):
     fd = os.open(folder/'guard-created', os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600)
     os.close(fd)
     kernel.nft('-f', '-', text=rules(None, cfg['interface'], cfg['source_addresses']))
-    expected = guard_identity(); began = time.monotonic_ns(); sequence = 0; armed = None
+    expected = guard_identity(); began = time.monotonic_ns(); sequence = 0; armed = None; binding = None
     selected = selectors.DefaultSelector(); selected.register(0, selectors.EVENT_READ)
     stopped = []; signal.signal(signal.SIGTERM, lambda *_: stopped.append('external_stop'))
     kernel.emit({'ready':True, 'role':'keeper', 'witness':kernel.status(), 'filter_sha256':expected})
@@ -415,7 +441,7 @@ def keeper(job, epoch, release):
     try:
         while time.monotonic_ns()-began < 8*10**9:
             if stopped: reason = stopped[0]; break
-            try:observed=guard_identity()
+            try:observed=guard_identity(binding)
             except ValueError:
                 reason='guard_changed';break
             if observed != expected: reason = 'guard_changed'; break
@@ -431,11 +457,12 @@ def keeper(job, epoch, release):
                 need(props['ActiveState'] == 'active' and int(props['MainPID']) > 1 and
                      props['ControlGroup'] == script, 'mail_public_arm_live_cgroup')
                 armed = script
+                binding = (armed, os.stat('/sys/fs/cgroup'+armed).st_ino)
                 script = ''.join('delete table inet '+v+'\n' for v in TABLES)+rules(
                     armed, cfg['interface'], cfg['source_addresses'])
             if op == 'lease': need(armed is not None, 'mail_public_lease_before_arm')
             if script is not None: kernel.nft('-f', '-', text=script)
-            if op == 'arm': expected = guard_identity()
+            if op == 'arm': expected = guard_identity(binding)
             kernel.emit({'accepted':True, 'id':value['id'], 'op':op})
             if op == 'stop': reason = 'requested_stop'; break
         else: reason = 'deadline'
@@ -1140,7 +1167,7 @@ def owned_preparation(job, release):
     record={'schema':'paw-mail-owned-preparation-v1','result':'FAIL','job':job,'release_sha':release,
         'epoch':epoch,'vm_started':False,'real_samples_executed':0,'real_connections':0,
         'production_grants_enabled':False,'i08_installed':False,
-        'scope':'Fixed private loopback preparation only; no packet matrix, browser or public readiness',
+        'scope':'Fixed private loopback preparation and two default-denied packets; no browser or public readiness',
         'programs':{name:sha(HERE.with_name(name).read_bytes()) for name in PROGRAMS}}
     with _owned_preparation_budget(job),fs.execution_lock():
         require_idle();before=snapshot();network=network_state()
@@ -1150,6 +1177,7 @@ def owned_preparation(job, release):
             until=time.monotonic()+5
             while not prep.poll():
                 need(time.monotonic()<until,'mail_public_raw_preparation');time.sleep(.02)
+            record['closed_packets'] = closed_packets(job, epoch, release, prep, actors)
             record['result']='PASS'
         except Exception as error:
             record['error']=type(error).__name__+':'+str(error)[:512]
@@ -1163,6 +1191,18 @@ def owned_preparation(job, release):
                           root_partition_cpu_percent=[35,10,25,15])
             record['preparation']={} if prep is None else {
                 name:getattr(prep,name) for name in ['fixture_configured','server_live','worker_live','ready']}
+            stop = Path(identity(job,epoch,release)['directory'])/'owner-result.json'
+            if stop.exists():
+                # Fixed protected path, bounded metadata, read only after the
+                # independent role stop/host restore checks above succeeded.
+                stopped = kernel.private_json(stop)
+                need(set(stopped)=={'schema','epoch','reason','namespace_inode','elapsed_ns'} and
+                     stopped['schema']=='paw-mail-network-stop-v1' and stopped['epoch']==epoch and
+                     stopped['reason'] in {'unknown','guard_changed','controller_lost','external_stop',
+                                          'requested_stop','deadline'} and
+                     all(type(stopped[k]) is int and stopped[k]>=0 for k in ['namespace_inode','elapsed_ns']),
+                     'mail_public_owned_stop_metadata')
+                record['guard_stop'] = stopped
             record['roles']=[{'unit':actor.unit,'launcher_returncode':actor.process.poll(),
                 'stderr_bytes':len(actor.errors),'stderr_sha256':sha(bytes(actor.errors)),
                 'stderr':bytes(actor.errors[:4096]).decode('utf-8','replace'),
@@ -1177,6 +1217,38 @@ def owned_preparation(job, release):
     return {'result':record['result'],'vm_started':False,'real_samples_executed':0,'real_connections':0,
             'production_grants_enabled':False,'i08_installed':False,'writers_stopped':True,'host_restored':True,
             'attestation_sha256':sha(raw),'export':str(target),'scope':record['scope']}
+
+
+def closed_packets(job, epoch, release, prep, roles):
+    """The same fixed denied UDP→collected worker→denied TCP path in both gates.
+
+    Only the loopback-only owned namespace is admissible. No lease is issued.
+    This is also callable by the existing no-VM owned diagnostic, so startup
+    and cgroup rearm failures do not require another real-source approval.
+    """
+    need(prep.mode=='owned-raw' and prep.ready, 'mail_public_closed_owned_only')
+    owner=prep.owner; worker=prep.worker; observations=[]
+    for serial, op in enumerate(['udp','tcp']):
+        if serial:
+            worker=PublicActor(job,epoch,release,'probe',owner.pid,registry=roles,serial=serial)
+            kernel.live_role(worker,'probe',prep.inode)
+        subprocess.run(['/usr/bin/systemctl','set-property','--runtime',worker.unit,
+            'IPAddressAllow=', 'IPAddressAllow=93.184.216.34/32 9.9.9.9/32'],
+            check=True,capture_output=True,timeout=2)
+        owner.send({'op':'arm','epoch':epoch,'id':serial,'serial':serial})
+        ack=owner.receive()
+        need(ack.get('accepted') is True and type(ack.get('id')) is int and ack['id']==serial,
+             'mail_public_raw_guard_ack')
+        worker.send({'op':op});value=worker.receive()
+        need(value.get('done') is True,'mail_public_raw_not_done')
+        worker.process.wait(timeout=2);observations.append(value)
+    need(not observations[0]['matched'] and not observations[1]['connected'],
+         'mail_public_actual_default_drop')
+    owner.send({'op':'stop','epoch':epoch,'id':2});ack=owner.receive()
+    need(ack.get('accepted') is True and type(ack.get('id')) is int and ack['id']==2,
+         'mail_public_raw_guard_ack')
+    owner.process.wait(timeout=2)
+    return observations
 
 
 def run_raw(approval,binding):
@@ -1222,7 +1294,7 @@ def run_raw(approval,binding):
                 need(value.get('done') is True,'mail_public_raw_not_done');worker.process.wait(timeout=2)
                 result['observations'].append(value);return value
             if case=='closed':
-                need(not packet('udp')['matched'] and not packet('tcp')['connected'],'mail_public_actual_default_drop')
+                result['observations']=closed_packets(job,epoch,release,prep,roles)
             elif case=='dns-only':
                 need(packet('udp','dns')['matched'] and not packet('tcp','dns')['connected'],
                      'mail_public_actual_dns_only')
@@ -1260,7 +1332,7 @@ def run_raw(approval,binding):
                 owner.process.wait(timeout=3);worker.process.wait(timeout=3)
                 stopped=kernel.private_json(folder/'owner-result.json')
                 need(stopped['reason']=='guard_changed','mail_public_guard_loss_disposition')
-            if case not in {'owner-loss','guard-loss'}:
+            if case not in {'closed','owner-loss','guard-loss'}:
                 control('stop');owner.process.wait(timeout=2)
             result['result']='PASS'
         finally:
