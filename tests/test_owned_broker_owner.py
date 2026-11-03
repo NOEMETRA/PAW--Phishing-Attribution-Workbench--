@@ -3,13 +3,13 @@ from contextlib import nullcontext,ExitStack
 import hashlib,json,os,sys,tempfile,types,unittest
 from pathlib import Path
 from unittest.mock import patch,Mock
-from paw.core import browser_owned_broker as p,browser_mediator as mediator,browser_owned_broker_guest as guest
+from paw.core import browser_owned_broker as p,browser_mediator as mediator,browser_owned_broker_guest as guest,mail_browser_public as mail
 
 R='b'*40;J='c'*32;U='00000000-0000-4000-8000-000000000001'
 GOOD={'reason':'requested_stop','connection_closed':True,'vm_uuid':U}
 
 class Owner(unittest.TestCase):
-    def simulate(self,owner,*,cleanup_fail=False,guest_bad=False,worker_bad=False,bootstrap_delayed=False,proof_delayed=False,late_pause=False,prepare_bad=None,capture_bad=False,late_capture=False,after_snapshot=False):
+    def simulate(self,owner,*,cleanup_fail=False,guest_bad=False,worker_bad=False,bootstrap_delayed=False,proof_delayed=False,late_pause=False,prepare_bad=None,capture_bad=False,late_capture=False,after_snapshot=False,mail_fixture=False):
         clock=[10**9];guest_ack=[];proof_armed=[False];proof_charged=[False]
         with tempfile.TemporaryDirectory()as directory:
             root=Path(directory);repo=root/'releases'/R;core=repo/'paw/core';core.mkdir(parents=True)
@@ -89,6 +89,11 @@ class Owner(unittest.TestCase):
                     registry.append(self)
                     if role==prepare_bad:raise ValueError('inert partial preparation failure')
                 def poll_ready(self):return clock[0]>=self.ready_when
+            def mail_prepare(job,epoch,release,mode,actors,*,protocol):
+                self.assertEqual(mode,'owned-browser');self.assertIs(protocol,True)
+                actor=Actor(job,epoch,release,'fixture',registry=actors)
+                actor.errors=b'Traceback: synthetic owned fixture\nValueError: precise-owned-error\n'
+                return types.SimpleNamespace(poll=Mock(side_effect=ValueError('owned_kernel_role_protocol_lost')))
             class Mediation:
                 def __init__(self,*args):
                     self.owner,self.worker=args[:2];self.nonce=args[2];self.sequence=1;Mediation.latest=self
@@ -125,7 +130,9 @@ class Owner(unittest.TestCase):
                 patch.object(p.time,'monotonic',side_effect=lambda:clock[0]/10**9), \
                 patch.object(p,'HERE',core/'browser_owned_broker.py'),patch.object(p,'Path',mapped), \
                 patch.object(p.os,'geteuid',return_value=0),patch.object(p,'prepare',return_value=(root,'f'*64)), \
-                patch.object(p,'partition',side_effect=lambda unit,restore=False:partitions.append(restore)), \
+                patch.object(p,'partition',side_effect=lambda unit,restore=False,**kw:partitions.append(restore)), \
+                patch.object(mail,'prepare_network',return_value=(root,'f'*64)), \
+                patch.object(mail,'NetworkPreparation',side_effect=mail_prepare), \
                 patch.object(p.kernel,'owned_validation',return_value={'result':'PASS','vm_started':False,'attestation_sha256':'f'*64}),patch.object(p.kernel,'Managed',Actor), \
                 patch.object(p.kernel,'live_role',return_value=123456),patch.object(p.kernel,'vacant_ids'), \
                 patch.object(p.kernel,'cleanup_actors',side_effect=cleanup), \
@@ -136,22 +143,26 @@ class Owner(unittest.TestCase):
                 patch.object(p,'send_response',side_effect=lambda channel,*args:setattr(channel,'completed',channel.completed+1)), \
                 patch.object(p.console,'transfer',side_effect=lambda channel,*args:setattr(channel,'refused',True)))
                 for manager in managers:stack.enter_context(manager)
-                if owner==GOOD and owner.get('connection_closed')is True and not cleanup_fail and not guest_bad and not worker_bad and prepare_bad is None and not capture_bad and not after_snapshot:
-                    try:answer=p.run_owned(J,R)
+                if owner==GOOD and owner.get('connection_closed')is True and not cleanup_fail and not guest_bad and not worker_bad and prepare_bad is None and not capture_bad and not after_snapshot and not mail_fixture:
+                    try:answer=p.run_owned(J,R,mail_fixture=mail_fixture)
                     except ValueError as error:
                         record=json.loads(next(control.glob('*/results.json')).read_bytes())
                         raise AssertionError('producer failed: '+record.get('error','unknown'))from error
                     self.assertEqual(answer['result'],'PASS')
                 else:
-                    with self.assertRaises(ValueError):p.run_owned(J,R)
+                    with self.assertRaises(ValueError):p.run_owned(J,R,mail_fixture=mail_fixture)
             self.assertIn('VM',stops);self.assertEqual(partitions,[False,True])
             known=owner==GOOD and owner.get('connection_closed')is True and not cleanup_fail
             self.assertEqual(len(published),1 if known else 0)
             if known:
                 attestation=json.loads((published[0]/'attestation.json').read_bytes())
-                self.assertEqual(attestation['result'],'FAIL'if guest_bad or worker_bad or prepare_bad or capture_bad or after_snapshot else'PASS')
+                self.assertEqual(attestation['result'],'FAIL'if guest_bad or worker_bad or prepare_bad or capture_bad or after_snapshot or mail_fixture else'PASS')
                 self.assertTrue(attestation['writers_stopped']);self.assertEqual(attestation['real_connections'],0)
                 self.assertFalse(attestation['production_grants_enabled'])
+                if mail_fixture:
+                    self.assertTrue(attestation['mail_fixture_preparation'])
+                    self.assertEqual(attestation['error'],'ValueError:owned_kernel_role_protocol_lost')
+                    self.assertIn('ValueError: precise-owned-error',attestation['role_diagnostics'][0]['stderr'])
                 if capture_bad:
                     self.assertEqual(attestation['capture_artifacts'],[{'name':'dom.html','bytes':9,'sha256':hashlib.sha256(b'owned DOM').hexdigest()}])
                     self.assertEqual(attestation['capture_missing_coverage'],['screenshot.png'])
@@ -170,6 +181,8 @@ class Owner(unittest.TestCase):
                     self.assertLess(attestation['stop_ns'],12*10**9,'post-stop hashing must not inflate the external stop measurement')
                     self.assertGreaterEqual(attestation['verification_ns'],16*10**9)
             else:self.assertEqual(list(exports.iterdir()),[])
+    def test_mail_fixture_failure_beside_VM_keeps_exact_error_and_known_stop(self):self.simulate(GOOD,mail_fixture=True)
+    def test_mail_fixture_unknown_stop_cannot_publish_diagnostic(self):self.simulate(GOOD,mail_fixture=True,cleanup_fail=True)
     def test_auxiliary_probe_stops_network_at_snapshot_before_late_PNG_under_same_lease(self):self.simulate(GOOD,late_capture=True)
     def test_network_request_after_snapshot_closes_without_reopening_stopped_roles(self):self.simulate(GOOD,after_snapshot=True)
     def test_later_capture_failure_retains_DOM_and_never_restarts_consumed_stream(self):self.simulate(GOOD,capture_bad=True)

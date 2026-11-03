@@ -27,7 +27,8 @@ from . import browser_broker_wire as wire,browser_broker_console as console,brow
 HERE=Path(__file__).resolve()
 PROGRAMS=['browser_owned_broker.py','browser_owned_broker_guest.py','browser_broker_console.py',
     'browser_owned_protocol.py','browser_mediator.py','mail_browser_dns.py','browser_broker_wire.py',
-    'browser_cdp.py','browser_owned_cdp_guest.py','owned_kernel_runtime.py','owned_kernel_policy.py']
+    'browser_cdp.py','browser_owned_cdp_guest.py','owned_kernel_runtime.py','owned_kernel_policy.py',
+    'mail_browser_public.py']
 SEED='https://paw-owned.invalid/'
 
 
@@ -35,10 +36,22 @@ def require(value,reason):
     if not value:raise ValueError(reason)
 
 
-def partition(parent,restore=False):
+def partition(parent,restore=False,*,mail_fixture=False):
+    require(type(mail_fixture)is bool,'owned_broker_fixture_selection')
     subprocess.run(['/usr/bin/systemctl','set-property','--runtime',parent,
-        'MemoryMax='+('512M'if restore else'256M'),'TasksMax='+('64'if restore else'32'),
-        'CPUQuota='+('100%'if restore else'50%')],check=True,capture_output=True,timeout=2)
+        'MemoryMax='+('512M'if restore else'192M'if mail_fixture else'256M'),
+        'TasksMax='+('64'if restore else'24'if mail_fixture else'32'),
+        'CPUQuota='+('100%'if restore else'35%'if mail_fixture else'50%')],
+        check=True,capture_output=True,timeout=2)
+
+
+def fixture_preparation(job,epoch,release,actors,*,mail_fixture=False):
+    """Fixed owned path only; the enrolled worker chooses this diagnostic."""
+    require(type(mail_fixture)is bool,'owned_broker_fixture_selection')
+    if mail_fixture:
+        from . import mail_browser_public as public
+        return public.NetworkPreparation(job,epoch,release,'owned-browser',actors,protocol=True)
+    return NetworkPreparation(job,epoch,release,actors)
 
 
 def prepare(job,epoch,release):
@@ -272,9 +285,10 @@ def finish_network(mediation,actors,folder,epoch,inode,record):
     record['timing_ns']['network_roles_stopped']=time.monotonic_ns()
 
 
-def run_owned(job,release):
+def run_owned(job,release,*,mail_fixture=False):
     require(os.geteuid()==0 and HERE==Path('/opt/paw-vm/releases')/release/'paw/core/browser_owned_broker.py',
             'owned_broker_immutable_root_only')
+    require(type(mail_fixture)is bool,'owned_broker_fixture_selection')
     kernel.policy.identity(job,'0'*32,release)
     # Fresh exact-source raw kernel acceptance, before this new VM scope.
     kernel_result=kernel.owned_validation(job,release)
@@ -294,10 +308,14 @@ def run_owned(job,release):
     record={'schema':'paw-owned-brokered-browser-v1','result':'FAIL','job':job,'release_sha':release,
         'real_connections':0,'real_samples_executed':0,'i08_installed':False,'production_grants_enabled':False,
         'kernel_component':kernel_result,'fixture_nonce':epoch,'capture_artifacts':[],
+        'mail_fixture_preparation':mail_fixture,
         'scope':'owned private DNS, plain HTTP transport and actual HTTPS no-NIC Chrome; not full O3 fault/custody or public authority'}
     actors=[];gate=None;vm=None;partitioned=False;mediation=None
     with auth.fs.execution_lock():
-        folder,cert_sha=prepare(job,epoch,release)
+        if mail_fixture:
+            from . import mail_browser_public as public
+            folder,cert_sha=public.prepare_network(job,epoch,release,'owned-browser',{})
+        else:folder,cert_sha=prepare(job,epoch,release)
         require(available_memory()>=2*1024**3 and shutil.disk_usage(BROWSER_BASE.parent).free>=10*1024**3,
                 'owned_broker_host_resources')
         out=Path('/var/lib/paw-s14/control')/('owned-broker-'+epoch)
@@ -336,9 +354,11 @@ def run_owned(job,release):
                     require(parent['ActiveState']=='active'and parent['MainPID']==str(os.getpid())and
                         parent['MemoryMax']==str(512*1024**2)and parent['TasksMax']=='64',
                         'owned_broker_parent_budget')
-                    partitioned=True;partition(ids['parent'])
+                    partitioned=True
+                    if mail_fixture:partition(ids['parent'],mail_fixture=True)
+                    else:partition(ids['parent'])
                     record['timing_ns']['network_preparation_start']=time.monotonic_ns()
-                    preparation=NetworkPreparation(job,epoch,release,actors)
+                    preparation=fixture_preparation(job,epoch,release,actors,mail_fixture=mail_fixture)
                 if preparation is not None and mediation is None and preparation.poll():
                     owner,server,worker=preparation.owner,preparation.server,preparation.worker
                     inode=preparation.inode

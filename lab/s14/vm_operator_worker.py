@@ -34,7 +34,9 @@ def owned_browser_capture(job,release,record,announce):
     record['mail_capture_scope']=('owned email request and terminal sidecar'if required else
         'protected native enrollment generated fixtures only; no email custody claim')
     admission=owned_mail_channel.admit(job,release,announce)if required else None
-    try:record['owned_broker_probe']=broker_probe(job,release)
+    try:
+        record['owned_broker_probe']=(broker_probe(job,release,mail_fixture=True)
+                                     if required else broker_probe(job,release))
     finally:
         if admission is not None:record['owned_mail_capture']=owned_mail_channel.publish(admission)
     if admission is not None:
