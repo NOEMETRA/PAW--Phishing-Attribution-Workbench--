@@ -1,12 +1,68 @@
 """Inert selection of the exact private preparation during an owned VM run."""
-import unittest
+import hashlib, socket, tempfile, time, types, unittest
+from pathlib import Path
 from unittest.mock import Mock, patch
 from paw.core import browser_owned_broker as broker, mail_browser_public as public
+from paw.core import browser_broker_wire as wire, browser_owned_protocol as protocol
 
 J, E, R = 'a'*32, 'b'*32, 'c'*40
 
 
 class MailFixtureVM(unittest.TestCase):
+    def test_mediation_legacy_and_invalid_selections_do_not_arm_mail_roles(self):
+        prep=types.SimpleNamespace(owner=Mock(),worker=Mock())
+        with patch.object(broker,'Mediation')as legacy,patch.object(public,'Mediation')as mail:
+            for kwargs in [{},{'mail_fixture':False}]:
+                broker.fixture_mediation(prep,E,123,Path('/unused'),**kwargs)
+            self.assertEqual(legacy.call_count,2);mail.assert_not_called()
+            for value in ['public',1,None]:
+                with self.assertRaisesRegex(ValueError,'fixture_selection'):
+                    broker.fixture_mediation(prep,E,123,Path('/unused'),mail_fixture=value)
+            mail.assert_not_called();self.assertEqual(legacy.call_count,2)
+
+    def test_selected_mail_mediation_reaches_actual_first_request_protocol_without_network(self):
+        controls=[];responses=[];ids=public.identity(J,E,R)
+        class Owner:
+            unit='keeper.service';pid=42
+            process=types.SimpleNamespace(wait=lambda timeout:0)
+            def send(self,value):
+                public.keeper_action(value,E,len(controls),ids)
+                controls.append(value)
+            def receive(self):return {'accepted':True,'id':controls[-1]['id']}
+        class Worker:
+            unit='probe.service';pid=43
+            process=types.SimpleNamespace(stdin=types.SimpleNamespace(fileno=lambda:99),wait=lambda timeout:0)
+            def receive(self,seconds):return responses.pop(0)
+        prep=types.SimpleNamespace(owner=Owner(),worker=Worker())
+        began=time.monotonic_ns();decoder=wire.Decoder(E)
+        def http(plan,remaining):
+            body=('PAW-OWNED-'+E).encode()
+            return {'http_status':200,'headers':[],'peer_ipv4':'93.184.216.34',
+                'tls_verified_by_broker':plan['scheme']=='https','body_bytes':len(body),
+                'body_sha256':hashlib.sha256(body).hexdigest()},body
+        transport=public.PublicTransport(E,began+9*10**9,
+            lambda host,ident,deadline:protocol.dns_response(public.dns.question(host,ident)),http)
+        def send(fd,raw,deadline):
+            self.assertEqual(fd,99)
+            [(header,body)]=decoder.feed(raw)
+            fields,payload=transport.dispatch(E,header['sequence'],header['kind'],header['fields'],body)
+            responses.append({'wire':{'kind':'reply','nonce':E,'sequence':header['sequence'],'fields':fields},'body':payload})
+        with tempfile.TemporaryDirectory()as d,patch.object(socket,'socket',side_effect=AssertionError('no sockets')), \
+             patch.object(broker,'write_private',side_effect=send),patch.object(public.subprocess,'run')as properties:
+            mediation=broker.fixture_mediation(prep,E,began,Path(d),mail_fixture=True)
+            request={'nonce':E,'seq':0,'url':broker.SEED,'method':'GET','resource':'Document'}
+            metadata,body=mediation.response(request)
+            self.assertEqual(metadata['http_status'],200);self.assertEqual(body,('PAW-OWNED-'+E).encode())
+            self.assertFalse(mediation.ledger.closed)
+            self.assertEqual(controls[0],{'op':'arm','epoch':E,'id':0,'serial':0})
+            leases=[v for v in controls if v['op']=='lease']
+            self.assertEqual([(v['kind'],v['address'])for v in leases],[('dns','9.9.9.9'),('https','93.184.216.34')])
+            self.assertEqual([v.args[0][-2:]for v in properties.call_args_list],
+                [['IPAddressAllow=','IPAddressAllow=9.9.9.9/32'],['IPAddressAllow=','IPAddressAllow=93.184.216.34/32']])
+            self.assertEqual(mediation.budget.facts()['request_slots'],[1,0,0])
+            self.assertEqual([v['operation']for v in mediation.observations],['dns','http'])
+            self.assertEqual({v.name for v in Path(d).iterdir()},{'dns-00.bin','body-00.bin'})
+
     def test_mail_fixture_uses_exact_private_native_preparation_without_public_mode(self):
         actors = []
         with patch.object(public, 'NetworkPreparation') as prepare, \

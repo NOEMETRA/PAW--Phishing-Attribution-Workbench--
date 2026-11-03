@@ -54,6 +54,15 @@ def fixture_preparation(job,epoch,release,actors,*,mail_fixture=False):
     return NetworkPreparation(job,epoch,release,actors)
 
 
+def fixture_mediation(preparation,epoch,began,out,*,mail_fixture=False):
+    require(type(mail_fixture)is bool,'owned_broker_fixture_selection')
+    if mail_fixture:
+        from . import mail_browser_public as public
+        return public.Mediation(preparation.owner,preparation.worker,epoch,began,SEED,
+            public.BatchBudget([SEED]*3),0,out)
+    return Mediation(preparation.owner,preparation.worker,epoch,began)
+
+
 def prepare(job,epoch,release):
     ids=kernel.policy.identity(job,epoch,release);folder=Path(ids['directory'])
     kernel.prepare_case(folder,job,epoch,release)
@@ -364,7 +373,7 @@ def run_owned(job,release,*,mail_fixture=False):
                     owner,server,worker=preparation.owner,preparation.server,preparation.worker
                     inode=preparation.inode
                     record['timing_ns']['actors_ready']=time.monotonic_ns()
-                    mediation=Mediation(owner,worker,epoch,began)
+                    mediation=fixture_mediation(preparation,epoch,began,out,mail_fixture=mail_fixture)
                 if value.get('network_quiescent')is True and not network_closed:
                     require(mediation is not None and request is None,'owned_broker_snapshot_with_pending_network')
                     record['timing_ns']['network_quiescent']=time.monotonic_ns()

@@ -19,6 +19,10 @@ The ordinary fixed-owned browser recipe therefore rehearses that same mail
 fixture preparation while its existing no-NIC synthetic browser is running.
 The guest uses the mail adapter's existing seed kind with only the compiled
 `https://paw-owned.invalid/` URL; callers cannot supply the seed or URL.
+The same selection uses the existing mail mediation and its bounded owned slot,
+including the worker cgroup arm, address-bound leases and per-operation BPF
+allow-list. An inert first-request regression traverses the actual keeper shape,
+binary framing, DNS codec and transport dispatch; it refuses all real sockets.
 It retains the existing broker stop/restore checks and stopped-role stderr.
 The coordinator uses the native192MiB/24tasks/35% partition during this rehearsal;
 the original512MiB/64tasks/100% parent is restored afterwards. Native enrollment's
