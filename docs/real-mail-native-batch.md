@@ -23,6 +23,9 @@ The same selection uses the existing mail mediation and its bounded owned slot,
 including the worker cgroup arm, address-bound leases and per-operation BPF
 allow-list. An inert first-request regression traverses the actual keeper shape,
 binary framing, DNS codec and transport dispatch; it refuses all real sockets.
+Owned DNS packets and response bodies remain inline in the delivered network
+observations, including after a later request fails. This path does not leave
+references to the public producer's separate Root-private resource files.
 It retains the existing broker stop/restore checks and stopped-role stderr.
 The coordinator uses the native192MiB/24tasks/35% partition during this rehearsal;
 the original512MiB/64tasks/100% parent is restored afterwards. Native enrollment's

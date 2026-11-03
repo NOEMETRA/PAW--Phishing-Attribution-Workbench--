@@ -1,5 +1,5 @@
 """Inert selection of the exact private preparation during an owned VM run."""
-import hashlib, socket, tempfile, time, types, unittest
+import base64, hashlib, json, socket, tempfile, time, types, unittest, uuid
 from pathlib import Path
 from unittest.mock import Mock, patch
 from paw.core import browser_owned_broker as broker, mail_browser_public as public
@@ -61,7 +61,31 @@ class MailFixtureVM(unittest.TestCase):
                 [['IPAddressAllow=','IPAddressAllow=9.9.9.9/32'],['IPAddressAllow=','IPAddressAllow=93.184.216.34/32']])
             self.assertEqual(mediation.budget.facts()['request_slots'],[1,0,0])
             self.assertEqual([v['operation']for v in mediation.observations],['dns','http'])
-            self.assertEqual({v.name for v in Path(d).iterdir()},{'dns-00.bin','body-00.bin'})
+            with self.assertRaises(ValueError):
+                mediation.response({**request,'nonce':'f'*32,'seq':1})
+            self.assertTrue(mediation.ledger.closed)
+            # The same observations must survive the actual stopped-failure
+            # receipt boundary, rather than point into Root-private storage.
+            from paw.core import owned_mail_channel as channel,mail_browser_owned as custody
+            from test_mail_browser_owned import owned_case
+            root=Path(d);request_raw=Path(custody.prepare(owned_case(root),root/'request')['request']).read_bytes()
+            request=custody.validate_request(request_raw)
+            admission={'request':request,'raw':request_raw,'request_sha256':custody.digest(request_raw),
+                'job':J,'release_sha':R,'admitted_at':request['created_at']}
+            context={'context_sha256':'d'*64,'image_sha256':'e'*64,'chrome_binary_sha256':'f'*64}
+            a={'schema':'paw-owned-brokered-browser-v1','job':J,'release_sha':R,'fixture_nonce':E,
+                'context_sha256':'d'*64,'writers_stopped':True,'host_restored':True,'real_connections':0,
+                'real_samples_executed':0,'result':'FAIL','vm_uuid':str(uuid.uuid4()),'stop_ns':12345,
+                'guest':{},'capture_artifacts':[],'observations':mediation.observations}
+            receipt,outputs=channel.bound_result(admission,custody.canonical(a),context,{})
+            self.assertEqual(receipt['status'],'failed')
+            network=json.loads(outputs['network.json']);dns_row,http_row,refusal=network['observations']
+            self.assertEqual(refusal['operation'],'refused_or_unavailable')
+            self.assertEqual(base64.b64decode(http_row['response_body_b64'],validate=True),body)
+            packet=base64.b64decode(dns_row['packet_b64'],validate=True)
+            self.assertEqual(hashlib.sha256(packet).hexdigest(),dns_row['packet_sha256'])
+            self.assertNotIn('packet',dns_row);self.assertNotIn('body_file',http_row)
+            self.assertFalse(list(root.glob('dns-*.bin'))+list(root.glob('body-*.bin')))
 
     def test_mail_fixture_uses_exact_private_native_preparation_without_public_mode(self):
         actors = []

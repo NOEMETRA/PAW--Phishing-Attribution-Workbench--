@@ -58,7 +58,24 @@ def fixture_mediation(preparation,epoch,began,out,*,mail_fixture=False):
     require(type(mail_fixture)is bool,'owned_broker_fixture_selection')
     if mail_fixture:
         from . import mail_browser_public as public
-        return public.Mediation(preparation.owner,preparation.worker,epoch,began,SEED,
+        class OwnedMailMediation(public.Mediation):
+            # The owned receipt carries network evidence inline. The public
+            # producer's separate file inventory is not part of that contract.
+            def write(self,name,raw):
+                require(type(raw)is bytes and len(raw)<=public.CASE_BYTES and
+                    re.fullmatch(r'(dns|body)-[0-9]{2}[.]bin',name),'owned_broker_inline_evidence')
+                self._inline=base64.b64encode(raw).decode('ascii')
+            def resolver(self,host,deadline_ns):
+                result=super().resolver(host,deadline_ns)
+                row=self.observations[-1];row.pop('packet');row['packet_b64']=self._inline
+                self._inline=None
+                return result
+            def response(self,request):
+                result=super().response(request)
+                row=self.observations[-1];row.pop('body_file');row['response_body_b64']=self._inline
+                self._inline=None
+                return result
+        return OwnedMailMediation(preparation.owner,preparation.worker,epoch,began,SEED,
             public.BatchBudget([SEED]*3),0,out)
     return Mediation(preparation.owner,preparation.worker,epoch,began)
 
