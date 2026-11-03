@@ -69,6 +69,8 @@ class Owner(unittest.TestCase):
             class Gate:
                 def __init__(self,args,**kwargs):
                     self.output=args.output;self.output.mkdir();self.active_vm=None;self.nonce=kwargs['seed_config']['nonce']
+                    if mail_fixture:
+                        assert kwargs['seed_config']=={'kind':'mail-public-browser-v1','nonce':self.nonce,'url':p.SEED}
                     self.connection=types.SimpleNamespace(listAllDomains=lambda _:[],close=lambda:None)
                 def snapshot_host(self):return {'owned':'unchanged'}
                 def start(self,*args):

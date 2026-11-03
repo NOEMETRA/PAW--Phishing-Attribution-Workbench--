@@ -321,7 +321,8 @@ def run_owned(job,release,*,mail_fixture=False):
         out=Path('/var/lib/paw-s14/control')/('owned-broker-'+epoch)
         media=input_media(b'PAW fixed owned broker fixture only',epoch)
         gate=BrowserVM(argparse.Namespace(output=out),phase='owned_brokered',media=media,
-            seed_config={'kind':'owned-cdp-probe-v1','nonce':epoch})
+            seed_config=({'kind':'mail-public-browser-v1','nonce':epoch,'url':SEED}if mail_fixture else
+                         {'kind':'owned-cdp-probe-v1','nonce':epoch}))
         gate.canary=out/'host-owned-canary.bin';gate.canary.write_bytes(os.urandom(32));gate.canary.chmod(0o600)
         canary=digest(gate.canary);before=gate.snapshot_host();network=network_state()
         try:
