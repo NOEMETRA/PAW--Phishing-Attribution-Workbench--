@@ -1,5 +1,18 @@
 # One native batch for three selected mail URLs
 
+The fixed no-VM preparation now also starts the exact private `owned-browser`
+fixture/transport preparation used by native capture. It sends no DNS/HTTP
+request and launches no guest or native scope. After independently stopping
+all roles and checking the host/network snapshot, the bounded diagnostic retains
+each launcher's exit and up to4096 bytes of its already-bounded stderr. A fixture
+failure keeps the overall recipe FAIL even when the raw packet cases passed.
+Readiness success is explicitly not a TLS handshake or browser acceptance.
+This makes the native177-c fixture exit1/protocol-loss diagnosable through the
+existing limited helper before another real-source authentication. Its precise
+underlying exception must be reproduced before any corrective change; this
+diagnostic does not assert a TLS, privilege or timing cause. Role lifetimes,
+aggregate budgets, authority and public/VM execution paths remain unchanged.
+
 This increment adapts the existing no-NIC browser and existing DNS/HTTP/TLS
 transport to one explicitly authenticated three-source operation. It adds no
 HTTP parser, TLS stack, route, bridge, NAT, Docker configuration, permanent
