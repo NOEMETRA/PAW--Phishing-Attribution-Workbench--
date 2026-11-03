@@ -74,10 +74,10 @@ class Native(unittest.TestCase):
         events=[];admission={'job':J,'release_sha':R};record={}
         with patch.object(c,'admission_required',return_value=True), \
              patch.object(c,'admit',side_effect=lambda *a:events.append('admit')or admission), \
-             patch.object(broker,'run_owned',side_effect=lambda *a:events.append('capture')or{'result':'PASS'}), \
+             patch.object(broker,'run_owned',side_effect=lambda *a,**kw:events.append(('capture',kw))or{'result':'PASS'}), \
              patch.object(c,'publish',side_effect=lambda value:events.append(('publish',value))or{'status':'completed'}):
             worker.owned_browser_capture(J,R,record,lambda _:None)
-        self.assertEqual(events,['admit','capture',('publish',admission)]);self.assertIs(record['mail_admission_required'],True)
+        self.assertEqual(events,['admit',('capture',{'mail_fixture':True}),('publish',admission)]);self.assertIs(record['mail_admission_required'],True)
     def test_UID_cannot_select_native_mode_or_read_protected_grant(self):
         with self.assertRaisesRegex(ValueError,'immutable_root_only'):c.admission_required(J,R)
 

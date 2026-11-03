@@ -13,6 +13,26 @@ underlying exception must be reproduced before any corrective change; this
 diagnostic does not assert a TLS, privilege or timing cause. Role lifetimes,
 aggregate budgets, authority and public/VM execution paths remain unchanged.
 
+The subsequent no-VM fixture preparation passed with empty stderr; this did not
+reproduce the earlier native capture exception and is not evidence of a fix.
+The ordinary fixed-owned browser recipe therefore rehearses that same mail
+fixture preparation while its existing no-NIC synthetic browser is running.
+The guest uses the mail adapter's existing seed kind with only the compiled
+`https://paw-owned.invalid/` URL; callers cannot supply the seed or URL.
+The same selection uses the existing mail mediation and its bounded owned slot,
+including the worker cgroup arm, address-bound leases and per-operation BPF
+allow-list. An inert first-request regression traverses the actual keeper shape,
+binary framing, DNS codec and transport dispatch; it refuses all real sockets.
+Owned DNS packets and response bodies remain inline in the delivered network
+observations, including after a later request fails. This path does not leave
+references to the public producer's separate Root-private resource files.
+It retains the existing broker stop/restore checks and stopped-role stderr.
+The coordinator uses the native192MiB/24tasks/35% partition during this rehearsal;
+the original512MiB/64tasks/100% parent is restored afterwards. Native enrollment's
+generated baseline and the broker's default preparation remain unchanged.
+No caller chooses this switch, a public endpoint or a native source scope.
+This is an owned reproduction path, not a correction of an unobserved exception.
+
 This increment adapts the existing no-NIC browser and existing DNS/HTTP/TLS
 transport to one explicitly authenticated three-source operation. It adds no
 HTTP parser, TLS stack, route, bridge, NAT, Docker configuration, permanent
