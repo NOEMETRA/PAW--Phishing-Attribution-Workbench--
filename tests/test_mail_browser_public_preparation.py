@@ -137,7 +137,7 @@ class Preparation(unittest.TestCase):
                     obj._start_owned_worker()
                     actor.assert_called_once_with(J,E,R,'probe',42,registry=obj.actors,protocol=False,defer_ready=True)
 
-    def exercise(self,failure=False,cleanup_failure=False,rearm_failure=False,dns_failure=False,expiry_failure=False,bindings_failure=False):
+    def exercise(self,failure=False,cleanup_failure=False,rearm_failure=False,dns_failure=False,expiry_failure=False,bindings_failure=False,tls_failure=False):
         with tempfile.TemporaryDirectory()as d:
             actor=SimpleNamespace(unit=m.identity(J,E,R)['keeper'],process=SimpleNamespace(poll=lambda:1),
                                   errors=bytearray(b'actual bounded role stderr'),observation=None)
@@ -145,7 +145,9 @@ class Preparation(unittest.TestCase):
                 poll=Mock(side_effect=ValueError('inert role failure')if failure else None,return_value=True))
             def create(*args,**kwargs):args[4].append(actor);return prepared
             exported=[]
-            modules={'one_use_authorization':SimpleNamespace(execution_lock=lambda:nullcontext()),
+            tls=Mock(return_value={'result':'FAIL','error':'ValueError:fixture exception'}if tls_failure else {'result':'PASS'})
+            modules={'paw.core.mail_browser_fixture_diagnostic':SimpleNamespace(run=tls),
+                'one_use_authorization':SimpleNamespace(execution_lock=lambda:nullcontext()),
                 'reader_export':SimpleNamespace(publish_reader_tree=lambda path:exported.append(path)),
                 'vm_runtime_revalidation':SimpleNamespace(snapshot=lambda:{'same':True},network_state=lambda:{'same':True})}
             with patch.dict(sys.modules,modules),patch.object(m,'HERE',Path('/opt/paw-vm/releases')/R/'paw/core/mail_browser_public.py'), \
@@ -170,7 +172,7 @@ class Preparation(unittest.TestCase):
                 self.assertEqual(value['real_connections'],0);self.assertFalse(value['production_grants_enabled'])
                 report=json.loads((Path(value['export'])/'attestation.json').read_bytes())
                 self.assertEqual(report['roles'][0]['stderr'],'actual bounded role stderr')
-                self.assertEqual(report['result'],'FAIL'if failure or rearm_failure or dns_failure or expiry_failure or bindings_failure else 'PASS')
+                self.assertEqual(report['result'],'FAIL'if failure or rearm_failure or dns_failure or expiry_failure or bindings_failure or tls_failure else 'PASS')
                 self.assertEqual(report['guard_cleanup_progress'],{'revoked-complete':True,'stop-hook-entered':True})
                 if failure:closed.assert_not_called()
                 else:closed.assert_called_once_with(J,report['epoch'],R,prepared,[actor],observations=[])
@@ -190,9 +192,15 @@ class Preparation(unittest.TestCase):
                         self.assertEqual(len({report['epoch'],report['dns_only']['epoch'],report['http_expiry']['epoch']}),3)
                         if expiry_failure:
                             bindings.assert_not_called();self.assertEqual(report['error'],report['http_expiry']['error'])
-                        else:bindings.assert_called_once_with(J,R)
+                        else:
+                            bindings.assert_called_once_with(J,R)
+                            if not bindings_failure:
+                                tls.assert_called_once_with(J,R)
+                                self.assertEqual(report['tls_fixture']['result'],'FAIL'if tls_failure else 'PASS')
+                                if tls_failure:self.assertEqual(report['error'],report['tls_fixture']['error'])
                 self.assertEqual(len(exported),1)
                 self.assertTrue(report['writers_stopped']);self.assertTrue(report['host_restored'])
+    def test_tls_fixture_failure_cannot_inherit_raw_packet_pass(self):self.exercise(tls_failure=True)
     def test_fixed_owned_success_is_not_public_readiness(self):self.exercise()
     def test_failed_preparation_preserves_stopped_role_diagnostic(self):self.exercise(failure=True)
     def test_failed_rearm_preserves_stopped_role_diagnostic(self):self.exercise(rearm_failure=True)

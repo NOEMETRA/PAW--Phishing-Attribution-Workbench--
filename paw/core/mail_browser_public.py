@@ -1423,11 +1423,7 @@ def owned_binding_probe(job,release):
 
 
 def owned_preparation(job, release):
-    """Sequential closed and DNS-only cases through the same finite no-VM recipe.
-
-    Neither case constructs native/public authority. Each has a fresh private
-    namespace/epoch, unchanged lifetimes and independently stopped roles.
-    """
+    """Fixed private packet and TLS-fixture readiness; no VM or public grant."""
     need(os.geteuid()==0 and HERE==Path('/opt/paw-vm/releases')/release/'paw/core/mail_browser_public.py',
          'mail_public_owned_preparation_snapshot')
     import one_use_authorization as fs
@@ -1448,7 +1444,12 @@ def owned_preparation(job, release):
                 record['isolated_bindings']=owned_binding_probe(job,release)
             except Exception as error:
                 record['result']='FAIL';record['error']=type(error).__name__+':'+str(error)[:512]
-    record['scope']='Sequential fixed closed, DNS-only and HTTP-expiry private packet gates; no browser or public readiness'
+        if record['result']=='PASS':
+            from .mail_browser_fixture_diagnostic import run
+            record['tls_fixture']=run(job,release)
+            if record['tls_fixture']['result']!='PASS':
+                record['result']='FAIL';record['error']=record['tls_fixture']['error']
+    record['scope']='Fixed private packet gates and TLS-fixture readiness; no browser or public readiness'
     raw=canonical(record);need(len(raw)<=32768,'mail_public_owned_diagnostic_budget')
     target=EXPORT_ROOT/('owned-mail-preparation-'+job)
     target.mkdir(mode=0o700)
