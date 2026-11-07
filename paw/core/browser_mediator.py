@@ -20,6 +20,8 @@ import urllib.parse
 
 LIMITS = {'requests': 32, 'hosts': 8, 'redirects': 5, 'bytes': 4*1024**2,
           'seconds': 15, 'lease_seconds': 5, 'header_bytes': 32768}
+OWNED_REHEARSAL_SEED = 'https://paw-owned.invalid/'
+OWNED_REHEARSAL_SECONDS = 18
 DENIED = tuple(ipaddress.ip_network(x) for x in (
     '0.0.0.0/8','10.0.0.0/8','100.64.0.0/10','127.0.0.0/8',
     '169.254.0.0/16','172.16.0.0/12','192.0.0.0/24','192.0.2.0/24',
@@ -107,13 +109,16 @@ class BrowserRequestLedger:
     admit() must be collected by its trusted resolver, never supplied by a page.
     Public-host discovery is permitted only when that approved policy says so.
     """
-    def __init__(self,seed_url,nonce,started_ns,*,allow_dynamic_public_hosts=False):
+    def __init__(self,seed_url,nonce,started_ns,*,allow_dynamic_public_hosts=False,owned_rehearsal=False):
         seed=endpoint(seed_url)
         require(type(nonce) is str and re.fullmatch('[0-9a-f]{32}',nonce),'broker_nonce')
         require(type(started_ns) is int and started_ns>=0,'broker_start_time')
         require(type(allow_dynamic_public_hosts) is bool,'broker_host_policy')
+        require(type(owned_rehearsal) is bool and
+                (not owned_rehearsal or seed_url==OWNED_REHEARSAL_SEED),'broker_owned_rehearsal_seed')
         self.seed=seed;self.nonce=nonce;self.started_ns=started_ns
-        self.deadline_ns=started_ns+LIMITS['seconds']*10**9
+        window=OWNED_REHEARSAL_SECONDS if owned_rehearsal else LIMITS['seconds']
+        self.deadline_ns=started_ns+window*10**9
         self.dynamic=allow_dynamic_public_hosts;self.used=0;self.received=0;self.redirects=0
         self.pins={};self._pending=None;self._key=secrets.token_bytes(32);self.closed=False
         self.seed_admitted=False;self._resolving=False;self._lookup_hosts=set()

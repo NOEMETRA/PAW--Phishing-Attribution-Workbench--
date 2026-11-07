@@ -18,6 +18,42 @@ J='1'*32; E='2'*32; R='3'*40
 SEEDS=['https://one.invalid/', 'http://two.invalid/', 'https://three.invalid/']
 
 class PublicBoundary(unittest.TestCase):
+    def test_late_https_window_is_bound_to_the_fixed_private_rehearsal(self):
+        from paw.core import browser_owned_broker as broker
+        seed=m.mediator.OWNED_REHEARSAL_SEED
+        prep=SimpleNamespace(owner=object(),worker=object())
+        with patch.object(m.Mediation,'control'):
+            rehearsal=broker.fixture_mediation(prep,E,0,None,mail_fixture=True)
+            public=m.Mediation(prep.owner,prep.worker,E,0,seed,m.BatchBudget([seed]*3),0,None)
+        frame={'nonce':E,'seq':0,'url':seed,'method':'GET','resource':'Document'}
+        now=14*10**9
+        expired=public.ledger.admit(frame,['93.184.216.34'],0,10**10,now)
+        with self.assertRaisesRegex(ValueError,'expired_kernel_lease'):
+            broker.kernel_lease_milliseconds(expired,now)
+        plan=rehearsal.ledger.admit(frame,['93.184.216.34'],0,10**10,now)
+        self.assertEqual(plan['expires_ns'],18*10**9)
+        self.assertEqual(broker.kernel_lease_milliseconds(plan,now),2000)
+        with self.assertRaisesRegex(ValueError,'broker_session_expired'):
+            rehearsal.ledger.lease(plan,18*10**9)
+        with self.assertRaisesRegex(ValueError,'mail_owned_rehearsal_private_only'):
+            m.Mediation(prep.owner,prep.worker,E,0,seed,None,0,None,approval={},owned_rehearsal=True)
+        for kind,url,window in [
+            (m.OWNED_REHEARSAL_KIND,seed,18),
+            ('mail-public-browser-v1',seed,15),
+            (m.OWNED_REHEARSAL_KIND,SEEDS[0],None),
+        ]:
+            with self.subTest(kind=kind,url=url):
+                runtime=m.PublicRuntime()
+                self.addCleanup(runtime.selector.close)
+                config={'kind':kind,'url':url,'nonce':E}
+                with patch.object(Path,'read_bytes',return_value=m.canonical(config)):
+                    if window is None:
+                        with self.assertRaisesRegex(ValueError,'mail_owned_rehearsal_seed'):
+                            runtime._start_nonce()
+                        continue
+                    self.assertEqual(runtime._start_nonce(),E)
+                self.assertEqual(runtime.window_seconds,window)
+
     def test_normal_revocation_proof_requires_root_private_empty_single_link_regular_file(self):
         info={'st_mode':m.stat.S_IFREG|0o600,'st_uid':0,'st_nlink':1,'st_size':0}
         ids=m.identity(J,E,R)

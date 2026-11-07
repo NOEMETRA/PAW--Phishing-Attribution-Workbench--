@@ -77,6 +77,8 @@ def fixture(nonce,frame):
 
 
 class Runtime:
+    window_seconds=15
+
     def __init__(self):
         self.process=None;self.started=None;self.driver=None;self.used=False;self.done=None
         self.decoder=cdp.PipeDecoder();self.selector=selectors.DefaultSelector();self.write=bytearray()
@@ -169,7 +171,7 @@ class Runtime:
                     for message in self.decoder.feed(raw):self.driver.accept(message);self.cdp_frames+=1
             netlog=WORK/'netlog.json'
             require(not netlog.exists() or netlog.stat().st_size<=1024**2,'owned_netlog_budget')
-            require(time.monotonic()-self.started<15,'owned_whole_deadline')
+            require(time.monotonic()-self.started<self.window_seconds,'owned_whole_deadline')
             require(self.process.poll() is None,'owned_chrome_exited')
             if self._snapshot_due():
                 self.driver.snapshot()

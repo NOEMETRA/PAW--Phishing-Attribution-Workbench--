@@ -29,7 +29,7 @@ PROGRAMS=['browser_owned_broker.py','browser_owned_broker_guest.py','browser_bro
     'browser_owned_protocol.py','browser_mediator.py','mail_browser_dns.py','browser_broker_wire.py',
     'browser_cdp.py','browser_owned_cdp_guest.py','owned_kernel_runtime.py','owned_kernel_policy.py',
     'mail_browser_public.py']
-SEED='https://paw-owned.invalid/'
+SEED=mediator.OWNED_REHEARSAL_SEED
 
 
 def require(value,reason):
@@ -76,7 +76,7 @@ def fixture_mediation(preparation,epoch,began,out,*,mail_fixture=False):
                 self._inline=None
                 return result
         return OwnedMailMediation(preparation.owner,preparation.worker,epoch,began,SEED,
-            public.BatchBudget([SEED]*3),0,out)
+            public.BatchBudget([SEED]*3),0,out,owned_rehearsal=True)
     return Mediation(preparation.owner,preparation.worker,epoch,began)
 
 
@@ -347,7 +347,7 @@ def run_owned(job,release,*,mail_fixture=False):
         out=Path('/var/lib/paw-s14/control')/('owned-broker-'+epoch)
         media=input_media(b'PAW fixed owned broker fixture only',epoch)
         gate=BrowserVM(argparse.Namespace(output=out),phase='mail_public'if mail_fixture else'owned_brokered',media=media,
-            seed_config=({'kind':'mail-public-browser-v1','nonce':epoch,'url':SEED}if mail_fixture else
+            seed_config=({'kind':public.OWNED_REHEARSAL_KIND,'nonce':epoch,'url':SEED}if mail_fixture else
                          {'kind':'owned-cdp-probe-v1','nonce':epoch}))
         gate.canary=out/'host-owned-canary.bin';gate.canary.write_bytes(os.urandom(32));gate.canary.chmod(0o600)
         canary=digest(gate.canary);before=gate.snapshot_host();network=network_state()
@@ -360,10 +360,11 @@ def run_owned(job,release,*,mail_fixture=False):
             admitted=vm['channel'].call('start',seconds=8)
             require(admitted.get('started')is True,'owned_broker_guest_start_ack')
             # Guest start includes its mandatory image check/preparation. The
-            # same15s execution clock begins at the successful start boundary,
-            # not before those prerequisites. Guest15s/keeper8s/worker10s stay.
+            # Execution begins at the successful start boundary. The fixed
+            # private mail rehearsal has its own window; role lifetimes stay.
             began=time.monotonic_ns();record['timing_ns']['guest_start_ack']=began
-            end=time.monotonic()+18;preparation=None;network_closed=False
+            window=mediator.OWNED_REHEARSAL_SECONDS if mail_fixture else mediator.LIMITS['seconds']
+            end=time.monotonic()+window+3;preparation=None;network_closed=False
             while time.monotonic()<end:
                 value=vm['channel'].call('poll',seconds=5)
                 request=value.get('network_request')

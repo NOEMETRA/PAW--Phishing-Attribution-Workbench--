@@ -116,7 +116,7 @@ class Runtime(fixed.Runtime):
         try:
             require(not self.transfer_failed and self.network_pending is not None and
                 self.driver is not None and self.driver.stage=='running' and
-                self.started is not None and time.monotonic()-self.started<15 and
+                self.started is not None and time.monotonic()-self.started<self.window_seconds and
                 type(value) is dict,'owned_network_not_pending_or_expired')
             pending=self.network_pending;request=pending['request'];slot=request['seq']
             require(value.get('nonce')==self.nonce and type(value.get('seq')) is int and
