@@ -78,6 +78,7 @@ def fixture(nonce,frame):
 
 class Runtime:
     window_seconds=15
+    minimum_requests=2
 
     def __init__(self):
         self.process=None;self.started=None;self.driver=None;self.used=False;self.done=None
@@ -142,7 +143,7 @@ class Runtime:
             re.fullmatch('[0-9a-f]{32}',config['nonce']),'owned_fixed_config')
         return config['nonce']
     def _snapshot_due(self):
-        return self.driver.stage=='running' and self.requests>=2 and self.driver.fetch.pending is None and not self.driver.queue and time.monotonic()-self.started>=3
+        return self.driver.stage=='running' and self.requests>=self.minimum_requests and self.driver.fetch.pending is None and not self.driver.queue and time.monotonic()-self.started>=3
     def _validate_completed(self):
         dom=self.driver.dom or b''
         require(('PAW-OWNED-'+self.nonce).encode() in dom and b'data-owned="done"' in dom and

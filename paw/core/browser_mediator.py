@@ -58,7 +58,7 @@ def endpoint(url):
 
 
 def mail_guest_seed(config):
-    """Decode the immutable no-NIC guest seed and its fixed window."""
+    """Decode the immutable no-NIC guest seed and its capture bounds."""
     require(type(config) is dict and set(config) == {'kind', 'nonce', 'url'} and
             config['kind'] in ('mail-public-browser-v1', OWNED_REHEARSAL_KIND) and
             type(config['nonce']) is str and re.fullmatch('[0-9a-f]{32}', config['nonce']),
@@ -67,8 +67,9 @@ def mail_guest_seed(config):
     endpoint(url)
     if config['kind'] == OWNED_REHEARSAL_KIND:
         require(url == OWNED_REHEARSAL_SEED, 'mail_owned_rehearsal_seed')
-        return url, nonce, OWNED_REHEARSAL_SECONDS
-    return url, nonce, LIMITS['seconds']
+        # The known fixture requires the document and its scripted fetch.
+        return url, nonce, OWNED_REHEARSAL_SECONDS, 2
+    return url, nonce, LIMITS['seconds'], 1
 
 
 def public_answers(values):

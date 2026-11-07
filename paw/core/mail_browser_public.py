@@ -204,7 +204,7 @@ class BatchBudget:
 class PublicRuntime(captured.Runtime):
     def _start_nonce(self):
         config = cdp.strict_json(Path('/etc/paw-mail-browser.json').read_bytes())
-        self.seed, nonce, self.window_seconds = mediator.mail_guest_seed(config)
+        self.seed, nonce, self.window_seconds, self.minimum_requests = mediator.mail_guest_seed(config)
         return nonce
     def _make_controller(self):
         # The existing controller already denies downloads and permissions,
@@ -214,9 +214,6 @@ class PublicRuntime(captured.Runtime):
         result=super().inspect()
         result['purpose']='Selected mail URL; no-NIC main-page browser capture'
         return result
-    def _snapshot_due(self):
-        return self.driver.stage == 'running' and self.requests >= 1 and self.driver.fetch.pending is None and \
-            not self.driver.queue and time.monotonic()-self.started >= 3
     def _validate_completed(self):
         need(type(self.driver.dom) is bytes and 0 < len(self.driver.dom) <= 256*1024 and
              all(self.witness.flags().values()),
