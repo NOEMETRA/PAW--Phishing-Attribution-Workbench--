@@ -100,7 +100,8 @@ ASSETS = {
         (652312, '5c2fbbc1215f7d98f5ce6c2675a1f09db5818d69fb6d962174c6f88f42bf5373')}
 POLICY = {'allow_dynamic_public_hosts': True, 'public_hosts_batch': 8,
           'http_requests_batch': 32, 'response_bytes_batch': 4*1024**2,
-          'redirects_per_navigation': 5, 'browser_seconds': 15, 'external_stop_seconds': 12}
+          'redirects_per_navigation': 5, 'browser_seconds': 15, 'owned_browser_seconds': 30,
+          'external_stop_seconds': 12}
 OWNED_CASES = ('closed', 'dns-only', 'http-expiry', 'owner-loss', 'guard-loss',
                'private-dns', 'rebind', 'redirect', 'protocol-loss', 'counter-budget', 'browser')
 BUNDLE_MAX = 2*1024**2
@@ -109,6 +110,53 @@ BUNDLE_MAX = 2*1024**2
 def need(value, reason):
     if not value:
         raise ValueError(reason)
+
+
+def capture_seconds(owned, seconds):
+    expected = POLICY['owned_browser_seconds' if owned else 'browser_seconds']
+    need(seconds == expected, 'mail_public_browser_policy_mismatch')
+    return expected
+
+
+def batch_already_closed(release, batch):
+    """Reuse an exact protected clean close only after fresh idle evidence."""
+    from .mail_browser_public import require_idle
+    try:
+        raw = protected(private_batch(batch)/'closed.json', 65536)
+        value = decode(raw, 65536)
+        if not (type(value) is dict and set(value) == {'schema','batch_id','release_sha','at','failures'}
+                and value['schema'] == 'paw-mail-native-batch-closed-v1'
+                and value['batch_id'] == batch and value['release_sha'] == release
+                and type(value['at']) is int and value['failures'] == []):
+            return False
+        require_idle()
+    except (OSError, ValueError, subprocess.SubprocessError):
+        return False
+    return True
+
+
+def batch_child_jobs(batch):
+    fd = root_directory(private_batch(batch)/'children')
+    try:
+        names = os.listdir(fd)
+    finally:
+        os.close(fd)
+    need(len(names) <= 128, 'mail_public_batch_children_budget')
+    return sorted(name[:-5] for name in names if re.fullmatch(r'[0-9a-f]{32}\.json', name))
+
+
+def publish_batch_close(release, batch, failures):
+    from .mail_browser_public import require_idle
+    if not failures:
+        try:
+            require_idle()
+        except (OSError, ValueError, subprocess.SubprocessError) as error:
+            failures.append(type(error).__name__+':'+str(error)[:256])
+    atomic(private_batch(batch)/'closed.json', canonical({
+        'schema':'paw-mail-native-batch-closed-v1','batch_id':batch,'release_sha':release,
+        'at':int(time.time()),'failures':failures}))
+    need(not failures, 'mail_public_batch_cleanup_failed')
+    return {'status':'closed','batch_id':batch}
 
 
 def canonical(value):

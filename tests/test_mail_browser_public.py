@@ -46,6 +46,14 @@ class PublicBoundary(unittest.TestCase):
             rehearsal.ledger.lease(second,24*10**9)
         with self.assertRaisesRegex(ValueError,'mail_owned_rehearsal_private_only'):
             m.Mediation(prep.owner,prep.worker,E,0,seed,None,0,None,approval={},owned_rehearsal=True)
+        approval={'owned_selection':{'url':seed}}
+        with patch.object(m.Mediation,'control'):
+            native_owned=m.Mediation(prep.owner,prep.worker,E,0,seed,None,0,None,approval=approval,
+                                     owned_rehearsal=True)
+        self.assertIs(native_owned.approval,approval)
+        self.assertEqual(native_owned.ledger.deadline_ns,24*10**9)
+        with self.assertRaisesRegex(ValueError,'mail_owned_rehearsal_private_only'):
+            m.Mediation(prep.owner,prep.worker,E,0,seed,None,0,None,uplink={},approval=approval,owned_rehearsal=True)
         for kind,url,window in [
             (m.mediator.OWNED_REHEARSAL_KIND,seed,24),
             ('mail-public-browser-v1',seed,15),

@@ -22,7 +22,7 @@ def module(name,**fields):
 
 class Lifecycle(unittest.TestCase):
     def simulate(self,owner=GOOD,*,bad_stop=False,bad_network_stop=False,transport_failure=False,
-                 wrong_sandbox=False,partial_capture=False,after_snapshot=False):
+                 wrong_sandbox=False,partial_capture=False,after_snapshot=False,owned=False):
         clock=[10**9]
         with tempfile.TemporaryDirectory() as d:
             root=Path(d);case=owned_case(root);request=json.loads(custody.prepare(case,0))
@@ -33,7 +33,7 @@ class Lifecycle(unittest.TestCase):
             digest=lambda path:hashlib.sha256(Path(path).read_bytes()).hexdigest()
             context={'image_sha256':digest(browser),'chrome_version':'inert Chrome','chrome_binary_sha256':'e'*64}
             approval={'batch_id':B,'release_sha':R,'context':{'browser':context,'ca_sha256':'f'*64,'uplink':{}}}
-            binding={'job':J,'epoch':E,'slot':0}
+            binding={'job':J,'epoch':E,'slot':'owned' if owned else 0}
             sandbox={k:True for k in ['all_uids_nonroot','renderer_nnp','renderer_seccomp','renderer_pid_namespace','renderer_seen']}
             if wrong_sandbox:sandbox['renderer_seen']=False
             published=[];events=[];channels=[]
@@ -49,7 +49,8 @@ class Lifecycle(unittest.TestCase):
             class Channel:
                 def __init__(self):
                     self.completed=0;self.snapshot=False;self.capture_calls=[]
-                    self.transfer=guest.Transfer(E,{'dom.html':b'owned DOM','screenshot.png':b'opaque inert PNG'},True)
+                    dom=(f'<body data-owned="done">PAW-OWNED-{E}</body>'.encode() if owned else b'owned DOM')
+                    self.transfer=guest.Transfer(E,{'dom.html':dom,'screenshot.png':b'opaque inert PNG'},True)
                     channels.append(self)
                 def terminal(self,status):
                     return {'done':True,'status':status,'writers_stopped':True,'network_interfaces':['lo'],
@@ -62,7 +63,7 @@ class Lifecycle(unittest.TestCase):
                         if partial_capture and kw['value']['name']=='screenshot.png':raise ValueError('inert PNG lost')
                         return self.transfer.read(kw['value'])
                     if op=='cancel':return self.terminal('failed')
-                    if self.completed<1 or self.snapshot and after_snapshot:
+                    if self.completed<(2 if owned else 1) or self.snapshot and after_snapshot:
                         return {'done':False,'network_request':{'nonce':E,'seq':self.completed,
                             'url':request['url'],'method':'GET','resource':'Document'}}
                     if not self.snapshot:
@@ -71,6 +72,7 @@ class Lifecycle(unittest.TestCase):
             class Gate:
                 def __init__(self,args,**kw):
                     assert kw['phase']=='mail_public';assert kw['seed_config']['url']==request['url']
+                    assert kw['seed_config']['kind']==(p.mediator.OWNED_REHEARSAL_KIND if owned else 'mail-public-browser-v1')
                     self.output=args.output;self.output.mkdir();self.active_vm=None
                     self.connection=SimpleNamespace(listAllDomains=lambda _:[],close=lambda:events.append('connection-close'))
                 def snapshot_host(self):return {'unchanged':True}
@@ -81,19 +83,22 @@ class Lifecycle(unittest.TestCase):
                 def stop(self,vm):events.append('VM-stop');self.active_vm=None
             class Prep:
                 def __init__(self,job,epoch,release,mode,actors):
+                    assert mode==('owned-browser' if owned else 'public')
                     self.owner=SimpleNamespace(observation={'role':'keeper'})
                     self.worker=SimpleNamespace(observation={'role':'probe'})
                     actors.extend([self.owner,self.worker]);events.append('roles-start')
                 def poll(self):return True
             class Mediation:
-                def __init__(self,*args):
+                def __init__(self,*args,owned_rehearsal):
+                    assert owned_rehearsal is owned and args[-1] is approval
+                    assert (args[-2] is None) is owned
                     self.budget=args[5];self.observations=[];self.bodies=[]
                     self.ledger=SimpleNamespace(close=lambda:{'scope':'inert'})
                 def response(self,frame):
                     self.budget.request(0);self.budget.reserve(0)
                     if transport_failure:
                         self.budget.uncertain(0);raise ValueError('inert transport failed')
-                    self.budget.complete(0,5);return {},b'owned'
+                    self.budget.complete(0,5);self.observations.append({'operation':'http'});return {},b'owned'
                 def stop(self):
                     events.append('network-stop')
                     if bad_network_stop:raise ValueError('inert early worker exit')
@@ -129,7 +134,9 @@ class Lifecycle(unittest.TestCase):
             self.assertIn('VM-stop',events);self.assertIn('connection-close',events)
             self.assertEqual(len(published),1 if known else 0)
             if known:
-                receipt=p.validate_receipt((published[0]/'receipt.json').read_bytes(),request,B,0)
+                receipt=p.validate_receipt((published[0]/'receipt.json').read_bytes(),request,B,binding['slot'])
+                record=json.loads((published[0]/'network.json').read_bytes())
+                self.assertEqual(record['browser_seconds'],30 if owned else 15)
                 failed=bad_network_stop or transport_failure or wrong_sandbox or partial_capture or after_snapshot
                 self.assertEqual(answer['status'],'failed' if failed else 'completed')
                 self.assertEqual(receipt['status'],answer['status'])
@@ -143,6 +150,7 @@ class Lifecycle(unittest.TestCase):
                     record=json.loads((published[0]/'network.json').read_bytes())
                     self.assertIn('network_after_snapshot',record['error'])
     def test_complete_flow_stops_network_before_capture_and_seals_only_after_external_stop(self):self.simulate()
+    def test_native_owned_child_uses_fixed_private_profile_before_public_work(self):self.simulate(owned=True)
     def test_domain_absence_cannot_replace_external_owner_disposition(self):
         for owner in [None,{}, {**GOOD,'connection_closed':1},{**GOOD,'reason':'guard_changed'},
                       {**GOOD,'vm_uuid':'00000000-0000-4000-8000-000000000002'}]:

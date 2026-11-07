@@ -52,9 +52,7 @@ def need(value, reason):
         raise ValueError(reason)
 
 
-def canonical(value):
-    return json.dumps(value, sort_keys=True, separators=(',', ':'),
-                      ensure_ascii=True, allow_nan=False).encode('ascii')
+canonical = cdp.canonical
 
 
 def sha(raw):
@@ -813,7 +811,8 @@ class Mediation:
     def __init__(self, owner, worker, nonce, began, seed, budget, slot, out, uplink=None, approval=None,
                  *, owned_rehearsal=False):
         from . import browser_owned_broker as existing
-        need(not owned_rehearsal or (uplink is None and approval is None),'mail_owned_rehearsal_private_only')
+        need(not owned_rehearsal or (uplink is None and (approval is None or
+             approval.get('owned_selection', {}).get('url') == seed)), 'mail_owned_rehearsal_private_only')
         self._existing=existing
         self.owner=owner;self.worker=worker;self.nonce=nonce;self.control_sequence=0;self.sequence=0
         self.ledger=mediator.BrowserRequestLedger(seed,nonce,began,allow_dynamic_public_hosts=True,
@@ -982,7 +981,8 @@ def run_capture(approval, binding, request, budget):
     from benign_guest_validation import BASE,digest
     from vm_runtime_revalidation import network_state
     job=binding['job'];epoch=binding['epoch'];release=approval['release_sha'];slot=binding['slot']
-    mode='owned-browser' if slot=='owned' else 'public';budget_slot=0 if slot=='owned' else slot
+    owned=slot=='owned'
+    mode='owned-browser' if owned else 'public';budget_slot=0 if owned else slot
     need(native.scope(release,approval['batch_id'])==approval,'mail_public_live_batch_changed')
     _,system_bindings=native.system_libvirt()
     context=auth.capture();auth.validate_context(context)
@@ -995,6 +995,10 @@ def run_capture(approval, binding, request, budget):
         'source_sha256':request['source_sha256'],'request_sha256':sha(canonical(request)),
         'scope':'No-NIC main-page browser and filtered broker observations; broker TLS, no browser fingerprint',
         'capture_artifacts':[],'admitted_at':int(time.time()),'mode':mode}
+    kind = mediator.OWNED_REHEARSAL_KIND if owned else 'mail-public-browser-v1'
+    config = {'kind':kind,'nonce':epoch,'url':request['url']}
+    _, _, window, _, local = mediator.mail_guest_seed(config)
+    record['browser_seconds'] = native.capture_seconds(owned, window+local)
     with auth.fs.execution_lock():
         require_idle()
         folder,ca_sha=prepare_network(job,epoch,release,mode,approval['context']['uplink'])
@@ -1003,7 +1007,7 @@ def run_capture(approval, binding, request, budget):
         out=Path('/var/lib/paw-s14/control')/('mail-capture-'+epoch)
         media=input_media(b'Only the protected selected URL is seeded; original email is never executed',epoch)
         gate=BrowserVM(argparse.Namespace(output=out),phase='mail_public',media=media,
-            seed_config={'kind':'mail-public-browser-v1','nonce':epoch,'url':request['url']})
+            seed_config=config)
         gate.canary=out/'host-owned-canary.bin';gate.canary.write_bytes(os.urandom(32));gate.canary.chmod(0o600)
         canary=digest(gate.canary);before=gate.snapshot_host();network=network_state()
         record.update(context_sha256=sha(canonical(context)),image_sha256=context['image_sha256'],
@@ -1015,7 +1019,7 @@ def run_capture(approval, binding, request, budget):
                  inspected['chrome_binary_sha256']==context['chrome_binary_sha256'],'mail_public_exact_guest')
             admitted=vm['channel'].call('start',seconds=8)
             need(admitted.get('started') is True,'mail_public_guest_start_ack')
-            began=time.monotonic_ns();record['guest_started_ns']=began;end=time.monotonic()+18
+            began=time.monotonic_ns();record['guest_started_ns']=began;end=time.monotonic()+record['browser_seconds']+3
             while time.monotonic()<end:
                 value=vm['channel'].call('poll',seconds=5);request_frame=value.get('network_request')
                 need(not network_closed or request_frame is None,'mail_public_network_after_snapshot')
@@ -1024,7 +1028,8 @@ def run_capture(approval, binding, request, budget):
                     preparation=NetworkPreparation(job,epoch,release,mode,actors)
                 if preparation is not None and mediation is None and preparation.poll():
                     mediation=Mediation(preparation.owner,preparation.worker,epoch,began,request['url'],
-                        budget,budget_slot,out,approval['context']['uplink'] if mode=='public' else None,approval)
+                        budget,budget_slot,out,None if owned else approval['context']['uplink'],approval,
+                        owned_rehearsal=owned)
                 if value.get('network_quiescent') is True and not network_closed:
                     need(mediation is not None and request_frame is None,'mail_public_quiescent_pending')
                     mediation.stop();network_closed=True;record['network_stopped_before_capture']=True
@@ -1040,7 +1045,7 @@ def run_capture(approval, binding, request, budget):
                  all(v is True for v in value['sandbox'].values()),'mail_public_guest_incomplete')
             record['capture_transfer_started']=True
             existing.collect_capture(vm['channel'],epoch,value,out,record['capture_artifacts'])
-            if mode=='owned-browser':
+            if owned:
                 dom=(out/'capture-dom.html').read_bytes()
                 need(('PAW-OWNED-'+epoch).encode() in dom and b'data-owned="done"' in dom and
                      len([v for v in mediation.observations if v['operation']=='http'])>=2,
@@ -1238,7 +1243,6 @@ def client_import(directory,batch,slot,output):
 
 def _client_import(directory,batch,slot,output):
     import blake3
-    from contextlib import contextmanager
     from . import mail_browser_custody as custody, mail_browser_owned as owned, synthetic_bridge as shared
     shared._linux();slot_name(slot)
     need(type(batch) is str and re.fullmatch('[0-9a-f]{32}',batch),'mail_public_export_batch')
@@ -1892,21 +1896,15 @@ def cleanup_batch(release,batch):
     from . import mail_browser_native as native
     need(os.geteuid()==0 and HERE==Path('/opt/paw-vm/releases')/release/'paw/core/mail_browser_public.py',
          'mail_public_cleanup_immutable_root')
-    directory=native.private_batch(batch);children=directory/'children';failures=[]
-    fd=native.root_directory(children)
-    try:names=os.listdir(fd)
-    finally:os.close(fd)
-    need(len(names)<=128,'mail_public_batch_children_budget')
-    jobs=sorted(name[:-5] for name in names if re.fullmatch(r'[0-9a-f]{32}\.json',name))
-    for job in jobs:
+    if native.batch_already_closed(release,batch):
+        return {'status':'closed','batch_id':batch}
+    failures=[]
+    for job in native.batch_child_jobs(batch):
         try:
             subprocess.run(['/usr/bin/systemctl','stop','paw-vm-owned-'+job+'.service'],capture_output=True,timeout=14)
             cleanup_child(release,batch,job)
         except Exception as error:failures.append(type(error).__name__+':'+str(error)[:256])
-    native.atomic(directory/'closed.json',canonical({'schema':'paw-mail-native-batch-closed-v1',
-        'batch_id':batch,'release_sha':release,'at':int(time.time()),'failures':failures}))
-    need(not failures,'mail_public_batch_cleanup_failed')
-    return {'status':'closed','batch_id':batch}
+    return native.publish_batch_close(release,batch,failures)
 
 
 ACK_MAX=2*1024**2
