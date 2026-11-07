@@ -81,6 +81,34 @@ class PublicBoundary(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'mail_public_transport_session'):
                 m.PublicTransport(E,began+17*10**9,None,None,private=True)
 
+    def test_rehearsal_has_time_for_local_snapshot_after_network_cutoff(self):
+        from unittest.mock import Mock
+        for kind,stage,elapsed,status in [
+            (m.mediator.OWNED_REHEARSAL_KIND,'snapshot_ready',25.160,'completed'),
+            (m.mediator.OWNED_REHEARSAL_KIND,'running',25.160,'failed'),
+            (m.mediator.OWNED_REHEARSAL_KIND,'snapshot_ready',30,'failed'),
+            ('mail-public-browser-v1','snapshot_ready',15,'failed'),
+        ]:
+            with self.subTest(kind=kind,stage=stage,elapsed=elapsed):
+                runtime=m.PublicRuntime()
+                self.addCleanup(runtime.selector.close)
+                config={'kind':kind,'url':m.mediator.OWNED_REHEARSAL_SEED,'nonce':E}
+                with patch.object(Path,'read_bytes',return_value=m.canonical(config)):
+                    runtime._start_nonce()
+                runtime.started=0
+                runtime.process=Mock()
+                runtime.process.poll.return_value=None
+                runtime.driver=SimpleNamespace(stage=stage)
+                runtime.witness=Mock()
+                with patch.object(m.os,'listdir',return_value=['lo']), \
+                     patch.object(m.time,'monotonic',return_value=elapsed), \
+                     patch.object(runtime.selector,'select',return_value=[]), \
+                     patch.object(runtime,'finish',return_value={'done':True}) as finish:
+                    self.assertTrue(runtime.tick()['done'])
+                    self.assertEqual(finish.call_args.args[0],status)
+                    if status=='failed':
+                        self.assertIn('owned_whole_deadline',finish.call_args.args[1])
+
     def test_fixed_rehearsal_waits_for_scripted_fetch_after_the_document(self):
         for kind,after_document in [('mail-public-browser-v1',True),(m.mediator.OWNED_REHEARSAL_KIND,False)]:
             with self.subTest(kind=kind):
