@@ -45,6 +45,7 @@ PROGRAMS = ('mail_browser_public.py', 'browser_cdp.py', 'browser_owned_cdp_guest
             'browser_owned_broker_guest.py', 'browser_broker_console.py', 'browser_mediator.py',
             'browser_broker_wire.py', 'mail_browser_dns.py', 'owned_kernel_runtime.py',
             'owned_kernel_policy.py', 'browser_owned_protocol.py')
+OWNED_REHEARSAL_KIND = 'mail-owned-browser-rehearsal-v1'
 
 
 def need(value, reason):
@@ -205,9 +206,12 @@ class PublicRuntime(captured.Runtime):
     def _start_nonce(self):
         config = cdp.strict_json(Path('/etc/paw-mail-browser.json').read_bytes())
         need(type(config) is dict and set(config) == {'kind', 'nonce', 'url'} and
-             config['kind'] == 'mail-public-browser-v1' and type(config['nonce']) is str and
+             config['kind'] in ('mail-public-browser-v1', OWNED_REHEARSAL_KIND) and type(config['nonce']) is str and
              re.fullmatch('[0-9a-f]{32}', config['nonce']), 'mail_public_guest_seed')
         mediator.endpoint(config['url'])
+        if config['kind'] == OWNED_REHEARSAL_KIND:
+            need(config['url'] == mediator.OWNED_REHEARSAL_SEED,'mail_owned_rehearsal_seed')
+            self.window_seconds = mediator.OWNED_REHEARSAL_SECONDS
         self.seed = config['url']; return config['nonce']
     def _make_controller(self):
         # The existing controller already denies downloads and permissions,
@@ -817,11 +821,14 @@ class NetworkPreparation:
 
 
 class Mediation:
-    def __init__(self, owner, worker, nonce, began, seed, budget, slot, out, uplink=None, approval=None):
+    def __init__(self, owner, worker, nonce, began, seed, budget, slot, out, uplink=None, approval=None,
+                 *, owned_rehearsal=False):
         from . import browser_owned_broker as existing
+        need(not owned_rehearsal or (uplink is None and approval is None),'mail_owned_rehearsal_private_only')
         self._existing=existing
         self.owner=owner;self.worker=worker;self.nonce=nonce;self.control_sequence=0;self.sequence=0
-        self.ledger=mediator.BrowserRequestLedger(seed,nonce,began,allow_dynamic_public_hosts=True)
+        self.ledger=mediator.BrowserRequestLedger(seed,nonce,began,allow_dynamic_public_hosts=True,
+                                                 owned_rehearsal=owned_rehearsal)
         self.budget=budget;self.slot=slot;self.out=out;self.uplink=uplink;self.approval=approval
         self.observations=[];self.bodies=[]
         self.control('arm',serial=0)
