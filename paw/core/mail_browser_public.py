@@ -231,9 +231,10 @@ class PublicRuntime(captured.Runtime):
 
 class PublicTransport:
     """Typed Root channel only; reuse the existing DNS and HTTP/TLS I/O."""
-    def __init__(self, nonce, deadline_ns, dns_transport, http_transport):
+    def __init__(self, nonce, deadline_ns, dns_transport, http_transport, *, private=False):
+        cap = mediator.OWNED_REHEARSAL_ROLE_SECONDS if private else 10
         need(type(nonce) is str and re.fullmatch('[0-9a-f]{32}', nonce) and
-             type(deadline_ns) is int and time.monotonic_ns() < deadline_ns <= time.monotonic_ns()+10**10,
+             type(deadline_ns) is int and time.monotonic_ns() < deadline_ns <= time.monotonic_ns()+cap*10**9,
              'mail_public_transport_session')
         self.nonce = nonce; self.deadline = deadline_ns; self.dns = dns_transport; self.http = http_transport
         self.sequence = 0; self.bytes = 0; self.closed = False
@@ -303,6 +304,8 @@ def service(job, epoch, release, role, keeper_pid=None, serial=0, *, protocol=Fa
     config = kernel.private_json(folder/'public.json')
     need(config['mode'] in {'owned-raw', 'owned-browser', 'public'}, 'mail_public_role_mode')
     props.update(BindsTo=ids['parent'], After=ids['parent'])
+    if config['mode'] == 'owned-browser':
+        props['RuntimeMaxSec'] = str(mediator.OWNED_REHEARSAL_ROLE_SECONDS + 2)
     if role == 'fixture':
         need(config['mode'] != 'public', 'mail_public_no_public_fixture')
         props.pop('NetworkNamespacePath', None)
@@ -511,7 +514,8 @@ def keeper(job, epoch, release):
     kernel.emit({'ready':True, 'role':'keeper', 'witness':kernel.status(), 'filter_sha256':expected})
     reason = 'unknown';check_error = None;check_detail = None
     try:
-        while time.monotonic_ns()-began < 8*10**9:
+        cap = mediator.OWNED_REHEARSAL_ROLE_SECONDS if cfg['mode']=='owned-browser' else 8
+        while time.monotonic_ns()-began < cap*10**9:
             if stopped: reason = stopped[0]; break
             try:observed=guard_identity(binding,expected=expected)
             except ValueError as error:
@@ -594,7 +598,7 @@ def fixture_main(job, epoch, release):
     else:
         if __package__: from . import browser_owned_protocol as protocol
         else: import browser_owned_protocol as protocol
-        protocol.fixture_main(job, epoch, release)
+        protocol.fixture_main(job, epoch, release, mail_fixture=True)
 
 
 def drop_public():
@@ -609,15 +613,6 @@ def drop_public():
          all(int(witness[k],16) == 0 for k in ['cap_eff', 'cap_prm', 'cap_inh', 'cap_amb']),
          'mail_public_irreversible_identity')
     return witness
-
-
-def dns_bytes(host, ident, deadline_ns):
-    need(type(deadline_ns) is int and deadline_ns > time.monotonic_ns(), 'mail_public_dns_deadline')
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as stream:
-        stream.settimeout(min(1, (deadline_ns-time.monotonic_ns())/10**9))
-        stream.connect(dns.RESOLVER); stream.send(dns.question(host, ident)); raw = stream.recv(4097)
-    need(time.monotonic_ns() < deadline_ns, 'mail_public_dns_expired')
-    return raw
 
 
 def probe_main(job, epoch, release, form):
@@ -652,7 +647,10 @@ def probe_main(job, epoch, release, form):
         kernel.probe(job,epoch,release,stream_seconds=2);return
     witness = drop_public()
     kernel.emit({'ready':True, 'role':'probe', 'witness':witness})
-    session = PublicTransport(epoch, time.monotonic_ns()+8*10**9, dns_bytes, mediator.transport_response)
+    private = cfg['mode'] == 'owned-browser'
+    cap = mediator.OWNED_REHEARSAL_ROLE_SECONDS if private else 8
+    session = PublicTransport(epoch, time.monotonic_ns()+cap*10**9, dns.read_response,
+                              mediator.transport_response, private=private)
     decoder = wire.Decoder(epoch, body_budget=0); written = 0
     while not session.closed:
         raw = os.read(0,32768)

@@ -81,11 +81,12 @@ class Server:
     Only the immutable launcher may supply its three fixed namespace
     sockets and fixed owned-only SSL context. Ordinary tests use loopback.
     """
-    def __init__(self,nonce,sockets,tls_context,deadline_ns,*,dns_mode='public'):
+    def __init__(self,nonce,sockets,tls_context,deadline_ns,*,dns_mode='public',mail_fixture=False):
         import time
+        cap=mediator.OWNED_REHEARSAL_ROLE_SECONDS if mail_fixture else 8
         require(type(nonce)is str and re.fullmatch('[0-9a-f]{32}',nonce) and
             type(sockets)is dict and set(sockets)=={'dns','http','https'} and
-            type(deadline_ns)is int and time.monotonic_ns()<deadline_ns<=time.monotonic_ns()+8*10**9 and
+            type(deadline_ns)is int and time.monotonic_ns()<deadline_ns<=time.monotonic_ns()+cap*10**9 and
             dns_mode in {'public','private','changed'},'owned_fixture_server_config')
         self.nonce=nonce;self.sockets=sockets;self.context=tls_context
         self.deadline=deadline_ns;self.mode=dns_mode;self.closed=False
@@ -217,7 +218,7 @@ def transport_main(job,epoch,release):
             write_frame(encoded)
 
 
-def fixture_main(job,epoch,release):
+def fixture_main(job,epoch,release,*,mail_fixture=False):
     kernel.role_entry(job,epoch,release,'fixture');sockets={}
     try:
         for name,address,port in [('dns','9.9.9.9',53),('http','93.184.216.34',80),
@@ -231,7 +232,8 @@ def fixture_main(job,epoch,release):
                 'owned_protocol_fixture_privilege')
         context=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         context.load_cert_chain('/etc/paw-owned-cert.pem','/etc/paw-owned-key.pem')
-        server=Server(epoch,sockets,context,time.monotonic_ns()+8*10**9)
+        cap=mediator.OWNED_REHEARSAL_ROLE_SECONDS if mail_fixture else 8
+        server=Server(epoch,sockets,context,time.monotonic_ns()+cap*10**9,mail_fixture=mail_fixture)
         kernel.emit({'ready':True,'role':'fixture','witness':witness})
         server.run()
     finally:
