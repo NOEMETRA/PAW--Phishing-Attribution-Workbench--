@@ -71,7 +71,7 @@ class Owner(unittest.TestCase):
                     self.output=args.output;self.output.mkdir();self.active_vm=None;self.nonce=kwargs['seed_config']['nonce']
                     if mail_fixture:
                         assert kwargs['phase']=='mail_public'
-                        assert kwargs['seed_config']=={'kind':mail.OWNED_REHEARSAL_KIND,'nonce':self.nonce,'url':p.SEED}
+                        assert kwargs['seed_config']=={'kind':mediator.OWNED_REHEARSAL_KIND,'nonce':self.nonce,'url':p.SEED}
                     self.connection=types.SimpleNamespace(listAllDomains=lambda _:[],close=lambda:None)
                 def snapshot_host(self):return {'owned':'unchanged'}
                 def start(self,*args):

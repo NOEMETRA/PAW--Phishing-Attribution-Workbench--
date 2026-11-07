@@ -18,6 +18,11 @@ J='1'*32; E='2'*32; R='3'*40
 SEEDS=['https://one.invalid/', 'http://two.invalid/', 'https://three.invalid/']
 
 class PublicBoundary(unittest.TestCase):
+    def test_fixed_role_sources_fit_the_immutable_file_cap(self):
+        for name in m.PROGRAMS:
+            with self.subTest(program=name):
+                self.assertLessEqual(m.HERE.with_name(name).stat().st_size,128*1024)
+
     def test_late_https_window_is_bound_to_the_fixed_private_rehearsal(self):
         from paw.core import browser_owned_broker as broker
         seed=m.mediator.OWNED_REHEARSAL_SEED
@@ -38,9 +43,9 @@ class PublicBoundary(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'mail_owned_rehearsal_private_only'):
             m.Mediation(prep.owner,prep.worker,E,0,seed,None,0,None,approval={},owned_rehearsal=True)
         for kind,url,window in [
-            (m.OWNED_REHEARSAL_KIND,seed,18),
+            (m.mediator.OWNED_REHEARSAL_KIND,seed,18),
             ('mail-public-browser-v1',seed,15),
-            (m.OWNED_REHEARSAL_KIND,SEEDS[0],None),
+            (m.mediator.OWNED_REHEARSAL_KIND,SEEDS[0],None),
         ]:
             with self.subTest(kind=kind,url=url):
                 runtime=m.PublicRuntime()

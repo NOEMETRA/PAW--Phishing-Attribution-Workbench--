@@ -22,6 +22,7 @@ LIMITS = {'requests': 32, 'hosts': 8, 'redirects': 5, 'bytes': 4*1024**2,
           'seconds': 15, 'lease_seconds': 5, 'header_bytes': 32768}
 OWNED_REHEARSAL_SEED = 'https://paw-owned.invalid/'
 OWNED_REHEARSAL_SECONDS = 18
+OWNED_REHEARSAL_KIND = 'mail-owned-browser-rehearsal-v1'
 DENIED = tuple(ipaddress.ip_network(x) for x in (
     '0.0.0.0/8','10.0.0.0/8','100.64.0.0/10','127.0.0.0/8',
     '169.254.0.0/16','172.16.0.0/12','192.0.0.0/24','192.0.2.0/24',
@@ -54,6 +55,20 @@ def endpoint(url):
     require(p.netloc in {host,host+':'+str(default)} and port in {None,default},'broker_url_port')
     return {'url':url,'scheme':p.scheme,'host':host,'port':default,
             'url_sha256':hashlib.sha256(url.encode('ascii')).hexdigest()}
+
+
+def mail_guest_seed(config):
+    """Decode the immutable no-NIC guest seed and its fixed window."""
+    require(type(config) is dict and set(config) == {'kind', 'nonce', 'url'} and
+            config['kind'] in ('mail-public-browser-v1', OWNED_REHEARSAL_KIND) and
+            type(config['nonce']) is str and re.fullmatch('[0-9a-f]{32}', config['nonce']),
+            'mail_public_guest_seed')
+    url, nonce = config['url'], config['nonce']
+    endpoint(url)
+    if config['kind'] == OWNED_REHEARSAL_KIND:
+        require(url == OWNED_REHEARSAL_SEED, 'mail_owned_rehearsal_seed')
+        return url, nonce, OWNED_REHEARSAL_SECONDS
+    return url, nonce, LIMITS['seconds']
 
 
 def public_answers(values):
