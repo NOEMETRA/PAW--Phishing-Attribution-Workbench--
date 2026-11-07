@@ -395,6 +395,7 @@ class OctoberMaintenance(unittest.TestCase):
         self.old = {b'libbrotli1:amd64': b'1.2.0-3build1',
                     b'python3-brotli': b'1.2.0-3build1', b'owned-other': b'1'}
         self.old.update({k: before for k, (before, _) in runtime.OCT30_PACKAGES.items() if before is not None})
+        self.old.update({k: before for k, (before, _) in runtime.NOV05_PACKAGES.items()})
         self.brotli = dict(self.old)
         for key in runtime.BROTLI_PACKAGES: self.brotli[key] = b'1.2.0-3ubuntu0.1'
         self.current = dict(self.brotli)
@@ -475,6 +476,24 @@ class OctoberMaintenance(unittest.TestCase):
     def test_inventory_change_without_matching_context_refuses(self):
         context = dict(self.context, dpkg_inventory_sha256='0'*64)
         with self.assertRaisesRegex(ValueError, 'unreviewed_inventory'): self.transition(context=context)
+
+    def test_november_inventory_must_reconstruct_october_with_same_kernel(self):
+        packages = dict(self.current)
+        packages.update({name: after for name, (_, after) in runtime.NOV05_PACKAGES.items()})
+        digest = maintenance_auth.digest(self.rows(packages))
+        context = dict(self.context, dpkg_inventory_sha256=digest)
+        with mock.patch.object(runtime, 'INVENTORY_NOV05', digest):
+            receipt = maintenance_auth.validate_maintenance(self.transition(packages, context), context)
+            self.assertEqual(receipt['dpkg_inventory_sha256'], digest)
+            changed_kernel = dict(context, host=dict(context['host'], kernel='other'))
+            with self.assertRaisesRegex(ValueError, 'runtime_reviewed_kernel'):
+                self.transition(packages, changed_kernel)
+
+        packages[b'owned-other'] = b'2'
+        digest = maintenance_auth.digest(self.rows(packages))
+        with mock.patch.object(runtime, 'INVENTORY_NOV05', digest), \
+             self.assertRaisesRegex(ValueError, 'runtime_nov05_inventory_delta'):
+            self.transition(packages, dict(context, dpkg_inventory_sha256=digest))
 
 
 if __name__ == '__main__': unittest.main()
