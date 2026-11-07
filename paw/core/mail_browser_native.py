@@ -100,7 +100,8 @@ ASSETS = {
         (652312, '5c2fbbc1215f7d98f5ce6c2675a1f09db5818d69fb6d962174c6f88f42bf5373')}
 POLICY = {'allow_dynamic_public_hosts': True, 'public_hosts_batch': 8,
           'http_requests_batch': 32, 'response_bytes_batch': 4*1024**2,
-          'redirects_per_navigation': 5, 'browser_seconds': 15, 'external_stop_seconds': 12}
+          'redirects_per_navigation': 5, 'browser_seconds': 15, 'owned_browser_seconds': 30,
+          'external_stop_seconds': 12}
 OWNED_CASES = ('closed', 'dns-only', 'http-expiry', 'owner-loss', 'guard-loss',
                'private-dns', 'rebind', 'redirect', 'protocol-loss', 'counter-budget', 'browser')
 BUNDLE_MAX = 2*1024**2
@@ -109,6 +110,12 @@ BUNDLE_MAX = 2*1024**2
 def need(value, reason):
     if not value:
         raise ValueError(reason)
+
+
+def capture_seconds(owned, seconds):
+    expected = POLICY['owned_browser_seconds' if owned else 'browser_seconds']
+    need(seconds == expected, 'mail_public_browser_policy_mismatch')
+    return expected
 
 
 def canonical(value):
