@@ -1897,18 +1897,14 @@ def cleanup_batch(release,batch):
     need(os.geteuid()==0 and HERE==Path('/opt/paw-vm/releases')/release/'paw/core/mail_browser_public.py',
          'mail_public_cleanup_immutable_root')
     if native.batch_already_closed(release,batch):
-        require_idle()
         return {'status':'closed','batch_id':batch}
-    directory=native.private_batch(batch);failures=[]
+    failures=[]
     for job in native.batch_child_jobs(batch):
         try:
             subprocess.run(['/usr/bin/systemctl','stop','paw-vm-owned-'+job+'.service'],capture_output=True,timeout=14)
             cleanup_child(release,batch,job)
         except Exception as error:failures.append(type(error).__name__+':'+str(error)[:256])
-    native.atomic(directory/'closed.json',canonical({'schema':'paw-mail-native-batch-closed-v1',
-        'batch_id':batch,'release_sha':release,'at':int(time.time()),'failures':failures}))
-    need(not failures,'mail_public_batch_cleanup_failed')
-    return {'status':'closed','batch_id':batch}
+    return native.publish_batch_close(release,batch,failures)
 
 
 ACK_MAX=2*1024**2

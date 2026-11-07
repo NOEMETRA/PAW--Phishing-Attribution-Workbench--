@@ -119,16 +119,20 @@ def capture_seconds(owned, seconds):
 
 
 def batch_already_closed(release, batch):
-    """A second stop hook may reuse only an exact protected clean close."""
+    """Reuse an exact protected clean close only after fresh idle evidence."""
+    from .mail_browser_public import require_idle
     try:
         raw = protected(private_batch(batch)/'closed.json', 65536)
-    except FileNotFoundError:
+        value = decode(raw, 65536)
+        if not (type(value) is dict and set(value) == {'schema','batch_id','release_sha','at','failures'}
+                and value['schema'] == 'paw-mail-native-batch-closed-v1'
+                and value['batch_id'] == batch and value['release_sha'] == release
+                and type(value['at']) is int and value['failures'] == []):
+            return False
+        require_idle()
+    except (OSError, ValueError, subprocess.SubprocessError):
         return False
-    value = decode(raw, 65536)
-    return (type(value) is dict and set(value) == {'schema','batch_id','release_sha','at','failures'}
-            and value['schema'] == 'paw-mail-native-batch-closed-v1'
-            and value['batch_id'] == batch and value['release_sha'] == release
-            and type(value['at']) is int and value['failures'] == [])
+    return True
 
 
 def batch_child_jobs(batch):
@@ -139,6 +143,20 @@ def batch_child_jobs(batch):
         os.close(fd)
     need(len(names) <= 128, 'mail_public_batch_children_budget')
     return sorted(name[:-5] for name in names if re.fullmatch(r'[0-9a-f]{32}\.json', name))
+
+
+def publish_batch_close(release, batch, failures):
+    from .mail_browser_public import require_idle
+    if not failures:
+        try:
+            require_idle()
+        except (OSError, ValueError, subprocess.SubprocessError) as error:
+            failures.append(type(error).__name__+':'+str(error)[:256])
+    atomic(private_batch(batch)/'closed.json', canonical({
+        'schema':'paw-mail-native-batch-closed-v1','batch_id':batch,'release_sha':release,
+        'at':int(time.time()),'failures':failures}))
+    need(not failures, 'mail_public_batch_cleanup_failed')
+    return {'status':'closed','batch_id':batch}
 
 
 def canonical(value):

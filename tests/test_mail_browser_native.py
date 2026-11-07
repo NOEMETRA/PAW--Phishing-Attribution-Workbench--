@@ -38,9 +38,21 @@ class NativeData(unittest.TestCase):
              patch.object(n,'batch_child_jobs',side_effect=AssertionError('no repeated child stops')):
             self.assertEqual(p.cleanup_batch(R,B),{'status':'closed','batch_id':B})
             idle.assert_called_once_with()
-            idle.side_effect=ValueError('inert host residual')
-            with self.assertRaisesRegex(ValueError,'host residual'):
-                p.cleanup_batch(R,B)
+        for raw,idle_checks in [(n.canonical(value),[ValueError('inert host residual'),None]),
+                                (b'broken receipt',[None])]:
+            with self.subTest(raw=raw),patch.object(n,'protected',return_value=raw), \
+                 patch.object(p,'HERE',here),patch.object(p.os,'geteuid',return_value=0), \
+                 patch.object(p,'require_idle',side_effect=idle_checks) as idle, \
+                 patch.object(n,'batch_child_jobs',return_value=[J]),patch.object(n,'atomic'), \
+                 patch.object(p.subprocess,'run') as stop,patch.object(p,'cleanup_child') as cleanup:
+                self.assertEqual(p.cleanup_batch(R,B),{'status':'closed','batch_id':B})
+                stop.assert_called_once()
+                cleanup.assert_called_once_with(R,B,J)
+                self.assertEqual(idle.call_count,len(idle_checks))
+        with patch.object(p,'require_idle',side_effect=ValueError('still residual')),patch.object(n,'atomic') as write:
+            with self.assertRaisesRegex(ValueError,'batch_cleanup_failed'):
+                n.publish_batch_close(R,B,[])
+            self.assertEqual(json.loads(write.call_args.args[1])['failures'],['ValueError:still residual'])
 
     def test_native_master_requires_actual_deadline_no_inet_and_exact_resource_unit(self):
         valid={'MainPID':'321',**n.MASTER_PROPERTIES};n.validate_master_unit(valid,321)
