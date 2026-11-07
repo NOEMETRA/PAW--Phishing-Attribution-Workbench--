@@ -118,6 +118,29 @@ def capture_seconds(owned, seconds):
     return expected
 
 
+def batch_already_closed(release, batch):
+    """A second stop hook may reuse only an exact protected clean close."""
+    try:
+        raw = protected(private_batch(batch)/'closed.json', 65536)
+    except FileNotFoundError:
+        return False
+    value = decode(raw, 65536)
+    return (type(value) is dict and set(value) == {'schema','batch_id','release_sha','at','failures'}
+            and value['schema'] == 'paw-mail-native-batch-closed-v1'
+            and value['batch_id'] == batch and value['release_sha'] == release
+            and type(value['at']) is int and value['failures'] == [])
+
+
+def batch_child_jobs(batch):
+    fd = root_directory(private_batch(batch)/'children')
+    try:
+        names = os.listdir(fd)
+    finally:
+        os.close(fd)
+    need(len(names) <= 128, 'mail_public_batch_children_budget')
+    return sorted(name[:-5] for name in names if re.fullmatch(r'[0-9a-f]{32}\.json', name))
+
+
 def canonical(value):
     return json.dumps(value, sort_keys=True, separators=(',', ':'),
                       ensure_ascii=True, allow_nan=False).encode('ascii')

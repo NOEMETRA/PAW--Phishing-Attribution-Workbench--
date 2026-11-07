@@ -24,6 +24,24 @@ def hashed(raw):return blake3.blake3(raw).hexdigest()
 def b64(raw):return base64.b64encode(raw).decode('ascii')
 
 class NativeData(unittest.TestCase):
+    def test_second_stop_reuses_only_an_exact_clean_close_and_rechecks_idle_host(self):
+        value={'schema':'paw-mail-native-batch-closed-v1','batch_id':B,
+               'release_sha':R,'at':1,'failures':[]}
+        with patch.object(n,'protected',side_effect=FileNotFoundError):
+            self.assertFalse(n.batch_already_closed(R,B))
+        for change in [{'batch_id':J},{'release_sha':E},{'failures':['unreconciled']},{'at':True}]:
+            with self.subTest(change=change),patch.object(n,'protected',return_value=n.canonical({**value,**change})):
+                self.assertFalse(n.batch_already_closed(R,B))
+        here=Path('/opt/paw-vm/releases')/R/'paw/core/mail_browser_public.py'
+        with patch.object(n,'protected',return_value=n.canonical(value)),patch.object(p,'HERE',here), \
+             patch.object(p.os,'geteuid',return_value=0),patch.object(p,'require_idle') as idle, \
+             patch.object(n,'batch_child_jobs',side_effect=AssertionError('no repeated child stops')):
+            self.assertEqual(p.cleanup_batch(R,B),{'status':'closed','batch_id':B})
+            idle.assert_called_once_with()
+            idle.side_effect=ValueError('inert host residual')
+            with self.assertRaisesRegex(ValueError,'host residual'):
+                p.cleanup_batch(R,B)
+
     def test_native_master_requires_actual_deadline_no_inet_and_exact_resource_unit(self):
         valid={'MainPID':'321',**n.MASTER_PROPERTIES};n.validate_master_unit(valid,321)
         for change in [{'MainPID':'0'},{'RuntimeMaxUSec':'infinity'},{'NoNewPrivileges':'no'},

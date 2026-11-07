@@ -1896,13 +1896,11 @@ def cleanup_batch(release,batch):
     from . import mail_browser_native as native
     need(os.geteuid()==0 and HERE==Path('/opt/paw-vm/releases')/release/'paw/core/mail_browser_public.py',
          'mail_public_cleanup_immutable_root')
-    directory=native.private_batch(batch);children=directory/'children';failures=[]
-    fd=native.root_directory(children)
-    try:names=os.listdir(fd)
-    finally:os.close(fd)
-    need(len(names)<=128,'mail_public_batch_children_budget')
-    jobs=sorted(name[:-5] for name in names if re.fullmatch(r'[0-9a-f]{32}\.json',name))
-    for job in jobs:
+    if native.batch_already_closed(release,batch):
+        require_idle()
+        return {'status':'closed','batch_id':batch}
+    directory=native.private_batch(batch);failures=[]
+    for job in native.batch_child_jobs(batch):
         try:
             subprocess.run(['/usr/bin/systemctl','stop','paw-vm-owned-'+job+'.service'],capture_output=True,timeout=14)
             cleanup_child(release,batch,job)
