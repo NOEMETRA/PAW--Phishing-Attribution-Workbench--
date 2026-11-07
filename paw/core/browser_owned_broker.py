@@ -99,7 +99,7 @@ def prepare(job,epoch,release):
     for source,name in [(cert,'paw-owned-cert.pem'),(key,'paw-owned-key.pem')]:
         raw=source.read_bytes();require(0<len(raw)<=16384,'owned_broker_fixture_certificate_budget')
         target=folder/'fixture-root/etc'/name;target.write_bytes(raw);target.chmod(0o444)
-    trust=folder/'probe-root/etc/ssl/certs';trust.mkdir(parents=True,mode=0o755)
+    trust=kernel.prepare_role_trust(folder/'probe-root')
     target=trust/'ca-certificates.crt';target.write_bytes(cert.read_bytes());target.chmod(0o444)
     return folder,hashlib.sha256(cert.read_bytes()).hexdigest()
 

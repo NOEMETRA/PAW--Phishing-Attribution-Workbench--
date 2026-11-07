@@ -8,6 +8,7 @@ from types import SimpleNamespace
 from contextlib import ExitStack, nullcontext
 import os
 import sys
+import tempfile
 import threading
 import time
 
@@ -74,6 +75,31 @@ class Policy(unittest.TestCase):
 
 
 class Boundaries(unittest.TestCase):
+    def test_role_roots_keep_traversal_after_a_native_0077_umask(self):
+        actual_stat=Path.stat
+        sources={r.HERE,r.HERE.with_name('owned_kernel_policy.py')}
+        def immutable_source(path,*args,**kwargs):
+            if path in sources:return SimpleNamespace(st_uid=0,st_mode=0o444)
+            return actual_stat(path,*args,**kwargs)
+        with tempfile.TemporaryDirectory() as temporary,patch.object(Path,'stat',immutable_source):
+            folder=Path(temporary)/'job'
+            previous=os.umask(0o077)
+            try:
+                r.prepare_case(folder,J,E,R)
+                trust=r.prepare_role_trust(folder/'probe-root')
+            finally:
+                os.umask(previous)
+            mode=lambda path:path.stat().st_mode&0o777
+            self.assertEqual(mode(folder),0o700)
+            self.assertEqual(mode(folder/'code'),0o555)
+            for role in ('fixture','probe'):
+                root=folder/(role+'-root')
+                self.assertEqual(mode(root),0o555)
+                self.assertEqual(mode(root/'etc'),0o755)
+                self.assertEqual(mode(root/'etc/paw-owned-kernel.json'),0o444)
+            self.assertEqual(mode(trust.parent),0o755)
+            self.assertEqual(mode(trust),0o755)
+
     def test_ordinary_uid_cannot_start_root_manager_owner_or_fixture_probe(self):
         with patch.object(subprocess,'Popen',side_effect=AssertionError('administrative call')), \
              patch.object(socket,'socket',side_effect=AssertionError('socket')):
