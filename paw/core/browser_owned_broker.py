@@ -364,7 +364,8 @@ def run_owned(job,release,*,mail_fixture=False):
             # private mail rehearsal has its own window; role lifetimes stay.
             began=time.monotonic_ns();record['timing_ns']['guest_start_ack']=began
             window=mediator.OWNED_REHEARSAL_SECONDS if mail_fixture else mediator.LIMITS['seconds']
-            end=time.monotonic()+window+3;preparation=None;network_closed=False
+            local=mediator.OWNED_REHEARSAL_LOCAL_SECONDS if mail_fixture else 0
+            end=time.monotonic()+window+local+3;preparation=None;network_closed=False
             while time.monotonic()<end:
                 value=vm['channel'].call('poll',seconds=5)
                 request=value.get('network_request')

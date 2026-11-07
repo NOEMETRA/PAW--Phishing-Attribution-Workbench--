@@ -204,7 +204,8 @@ class BatchBudget:
 class PublicRuntime(captured.Runtime):
     def _start_nonce(self):
         config = cdp.strict_json(Path('/etc/paw-mail-browser.json').read_bytes())
-        self.seed, nonce, self.window_seconds, self.minimum_requests = mediator.mail_guest_seed(config)
+        (self.seed, nonce, self.window_seconds, self.minimum_requests,
+         self.local_snapshot_seconds) = mediator.mail_guest_seed(config)
         return nonce
     def _make_controller(self):
         # The existing controller already denies downloads and permissions,

@@ -31,9 +31,10 @@ PARTS={'manifest.json':16384,'url_evidence.json':16384,'execution.json':16384,
 REQUEST_MAX=128*1024
 RECEIPT_MAX=32768
 ARTIFACTS={'dom.html':256*1024,'screenshot.png':256*1024,'network.json':1024**2}
-LIMITS={'browser_seconds':browser_mediator.OWNED_REHEARSAL_SECONDS,'requests':32,'response_bytes':4*1024**2,
+LIMITS={'browser_seconds':browser_mediator.OWNED_REHEARSAL_SECONDS+browser_mediator.OWNED_REHEARSAL_LOCAL_SECONDS,
+        'requests':32,'response_bytes':4*1024**2,
         'dom_bytes':256*1024,'screenshot_bytes':256*1024,'network_bytes':1024**2}
-LEGACY_LIMITS={**LIMITS,'browser_seconds':15}
+HISTORICAL_LIMITS=tuple({**LIMITS,'browser_seconds':seconds} for seconds in (15,24))
 PARENT_SCOPE='Root SHA256 snapshot of supplied owned parent; UID independently verifies BLAKE3 seal'
 SANDBOX={'renderer_seen','renderer_nnp','renderer_seccomp','renderer_pid_namespace','all_uids_nonroot'}
 
@@ -61,7 +62,7 @@ def validate_request(raw,now=None,*,historical=False):
         v['execution_authority']=='none'and v['profile']==PROFILE and type(v['request_id'])is str and
         re.fullmatch('[0-9a-f]{32}',v['request_id']),'owned_mail_not_authority')
     limits=canonical(v['limits'])
-    require(limits==canonical(LIMITS) or historical and limits==canonical(LEGACY_LIMITS),'owned_mail_limits')
+    require(limits==canonical(LIMITS) or historical and limits in map(canonical,HISTORICAL_LIMITS),'owned_mail_limits')
     current=time.time()if now is None else now
     require(type(v['created_at'])is int and type(v['expires_at'])is int and
         v['created_at']<=current<v['expires_at']<=v['created_at']+900,'owned_mail_request_expired')

@@ -23,6 +23,7 @@ LIMITS = {'requests': 32, 'hosts': 8, 'redirects': 5, 'bytes': 4*1024**2,
 OWNED_REHEARSAL_SEED = 'https://paw-owned.invalid/'
 OWNED_REHEARSAL_SECONDS = 24
 OWNED_REHEARSAL_ROLE_SECONDS = 16
+OWNED_REHEARSAL_LOCAL_SECONDS = 6
 OWNED_REHEARSAL_KIND = 'mail-owned-browser-rehearsal-v1'
 DENIED = tuple(ipaddress.ip_network(x) for x in (
     '0.0.0.0/8','10.0.0.0/8','100.64.0.0/10','127.0.0.0/8',
@@ -69,8 +70,8 @@ def mail_guest_seed(config):
     if config['kind'] == OWNED_REHEARSAL_KIND:
         require(url == OWNED_REHEARSAL_SEED, 'mail_owned_rehearsal_seed')
         # The known fixture requires the document and its scripted fetch.
-        return url, nonce, OWNED_REHEARSAL_SECONDS, 2
-    return url, nonce, LIMITS['seconds'], 1
+        return url, nonce, OWNED_REHEARSAL_SECONDS, 2, OWNED_REHEARSAL_LOCAL_SECONDS
+    return url, nonce, LIMITS['seconds'], 1, 0
 
 
 def public_answers(values):

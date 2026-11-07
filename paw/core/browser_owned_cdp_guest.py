@@ -79,6 +79,7 @@ def fixture(nonce,frame):
 class Runtime:
     window_seconds=15
     minimum_requests=2
+    local_snapshot_seconds=0
 
     def __init__(self):
         self.process=None;self.started=None;self.driver=None;self.used=False;self.done=None
@@ -172,7 +173,10 @@ class Runtime:
                     for message in self.decoder.feed(raw):self.driver.accept(message);self.cdp_frames+=1
             netlog=WORK/'netlog.json'
             require(not netlog.exists() or netlog.stat().st_size<=1024**2,'owned_netlog_budget')
-            require(time.monotonic()-self.started<self.window_seconds,'owned_whole_deadline')
+            # Snapshot is terminal for network requests. Only the fixed mail
+            # rehearsal can use extra time to finish local CDP work.
+            local=self.local_snapshot_seconds if self.driver.stage in {'snapshot','snapshot_ready'} else 0
+            require(time.monotonic()-self.started<self.window_seconds+local,'owned_whole_deadline')
             require(self.process.poll() is None,'owned_chrome_exited')
             if self._snapshot_due():
                 self.driver.snapshot()

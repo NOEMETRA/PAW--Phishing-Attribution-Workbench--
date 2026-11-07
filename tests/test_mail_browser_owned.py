@@ -75,11 +75,13 @@ class OwnedMail(unittest.TestCase):
             with self.assertRaises(ValueError):m.validate_request(raw)
     def test_old_window_is_readable_for_custody_but_refused_for_new_execution(self):
         v,_,_=self.request()
-        self.assertEqual(v['limits']['browser_seconds'],24)
-        raw=m.canonical({**v,'limits':{**v['limits'],'browser_seconds':15}})
-        with self.assertRaisesRegex(ValueError,'owned_mail_limits'):
-            m.validate_request(raw)
-        self.assertEqual(m.validate_request(raw,historical=True)['limits']['browser_seconds'],15)
+        self.assertEqual(v['limits']['browser_seconds'],30)
+        for seconds in (15,24):
+            with self.subTest(seconds=seconds):
+                raw=m.canonical({**v,'limits':{**v['limits'],'browser_seconds':seconds}})
+                with self.assertRaisesRegex(ValueError,'owned_mail_limits'):
+                    m.validate_request(raw)
+                self.assertEqual(m.validate_request(raw,historical=True)['limits']['browser_seconds'],seconds)
     def test_live_parent_changed_seal_and_inside_output_refuse(self):
         with self.assertRaises(ValueError):m.prepare(self.case,self.case/'output')
         supervisor=self.root/'jobs/analysis_ownedfixture/supervisor.json';supervisor.write_text('{"tree_stopped":false}')
