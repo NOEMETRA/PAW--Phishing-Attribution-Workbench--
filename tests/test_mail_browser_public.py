@@ -59,6 +59,25 @@ class PublicBoundary(unittest.TestCase):
                     self.assertEqual(runtime._start_nonce(),E)
                 self.assertEqual(runtime.window_seconds,window)
 
+    def test_fixed_rehearsal_waits_for_scripted_fetch_after_the_document(self):
+        for kind,after_document in [('mail-public-browser-v1',True),(m.mediator.OWNED_REHEARSAL_KIND,False)]:
+            with self.subTest(kind=kind):
+                runtime=m.PublicRuntime()
+                self.addCleanup(runtime.selector.close)
+                config={'kind':kind,'url':m.mediator.OWNED_REHEARSAL_SEED,'nonce':E}
+                with patch.object(Path,'read_bytes',return_value=m.canonical(config)):
+                    runtime._start_nonce()
+                runtime.started=0
+                runtime.requests=1
+                runtime.driver=SimpleNamespace(stage='running',fetch=SimpleNamespace(pending=None),queue=[])
+                with patch.object(m.time,'monotonic',return_value=14.726):
+                    self.assertIs(runtime._snapshot_due(),after_document)
+                    runtime.requests=2
+                    runtime.driver.fetch.pending=object()
+                    self.assertFalse(runtime._snapshot_due())
+                    runtime.driver.fetch.pending=None
+                    self.assertTrue(runtime._snapshot_due())
+
     def test_normal_revocation_proof_requires_root_private_empty_single_link_regular_file(self):
         info={'st_mode':m.stat.S_IFREG|0o600,'st_uid':0,'st_nlink':1,'st_size':0}
         ids=m.identity(J,E,R)
