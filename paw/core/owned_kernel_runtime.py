@@ -482,16 +482,32 @@ def prepare_case(folder,job,epoch,release):
     folder.mkdir(mode=0o700,parents=False,exist_ok=False)
     config={'schema':'paw-owned-kernel-config-v1','job':job,'epoch':epoch,'release':release}
     (folder/'config.json').write_bytes(canonical(config));(folder/'config.json').chmod(0o600)
-    code=folder/'code';code.mkdir(mode=0o555)
+    code=folder/'code';code.mkdir(mode=0o700)
     for source in [HERE,HERE.with_name('owned_kernel_policy.py')]:
         info=source.stat();require(info.st_uid==0 and not info.st_mode&0o022,'owned_kernel_immutable_source')
         raw=source.read_bytes();require(len(raw)<=128*1024,'owned_kernel_source_budget')
         target=code/source.name;target.write_bytes(raw);target.chmod(0o444)
+    code.chmod(0o555)
     for role in ['fixture','probe']:
         root=folder/(role+'-root');root.mkdir(mode=0o755)
-        for name in ['usr','lib','lib64','etc','proc','sys','dev','tmp','var','opt','run']:(root/name).mkdir(mode=0o755)
+        for name in ['usr','lib','lib64','etc','proc','sys','dev','tmp','var','opt','run']:
+            directory=root/name
+            directory.mkdir(mode=0o755)
+            # PID1 applies the native controller's 0077 umask to staging.
+            # These paths are exposed only inside each role's private root.
+            directory.chmod(0o755)
         (root/'etc/paw-owned-kernel.json').write_bytes(canonical(config))
         (root/'etc/paw-owned-kernel.json').chmod(0o444);root.chmod(0o555)
+
+
+def prepare_role_trust(root):
+    """Make the fixed CA path traversable after the role drops credentials."""
+    ssl=root/'etc/ssl'
+    trust=ssl/'certs'
+    for directory in (ssl,trust):
+        directory.mkdir(mode=0o755)
+        directory.chmod(0o755)
+    return trust
 
 
 def vacant_ids():

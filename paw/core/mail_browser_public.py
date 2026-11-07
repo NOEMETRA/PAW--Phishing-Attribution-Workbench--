@@ -690,7 +690,7 @@ def prepare_network(job, epoch, release, mode, uplink):
     for role in ['probe','fixture']:
         target = folder/(role+'-root')/'etc/paw-mail-network.json'
         target.write_bytes(canonical(cfg)); target.chmod(0o444)
-    trust = folder/'probe-root/etc/ssl/certs'; trust.mkdir(mode=0o755, parents=True)
+    trust = kernel.prepare_role_trust(folder/'probe-root')
     if mode == 'public':
         from .mail_browser_native import protected
         ca = protected(Path(mediator.TRUST_FILE), 2*1024**2, mode=0o644)
