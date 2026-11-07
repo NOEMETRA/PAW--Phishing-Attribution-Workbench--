@@ -16,7 +16,7 @@ import stat
 import time
 import uuid
 
-from . import synthetic_bridge as shared
+from . import browser_mediator, synthetic_bridge as shared
 
 SOURCE=(b'From: owned-sender@paw-owned.invalid\r\nTo: acceptance@paw-owned.invalid\r\n'
     b'Subject: PAW owned browser pipeline fixture\r\nDate: Sat, 31 Oct 2026 12:00:00 +0000\r\n'
@@ -31,8 +31,9 @@ PARTS={'manifest.json':16384,'url_evidence.json':16384,'execution.json':16384,
 REQUEST_MAX=128*1024
 RECEIPT_MAX=32768
 ARTIFACTS={'dom.html':256*1024,'screenshot.png':256*1024,'network.json':1024**2}
-LIMITS={'browser_seconds':15,'requests':32,'response_bytes':4*1024**2,
+LIMITS={'browser_seconds':browser_mediator.OWNED_REHEARSAL_SECONDS,'requests':32,'response_bytes':4*1024**2,
         'dom_bytes':256*1024,'screenshot_bytes':256*1024,'network_bytes':1024**2}
+LEGACY_LIMITS={**LIMITS,'browser_seconds':15}
 PARENT_SCOPE='Root SHA256 snapshot of supplied owned parent; UID independently verifies BLAKE3 seal'
 SANDBOX={'renderer_seen','renderer_nnp','renderer_seccomp','renderer_pid_namespace','all_uids_nonroot'}
 
@@ -50,7 +51,7 @@ def decode64(value,maximum):
     return raw
 
 
-def validate_request(raw,now=None):
+def validate_request(raw,now=None,*,historical=False):
     """Pure fixed-owned admission data. Does not verify a BLAKE3 seal or grant."""
     v=decode(raw,REQUEST_MAX)
     require(type(v)is dict and set(v)=={'schema','state','execution_authority','profile','request_id',
@@ -59,7 +60,8 @@ def validate_request(raw,now=None):
     require(v['schema']=='paw-owned-mail-browser-request-v1'and v['state']=='PREPARED_NOT_ACTIVE'and
         v['execution_authority']=='none'and v['profile']==PROFILE and type(v['request_id'])is str and
         re.fullmatch('[0-9a-f]{32}',v['request_id']),'owned_mail_not_authority')
-    require(canonical(v['limits'])==canonical(LIMITS),'owned_mail_limits')
+    limits=canonical(v['limits'])
+    require(limits==canonical(LIMITS) or historical and limits==canonical(LEGACY_LIMITS),'owned_mail_limits')
     current=time.time()if now is None else now
     require(type(v['created_at'])is int and type(v['expires_at'])is int and
         v['created_at']<=current<v['expires_at']<=v['created_at']+900,'owned_mail_request_expired')
@@ -280,7 +282,7 @@ def import_result(directory,request_path,output):
     shared._linux();case,ref,pieces=_case_snapshot(directory);dest=shared._destination(output,case)
     raw=shared._read_regular(request_path,REQUEST_MAX);parsed=decode(raw,REQUEST_MAX)
     require(type(parsed)is dict and type(parsed.get('created_at'))is int,'owned_mail_request_clock')
-    request=validate_request(raw,now=parsed['created_at'])
+    request=validate_request(raw,now=parsed['created_at'],historical=True)
     require(request['case_reference']==ref and request['snapshot_sha256']=={n:digest(data)for n,data in pieces.items()},
         'owned_mail_request_parent_changed')
     with trusted_export(request['request_id'])as fd:

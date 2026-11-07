@@ -21,7 +21,8 @@ import urllib.parse
 LIMITS = {'requests': 32, 'hosts': 8, 'redirects': 5, 'bytes': 4*1024**2,
           'seconds': 15, 'lease_seconds': 5, 'header_bytes': 32768}
 OWNED_REHEARSAL_SEED = 'https://paw-owned.invalid/'
-OWNED_REHEARSAL_SECONDS = 18
+OWNED_REHEARSAL_SECONDS = 24
+OWNED_REHEARSAL_ROLE_SECONDS = 16
 OWNED_REHEARSAL_KIND = 'mail-owned-browser-rehearsal-v1'
 DENIED = tuple(ipaddress.ip_network(x) for x in (
     '0.0.0.0/8','10.0.0.0/8','100.64.0.0/10','127.0.0.0/8',

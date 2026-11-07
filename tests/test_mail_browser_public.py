@@ -36,14 +36,18 @@ class PublicBoundary(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'expired_kernel_lease'):
             broker.kernel_lease_milliseconds(expired,now)
         plan=rehearsal.ledger.admit(frame,['93.184.216.34'],0,10**10,now)
-        self.assertEqual(plan['expires_ns'],18*10**9)
-        self.assertEqual(broker.kernel_lease_milliseconds(plan,now),2000)
+        self.assertEqual(plan['expires_ns'],19*10**9)
+        self.assertEqual(broker.kernel_lease_milliseconds(plan,now),3000)
+        rehearsal.ledger.complete(plan,200,[],b'owned','93.184.216.34',True,now)
+        now=16*10**9
+        second=rehearsal.ledger.admit({**frame,'url':seed+'owned-data','seq':1},['93.184.216.34'],0,10**10,now)
+        self.assertEqual(broker.kernel_lease_milliseconds(second,now),3000)
         with self.assertRaisesRegex(ValueError,'broker_session_expired'):
-            rehearsal.ledger.lease(plan,18*10**9)
+            rehearsal.ledger.lease(second,24*10**9)
         with self.assertRaisesRegex(ValueError,'mail_owned_rehearsal_private_only'):
             m.Mediation(prep.owner,prep.worker,E,0,seed,None,0,None,approval={},owned_rehearsal=True)
         for kind,url,window in [
-            (m.mediator.OWNED_REHEARSAL_KIND,seed,18),
+            (m.mediator.OWNED_REHEARSAL_KIND,seed,24),
             ('mail-public-browser-v1',seed,15),
             (m.mediator.OWNED_REHEARSAL_KIND,SEEDS[0],None),
         ]:
@@ -58,6 +62,24 @@ class PublicBoundary(unittest.TestCase):
                         continue
                     self.assertEqual(runtime._start_nonce(),E)
                 self.assertEqual(runtime.window_seconds,window)
+
+    def test_only_private_browser_roles_receive_the_rehearsal_lifetime(self):
+        for mode in ['owned-browser','owned-raw','public']:
+            with self.subTest(mode=mode),patch.object(m.kernel,'private_json',return_value={'mode':mode}):
+                _,keeper,_=m.service(J,E,R,'keeper',42)
+                _,probe,_=m.service(J,E,R,'probe',42,protocol=True)
+                expected=('18','18') if mode=='owned-browser' else ('8','10')
+                self.assertEqual((keeper['RuntimeMaxSec'],probe['RuntimeMaxSec']),expected)
+                self.assertEqual(probe['IPAddressAllow'],'')
+                self.assertEqual(keeper['CapabilityBoundingSet'],'CAP_NET_ADMIN')
+        began=10**9
+        with patch.object(m.time,'monotonic_ns',return_value=began):
+            with self.assertRaisesRegex(ValueError,'mail_public_transport_session'):
+                m.PublicTransport(E,began+16*10**9,None,None)
+            private=m.PublicTransport(E,began+16*10**9,None,None,private=True)
+            self.assertEqual(private.deadline,began+16*10**9)
+            with self.assertRaisesRegex(ValueError,'mail_public_transport_session'):
+                m.PublicTransport(E,began+17*10**9,None,None,private=True)
 
     def test_fixed_rehearsal_waits_for_scripted_fetch_after_the_document(self):
         for kind,after_document in [('mail-public-browser-v1',True),(m.mediator.OWNED_REHEARSAL_KIND,False)]:

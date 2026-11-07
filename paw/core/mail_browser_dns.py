@@ -34,6 +34,16 @@ def question(host,ident):
     return struct.pack('!6H',ident,0x0100,1,0,0,0)+name+struct.pack('!2H',1,1)
 
 
+def read_response(host, ident, deadline_ns):
+    """Read the raw response inside the already confined mail transport."""
+    require(type(deadline_ns) is int and deadline_ns > time.monotonic_ns(), 'mail_public_dns_deadline')
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as stream:
+        stream.settimeout(min(1, (deadline_ns-time.monotonic_ns())/10**9))
+        stream.connect(RESOLVER); stream.send(question(host, ident)); raw = stream.recv(4097)
+    require(time.monotonic_ns() < deadline_ns, 'mail_public_dns_expired')
+    return raw
+
+
 def _name(raw,offset):
     labels=[];end=None;seen=set();expanded=0
     while True:
