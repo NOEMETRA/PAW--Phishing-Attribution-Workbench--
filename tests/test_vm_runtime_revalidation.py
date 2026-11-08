@@ -396,6 +396,7 @@ class OctoberMaintenance(unittest.TestCase):
                     b'python3-brotli': b'1.2.0-3build1', b'owned-other': b'1'}
         self.old.update({k: before for k, (before, _) in runtime.OCT30_PACKAGES.items() if before is not None})
         self.old.update({k: before for k, (before, _) in runtime.NOV05_PACKAGES.items()})
+        self.old.update({k: before for k, (before, _) in runtime.NOV08_PACKAGES.items()})
         self.brotli = dict(self.old)
         for key in runtime.BROTLI_PACKAGES: self.brotli[key] = b'1.2.0-3ubuntu0.1'
         self.current = dict(self.brotli)
@@ -494,6 +495,29 @@ class OctoberMaintenance(unittest.TestCase):
         with mock.patch.object(runtime, 'INVENTORY_NOV05', digest), \
              self.assertRaisesRegex(ValueError, 'runtime_nov05_inventory_delta'):
             self.transition(packages, dict(context, dpkg_inventory_sha256=digest))
+
+
+    def test_nov08_inventory_must_reconstruct_exact_nov05_inventory(self):
+        nov05 = dict(self.current)
+        nov05.update({name: after for name, (_, after) in runtime.NOV05_PACKAGES.items()})
+        nov08 = dict(nov05)
+        nov08.update({name: after for name, (_, after) in runtime.NOV08_PACKAGES.items()})
+        digest = maintenance_auth.digest(self.rows(nov08))
+        context = dict(self.context, dpkg_inventory_sha256=digest)
+        with mock.patch.object(runtime, 'INVENTORY_NOV05', maintenance_auth.digest(self.rows(nov05))), \
+             mock.patch.object(runtime, 'INVENTORY_NOV08', digest):
+            receipt = maintenance_auth.validate_maintenance(self.transition(nov08, context), context)
+            self.assertEqual(receipt['dpkg_inventory_sha256'], digest)
+            for name, value, error in [
+                (b'apt', b'3.2.0', 'runtime_nov08_package_version'),
+                (b'owned-other', b'2', 'runtime_nov08_inventory_delta'),
+            ]:
+                changed = dict(nov08)
+                changed[name] = value
+                changed_digest = maintenance_auth.digest(self.rows(changed))
+                with self.subTest(name=name), mock.patch.object(runtime, 'INVENTORY_NOV08', changed_digest), \
+                     self.assertRaisesRegex(ValueError, error):
+                    self.transition(changed, dict(context, dpkg_inventory_sha256=changed_digest))
 
 
 if __name__ == '__main__': unittest.main()

@@ -81,6 +81,19 @@ NOV05_PACKAGES = {
     b'libsoup-3.0-common': (b'3.6.6-1ubuntu0.1', b'3.6.6-1ubuntu0.2'),
 }
 
+# Exact 8 November unattended upgrades, reconstructed back to INVENTORY_NOV05.
+INVENTORY_NOV08 = '8c3f5daa48d1354656e713da73639946177197c898afb1185dedd44e6088a8d1'
+NOV08_PACKAGES = {
+    b'apt': (b'3.2.0', b'3.2.1ubuntu0.1'),
+    b'apt-utils': (b'3.2.0', b'3.2.1ubuntu0.1'),
+    b'ca-certificates': (b'20260816ubuntu0.26.04.1', b'20260816ubuntu0.26.04.2'),
+    b'libapt-pkg7.0:amd64': (b'3.2.0', b'3.2.1ubuntu0.1'),
+    b'libsnmp-base': (b'5.9.4+dfsg-2ubuntu3', b'5.9.4+dfsg-2ubuntu3.1'),
+    b'libsnmp40t64:amd64': (b'5.9.4+dfsg-2ubuntu3', b'5.9.4+dfsg-2ubuntu3.1'),
+    b'python3-pil.imagetk:amd64': (b'12.1.1-2ubuntu1.3', b'12.1.1-2ubuntu1.4'),
+    b'python3-pil:amd64': (b'12.1.1-2ubuntu1.3', b'12.1.1-2ubuntu1.4'),
+}
+
 
 def require(value, reason):
     if not value: raise ValueError(reason)
@@ -263,10 +276,18 @@ def maintenance_transition(previous, context, inventory):
     require(len(set(names)) == len(names), 'runtime_inventory_duplicates')
     current = platform.digest(b'\n'.join(sorted(rows))+b'\n')
     require(current == context['dpkg_inventory_sha256'] and current in
-            {INVENTORY_PREVIOUS, INVENTORY_BROTLI, INVENTORY_OCT30, INVENTORY_NOV05},
+            {INVENTORY_PREVIOUS, INVENTORY_BROTLI, INVENTORY_OCT30, INVENTORY_NOV05, INVENTORY_NOV08},
             'runtime_unreviewed_inventory')
     old_context = dict(context, dpkg_inventory_sha256=INVENTORY_PREVIOUS)
-    if current == INVENTORY_NOV05:
+    if current == INVENTORY_NOV08:
+        packages = dict(row.split(b'\t') for row in rows)
+        for name, (before, after) in NOV08_PACKAGES.items():
+            require(packages.get(name) == after, 'runtime_nov08_package_version')
+            packages[name] = before
+        rows = [name+b'\t'+version for name, version in packages.items()]
+        require(platform.digest(b'\n'.join(sorted(rows))+b'\n') == INVENTORY_NOV05,
+                'runtime_nov08_inventory_delta')
+    if current in {INVENTORY_NOV05, INVENTORY_NOV08}:
         packages = dict(row.split(b'\t') for row in rows)
         for name, (before, after) in NOV05_PACKAGES.items():
             require(packages.get(name) == after, 'runtime_nov05_package_version')
@@ -274,7 +295,7 @@ def maintenance_transition(previous, context, inventory):
         rows = [name+b'\t'+version for name, version in packages.items()]
         require(platform.digest(b'\n'.join(sorted(rows))+b'\n') == INVENTORY_OCT30,
                 'runtime_nov05_inventory_delta')
-    if current in {INVENTORY_OCT30, INVENTORY_NOV05}:
+    if current in {INVENTORY_OCT30, INVENTORY_NOV05, INVENTORY_NOV08}:
         require(context['host']['kernel'] == OCT30_KERNEL[1], 'runtime_reviewed_kernel')
         packages = dict(row.split(b'\t') for row in rows)
         for name, (before, after) in OCT30_PACKAGES.items():
@@ -300,7 +321,12 @@ def maintenance_transition(previous, context, inventory):
             'runtime_inventory_delta')
     record['dpkg_inventory_sha256'] = current
     record['kernel'] = context['host']['kernel']
-    if current == INVENTORY_NOV05:
+    if current == INVENTORY_NOV08:
+        record['review_notes'] = (
+            'Exact reviewed 8 November eight-package transition through the 5 November inventory. '
+            'Protected predecessor and existing host, hypervisor and image bindings retained. '
+            'No I08, grant, guest update or real specimen authorization.')
+    elif current == INVENTORY_NOV05:
         record['review_notes'] = (
             'Exact reviewed 5 November 17-package transition through the 30 October inventory. '
             'Protected predecessor and existing host, hypervisor and image bindings retained. '
