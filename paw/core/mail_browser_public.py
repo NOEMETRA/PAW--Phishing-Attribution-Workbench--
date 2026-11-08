@@ -205,6 +205,12 @@ class PublicRuntime(captured.Runtime):
         (self.seed, nonce, self.window_seconds, self.minimum_requests,
          self.local_snapshot_seconds) = mediator.mail_guest_seed(config)
         return nonce
+    def _chrome_arguments(self):
+        args = super()._chrome_arguments()
+        # The broker must see the exact approved HTTP seed before any redirect.
+        if self.seed.startswith('http://'):
+            args.insert(-1, '--disable-features=HttpsUpgrades')
+        return args
     def _make_controller(self):
         # The existing controller already denies downloads and permissions,
         # intercepts before navigation and closes unsupported child targets.

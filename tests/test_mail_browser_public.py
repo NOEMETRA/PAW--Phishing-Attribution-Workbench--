@@ -23,6 +23,23 @@ class PublicBoundary(unittest.TestCase):
             with self.subTest(program=name):
                 self.assertLessEqual(m.HERE.with_name(name).stat().st_size,128*1024)
 
+    def test_exact_http_seed_disables_only_chromium_navigation_upgrade(self):
+        runtime = m.PublicRuntime()
+        self.addCleanup(runtime.selector.close)
+        base = m.captured.fixed.fixed_arguments()
+        for seed in (SEEDS[1], SEEDS[0], m.mediator.OWNED_REHEARSAL_SEED):
+            with self.subTest(seed=seed):
+                runtime.seed = seed
+                expected = list(base)
+                if seed == SEEDS[1]:
+                    expected.insert(-1, '--disable-features=HttpsUpgrades')
+                self.assertEqual(runtime._chrome_arguments(), expected)
+        ledger = m.mediator.BrowserRequestLedger(SEEDS[1], E, 0)
+        frame = {'nonce': E, 'seq': 0, 'url': SEEDS[1].replace('http:', 'https:'),
+                 'method': 'GET', 'resource': 'Document'}
+        with self.assertRaisesRegex(ValueError, 'broker_initial_seed'):
+            ledger.admit(frame, ['93.184.216.34'], 0, 10**9, 1)
+
     def test_late_https_window_is_bound_to_the_fixed_private_rehearsal(self):
         from paw.core import browser_owned_broker as broker
         seed=m.mediator.OWNED_REHEARSAL_SEED

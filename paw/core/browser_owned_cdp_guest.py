@@ -99,6 +99,8 @@ class Runtime:
         self.requests+=1;metadata,body=fixture(self.nonce,frame)
         if metadata is None:self.refused+=1;self.driver.refused()
         else:self.driver.response(metadata,body)
+    def _chrome_arguments(self):
+        return fixed_arguments()
     def start(self):
         self.inspect()
         from browser_sandbox import RendererWitness
@@ -121,7 +123,7 @@ class Runtime:
             libc=ctypes.CDLL(None)
             if libc.prctl(38,1,0,0,0)!=0 or libc.prctl(1,signal.SIGKILL,0,0,0)!=0 or os.getppid()!=parent:os._exit(125)
         try:
-            self.process=subprocess.Popen(fixed_arguments(),stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,
+            self.process=subprocess.Popen(self._chrome_arguments(),stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,
                 stderr=subprocess.PIPE,start_new_session=True,preexec_fn=admission,
                 pass_fds=tuple(sorted({3,4,read_keep,write_keep})),
                 env={'PATH':'/usr/bin:/bin','HOME':str(WORK),'LANG':'C.UTF-8',
