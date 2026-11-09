@@ -63,15 +63,21 @@ class NativeData(unittest.TestCase):
             with self.subTest(change=change),self.assertRaises(ValueError):n.validate_master_unit({**valid,**change},321)
     def test_existing_owned_baseline_keeps_its_legacy_newline_context_digest(self):
         from paw.core import browser_owned_broker as existing,browser_bridge
+        from test_owned_mail_fixture_vm import plain_http_proof
         context={'inert':'owned context'}
         value={'schema':'paw-owned-brokered-browser-v1','result':'PASS','release_sha':R,'job':J,
             'context_sha256':p.sha(browser_bridge.canonical(context)),'writers_stopped':True,'host_restored':True,
-            'stop_ns':1,'kernel_component':{'result':'PASS'},'guest':{'status':'completed',
+            'stop_ns':1,'fixture_nonce':'0'*32,'plain_http_probe':plain_http_proof(J,R),
+            'kernel_component':{'result':'PASS'},'guest':{'status':'completed',
                 'sandbox':{k:True for k in owned.SANDBOX}},
             'programs':{name:p.sha(p.HERE.with_name(name).read_bytes()) for name in existing.PROGRAMS}}
         raw=p.canonical(value)
         with patch.object(n,'protected',return_value=raw):
             self.assertEqual(p.verify_baseline(J,R,{'browser':context}),p.sha(raw))
+        for proof in [None, plain_http_proof(J,'9'*40), plain_http_proof(J,R,epoch='0'*32)]:
+            with patch.object(n,'protected',return_value=p.canonical({**value,'plain_http_probe':proof})), \
+                 self.assertRaisesRegex(ValueError,'plain_http'):
+                p.verify_baseline(J,R,{'browser':context})
     def bundle(self):
         assets={k:('inert fixed asset '+k).encode() for k in n.ASSETS}
         value={'schema':'paw-mail-native-bundle-v1','state':'NATIVE_CONDITIONAL_APPROVAL_REQUESTED',

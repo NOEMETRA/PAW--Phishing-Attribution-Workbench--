@@ -29,13 +29,19 @@ def producer_names(auth):
 def owned_browser_capture(job,release,record,announce):
     from paw.core import owned_mail_channel
     from paw.core.browser_owned_broker import run_owned as broker_probe
+    from paw.core.mail_browser_fixture_diagnostic import run_plain_http
     required=owned_mail_channel.admission_required(job,release)
     record['mail_admission_required']=required
     record['mail_capture_scope']=('owned email request and terminal sidecar'if required else
         'protected native enrollment generated fixtures only; no email custody claim')
+    proof=None
+    if required:
+        proof=run_plain_http(job,release)
+        record['plain_http_probe_result']=proof['result']
+        require(proof['result']=='PASS','operator_owned_plain_http_probe_failed')
     admission=owned_mail_channel.admit(job,release,announce)if required else None
     try:
-        record['owned_broker_probe']=(broker_probe(job,release,mail_fixture=True)
+        record['owned_broker_probe']=(broker_probe(job,release,mail_fixture=True,plain_http_proof=proof)
                                      if required else broker_probe(job,release))
     finally:
         if admission is not None:record['owned_mail_capture']=owned_mail_channel.publish(admission)

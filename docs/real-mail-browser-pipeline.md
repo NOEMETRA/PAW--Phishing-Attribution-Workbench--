@@ -482,8 +482,12 @@ HTTP or HTTPS tuple. The relative tuple timeout reserves the complete bounded
 keeper transaction so it cannot overrun an accepted absolute ledger lease.
 The nonroot transport performs numeric-pinned HTTP/TLS with hostname checking;
 Root accounts and filters the raw response before transferring metadata and
-body separately to the paused guest. A fixed additional plain HTTP transport
-probe is labeled separately; Chrome's page and JavaScript resource use HTTPS.
+body separately to the paused guest. For the installed mail rehearsal, a fixed
+plain HTTP transport probe completes in a separate private session before
+admitting the browser input. Its stopped evidence has its own epoch and shares
+the job and reviewed release with the HTTPS browser proof. Both are required
+for acceptance and recorded separately in the sidecar. Chrome's page and
+JavaScript resource use HTTPS. Native enrollment retains its generated recipe.
 No page cookies, credentials, forms, arbitrary hosts or live request continuation
 are admitted. Broker TLS remains explicitly distinct from browser TLS.
 

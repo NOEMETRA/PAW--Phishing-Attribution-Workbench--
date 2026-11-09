@@ -30,6 +30,7 @@ PROGRAMS=['browser_owned_broker.py','browser_owned_broker_guest.py','browser_bro
     'browser_cdp.py','browser_owned_cdp_guest.py','owned_kernel_runtime.py','owned_kernel_policy.py',
     'mail_browser_public.py']
 SEED=mediator.OWNED_REHEARSAL_SEED
+PLAIN_HTTP_SEED='http://paw-owned.invalid/owned-data'
 
 
 def require(value,reason):
@@ -281,10 +282,11 @@ def probe_plain_http(mediation,epoch,record):
     # Separate fixed transport probe: this does not claim Chrome
     # executed mixed-content HTTP.
     record['broker_progress']={'phase':'plain_http_probe','slot':mediation.ledger.used,
-        'url_sha256':hashlib.sha256(b'http://paw-owned.invalid/owned-data').hexdigest()}
+        'url_sha256':hashlib.sha256(PLAIN_HTTP_SEED.encode('ascii')).hexdigest()}
     record['timing_ns']['plain_http_probe_start']=time.monotonic_ns()
     plain,plain_body=mediation.response({'nonce':epoch,'seq':mediation.ledger.used,
-        'url':'http://paw-owned.invalid/owned-data','method':'GET','resource':'Fetch'})
+        'url':PLAIN_HTTP_SEED,'method':'GET',
+        'resource':'Document'if mediation.ledger.used==0 else'Fetch'})
     require(plain['http_status']==200 and plain_body==('PAW-OWNED-'+epoch).encode('ascii') and
         mediation.observations[-1]['tls_verified_by_broker']is False,
         'owned_broker_plain_http_transport_missing')
@@ -292,16 +294,16 @@ def probe_plain_http(mediation,epoch,record):
 
 
 def finish_network(mediation,actors,folder,epoch,inode,record):
-    """Verify the fixed transport proof and stop at the closed-network boundary."""
+    """Verify browser TLS responses and stop at the closed-network boundary."""
     http=[r for r in mediation.observations if r['operation']=='http']
-    if record['mail_fixture_preparation']:
-        require(len(http)==3 and all(r['tls_verified_by_broker']is True for r in http[:2]) and
-                http[2]['tls_verified_by_broker']is False and
-                'plain_http_probe_done'in record['timing_ns'],'owned_broker_mail_transport_proof')
-    else:
-        require(len(http)>=2 and all(r['tls_verified_by_broker']is True for r in http),
-                'owned_broker_actual_tls_resources_missing')
+    require(len(http)>=2 and all(r['tls_verified_by_broker']is True for r in http),
+            'owned_broker_actual_tls_resources_missing')
+    if not record['mail_fixture_preparation']:
         probe_plain_http(mediation,epoch,record)
+    stop_network_roles(mediation,actors,folder,epoch,inode,record)
+
+
+def stop_network_roles(mediation,actors,folder,epoch,inode,record):
     # A completed DOM and absent units cannot excuse an unexpected
     # network-owner/worker exit. Observe live identities, then perform
     # the typed worker stop and expected keeper stop explicitly.
@@ -322,11 +324,45 @@ def finish_network(mediation,actors,folder,epoch,inode,record):
     record['timing_ns']['network_roles_stopped']=time.monotonic_ns()
 
 
-def run_owned(job,release,*,mail_fixture=False):
+def require_plain_http_proof(proof,job,release,browser_epoch):
+    """Bind the fixed, stopped private HTTP exchange to this release and job."""
+    require(type(proof)is dict and proof.get('schema')=='paw-mail-owned-plain-http-v1'and
+        proof.get('result')=='PASS'and proof.get('job')==job and proof.get('release_sha')==release and
+        proof.get('vm_started')is False and proof.get('native_authority_created')is False and
+        type(proof.get('real_connections'))is int and proof['real_connections']==0 and
+        proof.get('writers_stopped')is True and proof.get('host_restored')is True,
+        'owned_broker_plain_http_proof')
+    epoch=proof.get('epoch');owner=proof.get('network_owner_disposition')
+    require(type(epoch)is str and re.fullmatch('[0-9a-f]{32}',epoch)and
+        type(browser_epoch)is str and re.fullmatch('[0-9a-f]{32}',browser_epoch)and epoch!=browser_epoch and
+        type(owner)is dict and owner.get('reason')=='requested_stop'and owner.get('epoch')==epoch,
+        'owned_broker_plain_http_identity')
+    timing=proof.get('timing_ns')
+    fields=('actors_ready','plain_http_probe_start','plain_http_probe_done','network_roles_stopped')
+    require(type(timing)is dict and all(type(timing.get(k))is int and timing[k]>=0 for k in fields)and
+        all(timing[a]<=timing[b]for a,b in zip(fields,fields[1:])),'owned_broker_plain_http_timing')
+    rows=proof.get('observations')
+    require(type(rows)is list and len(rows)==2 and all(type(row)is dict for row in rows) and
+        [row.get('operation') for row in rows]==['dns','http'],'owned_broker_plain_http_observations')
+    row=rows[1];request=row.get('request');body=('PAW-OWNED-'+epoch).encode('ascii')
+    require(type(request)is dict and type(request.get('seq'))is int and
+        request=={'nonce':epoch,'seq':0,'url':PLAIN_HTTP_SEED,'method':'GET','resource':'Document'}and
+        type(row.get('status'))is int and row['status']==200 and row.get('tls_verified_by_broker')is False and
+        row.get('body_sha256')==hashlib.sha256(body).hexdigest() and
+        type(row.get('body_bytes'))is int and row['body_bytes']==len(body) and
+        row.get('response_body_b64')==base64.b64encode(body).decode('ascii'),
+        'owned_broker_plain_http_response')
+
+
+def run_owned(job,release,*,mail_fixture=False,plain_http_proof=None):
     require(os.geteuid()==0 and HERE==Path('/opt/paw-vm/releases')/release/'paw/core/browser_owned_broker.py',
             'owned_broker_immutable_root_only')
     require(type(mail_fixture)is bool,'owned_broker_fixture_selection')
     kernel.policy.identity(job,'0'*32,release)
+    epoch=uuid.uuid4().hex
+    if mail_fixture:
+        require_plain_http_proof(plain_http_proof,job,release,epoch)
+    else:require(plain_http_proof is None,'owned_broker_unexpected_plain_http_proof')
     # Fresh exact-source raw kernel acceptance, before this new VM scope.
     kernel_result=kernel.owned_validation(job,release)
     require(kernel_result.get('result')=='PASS'and kernel_result.get('vm_started')is False and
@@ -341,12 +377,13 @@ def run_owned(job,release,*,mail_fixture=False):
     from vm_runtime_revalidation import network_state
     from reader_export import publish_reader_tree
     context=auth.capture();auth.validate_context(context)
-    epoch=uuid.uuid4().hex;ids=kernel.policy.identity(job,epoch,release)
+    ids=kernel.policy.identity(job,epoch,release)
     record={'schema':'paw-owned-brokered-browser-v1','result':'FAIL','job':job,'release_sha':release,
         'real_connections':0,'real_samples_executed':0,'i08_installed':False,'production_grants_enabled':False,
         'kernel_component':kernel_result,'fixture_nonce':epoch,'capture_artifacts':[],
         'mail_fixture_preparation':mail_fixture,
         'scope':'owned private DNS, plain HTTP transport and actual HTTPS no-NIC Chrome; not full O3 fault/custody or public authority'}
+    if mail_fixture:record['plain_http_probe']=plain_http_proof
     actors=[];gate=None;vm=None;partitioned=False;mediation=None
     with auth.fs.execution_lock():
         if mail_fixture:
@@ -363,6 +400,9 @@ def run_owned(job,release,*,mail_fixture=False):
         gate.canary=out/'host-owned-canary.bin';gate.canary.write_bytes(os.urandom(32));gate.canary.chmod(0o600)
         canary=digest(gate.canary);before=gate.snapshot_host();network=network_state()
         try:
+            if mail_fixture:
+                require(plain_http_proof['timing_ns']['network_roles_stopped']<=time.monotonic_ns(),
+                        'owned_broker_plain_http_future_stop')
             vm=gate.start('owned-brokered-browser');record['vm_uuid']=vm['node']['uuid']
             inspected=vm['channel'].call('inspect',seconds=8)
             require(inspected['network_interfaces']==['lo'] and inspected['chrome_version']==context['chrome_version'] and
@@ -409,8 +449,6 @@ def run_owned(job,release,*,mail_fixture=False):
                     record['timing_ns']['network_quiescent']=time.monotonic_ns()
                     finish_network(mediation,actors,folder,epoch,inode,record);network_closed=True
                 if mediation is not None and request is not None:
-                    require(not mail_fixture or 'plain_http_probe_done'not in record['timing_ns'],
-                            'owned_broker_unexpected_mail_request_after_probe')
                     record['broker_progress']={'phase':'browser_request','slot':request['seq'],
                         'url_sha256':hashlib.sha256(request['url'].encode('utf-8',errors='surrogatepass')).hexdigest()}
                     try:metadata,body=mediation.response(request)
@@ -418,15 +456,7 @@ def run_owned(job,release,*,mail_fixture=False):
                         if mediation.ledger.closed:raise
                         mediation.control('revoke')
                         console.transfer(vm['channel'],{'kind':'refusal','nonce':epoch,'seq':request['seq']})
-                    else:
-                        if mail_fixture and request['seq']==1:
-                            require(request['url']==SEED+'owned-data' and request['method']=='GET' and
-                                    mediation.ledger.used==2,'owned_broker_mail_second_resource')
-                            # The two fixed TLS exchanges are now witnessed.
-                            # Run the independent HTTP check before serializing
-                            # the second reply and waiting for guest quiescence.
-                            probe_plain_http(mediation,epoch,record)
-                        send_response(vm['channel'],epoch,request['seq'],metadata,body)
+                    else:send_response(vm['channel'],epoch,request['seq'],metadata,body)
                 time.sleep(.03)
             else:raise ValueError('owned_broker_poll_deadline')
             require(value.get('status')=='completed'and value.get('writers_stopped')is True and

@@ -8,6 +8,19 @@ from paw.core import browser_broker_wire as wire, browser_owned_protocol as prot
 J, E, R = 'a'*32, 'b'*32, 'c'*40
 
 
+def plain_http_proof(job, release, epoch='f'*32):
+    body=('PAW-OWNED-'+epoch).encode('ascii')
+    return {'schema':'paw-mail-owned-plain-http-v1','job':job,'release_sha':release,
+            'epoch':epoch,'result':'PASS','vm_started':False,'native_authority_created':False,
+            'real_connections':0,'writers_stopped':True,'host_restored':True,
+            'network_owner_disposition':{'reason':'requested_stop','epoch':epoch},
+            'timing_ns':dict(actors_ready=1,plain_http_probe_start=2,plain_http_probe_done=3,network_roles_stopped=4),
+            'observations':[{'operation':'dns'},{'operation':'http','status':200,'tls_verified_by_broker':False,
+                'request':{'nonce':epoch,'seq':0,'url':broker.PLAIN_HTTP_SEED,'method':'GET','resource':'Document'},
+                'body_sha256':hashlib.sha256(body).hexdigest(),'body_bytes':len(body),
+                'response_body_b64':base64.b64encode(body).decode('ascii')}]}
+
+
 class MailFixtureVM(unittest.TestCase):
     def test_mediation_legacy_and_invalid_selections_do_not_arm_mail_roles(self):
         prep=types.SimpleNamespace(owner=Mock(),worker=Mock())

@@ -3,7 +3,7 @@ from contextlib import nullcontext,redirect_stdout
 import importlib.util,io,os,subprocess,sys,types,unittest
 from pathlib import Path
 from unittest.mock import Mock,patch
-from paw.core import owned_mail_channel as c,browser_owned_broker as broker
+from paw.core import owned_mail_channel as c,browser_owned_broker as broker,mail_browser_fixture_diagnostic as diagnostic
 
 saved=list(sys.path)
 try:
@@ -67,17 +67,27 @@ class Native(unittest.TestCase):
         admit.assert_not_called();publish.assert_not_called();probe.assert_called_once_with(J,R)
     def test_ordinary_timeout_never_falls_back_to_native_fixtures(self):
         with patch.object(c,'admission_required',return_value=True),patch.object(c,'admit',side_effect=TimeoutError('inert no descriptor')), \
+             patch.object(diagnostic,'run_plain_http',return_value={'result':'PASS'}), \
              patch.object(broker,'run_owned')as probe,patch.object(c,'publish')as publish,self.assertRaises(TimeoutError):
             worker.owned_browser_capture(J,R,{},lambda _:None)
         probe.assert_not_called();publish.assert_not_called()
     def test_ordinary_admission_binds_same_job_capture_and_protected_publication(self):
-        events=[];admission={'job':J,'release_sha':R};record={}
+        events=[];admission={'job':J,'release_sha':R};record={};proof={'result':'PASS'}
         with patch.object(c,'admission_required',return_value=True), \
+             patch.object(diagnostic,'run_plain_http',side_effect=lambda *a:events.append(('http',a))or proof), \
              patch.object(c,'admit',side_effect=lambda *a:events.append('admit')or admission), \
              patch.object(broker,'run_owned',side_effect=lambda *a,**kw:events.append(('capture',kw))or{'result':'PASS'}), \
              patch.object(c,'publish',side_effect=lambda value:events.append(('publish',value))or{'status':'completed'}):
             worker.owned_browser_capture(J,R,record,lambda _:None)
-        self.assertEqual(events,['admit',('capture',{'mail_fixture':True}),('publish',admission)]);self.assertIs(record['mail_admission_required'],True)
+        self.assertEqual(events,[('http',(J,R)),'admit',('capture',{'mail_fixture':True,'plain_http_proof':proof}),('publish',admission)])
+        self.assertIs(record['mail_admission_required'],True)
+    def test_failed_separate_http_probe_never_consumes_mail_or_starts_browser(self):
+        with patch.object(c,'admission_required',return_value=True),patch.object(c,'admit')as admit, \
+             patch.object(diagnostic,'run_plain_http',return_value={'result':'FAIL'}), \
+             patch.object(broker,'run_owned')as probe,patch.object(c,'publish')as publish, \
+             self.assertRaisesRegex(ValueError,'plain_http_probe_failed'):
+            worker.owned_browser_capture(J,R,{},lambda _:None)
+        admit.assert_not_called();probe.assert_not_called();publish.assert_not_called()
     def test_UID_cannot_select_native_mode_or_read_protected_grant(self):
         with self.assertRaisesRegex(ValueError,'immutable_root_only'):c.admission_required(J,R)
 
