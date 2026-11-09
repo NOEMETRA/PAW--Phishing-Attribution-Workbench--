@@ -204,6 +204,10 @@ def bound_result(admission,attestation_raw,context,artifacts):
         all(type(raw)is bytes for raw in artifacts.values()),'owned_mail_capture_bytes')
     guest=a.get('guest')or{};require(type(guest)is dict,'owned_mail_guest_summary')
     complete=a.get('result')=='PASS'
+    plain_http=a.get('plain_http_probe')
+    if complete or plain_http is not None:
+        from .browser_owned_broker import require_plain_http_proof
+        require_plain_http_proof(plain_http,admission['job'],admission['release_sha'],a.get('fixture_nonce'))
     if complete:
         require(set(artifacts)=={'dom.html','screenshot.png'}and guest.get('status')=='completed'and
             guest.get('writers_stopped')is True and guest.get('network_interfaces')==['lo']and
@@ -215,7 +219,7 @@ def bound_result(admission,attestation_raw,context,artifacts):
     observations=a.get('observations',[]);require(type(observations)is list and len(observations)<=64,'owned_mail_network_inventory')
     network=custody.canonical({'schema':'paw-owned-mail-browser-network-v1','seed':custody.SEED,
         'fixture_nonce':a['fixture_nonce'],'raw_attestation_sha256':custody.digest(attestation_raw),
-        'observations':observations,'ledger':a.get('ledger')or a.get('ledger_progress'),
+        'observations':observations,'plain_http_probe':plain_http,'ledger':a.get('ledger')or a.get('ledger_progress'),
         'missing_coverage':{'guest':guest.get('missing_coverage',[]),
             'transfer':[name for name in ['dom.html','screenshot.png']if name not in artifacts]},
         'scope':'filtered broker observations; not complete browser HAR, packet capture or browser TLS fingerprint',

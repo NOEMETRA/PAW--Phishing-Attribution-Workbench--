@@ -4,12 +4,13 @@ import hashlib,json,os,sys,tempfile,types,unittest
 from pathlib import Path
 from unittest.mock import patch,Mock
 from paw.core import browser_owned_broker as p,browser_mediator as mediator,browser_owned_broker_guest as guest,mail_browser_public as mail
+from test_owned_mail_fixture_vm import plain_http_proof
 
 R='b'*40;J='c'*32;U='00000000-0000-4000-8000-000000000001'
 GOOD={'reason':'requested_stop','connection_closed':True,'vm_uuid':U}
 
 class Owner(unittest.TestCase):
-    def simulate(self,owner,*,cleanup_fail=False,guest_bad=False,worker_bad=False,bootstrap_delayed=False,proof_delayed=False,late_pause=False,prepare_bad=None,capture_bad=False,late_capture=False,after_snapshot=False,mail_fixture=False,mail_deadline=False,mail_extra=False):
+    def simulate(self,owner,*,cleanup_fail=False,guest_bad=False,worker_bad=False,bootstrap_delayed=False,proof_delayed=False,late_pause=False,prepare_bad=None,capture_bad=False,late_capture=False,after_snapshot=False,mail_fixture=False,mail_deadline=False):
         clock=[10**9];guest_ack=[];proof_armed=[False];proof_charged=[False]
         with tempfile.TemporaryDirectory()as directory:
             root=Path(directory);repo=root/'releases'/R;core=repo/'paw/core';core.mkdir(parents=True)
@@ -62,9 +63,6 @@ class Owner(unittest.TestCase):
                         return {'done':False,'network_request':{'nonce':self.nonce,'seq':self.completed,
                             'url':p.SEED+'owned-data' if mail_deadline and self.completed==1 else p.SEED,
                             'method':'GET','resource':'XHR' if mail_deadline and self.completed==1 else 'Document'}}
-                    if mail_extra:
-                        return {'done':False,'network_request':{'nonce':self.nonce,'seq':2,
-                            'url':p.SEED+'favicon.ico','method':'GET','resource':'Other'}}
                     if not self.snapshot_seen:
                         self.snapshot_seen=True
                         if late_capture:clock[0]=guest_ack[0]+12700*10**6
@@ -164,20 +162,21 @@ class Owner(unittest.TestCase):
                 if mail_deadline:
                     stack.enter_context(patch.object(p,'fixture_mediation',side_effect=lambda prep,epoch,began,out,**kw:
                         Mediation(prep.owner,prep.worker,epoch,began)))
-                if owner==GOOD and owner.get('connection_closed')is True and not cleanup_fail and not guest_bad and not worker_bad and prepare_bad is None and not capture_bad and not after_snapshot and (not mail_fixture or mail_deadline) and not mail_extra:
-                    try:answer=p.run_owned(J,R,mail_fixture=mail_fixture)
+                proof=plain_http_proof(J,R) if mail_fixture else None
+                if owner==GOOD and owner.get('connection_closed')is True and not cleanup_fail and not guest_bad and not worker_bad and prepare_bad is None and not capture_bad and not after_snapshot and (not mail_fixture or mail_deadline):
+                    try:answer=p.run_owned(J,R,mail_fixture=mail_fixture,plain_http_proof=proof)
                     except ValueError as error:
                         record=json.loads(next(control.glob('*/results.json')).read_bytes())
                         raise AssertionError('producer failed: '+record.get('error','unknown'))from error
                     self.assertEqual(answer['result'],'PASS')
                 else:
-                    with self.assertRaises(ValueError):p.run_owned(J,R,mail_fixture=mail_fixture)
+                    with self.assertRaises(ValueError):p.run_owned(J,R,mail_fixture=mail_fixture,plain_http_proof=proof)
             self.assertIn('VM',stops);self.assertEqual(partitions,[False,True])
             known=owner==GOOD and owner.get('connection_closed')is True and not cleanup_fail
             self.assertEqual(len(published),1 if known else 0)
             if known:
                 attestation=json.loads((published[0]/'attestation.json').read_bytes())
-                self.assertEqual(attestation['result'],'FAIL'if guest_bad or worker_bad or prepare_bad or capture_bad or after_snapshot or (mail_fixture and not mail_deadline) or mail_extra else'PASS')
+                self.assertEqual(attestation['result'],'FAIL'if guest_bad or worker_bad or prepare_bad or capture_bad or after_snapshot or (mail_fixture and not mail_deadline) else'PASS')
                 self.assertTrue(attestation['writers_stopped']);self.assertEqual(attestation['real_connections'],0)
                 self.assertFalse(attestation['production_grants_enabled'])
                 if mail_fixture and not mail_deadline:
@@ -185,15 +184,12 @@ class Owner(unittest.TestCase):
                     self.assertEqual(attestation['error'],'ValueError:owned_kernel_role_protocol_lost')
                     self.assertIn('ValueError: precise-owned-error',attestation['role_diagnostics'][0]['stderr'])
                 if mail_deadline:
-                    self.assertEqual([x['tls_verified_by_broker']for x in attestation['observations']],[True,True,False])
-                    self.assertEqual(attestation['ledger_progress']['requests_consumed'],3)
-                    self.assertEqual(attestation['timing_ns']['plain_http_probe_start']-guest_ack[0],19500*10**6)
-                    if mail_extra:
-                        self.assertEqual(attestation['error'],'ValueError:owned_broker_unexpected_mail_request_after_probe')
-                    else:
-                        self.assertEqual(attestation['timing_ns']['network_quiescent']-guest_ack[0],20850*10**6)
-                        self.assertLess(attestation['timing_ns']['plain_http_probe_done'],attestation['timing_ns']['network_quiescent'])
-                        self.assertLessEqual(attestation['timing_ns']['network_roles_stopped'],attestation['timing_ns']['guest_done'])
+                    self.assertEqual([x['tls_verified_by_broker']for x in attestation['observations']],[True,True])
+                    self.assertEqual(attestation['ledger_progress']['requests_consumed'],2)
+                    self.assertEqual(attestation['plain_http_probe'],proof)
+                    self.assertNotIn('plain_http_probe_start',attestation['timing_ns'])
+                    self.assertEqual(attestation['timing_ns']['network_quiescent']-guest_ack[0],20850*10**6)
+                    self.assertLessEqual(attestation['timing_ns']['network_roles_stopped'],attestation['timing_ns']['guest_done'])
                 if capture_bad:
                     self.assertEqual(attestation['capture_artifacts'],[{'name':'dom.html','bytes':9,'sha256':hashlib.sha256(b'owned DOM').hexdigest()}])
                     self.assertEqual(attestation['capture_missing_coverage'],['screenshot.png'])
@@ -214,10 +210,8 @@ class Owner(unittest.TestCase):
             else:self.assertEqual(list(exports.iterdir()),[])
     def test_mail_fixture_failure_beside_VM_keeps_exact_error_and_known_stop(self):self.simulate(GOOD,mail_fixture=True)
     def test_mail_fixture_unknown_stop_cannot_publish_diagnostic(self):self.simulate(GOOD,mail_fixture=True,cleanup_fail=True)
-    def test_mail_fixture_checks_plain_http_before_late_snapshot_under_same_lease(self):
+    def test_mail_fixture_reaches_late_snapshot_with_only_its_https_requests(self):
         self.simulate(GOOD,mail_fixture=True,mail_deadline=True)
-    def test_mail_fixture_refuses_unexpected_browser_request_after_plain_http(self):
-        self.simulate(GOOD,mail_fixture=True,mail_deadline=True,mail_extra=True)
     def test_auxiliary_probe_stops_network_at_snapshot_before_late_PNG_under_same_lease(self):self.simulate(GOOD,late_capture=True)
     def test_network_request_after_snapshot_closes_without_reopening_stopped_roles(self):self.simulate(GOOD,after_snapshot=True)
     def test_later_capture_failure_retains_DOM_and_never_restarts_consumed_stream(self):self.simulate(GOOD,capture_bad=True)

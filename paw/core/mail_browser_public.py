@@ -959,6 +959,7 @@ def verify_baseline(job, release, current):
             'all_uids_nonroot','renderer_nnp','renderer_seccomp','renderer_pid_namespace','renderer_seen']) and
          value.get('programs')=={n:sha(HERE.with_name(n).read_bytes()) for n in existing.PROGRAMS},
          'mail_public_current_owned_baseline_required')
+    existing.require_plain_http_proof(value.get('plain_http_probe'),job,release,value.get('fixture_nonce'))
     return sha(raw)
 
 

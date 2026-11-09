@@ -1,9 +1,11 @@
 """Inert exact preparation/error paths; no Root, sockets, VM or service calls."""
+from contextlib import contextmanager, nullcontext
 import hashlib
 import os
 from pathlib import Path
 from types import SimpleNamespace as NS
 import sys
+import tempfile
 import unittest
 from unittest.mock import Mock, patch
 
@@ -37,7 +39,7 @@ class FixtureDiagnostic(unittest.TestCase):
              patch.object(diagnostic, '__file__', '/opt/paw-vm/releases/' + R + '/paw/core/mail_browser_fixture_diagnostic.py'), \
              patch.object(diagnostic.os, 'geteuid', return_value=0), \
              patch.object(p.kernel, 'unit_properties', return_value=properties), \
-             patch.object(p, 'require_idle'), patch.object(p, 'prepare_network') as prepare, \
+             patch.object(p, 'require_idle'), patch.object(p, 'prepare_network', return_value=(Path('/owned'), 'f'*64)) as prepare, \
              patch.object(p, 'NetworkPreparation', side_effect=create) as preparation, \
              patch.object(p.kernel, 'cleanup_actors', side_effect=ValueError('unknown stop') if cleanup_failed else None) as cleanup, \
              patch.object(p.kernel, 'vacant_ids'), patch.object(p.time, 'sleep'), \
@@ -97,6 +99,33 @@ class FixtureDiagnostic(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'parent_budget'):
                 diagnostic.run(J, R)
             prepare.assert_not_called()
+
+    def test_separate_probe_publishes_only_after_budget_restore_under_lock(self):
+        events = []
+        @contextmanager
+        def boundary(label):
+            events.append('enter ' + label)
+            yield
+            events.append('exit ' + label)
+        def run(job, release, *, plain_http):
+            self.assertEqual((job, release, plain_http), (J, R, True))
+            events.append('known stop')
+            return {'result': 'PASS', 'writers_stopped': True}
+        def write(folder, name, raw):
+            (folder / name).write_bytes(raw)
+            events.append('write')
+        with tempfile.TemporaryDirectory() as d, \
+             patch.dict(sys.modules, {
+                 'one_use_authorization': NS(execution_lock=lambda: boundary('lock'),
+                                             root_directory=nullcontext, exclusive=write),
+                 'reader_export': NS(publish_reader_tree=lambda _: events.append('publish')),
+             }), patch.object(diagnostic, 'require_snapshot'), \
+             patch.object(diagnostic, 'run', side_effect=run), \
+             patch.object(diagnostic.public, 'EXPORT_ROOT', Path(d)), \
+             patch.object(diagnostic.public, '_owned_preparation_budget', return_value=boundary('budget')):
+            self.assertEqual(diagnostic.run_plain_http(J,R)['result'],'PASS')
+            self.assertTrue((Path(d)/('owned-plain-http-'+J)/'attestation.json').is_file())
+        self.assertEqual(events,['enter lock','enter budget','known stop','exit budget','write','publish','exit lock'])
 
 
 if __name__ == '__main__':

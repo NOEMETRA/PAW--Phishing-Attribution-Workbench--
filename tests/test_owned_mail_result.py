@@ -6,6 +6,7 @@ from paw.core import owned_mail_channel as c,mail_browser_owned as m
 from paw.core import browser_owned_broker as broker,browser_owned_broker_guest as guest,browser_cdp as cdp
 from test_mail_browser_owned import owned_case
 from test_owned_capture_controller import PNG
+from test_owned_mail_fixture_vm import plain_http_proof
 
 class Result(unittest.TestCase):
     def setUp(self):
@@ -21,18 +22,24 @@ class Result(unittest.TestCase):
             'guest':{'status':'completed','writers_stopped':True,'network_interfaces':['lo'],
                 'dom_sha256':m.digest(self.artifacts['dom.html']),'sandbox':{k:True for k in m.SANDBOX}},
             'capture_artifacts':[{'name':n,'bytes':len(raw),'sha256':m.digest(raw)}for n,raw in self.artifacts.items()],
-            'observations':[{'operation':'http','scope':'separate plain HTTP transport probe'}]}
+            'observations':[{'operation':'http','tls_verified_by_broker':True}],
+            'plain_http_probe':plain_http_proof('a'*32,'c'*40)}
     def test_bound_actual_bytes_raw_attestation_and_separate_network_coverage(self):
         raw=cdp.canonical(self.a);receipt,bodies=c.bound_result(self.admission,raw,self.context,self.artifacts)
         self.assertEqual(receipt['status'],'completed');self.assertEqual(receipt['runtime']['raw_attestation_sha256'],m.digest(raw))
         self.assertEqual(bodies['dom.html'],self.artifacts['dom.html']);self.assertEqual(bodies['screenshot.png'],PNG)
         network=m.decode(bodies['network.json'],m.ARTIFACTS['network.json'])
         self.assertIn('not complete browser HAR',network['scope']);self.assertIn('not browser',network['tls_verifier'])
+        self.assertEqual(network['plain_http_probe'],self.a['plain_http_probe'])
+        self.assertEqual(network['observations'],self.a['observations'])
     def test_missing_artifact_hash_job_nonce_release_context_or_stop_cannot_complete(self):
         changes=[{'job':'2'*32},{'release_sha':'2'*40},{'context_sha256':'2'*64},{'fixture_nonce':'2'*32},
             {'writers_stopped':False},{'host_restored':False},{'real_connections':True},
             {'stop_ns':12*10**9},{'capture_artifacts':[]},{'cleanup_errors':['unknown']},
-            {'guest':{**self.a['guest'],'sandbox':{k:False for k in m.SANDBOX}}}]
+            {'guest':{**self.a['guest'],'sandbox':{k:False for k in m.SANDBOX}}},
+            {'plain_http_probe':None},
+            {'plain_http_probe':plain_http_proof('a'*32,'c'*40,epoch=self.a['fixture_nonce'])},
+            {'plain_http_probe':plain_http_proof('a'*32,'9'*40)}]
         for change in changes:
             with self.subTest(change=change),self.assertRaises(ValueError):
                 c.bound_result(self.admission,cdp.canonical({**self.a,**change}),self.context,self.artifacts)
