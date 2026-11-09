@@ -277,20 +277,31 @@ def collect_capture(channel,nonce,guest,out,committed=None):
     return committed
 
 
-def finish_network(mediation,actors,folder,epoch,inode,record):
-    """Existing fixed HTTP check and typed stop, at the closed-network boundary."""
-    http=[r for r in mediation.observations if r['operation']=='http']
-    require(len(http)>=2 and all(r['tls_verified_by_broker']is True for r in http),
-            'owned_broker_actual_tls_resources_missing')
+def probe_plain_http(mediation,epoch,record):
     # Separate fixed transport probe: this does not claim Chrome
-    # executed mixed-content HTTP. The Chrome observations above use TLS.
+    # executed mixed-content HTTP.
     record['broker_progress']={'phase':'plain_http_probe','slot':mediation.ledger.used,
         'url_sha256':hashlib.sha256(b'http://paw-owned.invalid/owned-data').hexdigest()}
+    record['timing_ns']['plain_http_probe_start']=time.monotonic_ns()
     plain,plain_body=mediation.response({'nonce':epoch,'seq':mediation.ledger.used,
         'url':'http://paw-owned.invalid/owned-data','method':'GET','resource':'Fetch'})
     require(plain['http_status']==200 and plain_body==('PAW-OWNED-'+epoch).encode('ascii') and
         mediation.observations[-1]['tls_verified_by_broker']is False,
         'owned_broker_plain_http_transport_missing')
+    record['timing_ns']['plain_http_probe_done']=time.monotonic_ns()
+
+
+def finish_network(mediation,actors,folder,epoch,inode,record):
+    """Verify the fixed transport proof and stop at the closed-network boundary."""
+    http=[r for r in mediation.observations if r['operation']=='http']
+    if record['mail_fixture_preparation']:
+        require(len(http)==3 and all(r['tls_verified_by_broker']is True for r in http[:2]) and
+                http[2]['tls_verified_by_broker']is False and
+                'plain_http_probe_done'in record['timing_ns'],'owned_broker_mail_transport_proof')
+    else:
+        require(len(http)>=2 and all(r['tls_verified_by_broker']is True for r in http),
+                'owned_broker_actual_tls_resources_missing')
+        probe_plain_http(mediation,epoch,record)
     # A completed DOM and absent units cannot excuse an unexpected
     # network-owner/worker exit. Observe live identities, then perform
     # the typed worker stop and expected keeper stop explicitly.
@@ -398,6 +409,8 @@ def run_owned(job,release,*,mail_fixture=False):
                     record['timing_ns']['network_quiescent']=time.monotonic_ns()
                     finish_network(mediation,actors,folder,epoch,inode,record);network_closed=True
                 if mediation is not None and request is not None:
+                    require(not mail_fixture or 'plain_http_probe_done'not in record['timing_ns'],
+                            'owned_broker_unexpected_mail_request_after_probe')
                     record['broker_progress']={'phase':'browser_request','slot':request['seq'],
                         'url_sha256':hashlib.sha256(request['url'].encode('utf-8',errors='surrogatepass')).hexdigest()}
                     try:metadata,body=mediation.response(request)
@@ -405,7 +418,15 @@ def run_owned(job,release,*,mail_fixture=False):
                         if mediation.ledger.closed:raise
                         mediation.control('revoke')
                         console.transfer(vm['channel'],{'kind':'refusal','nonce':epoch,'seq':request['seq']})
-                    else:send_response(vm['channel'],epoch,request['seq'],metadata,body)
+                    else:
+                        if mail_fixture and request['seq']==1:
+                            require(request['url']==SEED+'owned-data' and request['method']=='GET' and
+                                    mediation.ledger.used==2,'owned_broker_mail_second_resource')
+                            # The two fixed TLS exchanges are now witnessed.
+                            # Run the independent HTTP check before serializing
+                            # the second reply and waiting for guest quiescence.
+                            probe_plain_http(mediation,epoch,record)
+                        send_response(vm['channel'],epoch,request['seq'],metadata,body)
                 time.sleep(.03)
             else:raise ValueError('owned_broker_poll_deadline')
             require(value.get('status')=='completed'and value.get('writers_stopped')is True and
