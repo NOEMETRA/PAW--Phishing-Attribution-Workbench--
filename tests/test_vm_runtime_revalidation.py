@@ -237,6 +237,8 @@ class Runtime(unittest.TestCase):
                  'result':preparation,'vm_started':False,'real_samples_executed':0,'real_connections':int(preparation_public),
                  'production_grants_enabled':False,'i08_installed':False,'writers_stopped':True,'host_restored':True}), \
              mock.patch('representation_producer.previous_owned_failure', return_value={'source_result': 'FAIL', 'vm_started': False}), \
+             mock.patch('paw.core.browser_owned_cdp_probe.previous_owned_cdp_failure',
+                        return_value={'available': True, 'audit_result': 'FAIL'}), \
              mock.patch('representation_producer.previous_owned_javascript_failure', **({'side_effect': ValueError('owned JS diagnostic failure')} if fail_javascript else {'return_value': {'source_result': 'FAIL', 'vm_started': False}})), \
              mock.patch.object(native_runtime, 'previous_owned_native_failure', **({'side_effect': ValueError('owned native diagnostic failure')} if fail_native else {'return_value': {'source_result': 'FAIL', 'vm_started': False}})), \
              mock.patch.object(Path, 'mkdir'), mock.patch('builtins.print'):
@@ -250,6 +252,7 @@ class Runtime(unittest.TestCase):
         self.assertEqual(len(writes), 1); self.assertEqual(writes[0][1], 'runtime.json')
         exported=json.loads(writes[0][2]);self.assertEqual(exported['previous_owned_native_failure'],{'source_result':'FAIL','vm_started':False})
         self.assertEqual(exported['previous_owned_javascript_failure'],{'source_result':'FAIL','vm_started':False})
+        self.assertEqual(exported['previous_owned_cdp_failure'], {'available': True, 'audit_result': 'FAIL'})
         self.assertEqual(published, [Path('/var/lib/paw-vm-exports')/('a'*32)])
 
     def test_owned_kernel_failure_or_scope_expansion_cannot_publish_runtime_pass(self):
