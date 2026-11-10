@@ -19,6 +19,117 @@ def require(value,reason):
     if not value:raise ValueError(reason)
 
 
+# Fixed, already stopped synthetic run. The operator never supplies a selector.
+_PRIOR_JOB = '018f2a1ed09f44ffa5b2ba37fb8f8138'
+_PRIOR_RELEASE = '4ba02fd14699e7ee5f35bfdef36f6250f494f02f'
+_PRIOR_MANIFEST = 'd61fe9562f32fb8686af1f462507901aea3bd83fcb39517da44bcb079691ba6a'
+_PRIOR_AUDIT = 'owned-cdp-217ae4a04d44467585c511c8164b372e'
+_PROGRAMS = ('browser_cdp.py', 'browser_owned_cdp_guest.py', 'browser_owned_cdp_probe.py')
+_FAILURE_CODES = frozenset({
+    'owned_cdp_probe_failed_no_publication', 'owned_cdp_external_poll_deadline',
+    'owned_cdp_real_guest_probe_failed', 'owned_cdp_exact_browser', 'owned_cdp_guest_start',
+    'owned_cdp_owner_result_path', 'owned_cdp_unexpected_owner_exit_blocks_publication',
+    'owned_cdp_external_stop_or_host_restore', 'guest_channel_deadline', 'unexpected_readiness',
+    'unexpected_response', 'frame_complexity', 'frame_nonfinite', 'owned_cdp_pipe_eof',
+    'owned_whole_deadline', 'owned_actual_js_or_sandbox_missing', 'owned_guest_writers_alive',
+    'owned_chrome_exited', 'owned_network_changed', 'owned_stderr_budget', 'owned_netlog_budget',
+    'guest_navigation_failed', 'guest_browser_lost', 'guest_command_failed', 'cdp_pipe_truncated',
+})
+
+
+def _failure_code(value):
+    if value is None:
+        return None
+    if type(value) is str:
+        code = value.rsplit(':', 1)[-1]
+        if code in _FAILURE_CODES:
+            return code
+    return 'unclassified'
+
+
+def _serial_progress(raw):
+    from gate_channel import validate_frame
+    result = {'ready': False, 'started': False, 'last_poll': None, 'terminal': None,
+              'traceback_seen': False, 'traceback_reason': None}
+    for line in raw.split(b'\n'):
+        line = line.removesuffix(b'\r')
+        if line == b'Traceback (most recent call last):':
+            result['traceback_seen'] = True
+        elif result['traceback_seen'] and len(line) <= 256 and line.startswith((b'ValueError: ', b'TimeoutError: ')):
+            code = _failure_code(line.decode('ascii', errors='replace').replace(': ', ':', 1))
+            if code != 'unclassified':
+                result['traceback_reason'] = code
+        if not line.startswith(b'PAW14 ') or len(line) > 65536:
+            continue
+        try:
+            frame = validate_frame(json.loads(line[6:]))
+        except (ValueError, UnicodeError, RecursionError):
+            continue
+        if frame == {'ready': True, 'network_interfaces': ['lo']}:
+            result['ready'] = True
+        data = frame.get('data')
+        if frame.get('ok') is not True or type(data) is not dict:
+            continue
+        if data.get('started') is True:
+            result['started'] = True
+        if data.get('done') is False:
+            stage = data.get('stage')
+            result['last_poll'] = stage if stage in ('configuring', 'running', 'snapshot', 'snapshot_ready') else 'other'
+        if data.get('done') is True:
+            status = data.get('status')
+            result['terminal'] = {
+                'status': status if status in ('completed', 'failed', 'cancelled') else 'other',
+                'error': _failure_code(data.get('error')),
+                'writers_stopped': data.get('writers_stopped') is True,
+            }
+    return result
+
+
+def previous_owned_cdp_failure():
+    """Publish finite observations from the fixed stopped synthetic job only."""
+    from one_use_authorization import read, root_directory
+    from vm_operator_host import private_json
+    from vm_release_storage import verify
+
+    require(os.geteuid() == 0, 'owned_cdp_historical_root_only')
+    try:
+        with root_directory(Path('/var/lib/paw-vm/jobs') / _PRIOR_JOB) as fd:
+            worker = private_json(fd, 'result.json')
+    except FileNotFoundError:
+        return {'available': False, 'job': _PRIOR_JOB}
+
+    capture = worker.get('owned_mail_capture')
+    require(type(capture) is dict and capture.get('status') == 'completed' and
+            worker.get('result') == 'FAIL' and worker.get('job') == _PRIOR_JOB and
+            worker.get('release_sha') == _PRIOR_RELEASE and worker.get('recipe') == 'browser-owned-v1' and
+            type(worker.get('real_samples_executed')) is int and worker['real_samples_executed'] == 0 and
+            worker.get('plain_http_probe_result') == 'PASS' and 'owned_cdp_probe' not in worker and
+            'returncode' not in worker, 'owned_cdp_historical_worker_binding')
+    with root_directory(Path('/opt/paw-vm/releases')) as fd:
+        manifest, _ = verify(fd, _PRIOR_RELEASE, _PRIOR_MANIFEST)
+    programs = {name: manifest['files']['paw/core/' + name]['sha256'] for name in _PROGRAMS}
+    with root_directory(Path('/var/lib/paw-s14/control') / _PRIOR_AUDIT) as fd:
+        raw = read(fd, 'results.json', 256 * 1024)
+        try:
+            serial = read(fd, 'owned-cdp-probe-serial.log', 2 * 1024**2)
+        except FileNotFoundError:
+            serial = None
+    report = json.loads(raw)
+    require(report.get('schema') == 'paw-owned-cdp-probe-v1' and report.get('job') == _PRIOR_JOB and
+            report.get('release_sha') == _PRIOR_RELEASE and report.get('programs') == programs and
+            report.get('result') in ('FAIL', 'PASS') and type(report.get('real_connections')) is int and
+            type(report.get('actual_real_samples')) is int and report['actual_real_samples'] == report['real_connections'] == 0,
+            'owned_cdp_historical_audit_binding')
+    return {'available': True, 'job': _PRIOR_JOB, 'release_sha': _PRIOR_RELEASE,
+            'worker_error': _failure_code(worker.get('error')), 'audit_result': report['result'],
+            'worker_cleanup_failed': worker.get('cleanup_failed') is True,
+            'error': _failure_code(report.get('error')), 'cleanup_error': _failure_code(report.get('cleanup_error')),
+            'writers_stopped_attested': report.get('writers_stopped') is True,
+            'host_restored_attested': report.get('host_restored') is True,
+            'audit_sha256': hashlib.sha256(raw).hexdigest(),
+            'serial': None if serial is None else _serial_progress(serial)}
+
+
 def run_owned(job,release):
     require(os.geteuid()==0 and Path('/proc/self/attr/current').read_text().strip()=='unconfined',
             'owned_cdp_root_PID1_worker_only')
@@ -34,7 +145,7 @@ def run_owned(job,release):
     from reader_export import publish_reader_tree
     context=auth.capture();auth.validate_context(context)
     programs={name:hashlib.sha256((repo/'paw/core'/name).read_bytes()).hexdigest()
-        for name in ['browser_cdp.py','browser_owned_cdp_guest.py','browser_owned_cdp_probe.py']}
+        for name in _PROGRAMS}
     out=Path('/var/lib/paw-s14/control')/('owned-cdp-'+uuid.uuid4().hex)
     identifier=uuid.uuid4().hex;gate=None;vm=None;record={'schema':'paw-owned-cdp-probe-v1','result':'FAIL',
         'job':job,'release_sha':release,'programs':programs,'actual_real_samples':0,'real_connections':0,

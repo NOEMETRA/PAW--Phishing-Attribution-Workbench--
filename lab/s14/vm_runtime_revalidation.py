@@ -416,6 +416,8 @@ def run_owned(job, release):
         record['runtime']['previous_owned_native_failure'] = previous_owned_native_failure()
         from representation_producer import previous_owned_javascript_failure
         record['runtime']['previous_owned_javascript_failure'] = previous_owned_javascript_failure()
+        from paw.core.browser_owned_cdp_probe import previous_owned_cdp_failure
+        record['runtime']['previous_owned_cdp_failure'] = previous_owned_cdp_failure()
         target = Path('/var/lib/paw-vm-exports')/job
         with fs.root_directory(target.parent): pass
         target.mkdir(mode=0o700)

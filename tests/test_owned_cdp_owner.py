@@ -95,4 +95,86 @@ class OwnerDisposition(unittest.TestCase):
                       {**GOOD,'connection_closed':1},{**GOOD,'reason':None}]:
             with self.subTest(owner=owner):self.simulate(owner,False)
 
+class StoppedDiagnostic(unittest.TestCase):
+    def setUp(self):
+        lab = Path(__file__).resolve().parents[1] / 'lab/s14'
+        self.enterContext(patch.object(sys, 'path', [str(lab), *sys.path]))
+
+    def read(self, worker_delta=None, report_delta=None, serial=None, missing_worker=False):
+        job = Path('/var/lib/paw-vm/jobs') / probe._PRIOR_JOB
+        releases = Path('/opt/paw-vm/releases')
+        audit = Path('/var/lib/paw-s14/control') / probe._PRIOR_AUDIT
+        programs = {name: hashlib.sha256(name.encode()).hexdigest() for name in probe._PROGRAMS}
+        worker = {'job': probe._PRIOR_JOB, 'release_sha': probe._PRIOR_RELEASE,
+                  'result': 'FAIL', 'recipe': 'browser-owned-v1', 'real_samples_executed': 0,
+                  'plain_http_probe_result': 'PASS', 'owned_mail_capture': {'status': 'completed'},
+                  'error': 'owned_cdp_probe_failed_no_publication', **(worker_delta or {})}
+        report = {'schema': 'paw-owned-cdp-probe-v1', 'job': probe._PRIOR_JOB,
+                  'release_sha': probe._PRIOR_RELEASE, 'result': 'FAIL', 'programs': programs,
+                  'real_connections': 0, 'actual_real_samples': 0,
+                  'error': 'TimeoutError:guest_channel_deadline', 'writers_stopped': True,
+                  'host_restored': True, **(report_delta or {})}
+        files = {'results.json': json.dumps(report).encode(), 'owned-cdp-probe-serial.log': serial}
+
+        def directory(path):
+            self.assertIn(path, (job, releases, audit))
+            if path == job and missing_worker:
+                raise FileNotFoundError
+            return nullcontext(path)
+
+        def audit_read(fd, name, limit):
+            self.assertEqual(fd, audit)
+            self.assertEqual(limit, {'results.json': 256 * 1024, 'owned-cdp-probe-serial.log': 2 * 1024**2}[name])
+            if files[name] is None:
+                raise FileNotFoundError
+            return files[name]
+
+        manifest = {'files': {'paw/core/' + name: {'sha256': digest} for name, digest in programs.items()}}
+        with patch('one_use_authorization.root_directory', side_effect=directory) as opened, \
+                patch('one_use_authorization.read', side_effect=audit_read), \
+                patch('vm_operator_host.private_json', return_value=worker) as state, \
+                patch('vm_release_storage.verify', return_value=(manifest, {})) as snapshot, \
+                patch.object(probe.os, 'geteuid', return_value=0):
+            result = probe.previous_owned_cdp_failure()
+            if missing_worker:
+                opened.assert_called_once_with(job)
+                snapshot.assert_not_called()
+            else:
+                state.assert_called_once_with(job, 'result.json')
+                snapshot.assert_called_once_with(releases, probe._PRIOR_RELEASE, probe._PRIOR_MANIFEST)
+            return result
+
+    def test_stored_only_diagnostic_surfaces_deadline_and_finite_guest_progress(self):
+        frames = [
+            {'ready': True, 'network_interfaces': ['lo']},
+            {'ok': True, 'id': 2, 'data': {'started': True}},
+            {'ok': True, 'id': 3, 'data': {'done': False, 'stage': 'running'}},
+            {'ok': True, 'id': 4, 'data': {'done': True, 'status': 'failed', 'writers_stopped': True,
+                                          'error': 'ValueError:owned_whole_deadline', 'private': 'redact-this'}},
+        ]
+        serial = b'PAW14 {invalid}\n' + b''.join(b'PAW14 ' + json.dumps(v).encode() + b'\n' for v in frames)
+        serial += b'Traceback (most recent call last):\r\nValueError: owned_actual_js_or_sandbox_missing\r\n'
+        result = self.read(serial=serial)
+        self.assertEqual(result['worker_error'], 'owned_cdp_probe_failed_no_publication')
+        self.assertEqual(result['error'], 'guest_channel_deadline')
+        self.assertEqual(result['serial'], {'ready': True, 'started': True, 'last_poll': 'running',
+                                            'terminal': {'status': 'failed', 'error': 'owned_whole_deadline',
+                                                         'writers_stopped': True},
+                                            'traceback_seen': True, 'traceback_reason': 'owned_actual_js_or_sandbox_missing'})
+        self.assertNotIn('redact-this', json.dumps(result))
+
+    def test_unavailable_and_unclassified_keep_failure_and_never_copy_raw_reason(self):
+        self.assertEqual(self.read(missing_worker=True), {'available': False, 'job': probe._PRIOR_JOB})
+        result = self.read(report_delta={'error': 'sensitive path', 'cleanup_error': 'other private text'})
+        self.assertEqual(result['audit_result'], 'FAIL')
+        self.assertIsNone(result['serial'])
+        self.assertEqual((result['error'], result['cleanup_error']), ('unclassified', 'unclassified'))
+
+    def test_mismatched_identity_or_non_synthetic_record_refuses(self):
+        with self.assertRaisesRegex(ValueError, 'historical_worker_binding'):
+            self.read(worker_delta={'job': 'a' * 32})
+        with self.assertRaisesRegex(ValueError, 'historical_audit_binding'):
+            self.read(report_delta={'real_connections': 1})
+
+
 if __name__=='__main__':unittest.main()
