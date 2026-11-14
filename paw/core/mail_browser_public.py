@@ -1497,15 +1497,15 @@ def closed_packets(job, epoch, release, prep, roles, *, observations=None):
         worker.process.wait(timeout=2);observations.append(value)
     need(not observations[0]['matched'] and not observations[1]['connected'],
          'mail_public_actual_default_drop')
-    # No probe remains and this closed case needs no further fixture I/O.
-    # Finish it cooperatively before its independent10s lifetime expires.
+    # Both probes stopped. Request both shutdowns before waiting.
+    owner.send({'op':'stop','epoch':epoch,'id':2})
     prep.server.send({'op':'stop'});counts=prep.server.receive()
     need(type(counts)is dict and set(counts)=={'counts'} and type(counts['counts'])is dict and
          set(counts['counts'])=={'tcp','udp','stream_bytes'} and
          all(type(v)is int and v==0 for v in counts['counts'].values()) and
          prep.server.process.wait(timeout=2)==0,'mail_public_closed_fixture_stop')
     prep.closed_fixture_counts=counts['counts']
-    owner.send({'op':'stop','epoch':epoch,'id':2});ack=owner.receive()
+    ack=owner.receive()
     need(ack.get('accepted') is True and type(ack.get('id')) is int and ack['id']==2,
          'mail_public_raw_guard_ack')
     need(owner.process.wait(timeout=2)==0,'mail_public_raw_guard_exit')

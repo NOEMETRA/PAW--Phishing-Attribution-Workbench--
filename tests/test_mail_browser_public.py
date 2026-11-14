@@ -377,7 +377,11 @@ class PublicBoundary(unittest.TestCase):
         owner.receive.side_effect=[{'accepted':True,'id':v} for v in range(3)]
         first=Mock(unit='first.service');first.receive.return_value={'done':True,'matched':False}
         second=Mock(unit='second.service');second.receive.return_value={'done':True,'connected':False}
-        server=Mock();server.receive.return_value={'counts':{'tcp':0,'udp':0,'stream_bytes':0}}
+        server=Mock()
+        def fixture_reply():
+            self.assertEqual(owner.send.call_args.args[0], {'op':'stop','epoch':E,'id':2})
+            return {'counts':{'tcp':0,'udp':0,'stream_bytes':0}}
+        server.receive.side_effect=fixture_reply
         server.process.wait.return_value=0
         prep=SimpleNamespace(mode='owned-raw',ready=True,owner=owner,worker=first,inode=99,server=server)
         roles=[]
