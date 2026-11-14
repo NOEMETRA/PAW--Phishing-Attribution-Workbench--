@@ -523,4 +523,33 @@ class OctoberMaintenance(unittest.TestCase):
                     self.transition(changed, dict(context, dpkg_inventory_sha256=changed_digest))
 
 
+    def test_nov14_requires_exact_delta_and_booted_kernel(self):
+        nov05 = dict(self.current)
+        nov05.update({name: after for name, (_, after) in runtime.NOV05_PACKAGES.items()})
+        nov08 = dict(nov05)
+        nov08.update({name: after for name, (_, after) in runtime.NOV08_PACKAGES.items()})
+        changes = {b'owned-new': (None, b'2'), b'owned-other': (b'1', None)}
+        nov14 = dict(nov08)
+        nov14[b'owned-new'] = b'2'
+        del nov14[b'owned-other']
+        current_digest = maintenance_auth.digest(self.rows(nov14))
+        context = copy.deepcopy(self.context)
+        context['host']['kernel'] = runtime.NOV14_KERNEL
+        context['dpkg_inventory_sha256'] = current_digest
+        with mock.patch.object(runtime, 'INVENTORY_NOV05', maintenance_auth.digest(self.rows(nov05))), \
+             mock.patch.object(runtime, 'INVENTORY_NOV08', maintenance_auth.digest(self.rows(nov08))), \
+             mock.patch.object(runtime, 'INVENTORY_NOV14', current_digest), \
+             mock.patch.object(runtime, 'NOV14_PACKAGES', changes):
+            receipt = maintenance_auth.validate_maintenance(self.transition(nov14, context), context)
+            self.assertEqual(receipt['kernel'], runtime.NOV14_KERNEL)
+            previous_kernel = dict(context, host=dict(context['host'], kernel=runtime.OCT30_KERNEL[1]))
+            with self.assertRaisesRegex(ValueError, 'runtime_reviewed_kernel'):
+                self.transition(nov14, previous_kernel)
+            drift = {**nov14, b'owned-unreviewed': b'1'}
+            drift_digest = maintenance_auth.digest(self.rows(drift))
+            with mock.patch.object(runtime, 'INVENTORY_NOV14', drift_digest), \
+                 self.assertRaisesRegex(ValueError, 'runtime_nov14_inventory_delta'):
+                self.transition(drift, dict(context, dpkg_inventory_sha256=drift_digest))
+
+
 if __name__ == '__main__': unittest.main()
