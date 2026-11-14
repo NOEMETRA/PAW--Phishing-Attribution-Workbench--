@@ -106,15 +106,59 @@ class Preparation(unittest.TestCase):
             self.assertEqual([r[0]for r in live],['keeper','fixture','probe'])
             self.assertGreaterEqual(live[-1][1],starts[1][1]+3)
 
-    def test_public_bootstrap_still_waits_for_guard_and_cannot_use_a_fixture_namespace(self):
-        owner=SimpleNamespace(poll_ready=lambda:False)
-        with patch.object(m,'PublicActor',return_value=owner)as actor:
-            prep=m.NetworkPreparation(J,E,R,'public',[])
+    def test_public_worker_overlaps_guard_readiness_with_observed_startup_delays(self):
+        from paw.core.browser_owned_broker import kernel_lease_milliseconds
+
+        start = 7_106
+        clock = [start]
+        starts = []
+        live = []
+
+        class Actor:
+            def __init__(self, job, epoch, release, role, keeper_pid=None, **kwargs):
+                self.role = role
+                self.unit = m.identity(J, E, R)[role]
+                self.pid = 42 if role == 'keeper' else 43
+                self.ready_at = 10_055 if role == 'keeper' else clock[0] + 218
+                starts.append((role, clock[0], keeper_pid))
+
+            def poll_ready(self):
+                return clock[0] >= self.ready_at
+
+        def properties(unit):
+            self.assertEqual(unit, m.identity(J, E, R)['keeper'])
+            return {'ActiveState': 'active' if clock[0] >= 7_919 else 'activating',
+                    'MainPID': '42' if clock[0] >= 7_919 else '0',
+                    'ControlGroup': '/system.slice/' + unit}
+
+        def observe(actor, role, namespace=None):
+            self.assertTrue(actor.poll_ready())
+            live.append((role, clock[0]))
+            return 99
+
+        with patch.object(m, 'PublicActor', Actor), \
+             patch.object(m.kernel, 'unit_properties', side_effect=properties), \
+             patch.object(m.kernel, 'private_json', return_value={'namespace_inode': 99}), \
+             patch.object(m.os, 'stat', return_value=SimpleNamespace(st_ino=99)), \
+             patch.object(m.kernel, 'live_role', side_effect=observe):
+            prep = m.NetworkPreparation(J, E, R, 'public', [])
             self.assertFalse(prep.poll())
             self.assertIsNone(prep.worker)
-            self.assertEqual(actor.call_count,1)
-            with self.assertRaisesRegex(ValueError,'namespace_source'):prep._owner(42)
-            self.assertEqual(actor.call_count,1)
+            with self.assertRaisesRegex(ValueError, 'namespace_source'):
+                prep._owner(42)
+            clock[0] = 7_919
+            self.assertFalse(prep.poll())
+            self.assertEqual(starts, [('keeper', start, None), ('probe', 7_919, 42)])
+            self.assertEqual(live, [])
+            clock[0] = 10_055
+            self.assertTrue(prep.poll())
+
+        self.assertEqual(live, [('keeper', 10_055), ('probe', 10_055)])
+        # Apply the same modeled 2.75s for arming, DNS and checks in both paths.
+        plan = {'expires_ns': 15_000 * 10**6}
+        with self.assertRaisesRegex(ValueError, 'expired_kernel_lease'):
+            kernel_lease_milliseconds(plan, (10_273 + 2_750) * 10**6)
+        self.assertEqual(kernel_lease_milliseconds(plan, (clock[0] + 2_750) * 10**6), 195)
 
     def test_owned_early_worker_requires_registered_exact_guard_and_private_namespace(self):
         obj=object.__new__(m.NetworkPreparation)
@@ -129,12 +173,12 @@ class Preparation(unittest.TestCase):
                  patch.object(m.os,'stat',return_value=SimpleNamespace(st_ino=inode)), \
                  patch.object(m,'PublicActor')as actor:
                 if changes.get('ActiveState')=='activating':
-                    obj._start_owned_worker();actor.assert_not_called()
+                    obj._start_worker();actor.assert_not_called()
                 elif changes or inode!=99:
-                    with self.assertRaisesRegex(ValueError,'active_guard_namespace'):obj._start_owned_worker()
+                    with self.assertRaisesRegex(ValueError,'active_guard_namespace'):obj._start_worker()
                     actor.assert_not_called()
                 else:
-                    obj._start_owned_worker()
+                    obj._start_worker()
                     actor.assert_called_once_with(J,E,R,'probe',42,registry=obj.actors,protocol=False,defer_ready=True)
 
     def exercise(self,failure=False,cleanup_failure=False,rearm_failure=False,dns_failure=False,expiry_failure=False,bindings_failure=False,tls_failure=False):

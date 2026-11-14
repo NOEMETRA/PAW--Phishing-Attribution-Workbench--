@@ -32,12 +32,19 @@ class DNSProbe(unittest.TestCase):
         obj.job=J;obj.epoch=E;obj.release=R;obj.mode='owned-raw';obj.protocol=False;obj.dns_probe=True
         obj.actors=[];obj.server=None;obj.fixture_configured=True;obj.server_live=True
         obj.inode=None;obj.ready=False;obj.worker_live=False;obj.worker=None
-        obj.owner=NS(pid=42,poll_ready=lambda:True)
+        unit=m.identity(J,E,R)['keeper']
+        obj.owner=NS(unit=unit,pid=42,poll_ready=lambda:True)
         worker=NS(poll_ready=lambda:True)
-        with patch.object(obj,'_start_owned_worker'),patch.object(m.kernel,'live_role',return_value=99), \
-             patch.object(m.os,'stat',return_value=NS(st_ino=10)), \
+        waiting={'ActiveState':'activating'}
+        active={'ActiveState':'active','MainPID':'42','ControlGroup':'/system.slice/'+unit}
+        with patch.object(m.kernel,'unit_properties',side_effect=[waiting,active]), \
+             patch.object(m.kernel,'private_json',return_value={'namespace_inode':99}), \
+             patch.object(m.kernel,'live_role',return_value=99), \
+             patch.object(m.os,'stat',side_effect=lambda path:NS(st_ino=10 if str(path)=='/proc/self/ns/net' else 99)), \
              patch.object(m,'OwnedDNSProbe',return_value=worker)as pair,patch.object(m,'PublicActor')as public:
-            self.assertTrue(obj.poll());pair.assert_called_once();public.assert_not_called()
+            self.assertTrue(obj.poll())
+            pair.assert_called_once_with(J,E,R,'probe',42,registry=obj.actors,protocol=False,defer_ready=True)
+            public.assert_not_called()
 
     def probe(self,commands):
         output=[];sockets=[]

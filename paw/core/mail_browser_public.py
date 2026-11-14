@@ -736,18 +736,17 @@ class NetworkPreparation:
         need((fixture_pid is None)==(self.mode=='public'), 'mail_public_bootstrap_namespace_source')
         self.owner=PublicActor(self.job,self.epoch,self.release,'keeper',fixture_pid,
                                registry=self.actors,defer_ready=True)
-    def _start_owned_worker(self):
-        if self.mode=='public' or self.worker is not None:return
-        # Popen is not PID1 registration. Wait for the exact Type=exec unit to
-        # be active before constructing a dependent worker, without waiting for
-        # the guard's later Python/nft readiness. Initial BPF stays deny-all.
+    def _start_worker(self):
+        if self.worker is not None:return
+        # PID1 must register the keeper before the probe joins it.
+        # Probe egress stays denied until both roles pass live checks.
         props=kernel.unit_properties(self.owner.unit)
         if props['ActiveState']!='active':return
         ids=identity(self.job,self.epoch,self.release);pid=int(props['MainPID'])
         cfg=kernel.private_json(Path(ids['directory'])/'public.json')
         need(pid>1 and props['ControlGroup']=='/system.slice/'+ids['keeper'] and
              os.stat('/proc/'+str(pid)+'/ns/net').st_ino==cfg['namespace_inode'],
-             'mail_public_owned_active_guard_namespace')
+             'mail_public_active_guard_namespace')
         actor=OwnedDNSProbe if self.dns_probe else OwnedExpiryProbe if getattr(self,'expiry_probe',False) else PublicActor
         self.worker=actor(self.job,self.epoch,self.release,'probe',pid,
             registry=self.actors,protocol=self.protocol,defer_ready=True)
@@ -794,17 +793,14 @@ class NetworkPreparation:
             self.server.send({'op':'continue'})
             self.fixture_configured=True; self._owner(pid)
         if self.inode is None:
-            self._start_owned_worker()
+            self._start_worker()
             if not self.owner.poll_ready():return False
             self.inode=kernel.live_role(self.owner,'keeper')
             need((self.inode == os.stat('/proc/self/ns/net').st_ino) == (self.mode == 'public'),
                  'mail_public_observed_namespace')
             if self.worker is None:
-                # Public mode has no private fixture and retains its original
-                # guard-ready-then-worker sequence and namespace source.
-                actor=OwnedDNSProbe if self.dns_probe else OwnedExpiryProbe if getattr(self,'expiry_probe',False) else PublicActor
-                self.worker=actor(self.job,self.epoch,self.release,'probe',self.owner.pid,
-                    registry=self.actors,protocol=self.protocol,defer_ready=True)
+                self._start_worker()
+                need(self.worker is not None, 'mail_public_keeper_no_longer_active')
         if not self.server_live and self.server.poll_ready():
             kernel.live_role(self.server,'fixture',self.inode);self.server_live=True
         if not self.worker_live and self.worker.poll_ready():
