@@ -95,6 +95,75 @@ NOV08_PACKAGES = {
 }
 
 
+# Exact package database observed after the host kernel update and later installs.
+INVENTORY_NOV14 = 'cf18e1d7f1bce31a04879b5289188e74f32db7dc4d82c7b5188ddb1be634f032'
+NOV14_KERNEL = '7.0.0-43-generic'
+NOV14_PACKAGES = {
+    b'bpftool': (b'7.7.0+7.0.0-42.42', b'7.7.0+7.0.0-43.43'),
+    b'gir1.2-soup-3.0:amd64': (b'3.6.6-1ubuntu0.2', b'3.6.6-1ubuntu0.3'),
+    b'gstreamer1.0-alsa:amd64': (b'1.28.2-1ubuntu0.1', b'1.28.2-1ubuntu0.2'),
+    b'gstreamer1.0-gl:amd64': (b'1.28.2-1ubuntu0.1', b'1.28.2-1ubuntu0.2'),
+    b'gstreamer1.0-plugins-base-apps': (b'1.28.2-1ubuntu0.1', b'1.28.2-1ubuntu0.2'),
+    b'gstreamer1.0-plugins-base:amd64': (b'1.28.2-1ubuntu0.1', b'1.28.2-1ubuntu0.2'),
+    b'gstreamer1.0-x:amd64': (b'1.28.2-1ubuntu0.1', b'1.28.2-1ubuntu0.2'),
+    b'heif-gdk-pixbuf:amd64': (b'1.21.2-3ubuntu0.6', b'1.21.2-3ubuntu0.7'),
+    b'heif-thumbnailer': (b'1.21.2-3ubuntu0.6', b'1.21.2-3ubuntu0.7'),
+    b'hplip': (b'3.24.4+dfsg0-0ubuntu8.1', b'3.24.4+dfsg0-0ubuntu8.3'),
+    b'hplip-data': (b'3.24.4+dfsg0-0ubuntu8.1', b'3.24.4+dfsg0-0ubuntu8.3'),
+    b'libfreerdp-server3-3:amd64': (b'3.32.1+dfsg-0ubuntu0.26.04.1', b'3.32.2+dfsg-0ubuntu0.26.04.1'),
+    b'libfreerdp3-3:amd64': (b'3.32.1+dfsg-0ubuntu0.26.04.1', b'3.32.2+dfsg-0ubuntu0.26.04.1'),
+    b'libgphoto2-6t64:amd64': (b'2.5.33-1ubuntu1.1', b'2.5.33-1ubuntu1.2'),
+    b'libgphoto2-l10n': (b'2.5.33-1ubuntu1.1', b'2.5.33-1ubuntu1.2'),
+    b'libgphoto2-port12t64:amd64': (b'2.5.33-1ubuntu1.1', b'2.5.33-1ubuntu1.2'),
+    b'libgstreamer-gl1.0-0:amd64': (b'1.28.2-1ubuntu0.1', b'1.28.2-1ubuntu0.2'),
+    b'libgstreamer-plugins-base1.0-0:amd64': (b'1.28.2-1ubuntu0.1', b'1.28.2-1ubuntu0.2'),
+    b'libheif-plugin-aomdec:amd64': (b'1.21.2-3ubuntu0.6', b'1.21.2-3ubuntu0.7'),
+    b'libheif-plugin-aomenc:amd64': (b'1.21.2-3ubuntu0.6', b'1.21.2-3ubuntu0.7'),
+    b'libheif1:amd64': (b'1.21.2-3ubuntu0.6', b'1.21.2-3ubuntu0.7'),
+    b'libhpmud0:amd64': (b'3.24.4+dfsg0-0ubuntu8.1', b'3.24.4+dfsg0-0ubuntu8.3'),
+    b'libnfs14:amd64': (b'5.0.2-1ubuntu1.1', b'5.0.2-1ubuntu1.2'),
+    b'libperl5.40:amd64': (b'5.40.1-7ubuntu0.3', b'5.40.1-7ubuntu0.4'),
+    b'libsane-hpaio:amd64': (b'3.24.4+dfsg0-0ubuntu8.1', b'3.24.4+dfsg0-0ubuntu8.3'),
+    b'libsoup-3.0-0:amd64': (b'3.6.6-1ubuntu0.2', b'3.6.6-1ubuntu0.3'),
+    b'libsoup-3.0-common': (b'3.6.6-1ubuntu0.2', b'3.6.6-1ubuntu0.3'),
+    b'libwinpr3-3:amd64': (b'3.32.1+dfsg-0ubuntu0.26.04.1', b'3.32.2+dfsg-0ubuntu0.26.04.1'),
+    b'linux-generic': (b'7.0.0-42.42', b'7.0.0-43.43'),
+    b'linux-generic-hwe-24.04': (b'7.0.0-42.42', b'7.0.0-43.43'),
+    b'linux-generic-hwe-26.04': (b'7.0.0-42.42', b'7.0.0-43.43'),
+    b'linux-headers-7.0.0-38': (b'7.0.0-38.38', None),
+    b'linux-headers-7.0.0-38-generic': (b'7.0.0-38.38', None),
+    b'linux-headers-7.0.0-43': (None, b'7.0.0-43.43'),
+    b'linux-headers-7.0.0-43-generic': (None, b'7.0.0-43.43'),
+    b'linux-headers-generic': (b'7.0.0-42.42', b'7.0.0-43.43'),
+    b'linux-headers-generic-hwe-26.04': (b'7.0.0-42.42', b'7.0.0-43.43'),
+    b'linux-image-7.0.0-43-generic': (None, b'7.0.0-43.43'),
+    b'linux-image-generic': (b'7.0.0-42.42', b'7.0.0-43.43'),
+    b'linux-image-generic-hwe-26.04': (b'7.0.0-42.42', b'7.0.0-43.43'),
+    b'linux-libc-dev:amd64': (b'7.0.0-42.42', b'7.0.0-43.43'),
+    b'linux-main-modules-v4l2loopback-7.0.0-43-generic': (None, b'7.0.0-43.43'),
+    b'linux-main-modules-zfs-7.0.0-43-generic': (None, b'7.0.0-43.43'),
+    b'linux-modules-7.0.0-43-generic': (None, b'7.0.0-43.43'),
+    b'linux-perf': (b'7.0.0-42.42', b'7.0.0-43.43'),
+    b'linux-tools-7.0.0-38': (b'7.0.0-38.38', None),
+    b'linux-tools-7.0.0-38-generic': (b'7.0.0-38.38', None),
+    b'linux-tools-7.0.0-43': (None, b'7.0.0-43.43'),
+    b'linux-tools-7.0.0-43-generic': (None, b'7.0.0-43.43'),
+    b'linux-tools-common': (b'7.0.0-42.42', b'7.0.0-43.43'),
+    b'ncurses-term': (None, b'6.6+20251231-1'),
+    b'openssh-server': (None, b'1:10.2p1-2ubuntu3.8'),
+    b'openssh-sftp-server': (None, b'1:10.2p1-2ubuntu3.8'),
+    b'perl': (b'5.40.1-7ubuntu0.3', b'5.40.1-7ubuntu0.4'),
+    b'perl-base': (b'5.40.1-7ubuntu0.3', b'5.40.1-7ubuntu0.4'),
+    b'perl-modules-5.40': (b'5.40.1-7ubuntu0.3', b'5.40.1-7ubuntu0.4'),
+    b'printer-driver-hpcups': (b'3.24.4+dfsg0-0ubuntu8.1', b'3.24.4+dfsg0-0ubuntu8.3'),
+    b'printer-driver-postscript-hp': (b'3.24.4+dfsg0-0ubuntu8.1', b'3.24.4+dfsg0-0ubuntu8.3'),
+    b'python3-pip-whl': (None, b'25.1.1+dfsg-1ubuntu2'),
+    b'python3-setuptools-whl': (None, b'78.1.1-0.1build1'),
+    b'python3.14-venv': (None, b'3.14.4-1ubuntu0.2'),
+    b'ssh-import-id': (None, b'5.11-0ubuntu4'),
+}
+
+
 def require(value, reason):
     if not value: raise ValueError(reason)
 
@@ -276,10 +345,20 @@ def maintenance_transition(previous, context, inventory):
     require(len(set(names)) == len(names), 'runtime_inventory_duplicates')
     current = platform.digest(b'\n'.join(sorted(rows))+b'\n')
     require(current == context['dpkg_inventory_sha256'] and current in
-            {INVENTORY_PREVIOUS, INVENTORY_BROTLI, INVENTORY_OCT30, INVENTORY_NOV05, INVENTORY_NOV08},
+            {INVENTORY_PREVIOUS, INVENTORY_BROTLI, INVENTORY_OCT30, INVENTORY_NOV05, INVENTORY_NOV08, INVENTORY_NOV14},
             'runtime_unreviewed_inventory')
     old_context = dict(context, dpkg_inventory_sha256=INVENTORY_PREVIOUS)
-    if current == INVENTORY_NOV08:
+    if current == INVENTORY_NOV14:
+        require(context['host']['kernel'] == NOV14_KERNEL, 'runtime_reviewed_kernel')
+        packages = dict(row.split(b'\t') for row in rows)
+        for name, (before, after) in NOV14_PACKAGES.items():
+            require(packages.get(name) == after, 'runtime_nov14_package_version')
+            if before is None: packages.pop(name)
+            else: packages[name] = before
+        rows = [name+b'\t'+version for name, version in packages.items()]
+        require(platform.digest(b'\n'.join(sorted(rows))+b'\n') == INVENTORY_NOV08,
+                'runtime_nov14_inventory_delta')
+    if current in {INVENTORY_NOV08, INVENTORY_NOV14}:
         packages = dict(row.split(b'\t') for row in rows)
         for name, (before, after) in NOV08_PACKAGES.items():
             require(packages.get(name) == after, 'runtime_nov08_package_version')
@@ -287,7 +366,7 @@ def maintenance_transition(previous, context, inventory):
         rows = [name+b'\t'+version for name, version in packages.items()]
         require(platform.digest(b'\n'.join(sorted(rows))+b'\n') == INVENTORY_NOV05,
                 'runtime_nov08_inventory_delta')
-    if current in {INVENTORY_NOV05, INVENTORY_NOV08}:
+    if current in {INVENTORY_NOV05, INVENTORY_NOV08, INVENTORY_NOV14}:
         packages = dict(row.split(b'\t') for row in rows)
         for name, (before, after) in NOV05_PACKAGES.items():
             require(packages.get(name) == after, 'runtime_nov05_package_version')
@@ -295,8 +374,9 @@ def maintenance_transition(previous, context, inventory):
         rows = [name+b'\t'+version for name, version in packages.items()]
         require(platform.digest(b'\n'.join(sorted(rows))+b'\n') == INVENTORY_OCT30,
                 'runtime_nov05_inventory_delta')
-    if current in {INVENTORY_OCT30, INVENTORY_NOV05, INVENTORY_NOV08}:
-        require(context['host']['kernel'] == OCT30_KERNEL[1], 'runtime_reviewed_kernel')
+    if current in {INVENTORY_OCT30, INVENTORY_NOV05, INVENTORY_NOV08, INVENTORY_NOV14}:
+        expected_kernel = NOV14_KERNEL if current == INVENTORY_NOV14 else OCT30_KERNEL[1]
+        require(context['host']['kernel'] == expected_kernel, 'runtime_reviewed_kernel')
         packages = dict(row.split(b'\t') for row in rows)
         for name, (before, after) in OCT30_PACKAGES.items():
             require(packages.get(name) == after, 'runtime_oct30_package_version')
@@ -321,7 +401,11 @@ def maintenance_transition(previous, context, inventory):
             'runtime_inventory_delta')
     record['dpkg_inventory_sha256'] = current
     record['kernel'] = context['host']['kernel']
-    if current == INVENTORY_NOV08:
+    if current == INVENTORY_NOV14:
+        record['review_notes'] = (
+            'Exact reviewed 14 November package inventory and host kernel42-to43 transition. '
+            'Protected predecessor and existing hypervisor, image and host identity bindings retained.')
+    elif current == INVENTORY_NOV08:
         record['review_notes'] = (
             'Exact reviewed 8 November eight-package transition through the 5 November inventory. '
             'Protected predecessor and existing host, hypervisor and image bindings retained. '
