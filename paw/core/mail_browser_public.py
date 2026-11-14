@@ -826,23 +826,22 @@ class Mediation:
         self._existing.Mediation.control(self,op,**fields)
     def transaction(self, kind, fields):
         return self._existing.Mediation.transaction(self,kind,fields)
-    def allow(self, kind, address, milliseconds, *, plan=None):
+    def allow(self, kind, address, milliseconds, *, plan=None, timing=None):
         if self.approval is not None:
             from . import mail_browser_native as native
             need(native.scope(self.approval['release_sha'],self.approval['batch_id'])==self.approval,
                  'mail_public_lease_scope_changed')
+        if timing is not None:timing['scope_checked']=time.monotonic_ns()
         if self.uplink is not None:
             from prepare_uplink import current_uplink
             need(canonical(current_uplink()) == canonical(self.uplink),'mail_public_uplink_changed')
-        # Lists are reset on every operation, not accumulated. Both BPF and
-        # duplicate expiring packet guards must admit the exact numeric tuple.
+        if timing is not None:timing['before_bpf']=time.monotonic_ns()
         subprocess.run(['/usr/bin/systemctl','set-property','--runtime',self.worker.unit,
             'IPAddressAllow=', 'IPAddressAllow='+address+'/32'], check=True,capture_output=True,timeout=2)
         if plan is not None:
-            # BPF installation has its own bounded latency. Start the existing
-            # two-second nft commit reserve only after that operation, so a
-            # relative timeout can never extend the absolute Root lease.
-            milliseconds=self._existing.kernel_lease_milliseconds(plan,time.monotonic_ns())
+            now=time.monotonic_ns()
+            if timing is not None:timing['after_bpf']=now
+            milliseconds=self._existing.kernel_lease_milliseconds(plan,now)
         self.control('lease',kind=kind,address=address,milliseconds=milliseconds)
     def resolver(self, host, deadline_ns):
         import secrets
@@ -870,12 +869,15 @@ class Mediation:
         # seed/method/envelope before invoking our trusted resolver callback.
         self.budget.request(self.slot)
         before=len(self.observations); reserved=False
+        timing={'request':time.monotonic_ns()}
         try:
             plan=self.ledger.admit_resolved(request,self.resolver)
             plan=self.ledger.lease(plan,time.monotonic_ns())
             remaining=self.budget.reserve(self.slot);reserved=True
-            ms=self._existing.kernel_lease_milliseconds(plan,time.monotonic_ns())
-            self.allow(plan['scheme'],plan['peer_ipv4'],ms,plan=plan)
+            timing.update(dns_done=plan['issued_ns'],expires=plan['expires_ns'],before_lease=time.monotonic_ns())
+            ms=self._existing.kernel_lease_milliseconds(plan,timing['before_lease'])
+            self.allow(plan['scheme'],plan['peer_ipv4'],ms,plan=plan,timing=timing)
+            timing['lease_committed']=time.monotonic_ns()
             fields,body=self.transaction('http',{'plan':plan,'remaining_bytes':remaining})
             need(set(fields) == {'request_sequence','operation','transport'} and
                  type(fields['transport']) is dict,'mail_public_transport_response')
@@ -891,12 +893,12 @@ class Mediation:
             self.observations.append({'operation':'http','request':dict(request),'url_sha256':plan['url_sha256'],
                 'status':metadata['http_status'],'body_file':name,'body_bytes':len(body),'body_sha256':sha(body),
                 'peer_ipv4':facts['peer_ipv4'],'tls_verified_by_broker':facts['tls_verified_by_broker'],
-                'response_headers':metadata['headers'],'tls_fingerprint_source':'broker, not browser'})
+                'response_headers':metadata['headers'],'tls_fingerprint_source':'broker, not browser','timing_ns':timing})
             return {k:metadata[k] for k in ['status','slot','http_status','headers','body_bytes','body_sha256']},body
         except (OSError,ValueError,KeyError,TypeError) as error:
             if reserved:self.budget.uncertain(self.slot)
             self.observations.append({'operation':'refused_or_unavailable','request':dict(request),
-                'reason':type(error).__name__+':'+str(error)[:256],'after_observation':before})
+                'reason':type(error).__name__+':'+str(error)[:256],'after_observation':before,'timing_ns':timing})
             # No retry/reconnection or new authority after unknown I/O. A
             # bounded diagnostic may later publish only after independent stop.
             self.ledger.closed=True
@@ -1027,12 +1029,16 @@ def run_capture(approval, binding, request, budget):
                 value=vm['channel'].call('poll',seconds=5);request_frame=value.get('network_request')
                 need(not network_closed or request_frame is None,'mail_public_network_after_snapshot')
                 if value.get('done') is True:record['guest']=value;break
+                if request_frame is not None and 'first_request_ns' not in record:
+                    record['first_request_ns']=time.monotonic_ns()
                 if preparation is None and (request_frame is not None or time.monotonic_ns()-began>=7*10**9):
                     preparation=NetworkPreparation(job,epoch,release,mode,actors)
                 if preparation is not None and mediation is None and preparation.poll():
+                    record['roles_ready_ns']=time.monotonic_ns()
                     mediation=Mediation(preparation.owner,preparation.worker,epoch,began,request['url'],
                         budget,budget_slot,out,None if owned else approval['context']['uplink'],approval,
                         owned_rehearsal=owned)
+                    record['guard_armed_ns']=time.monotonic_ns()
                 if value.get('network_quiescent') is True and not network_closed:
                     need(mediation is not None and request_frame is None,'mail_public_quiescent_pending')
                     mediation.stop();network_closed=True;record['network_stopped_before_capture']=True

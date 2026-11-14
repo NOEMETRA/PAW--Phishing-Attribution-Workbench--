@@ -539,6 +539,39 @@ class PublicBoundary(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'expired_kernel_lease'):
                 obj.allow('https','93.184.216.34',3000,plan={'expires_ns':6*10**9})
         self.assertFalse(events)
+    def test_refusal_timing_identifies_which_kernel_lease_check_failed(self):
+        from paw.core import browser_owned_broker as existing
+
+        seed = SEEDS[0]
+        for before_bpf in (True, False):
+            with self.subTest(before_bpf=before_bpf):
+                obj = object.__new__(m.Mediation)
+                obj.uplink = obj.approval = None
+                obj._existing = existing
+                obj.worker = SimpleNamespace(unit='inert.service')
+                obj.budget = m.BatchBudget([seed] * 3)
+                obj.slot = 0
+                obj.observations = []
+                plan = {'issued_ns': 11_000_000_000, 'expires_ns': 15_000_000_000,
+                        'scheme': 'https', 'peer_ipv4': '93.184.216.34'}
+                obj.ledger = SimpleNamespace(admit_resolved=lambda *_: plan, lease=lambda *_: plan)
+                obj.control = lambda *a, **kw: self.fail('expired nft lease installed')
+                obj.transaction = lambda *a, **kw: self.fail('expired HTTP transaction dispatched')
+                clock = [11_100_000_000, 11_200_000_000,
+                         13_000_000_000 if before_bpf else 12_000_000_000]
+                if not before_bpf:
+                    clock += [12_100_000_000, 12_200_000_000, 13_000_000_000]
+                with patch.object(m.time, 'monotonic_ns', side_effect=clock), \
+                     patch.object(m.subprocess, 'run') as run:
+                    with self.assertRaisesRegex(ValueError, 'expired_kernel_lease'):
+                        obj.response({'url': seed})
+                timing = obj.observations[0]['timing_ns']
+                self.assertEqual(timing['dns_done'], plan['issued_ns'])
+                self.assertEqual('after_bpf' in timing, not before_bpf)
+                self.assertNotIn('lease_committed', timing)
+                self.assertEqual(run.call_count, 0 if before_bpf else 1)
+                self.assertTrue(obj.ledger.closed)
+
     def test_actual_shared_controller_denies_download_before_any_navigation(self):
         runtime=m.PublicRuntime();runtime.seed=SEEDS[0];runtime.nonce=E
         sent=[];runtime._send=sent.append;runtime._request=lambda _:self.fail('premature network')
