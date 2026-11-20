@@ -30,7 +30,7 @@ def main():
             if response == 'stream':
                 self.send_response(200)
                 self.end_headers()
-                for _ in range(400):
+                for _ in range(800):
                     try:
                         self.wfile.write(b'x')
                     except (BrokenPipeError, ConnectionResetError):
@@ -93,6 +93,8 @@ def main():
                     assert event['check_id'] in check_ids and event['external_delivery'] == 'not_attempted'
             return check_ids, [e['alert_id'] for e in events if e['event'] == 'alert_committed']
 
+        invoke('acknowledge', '--campaign', 'absent', '--alert-id', '1', expected=1)
+        assert not (root / 'saved.db').exists()
         invoke('add', '--case', 'lab', '--url', origin + '/owned')
         assert 'outside the selected' in invoke('run', '--origin', 'http://127.0.0.1:1', expected=1)
         assert requests.empty()
@@ -119,6 +121,17 @@ def main():
         snapshot = history()
         assert [r['status'] for r in reversed(snapshot['checks'])] == ['up','up','down','up','error','up']
         assert sorted(r['alert_type'] for r in snapshot['alerts']) == ['changed','down','up']
+        selected = snapshot['alerts'][0]
+        assert selected['acknowledged'] == 0
+        identifier = str(selected['id'])
+        invoke('acknowledge', '--campaign', campaign.swapcase(), '--alert-id', identifier, expected=1)
+        assert history()['alerts'] == snapshot['alerts']
+        receipt = json.loads(invoke('acknowledge', '--campaign', campaign, '--alert-id', identifier))
+        assert receipt == {'campaign_id':campaign, 'alert_id':selected['id'], 'status':'acknowledged'}
+        receipt = json.loads(invoke('acknowledge', '--campaign', campaign, '--alert-id', identifier))
+        assert receipt['status'] == 'already_acknowledged'
+        expected_alerts = [dict(selected, acknowledged=1), *snapshot['alerts'][1:]]
+        assert history()['alerts'] == expected_alerts
         first_ids, emitted_alerts = stop(first)
         assert emitted_alerts == [r['id'] for r in reversed(snapshot['alerts'])]
         assert first_ids == [r['id'] for r in reversed(snapshot['checks'])]
@@ -151,6 +164,7 @@ def main():
         second_ids, second_alerts = stop(second)
         final = history()
         assert second_alerts == [final['alerts'][0]['id']]
+        assert next(alert for alert in final['alerts'] if alert['id'] == selected['id']) == expected_alerts[0]
         assert final['alerts'][0]['recorded_check_id'] == second_ids[0]
         assert final['alerts'][0]['source_check_available'] is True
         assert final['alerts'][0]['external_delivery_at_commit'] == 'not_attempted'

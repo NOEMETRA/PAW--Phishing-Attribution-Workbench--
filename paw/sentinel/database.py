@@ -30,14 +30,16 @@ class _InvalidUTF8Text(bytes):
 class CampaignDatabase:
     """SQLite database for managing monitored phishing campaigns."""
 
-    def __init__(self, db_path: str = "sentinel.db", *, read_only: bool = False, limits=None):
-        if type(read_only) is not bool: raise ValueError('read_only must be a boolean')
+    def __init__(self, db_path: str = "sentinel.db", *, read_only: bool = False, limits=None, initialize: bool = True):
+        if type(read_only) is not bool or type(initialize) is not bool:
+            raise ValueError('read_only and initialize must be booleans')
         self.limits = _resource_limits(limits)
         self._json_budget = ContextVar('sentinel_json_budget', default=None)
         path = _storage_path(db_path)
         self.db_path = str(path)
         self.read_only = read_only
-        metadata = _admit_storage_path(path, must_exist=read_only, directory_as_missing=read_only)
+        existing_only = read_only or not initialize
+        metadata = _admit_storage_path(path, must_exist=existing_only, directory_as_missing=existing_only)
         created = metadata is None
         if created:
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -58,7 +60,8 @@ class CampaignDatabase:
         # Failed creation leaves its target for inspection: another initializer
         # can acquire the same file after rollback, so unlink is not safe here.
         self._require_stopped_storage()
-        self._init_db()
+        if initialize:
+            self._init_db()
 
     def _admit_database(self):
         metadata = _admit_storage_path(Path(self.db_path), must_exist=True)
@@ -503,22 +506,36 @@ class CampaignDatabase:
         """Update campaign status."""
         self._writer_text(campaign_id, 'campaign_id', nonblank=True)
         self._writer_text(status, 'status', optional=True, nonblank=True)
-        return self._transition('campaigns', campaign_id, 'status', status)
+        return self._transition('campaigns', campaign_id, 'status', status) == 'updated'
 
-    def _transition(self, table, identifier, column, value):
+    def _transition(self, table, identifier, column, value, *, campaign_id=None):
+        # Table and column names come from fixed internal callers.
+        where = 'id=? COLLATE BINARY'
+        keys = (identifier,)
+        if campaign_id is not None:
+            where += ' AND campaign_id=? COLLATE BINARY'
+            keys += (campaign_id,)
+        select = f'SELECT {column} FROM {table} WHERE {where}'
         with self.connection() as conn:
             conn.execute('BEGIN IMMEDIATE')
-            rows = conn.execute(f'SELECT {column} FROM {table} WHERE id=? COLLATE BINARY', (identifier,)).fetchall()
-            if len(rows) > 1: raise ValueError('Ambiguous Sentinel transition target')
-            if not rows or rows == [(value,)]:
-                conn.rollback(); return False
-            cursor = conn.execute(f'UPDATE {table} SET {column}=? WHERE id=? COLLATE BINARY', (value, identifier))
+            kind = conn.execute('SELECT type FROM sqlite_master WHERE name=? COLLATE NOCASE',
+                                (table,)).fetchone()
+            if kind != ('table',):
+                raise ValueError('Sentinel transition requires a saved table')
+            rows = conn.execute(select, keys).fetchall()
+            if len(rows) > 1:
+                raise ValueError('Ambiguous Sentinel transition target')
+            if not rows:
+                return 'missing'
+            if rows == [(value,)]:
+                return 'unchanged'
+            cursor = conn.execute(f'UPDATE {table} SET {column}=? WHERE {where}', (value, *keys))
             if cursor.rowcount == 0:
-                conn.rollback(); return False
-            if (cursor.rowcount != 1 or conn.execute(f'SELECT {column} FROM {table} WHERE id=? COLLATE BINARY',
-                    (identifier,)).fetchall() != [(value,)]):
+                conn.rollback()
+                return 'rejected'
+            if cursor.rowcount != 1 or conn.execute(select, keys).fetchall() != [(value,)]:
                 raise RuntimeError('Sentinel transition did not persist; transaction rolled back')
-            return True
+            return 'updated'
 
     def record_check(self, campaign_id: str, status: str, response_time: float = None,
                     http_status: int = None, content_hash: str = None,
@@ -817,7 +834,18 @@ class CampaignDatabase:
     def acknowledge_alert(self, alert_id: int) -> bool:
         """Mark an alert as acknowledged."""
         self._writer_number(alert_id, 'alert_id', minimum=1, integer=True)
-        return self._transition('alerts', alert_id, 'acknowledged', 1)
+        return self._transition('alerts', alert_id, 'acknowledged', 1) == 'updated'
+
+    def acknowledge_campaign_alert(self, campaign_id: str, alert_id: int) -> str:
+        """Acknowledge the selected campaign alert in one transaction."""
+        self._writer_text(campaign_id, 'campaign_id', nonblank=True)
+        self._writer_number(alert_id, 'alert_id', minimum=1, integer=True)
+        result = self._transition('alerts', alert_id, 'acknowledged', 1, campaign_id=campaign_id)
+        if result == 'missing':
+            raise ValueError('Alert not found for the selected campaign')
+        if result == 'rejected':
+            raise RuntimeError('Sentinel acknowledgment did not persist; transaction rolled back')
+        return 'acknowledged' if result == 'updated' else 'already_acknowledged'
 
     def _expire_check_body(self, conn, identifier):
         # Only rewrite text metadata in the format emitted by the monitor.

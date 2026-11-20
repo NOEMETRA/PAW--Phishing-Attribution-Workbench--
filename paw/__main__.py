@@ -351,13 +351,14 @@ For help: paw help <command>
         p_update.add_argument("--case", required=True, help="Path to case directory")
 
         # MONITOR command (Sentinel)
-        p_monitor = sub.add_parser("monitor", help="Stored campaigns/local integrity; service start/stop unavailable")
-        p_monitor.add_argument("action", choices=["run", "start", "stop", "status", "add", "remove", "list", "check", "files", "integrity", "history"],
+        p_monitor = sub.add_parser("monitor", help="Sentinel campaign monitoring and local evidence")
+        p_monitor.add_argument("action", choices=["run", "start", "stop", "status", "add", "remove", "list", "check", "files", "integrity", "history", "acknowledge"],
                               help="Monitoring action (start/stop unavailable; no persistent service control)")
         p_monitor.add_argument("--origin", action="append", help="Owned literal loopback/private HTTP(S) origin for foreground run (repeatable)")
         p_monitor.add_argument("--case", help="Case ID to monitor (for add action)")
         p_monitor.add_argument("--url", help="URL to monitor (for add action)")
-        p_monitor.add_argument("--campaign", help="Campaign ID (required for history, optional for check)")
+        p_monitor.add_argument("--campaign", help="Campaign ID (required for history and acknowledge, optional for check)")
+        p_monitor.add_argument("--alert-id", type=int, help="Alert ID (required for acknowledge)")
 
         # GEOGRAPHIC command (Sentinel Intelligence)
         p_geo = sub.add_parser("geographic", aliases=["geo"], help="Describe unverified stored geographic observations")
@@ -562,6 +563,20 @@ For help: paw help <command>
             from .core.trace import update_report
             update_report(args.case)
         elif args.cmd == "monitor":
+            if args.action == "acknowledge":
+                if not args.campaign or not args.campaign.strip() or args.alert_id is None:
+                    raise ValueError("--campaign and --alert-id are required for acknowledge")
+                if not 0 < args.alert_id < 2**63:
+                    raise ValueError("--alert-id must fit a positive SQLite integer")
+                if args.case is not None or args.url is not None or args.origin:
+                    raise ValueError("acknowledge accepts only --campaign and --alert-id")
+                from .sentinel import CampaignDatabase, SentinelConfig
+                database = CampaignDatabase(**SentinelConfig().get_database_options(), initialize=False)
+                result = database.acknowledge_campaign_alert(args.campaign, args.alert_id)
+                print(json.dumps({'campaign_id':args.campaign, 'alert_id':args.alert_id, 'status':result}))
+                return
+            if args.alert_id is not None:
+                raise ValueError("--alert-id applies only to monitor acknowledge")
             if args.action == "run":
                 if any(value is not None for value in (args.case, args.campaign, args.url)):
                     raise ValueError("monitor run selects all active campaigns and accepts only --origin")
@@ -729,7 +744,7 @@ Commands:
   forensic    Strict profile + exports + optional anchoring
   detonate    Safely detonate URLs from analyzed case
   canary      Unavailable: collection awaits isolated lab storage
-  monitor     Stored campaigns/local integrity; service start/stop unavailable
+  monitor     Sentinel campaigns and local evidence; service start/stop unavailable
   geographic  Generate geographic intelligence reports
   query       Search case database
   export      Export case in various formats
@@ -759,6 +774,7 @@ USAGE:
   paw monitor <action> [options]
 
 ACTIONS:
+  acknowledge         Mark a local alert as seen; requires --campaign and --alert-id
   run                 Foreground Linux lab monitor; requires --origin, stops on SIGTERM/SIGINT
   start, stop         Unavailable: no supervised persistent service control
   list, status        Passive stored campaign/count reads; runtime state unknown

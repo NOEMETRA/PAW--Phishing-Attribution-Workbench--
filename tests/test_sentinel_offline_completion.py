@@ -43,6 +43,28 @@ class SentinelOfflineCompletion(unittest.TestCase):
         self.assertFalse(self.db.acknowledge_alert(1)); self.assertEqual(self.source(), before)
         self.assertEqual(self.db.get_campaign(self.other)['status'], 'active')
 
+    def test_acknowledgment_opens_existing_alert_table_without_migration(self):
+        saved = self.root/'legacy.db'
+        with closing(sqlite3.connect(saved)) as conn, conn:
+            conn.execute("CREATE TABLE alerts (id INTEGER, campaign_id TEXT COLLATE NOCASE, acknowledged INTEGER)")
+            conn.execute("INSERT INTO alerts VALUES (1,'legacy',0)")
+        writer = CampaignDatabase(str(saved), initialize=False)
+        before = saved.read_bytes()
+        with self.assertRaisesRegex(ValueError, 'Alert not found'):
+            writer.acknowledge_campaign_alert('LEGACY', 1)
+        self.assertEqual(saved.read_bytes(), before)
+        with writer.connection() as conn:
+            conn.execute("CREATE TRIGGER refused BEFORE UPDATE ON alerts BEGIN SELECT RAISE(IGNORE); END")
+        with self.assertRaisesRegex(RuntimeError, 'acknowledgment did not persist'):
+            writer.acknowledge_campaign_alert('legacy', 1)
+        with writer.connection() as conn:
+            self.assertEqual(conn.execute("SELECT * FROM alerts").fetchone(), (1, 'legacy', 0))
+            conn.execute("DROP TRIGGER refused")
+        self.assertEqual(writer.acknowledge_campaign_alert('legacy', 1), 'acknowledged')
+        self.assertEqual(writer.acknowledge_campaign_alert('legacy', 1), 'already_acknowledged')
+        with writer.connection() as conn:
+            self.assertEqual(conn.execute("SELECT name FROM sqlite_master").fetchall(), [('alerts',)])
+
     def test_mutator_admission_precedes_database_access(self):
         operations = [lambda: self.db.update_campaign_status(True, 'paused'),
             lambda: self.db.update_campaign_status(self.campaign, ''),

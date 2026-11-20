@@ -23,6 +23,17 @@ sconosciuto. `external_delivery_at_commit` riporta lo stato registrato al
 salvataggio dell’avviso. Per gli archivi privi di questa informazione vale
 `unknown`. La presa visione locale è registrata in `acknowledged`.
 
+```bash
+paw monitor acknowledge --campaign ID --alert-id 42
+```
+
+Usare l’ID dell’avviso riportato dalla cronologia. Il comando restituisce
+`acknowledged` alla prima conferma e `already_acknowledged` alle successive.
+Un avviso assente o appartenente a un’altra campagna produce un errore.
+La conferma aggiorna il record già salvato e resta visibile dopo il riavvio.
+Lo stato di consegna esterna è registrato nel campo distinto
+`external_delivery_at_commit`.
+
 Per controllare i casi locali a elaborazione conclusa:
 
 ```bash
