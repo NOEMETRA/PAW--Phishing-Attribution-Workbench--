@@ -263,7 +263,7 @@ class _Forms(HTMLTextContextParser):
                 self.issue('form_count_limit'); self.stack.append(None)
             else:
                 form = self.node(tag, attrs)
-                form.update(index=len(self.result['forms']), inputs=[], field_types={},
+                form.update(index=len(self.result['forms']), nested_form=bool(self.stack), inputs=[], field_types={},
                             payment_indicators=[], suspicious_elements=[])
                 self.result['forms'].append(form); self.stack.append(form)
         elif tag in self.CONTROLS:

@@ -32,10 +32,11 @@ class CorpusEvaluation(unittest.TestCase):
             self.labels.append({'sha256':hashlib.sha256(original).hexdigest(), 'split':'holdout',
                                 'group':str(i), 'label':label, 'label_basis':'constructed fixture'})
 
-    def evaluate(self):
+    def evaluate(self, *, static_triage=False):
         file = self.root/'labels.json'
         file.write_text(json.dumps(self.labels))
-        return evaluator['evaluate'](evaluator['read_labels'](file), self.cases, 'strict', 'holdout')
+        return evaluator['evaluate'](evaluator['read_labels'](file), self.cases, 'strict', 'holdout',
+                                     static_triage=static_triage)
 
     def test_denominators_exclude_unresolved_and_abstention_stays_visible(self):
         result = self.evaluate()
@@ -44,6 +45,20 @@ class CorpusEvaluation(unittest.TestCase):
         self.assertEqual(result['decisions_by_independent_label']['phishing']['Inconclusive'], 1)
         self.labels[0]['label'] = 'unresolved'
         self.assertIsNone(self.evaluate()['false_referrals']['rate'])
+
+    def test_static_triage_keeps_its_own_outcomes(self):
+        with self.assertRaisesRegex(ValueError, 'requires a saved mail_triage'):
+            self.evaluate(static_triage=True)
+        for index, status in enumerate(('no_supported_signal','review','not_evaluated')):
+            case = self.cases/f'case-{index}'
+            (case/'mail_triage.json').write_text(json.dumps({'schema_version':1,'referral_status':status}))
+            seal_case(case)
+        result = self.evaluate(static_triage=True)
+        self.assertEqual(result['referral_rule'], 'static_mail_triage')
+        self.assertEqual(result['false_referrals']['count'], 0)
+        self.assertEqual(result['missed_referrals']['count'], 0)
+        self.assertEqual(result['decisions_by_independent_label']['unresolved']['not_evaluated'], 1)
+        self.assertEqual(self.evaluate()['missed_referrals']['count'], 1)
 
     def test_group_leakage_and_unsealed_scores_refused(self):
         self.labels[0].update(group='1', split='development')

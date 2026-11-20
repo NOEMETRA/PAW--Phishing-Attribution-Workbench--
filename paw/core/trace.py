@@ -1079,6 +1079,10 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
     if abuse: score['coverage']['not_evaluated'].append('arf_xarf_conformance')
     score['assessment_status'] = 'partial'
     write_json(os.path.join(case_dir, 'campaign_correlations.json'), correlations)
+    from .mail_triage import evaluate_mail_triage
+    triage = evaluate_mail_triage(html_result, body_inventory, headers, auth.get('from_domain'),
+                                 mime_result['metadata']['status'])
+    atomic_json(os.path.join(case_dir, 'mail_triage.json'), triage)
     score['coverage']['stages'] = stage_status
     write_json(os.path.join(case_dir, 'analysis_coverage.json'), score['coverage'])
     write_json(os.path.join(case_dir,"report/score.json"), score)
@@ -1113,6 +1117,9 @@ def trace_one(eml_path, lang, stix, abuse, anchor, no_egress, profile="default",
     exec_md += "\nScore components:\n\n" + '\n'.join(
         f"- {name}: {value:.12g} — {score['component_sources'][name]}" for name, value in score['score_components'].items()) + '\n'
     exec_md += "\n" + "\n".join(f"- {name}: {value['status']}" for name, value in stage_status.items()) + "\n"
+    exec_md += "\n## Mail review referral\n"
+    exec_md += f"{triage['referral_status']} (coverage: {triage['coverage']['status']}). "
+    exec_md += "See mail_triage.json for evidence references.\n"
     exec_md += "\n## HTML observation coverage\n"
     exec_md += markdown_json(stage_status['html_observations'])
     # Add detonation/canary sections if they exist

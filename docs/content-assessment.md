@@ -93,3 +93,30 @@ POSIX skips) and eight real full-CLI cases. A fresh 20-original-EML offline run
 verified originals and seals, unchanged auxiliary artifacts, URL/evidence
 inventories and final scores. It took 23.803 s with 120.93 MiB sampled tree RSS;
 these observations do not establish a speedup or accuracy.
+
+## Evidence-linked mail review referral
+
+The installed mail analysis now saves `mail_triage.json` in the sealed case.
+The executive report and case API expose the result. The first rule refers a
+message for review when parser-selected outer HTML declares a POST form with a
+named password input and an absolute HTTP(S) action on a different registrable
+domain from the sole parsed From. Domain comparison uses the bundled public and
+private suffix snapshot. The From remains an unverified header identity.
+Findings identify the MIME part, the hash and path of its captured text, and the
+parser coordinates of the form and the input.
+
+Partial MIME/form evidence and nested forms limit coverage. A structurally
+admitted HTML part can supply positive evidence from its captured, charset-decoded
+text while its payload transfer remains partial. The finding retains that status.
+Without a finding, partial evidence yields `not_evaluated`. Duplicate action
+or method declarations, direct disabled or reassigned controls, and inert
+comment or template markup cannot satisfy the rule. Coverage refers to the
+supported parser view. External identity providers and forwarded material can
+look similar in static markup. The result is a human review referral with
+`calibrated: false`. Sender authentication, actual browser behavior and
+infrastructure attribution continue to have their own evidence.
+
+`tools/evaluate_mail_corpus.py --static-triage` evaluates this referral separately.
+Constructed CLI fixtures verify the evidence bindings and rule exclusions.
+Use independently labelled development data for rule changes and reserve a
+fresh holdout for estimating referral error rates.
