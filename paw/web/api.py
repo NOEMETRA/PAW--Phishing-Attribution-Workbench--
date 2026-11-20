@@ -19,6 +19,7 @@ from typing import Literal
 from fastapi import BackgroundTasks, FastAPI, File, HTTPException, UploadFile, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.datastructures import Headers
 from urllib.parse import urlsplit
 from pydantic import BaseModel, Field
 from ..core.runtime import RunLimits, supervise, preserve_interrupted, read_progress
@@ -27,6 +28,63 @@ from ..core.job_registry import control_path, case_owner, job_state, controls
 from ..core.dkim_keys import snapshot_key_bundle
 from ..core.index import describe_fingerprint
 from ..core.consumer_views import read_artifact_json, read_artifact_text, assessment_view, ReadBudget
+
+EMAIL_UPLOAD_BYTES = 25 * 1024**2
+SOURCE_UPLOAD_BYTES = 16 * 1024**2
+UPLOAD_ENVELOPE_BYTES = {
+    '/api/upload': EMAIL_UPLOAD_BYTES + 65536,
+    '/api/sources/upload': SOURCE_UPLOAD_BYTES + 65536,
+}
+
+
+class UploadEnvelope:
+    """Validate framing and cap the stream before multipart parsing."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope['type'] != 'http' or scope['method'] != 'POST':
+            await self.app(scope, receive, send)
+            return
+        path = scope['path']
+        prefix = scope.get('root_path', '').rstrip('/')
+        if prefix and path.startswith(prefix + '/'):
+            path = path[len(prefix):]
+        limit = UPLOAD_ENVELOPE_BYTES.get(path)
+        if limit is None:
+            await self.app(scope, receive, send)
+            return
+        headers = Headers(scope=scope)
+        lengths = headers.getlist('content-length')
+        if 'transfer-encoding' in headers or not lengths:
+            response = JSONResponse({'detail': 'Fixed Content-Length required for upload'}, status_code=411)
+            await response(scope, receive, send)
+            return
+        if len(lengths) != 1 or not lengths[0].isascii() or not lengths[0].isdecimal():
+            response = JSONResponse({'detail': 'Invalid Content-Length'}, status_code=400)
+            await response(scope, receive, send)
+            return
+        if len(lengths[0]) > 10 or int(lengths[0]) > limit:
+            response = JSONResponse({'detail': 'Multipart envelope exceeds budget'}, status_code=413)
+            await response(scope, receive, send)
+            return
+        declared = int(lengths[0])
+        received = 0
+
+        async def bounded_receive():
+            nonlocal received
+            message = await receive()
+            if message['type'] == 'http.request':
+                received += len(message.get('body', b''))
+                if received > limit:
+                    raise HTTPException(413, 'Multipart envelope exceeds budget')
+                if received > declared or (not message.get('more_body') and received != declared):
+                    raise HTTPException(400, 'Multipart length differs from Content-Length')
+            return message
+
+        await self.app(scope, bounded_receive, send)
+
 
 @asynccontextmanager
 async def lifespan(application):
@@ -46,6 +104,7 @@ async def lifespan(application):
     yield
 
 app = FastAPI(title='PAW', version='2.0.0', lifespan=lifespan)
+app.add_middleware(UploadEnvelope)
 STATIC_DIR = Path(__file__).parent/'static'
 app.mount('/assets', StaticFiles(directory=STATIC_DIR), name='assets')
 
@@ -57,14 +116,6 @@ async def local_boundary(request: Request, call_next):
     origin = request.headers.get('origin')
     if origin and origin != str(request.base_url).rstrip('/'):
         return JSONResponse({'detail':'Same-origin requests required'}, status_code=403)
-    upload_limits = {'/api/upload': 25 * 1024**2, '/api/sources/upload': 16 * 1024**2}
-    if request.method == 'POST' and request.url.path in upload_limits:
-        length = request.headers.get('content-length', '')
-        # Bound the multipart envelope before FastAPI spools/parses any body.
-        if request.headers.get('transfer-encoding') or not length.isascii() or not length.isdecimal():
-            return JSONResponse({'detail': 'Fixed Content-Length required for upload'}, status_code=411)
-        if len(length) > 10 or int(length) > upload_limits[request.url.path] + 65536:
-            return JSONResponse({'detail': 'Multipart envelope exceeds budget'}, status_code=413)
     response = await call_next(request)
     response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
     response.headers['X-Content-Type-Options'] = 'nosniff'
@@ -260,7 +311,7 @@ async def upload_source(file: UploadFile = File(...)):
         with os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), 'wb') as stream:
             while chunk := await file.read(65536):
                 size += len(chunk)
-                if size > 16*1024**2: raise HTTPException(413, 'Source exceeds16MiB')
+                if size > SOURCE_UPLOAD_BYTES: raise HTTPException(413, 'Source exceeds 16 MiB')
                 stream.write(chunk)
     except Exception:
         path.unlink(missing_ok=True)
@@ -311,7 +362,7 @@ async def upload_email(file: UploadFile = File(...)):
         with path.open('xb') as stream:
             while chunk := await file.read(1024 * 1024):
                 size += len(chunk)
-                if size > 25 * 1024 * 1024:
+                if size > EMAIL_UPLOAD_BYTES:
                     raise HTTPException(413, 'Email exceeds 25 MiB')
                 stream.write(chunk)
         if not size: raise HTTPException(400, 'Empty email')
