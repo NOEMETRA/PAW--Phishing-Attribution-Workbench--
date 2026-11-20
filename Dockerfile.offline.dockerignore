@@ -1,0 +1,10 @@
+*
+!paw/
+!paw/**
+!pyproject.toml
+!setup.py
+!requirements.txt
+!README.md
+!LICENSE
+**/__pycache__
+**/*.py[co]

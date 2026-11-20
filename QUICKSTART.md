@@ -39,6 +39,26 @@ paw analyze inbox/ --profile strict --no-egress
 
 Each invocation creates its own cases. The quick preset always uses the offline policy. Analyze, full, forensic and trace also default to offline. Keep `--no-egress` in development scripts to record intent. Their `--allow-egress` option permits enrichment and automatic URL detonation in an isolated environment. The offline policy skips URL detonation and network enrichment. See the [offline scope and isolation limits](README.md#offline-analysis---no-egress).
 
+## Analyze offline in a Linux container
+
+From a local checkout, point Compose at two existing directories. The input
+directory is mounted read-only. The output directory must be writable by
+UID 1000, the container's runtime user.
+
+```bash
+export PAW_INPUT_DIR=/absolute/path/to/originals
+export PAW_OUTPUT_DIR=/absolute/path/to/case-output
+docker compose -f compose.offline.yaml build
+docker compose -f compose.offline.yaml run --rm paw full /input/sample.eml --no-egress
+```
+
+The build downloads the Python base image and dependencies. At runtime this
+profile has no external network, drops capabilities and mounts the image
+filesystem read-only. Cases are written under `PAW_OUTPUT_DIR/cases`.
+`Dockerfile` and `docker-compose.yml` are the legacy encrypted-clicking
+profile. Active browser and uplink acceptance are tracked in the
+[S14 isolation protocol](docs/s14-controlled-uplink.md).
+
 ## Read and verify a case
 
 PAW prints the path of the case it creates. Start with `report/executive.md`. Use `report/score.json` for the scoring profile, decision thresholds and component contributions, and `execution.json` for skipped stages. The score is an uncalibrated heuristic. An inconclusive result leaves the message’s legitimacy unresolved. Sender headers and candidate infrastructure require independent verification before attribution.
