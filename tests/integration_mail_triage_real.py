@@ -13,6 +13,7 @@ def read(case, name):
 
 def main():
     form = '<form method="post" action="https://example.org/"><input type="password" name="fixture"></form>'
+    anchor = '<a href="https://example.org/path"><span>https://example.com/</span></a>'
     tests = {
         'cross-domain': (form, False, 'review'),
         'archived-lf': (form, False, 'review'),
@@ -22,6 +23,13 @@ def main():
         'disabled': (form.replace('type=', 'disabled type='), False, 'no_supported_signal'),
         'nested': (form.replace('<input', '<form><input').replace('</form>', '</form></form>'), False, 'not_evaluated'),
         'ambiguous-sender': (form, True, 'not_evaluated'),
+        'anchor-mismatch': (anchor, False, 'review'),
+        'anchor-ambiguous-sender': (anchor, True, 'review'),
+        'anchor-same-site': (anchor.replace('example.org','login.example.com'), False, 'no_supported_signal'),
+        'anchor-duplicate-href': (anchor.replace('<a ', '<a href="/" '), False, 'no_supported_signal'),
+        'anchor-non-url': (anchor.replace('https://example.com/','Open page'), False, 'no_supported_signal'),
+        'anchor-inert': ('<template>'+anchor+'</template><!--'+anchor+'-->', False, 'no_supported_signal'),
+        'anchor-unclosed': (anchor.replace('</a>',''), False, 'not_evaluated'),
     }
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
@@ -61,12 +69,21 @@ def main():
                 for key,value in [('form','<form'),('named_password_input','<input')]:
                     coords = finding[key]
                     assert text.decode().splitlines()[coords['line']-1][coords['column']:].startswith(value)
+            elif title in ('anchor-mismatch','anchor-ambiguous-sender'):
+                finding, = triage['findings']
+                assert finding['rule'] == 'displayed_link_hostname_mismatch'
+                assert (finding['displayed_hostname'], finding['destination_hostname']) == ('example.com','example.org')
+                evidence = finding['source']
+                text = (case/evidence['text_path']).read_bytes()
+                assert sha256(text).hexdigest() == evidence['text_sha256']
+                line,col = (finding['anchor'][field] for field in ('line','column'))
+                assert text.decode().splitlines()[line-1][col:].startswith('<a ')
             else:
                 assert not triage['findings']
             assert triage['referral_status'] in (case/'report/executive.md').read_text()
             subprocess.run(cli+['verify','--case',str(case)], cwd=root, check=True, capture_output=True, timeout=10)
         assert seen == tests.keys()
-    print('PASS: evidence-linked static review for two captured cross-domain forms, six comparison cases, eight valid seals.')
+    print('PASS: evidence-linked static review for four supported referrals, eleven comparison cases, fifteen valid seals.')
 
 
 if __name__ == '__main__':

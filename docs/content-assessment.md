@@ -120,3 +120,15 @@ infrastructure attribution continue to have their own evidence.
 Constructed CLI fixtures verify the evidence bindings and rule exclusions.
 Use independently labelled development data for rule changes and reserve a
 fresh holdout for estimating referral error rates.
+
+A second rule compares the complete literal HTTP(S) URL shown as an HTML
+anchor label with the absolute URL in its sole `href`. A different registrable
+domain yields a review referral. Both domains use the bundled public and
+private suffix snapshot. The comparison works even when the From identity is
+ambiguous. It records the two hostnames and the anchor coordinates in the
+hash-linked MIME text. Relative targets, duplicate hrefs, nested anchors,
+inert markup and non-URL labels fall outside the paired comparison. The
+parser admits a bounded subset of inline text formatting and stops retaining
+anchors after 256 candidates per document. Tracking redirects and link
+rewriting can produce the same observed difference. The result describes
+static markup and leaves the analyst to assess its context.
