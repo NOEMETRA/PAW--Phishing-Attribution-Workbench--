@@ -880,7 +880,7 @@ class CampaignDatabase:
                      else state['attempts'] == 0 and state.get('automatic') is True)
                 and (state['http_status'] is None or
                      type(state['http_status']) is int and 100 <= state['http_status'] <= 599)
-                and state['error'] in (None,'http_status','receipt_missing','transport_error')
+                and state['error'] in (None,'http_status','receipt_missing','transport_error','deadline_exceeded')
                 and isinstance(state['updated_at'], str)
                 and re.fullmatch(r'\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ', state['updated_at']) is not None
                 and (state['status'] != 'receipt_confirmed' or

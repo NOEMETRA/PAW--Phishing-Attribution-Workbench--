@@ -125,6 +125,8 @@ jobs:
           "$RUNNER_TEMP/paw-installed/bin/python" -I -B "$GITHUB_WORKSPACE/tests/integration_sentinel_journal_recovery_real.py"
           "$RUNNER_TEMP/paw-installed/bin/python" -I -B "$GITHUB_WORKSPACE/tests/integration_sentinel_delivery_real.py"
           "$RUNNER_TEMP/paw-installed/bin/python" -I -B "$GITHUB_WORKSPACE/tests/integration_sentinel_automatic_delivery_real.py"
+          "$RUNNER_TEMP/paw-installed/bin/python" -I -B "$GITHUB_WORKSPACE/tests/integration_sentinel_delivery_deadline_real.py"
+          "$RUNNER_TEMP/paw-installed/bin/python" -I -B "$GITHUB_WORKSPACE/tests/integration_sentinel_delivery_tls_real.py"
       - name: Retain bounded installed-package logs
         if: always()
         uses: actions/upload-artifact@v4

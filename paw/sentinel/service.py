@@ -100,7 +100,9 @@ def run_foreground(origins, webhook=None):
 
         def request_stop(signum, frame):
             nonlocal stopping
-            stopping = True
+            if not stopping:
+                stopping = True
+                monitor._stop_event.set()
 
         previous = {sig: signal.signal(sig, request_stop) for sig in (signal.SIGTERM, signal.SIGINT)}
         try:
@@ -110,6 +112,8 @@ def run_foreground(origins, webhook=None):
                 next_delivery = time.monotonic()
                 while not stopping:
                     state = monitor.get_runtime_state()
+                    if stopping:
+                        break
                     if state['last_error'] or state['callback_errors'] or state['state'] != 'running':
                         raise RuntimeError(f"Sentinel cycle failed: {state['last_error'] or state['callback_errors'] or state['state']}")
                     if target and time.monotonic() >= next_delivery:

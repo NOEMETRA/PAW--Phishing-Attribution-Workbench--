@@ -59,7 +59,10 @@ Il comando consegna un singolo avviso già salvato a un ricevitore su indirizzo
 loopback letterale. Invia per POST soltanto ID evento, ID campagna, ID avviso e
 tipo. Il ricevitore deve usare l'header `Idempotency-Key` per riconoscere i
 tentativi dello stesso evento, salvare l'evento una volta e rispondere con
-HTTP 2xx e `Sentinel-Receipt` uguale alla chiave. I redirect non vengono seguiti.
+HTTP 2xx e `Sentinel-Receipt` uguale alla chiave. I redirect non vengono seguiti. Il trasporto usa un limite complessivo
+di tre secondi per connessione, TLS, invio e intestazioni della ricevuta.
+Le intestazioni sono limitate a 16 KiB. Una scadenza è registrata come
+`deadline_exceeded` e lascia la ricevuta non confermata.
 
 La prima esecuzione associa l'avviso al destinatario e salva l'ID prima
 della richiesta. Se il processo si interrompe o manca una ricevuta valida,

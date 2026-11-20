@@ -1,6 +1,9 @@
 """Receipt-based delivery of saved alerts to an owned laboratory receiver."""
+import asyncio
 import hashlib
 import ipaddress
+import json
+import ssl
 from urllib.parse import urlsplit, urlunsplit
 
 from .config import SentinelConfig
@@ -43,7 +46,6 @@ def deliver_saved_alert(campaign_id, alert_id, destination):
 
 def send_saved_alert(database, campaign_id, alert_id, target):
     _require_active()
-    import requests
 
     endpoint, fingerprint = webhook_destination(target[0])
     if fingerprint != target[1]:
@@ -53,22 +55,55 @@ def send_saved_alert(database, campaign_id, alert_id, target):
         return state
     event_id = state['event_id']
     payload = {'event_id':event_id, 'campaign_id':campaign_id, 'alert_id':alert_id, 'alert_type':alert_type}
-    code = None
-    try:
-        with requests.Session() as session:
-            request = requests.Request('POST', endpoint, json=payload,
-                                       headers={'Idempotency-Key':event_id}).prepare()
-            # The adapter performs a single request. It doesn't resolve redirects
-            # or consume the redirect body while preparing a potential next hop.
-            adapter = session.get_adapter(endpoint)
-            with adapter.send(request, timeout=3, stream=True, verify=True, proxies={}) as response:
-                code = response.status_code
-                if not 200 <= code < 300:
-                    outcome = 'http_status'
-                elif response.headers.get('Sentinel-Receipt') == event_id:
-                    outcome = 'receipt_confirmed'
-                else:
-                    outcome = 'receipt_missing'
-    except requests.RequestException:
-        outcome = 'transport_error'
+    code, outcome = asyncio.run(_request_receipt(endpoint, payload))
     return database.finish_alert_delivery(campaign_id, alert_id, state, outcome, code)
+
+
+async def _request_receipt(endpoint, payload):
+    """Use one wall-clock deadline for connect, TLS, write and response headers."""
+    import certifi
+    import h11
+
+    parsed = urlsplit(endpoint)
+    secure = parsed.scheme == 'https'
+    context = ssl.create_default_context(cafile=certifi.where()) if secure else None
+    port = parsed.port if parsed.port is not None else (443 if secure else 80)
+    key = payload['event_id'].encode('ascii')
+    body = json.dumps(payload, separators=(',', ':')).encode('ascii')
+    connection = h11.Connection(h11.CLIENT)
+    packet = connection.send(h11.Request(method=b'POST', target=parsed.path.encode('ascii'), headers=[
+        (b'host', parsed.netloc.encode('ascii')), (b'content-type', b'application/json'),
+        (b'content-length', str(len(body)).encode('ascii')), (b'idempotency-key', key),
+        (b'connection', b'close'),
+    ]))
+    packet += connection.send(h11.Data(data=body)) + connection.send(h11.EndOfMessage())
+    try:
+        async with asyncio.timeout(3):
+            reader, writer = await asyncio.open_connection(parsed.hostname, port, ssl=context)
+            try:
+                writer.write(packet)
+                await writer.drain()
+                remaining = 16 * 1024
+                while True:
+                    event = connection.next_event()
+                    if isinstance(event, h11.Response):
+                        code = event.status_code
+                        if not 200 <= code < 300:
+                            return code, 'http_status'
+                        receipts = [value for name, value in event.headers if name == b'sentinel-receipt']
+                        return code, 'receipt_confirmed' if receipts == [key] else 'receipt_missing'
+                    if isinstance(event, h11.InformationalResponse) and event.status_code != 101:
+                        continue
+                    if event is not h11.NEED_DATA or remaining == 0:
+                        return None, 'transport_error'
+                    data = await reader.read(min(4096, remaining))
+                    remaining -= len(data)
+                    connection.receive_data(data)
+            finally:
+                # A receipt is only a header. Abort the transport without
+                # consuming an arbitrary body or waiting for a TLS close reply.
+                writer.transport.abort()
+    except TimeoutError:
+        return None, 'deadline_exceeded'
+    except (OSError, h11.ProtocolError):
+        return None, 'transport_error'
