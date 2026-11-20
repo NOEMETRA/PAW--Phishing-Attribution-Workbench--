@@ -406,3 +406,30 @@ with an inconclusive decision is missed by this rule. The matrix preserves the
 inconclusive decision in both cases. Unresolved labels contribute to the matrix
 and are excluded from rate denominators. An empty denominator yields JSON
 `null`. Pilot and development runs produce counts only.
+
+#### Historical reference holdout, 21 November 2026
+
+The wheel from local commit `d32f58b` was run with `--no-egress` inside a Linux
+network namespace. The holdout was fixed before execution. It includes 16
+messages labelled phishing by José Nazario and 16 messages labelled non-spam
+by the Apache SpamAssassin Public Corpus. Selection took eight messages from
+each of two phishing mailboxes and the `easy_ham` and `hard_ham` archives, with
+one representative per exact message hash or normalized subject. The mbox
+inputs preserve the archived RFC 822 data after removal of the mbox delimiter.
+The ham inputs preserve the archived member bytes. [Nazario source and classification](https://monkey.org/~jose/phishing/README.txt) · [SpamAssassin corpus description](https://spamassassin.apache.org/old/publiccorpus/readme.html)
+
+All 96 runs completed across the three profiles with byte-identical archived
+inputs and valid seals. Each profile returned 32 inconclusive decisions.
+Under the documented referral rule, each missed 16 of 16 phishing messages
+and referred zero of 16 non-spam messages. The strict profile's maximum
+phishing score was 0.25 against the 0.52 referral threshold. URL inventory
+found links in 15 of 16 messages in each class. Sender-domain heuristics
+contributed to two cases per class. Authentication checks were unavailable
+during offline analysis. The threshold and scoring logic stayed fixed
+throughout the measurement.
+
+The two classes come from different historical collections and include source
+redactions. The experiment measures referrals on this cohort. Contemporary
+deployment performance and independent adjudication of the separately stored
+Gmail pilot remain open. The report contains aggregate counts and archive
+hashes. The messages and case data are stored separately.
