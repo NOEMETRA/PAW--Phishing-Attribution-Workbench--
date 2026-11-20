@@ -86,6 +86,28 @@ class SentinelOfflineCompletion(unittest.TestCase):
                 self.assertEqual(conn.execute('SELECT id FROM '+table+' ORDER BY id').fetchall(), [(3,),(4,),(5,),(6,),(7,)])
         self.assertTrue(result['complete']); self.assertEqual(result['cutoff_utc'], '2026-10-23T00:00:00Z')
 
+    def test_body_expiry_preserves_unreadable_metadata_and_rolls_back_on_alert_failure(self):
+        body = {'source_metadata': {'retained_body_bytes':1, 'http_observation':{'body_base64':'eA=='}},
+                'monitor_comparison':{'schema_version':1}}
+        with self.db.connection() as conn:
+            conn.execute("UPDATE checks SET metadata=?, check_time='2026-10-19T00:00:00Z'", (json.dumps(body),))
+            conn.execute("INSERT INTO checks(campaign_id,check_time,status,metadata) "
+                         "VALUES (?,'2026-10-19T00:00:00Z','error',CAST(X'80' AS TEXT))", (self.other,))
+            conn.execute("UPDATE alerts SET alert_time='2000-01-01T00:00:00Z'")
+            conn.execute("CREATE TRIGGER refused BEFORE DELETE ON alerts BEGIN SELECT RAISE(ABORT,'fault'); END")
+        with patch('paw.sentinel.database.utc_now_iso', return_value='2026-10-23T00:00:00Z'):
+            before = self.source()
+            with self.assertRaises(sqlite3.IntegrityError):
+                self.db.cleanup_old_data(10, body_retention_days=2)
+            self.assertEqual(self.source(), before)
+            with self.db.connection() as conn: conn.execute('DROP TRIGGER refused')
+            result = self.db.cleanup_old_data(10, body_retention_days=2)
+            self.assertEqual(result['expired_bodies'], 1)
+            self.assertEqual(result['uninterpretable_body_ids'], [2])
+            self.assertEqual(self.db.cleanup_old_data(10, body_retention_days=2)['expired_bodies'], 0)
+        with self.db.connection() as conn:
+            self.assertEqual(conn.execute("SELECT hex(metadata) FROM checks WHERE id=2").fetchone(), ('80',))
+
     def test_failed_retention_rolls_back_both_tables(self):
         with self.db.connection() as conn:
             conn.execute("UPDATE checks SET check_time='2000-01-01T00:00:00Z'")

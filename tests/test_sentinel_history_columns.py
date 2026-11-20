@@ -98,6 +98,21 @@ class SentinelHistoryColumns(unittest.TestCase):
             reader.get_campaign_history('missing')
         self.assertEqual(Path(writer.db_path).read_bytes(), before)
 
+    def test_history_resolves_only_positive_stored_check_ids_in_the_same_campaign(self):
+        writer = history_database(self.root/'links.db', 'reversed')
+        selected = writer.add_campaign('saved-case', 'https://one.invalid/')
+        neighbor = writer.add_campaign('other-case', 'https://two.invalid/')
+        seed_history(writer, 'checks', id=11, campaign_id=selected)
+        seed_history(writer, 'checks', id=12, campaign_id=neighbor)
+        metadata = ['{"check_id":11}', '{"check_id":12}', '{"check_id":13}', '{"check_id":true}',
+                    '{"check_id":9223372036854775808}', '{"check_id":11,"check_id":12}', 'null']
+        for index, value in enumerate(metadata, 1):
+            seed_history(writer, 'alerts', id=index, campaign_id=selected, metadata=value)
+        reader = CampaignDatabase(writer.db_path, read_only=True)
+        alerts = reversed(reader.get_campaign_history(selected)['alerts'])
+        self.assertEqual([(a['recorded_check_id'], a['source_check_available']) for a in alerts],
+                         [(11, True), (12, False), (13, False)] + [(None, None)] * 4)
+
     def test_every_field_matches_independent_named_sql_in_both_reader_modes(self):
         for layout in LAYOUTS:
             writer = history_database(self.root/(layout+'.db'), layout)

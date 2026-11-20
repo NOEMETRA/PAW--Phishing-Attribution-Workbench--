@@ -631,7 +631,8 @@ class CampaignDatabase:
                 if not enabled: continue
                 message = ('Stored content digest differs' if event == 'changed' else 'HTTP status class transitioned to '+event)
                 level = 'warning' if event == 'down' else 'info'
-                alert_metadata = self._encode_writer_json({**comparison,'check_id':rowid},'metadata')
+                alert_metadata = self._encode_writer_json({**comparison, 'check_id':rowid,
+                    'external_delivery_at_commit':'not_attempted'}, 'metadata')
                 alert_values = (campaign_id,timestamp,event,level,message,alert_metadata)
                 alert_id = self._insert_writer_record(conn,'alerts',alert_columns,alert_values)
                 inserted.append((alert_id,alert_values))
@@ -689,14 +690,39 @@ class CampaignDatabase:
                 SELECT id, check_time, status, http_status, content_hash
                 FROM checks WHERE campaign_id = ? COLLATE BINARY ORDER BY id DESC LIMIT ?
             """, (campaign_id, limit)).fetchall()
-            alerts = conn.execute("""
-                SELECT id, alert_time, alert_type, severity, acknowledged
+            has_metadata = conn.execute(
+                "SELECT 1 FROM pragma_table_info('alerts') WHERE name = 'metadata' COLLATE NOCASE"
+            ).fetchone()
+            # Some legacy alert tables contain only summary columns. Keep the
+            # same read-only view and cap the bytes read from optional metadata.
+            source = ("CASE WHEN length(CAST(metadata AS BLOB)) <= ? THEN metadata END"
+                      if has_metadata else "NULL")
+            parameters = [self.limits['max_json_bytes']] if has_metadata else []
+            rows = conn.execute(f"""
+                SELECT id, alert_time, alert_type, severity, acknowledged, {source} AS metadata
                 FROM alerts WHERE campaign_id = ? COLLATE BINARY ORDER BY id DESC LIMIT ?
-            """, (campaign_id, limit)).fetchall()
+            """, [*parameters, campaign_id, limit]).fetchall()
+            alerts = []
+            for row in rows:
+                alert = dict(row)
+                metadata, _ = self._decode_json_field(alert.pop('metadata'), {})
+                check_id = metadata.get('check_id') if isinstance(metadata, dict) else None
+                if type(check_id) is not int or not 1 <= check_id <= 2**63 - 1:
+                    check_id = None
+                alert['external_delivery_at_commit'] = (
+                    'not_attempted' if isinstance(metadata, dict)
+                    and metadata.get('external_delivery_at_commit') == 'not_attempted' else 'unknown'
+                )
+                alert['recorded_check_id'] = check_id
+                alert['source_check_available'] = None if check_id is None else bool(conn.execute(
+                    "SELECT 1 FROM checks WHERE id = ? AND campaign_id = ? COLLATE BINARY LIMIT 1",
+                    (check_id, campaign_id),
+                ).fetchone())
+                alerts.append(alert)
         return {
             'campaign': dict(campaign), 'limit_per_kind': limit, 'order': 'id_desc',
             'checks': [dict(row) for row in checks],
-            'alerts': [dict(row) for row in alerts],
+            'alerts': alerts,
         }
 
     def get_recent_checks(self, campaign_id: str, limit: int = 10) -> List[Dict[str, Any]]:
@@ -756,9 +782,48 @@ class CampaignDatabase:
         self._writer_number(alert_id, 'alert_id', minimum=1, integer=True)
         return self._transition('alerts', alert_id, 'acknowledged', 1)
 
-    def cleanup_old_data(self, retention_days: int = 90, *, alert_retention_days: int | None = None):
+    def _expire_check_body(self, conn, identifier):
+        # Only rewrite text metadata in the format emitted by the monitor.
+        # Reading bytes keeps invalid legacy TEXT from aborting SQLite decoding.
+        kind, raw = conn.execute(
+            "SELECT typeof(metadata), CASE WHEN length(CAST(metadata AS BLOB)) <= ? "
+            "THEN CAST(metadata AS BLOB) END FROM checks WHERE id = ?",
+            (self.limits['max_json_bytes'], identifier),
+        ).fetchone()
+        if kind == 'null':
+            return 'absent'
+        if kind != 'text' or raw is None:
+            return 'uninterpretable'
+        try:
+            original = raw.decode('utf-8')
+        except UnicodeDecodeError:
+            return 'uninterpretable'
+        metadata, evidence = self._decode_json_field(original, {})
+        if evidence['status'] != 'decoded' or not isinstance(metadata, dict):
+            return 'uninterpretable'
+        source = metadata.get('source_metadata')
+        observation = source.get('http_observation') if isinstance(source, dict) else None
+        if not isinstance(observation, dict) or 'body_base64' not in observation:
+            return 'absent'
+        comparison = metadata.get('monitor_comparison')
+        version = comparison.get('schema_version') if isinstance(comparison, dict) else None
+        if type(version) is not int or version != 1:
+            return 'uninterpretable'
+        del observation['body_base64']
+        source.update(retained_body_bytes=0, body_retention_status='expired')
+        encoded = self._encode_writer_json(metadata, 'metadata')
+        changed = conn.execute('UPDATE checks SET metadata=? WHERE id=?', (encoded, identifier))
+        stored = conn.execute('SELECT metadata FROM checks WHERE id=?', (identifier,)).fetchone()
+        if changed.rowcount != 1 or stored != (encoded,):
+            raise RuntimeError('Sentinel body expiry did not persist; transaction rolled back')
+        return 'expired'
+
+    def cleanup_old_data(self, retention_days: int = 90, *, alert_retention_days: int | None = None,
+                         body_retention_days: int | None = None):
         """Delete only interpretable expired check/alert rows; never case files."""
         self._writer_number(retention_days, 'retention_days', minimum=0, maximum=365_000, integer=True)
+        if body_retention_days is not None:
+            self._writer_number(body_retention_days, 'body_retention_days', minimum=0, maximum=365_000, integer=True)
         if alert_retention_days is None:
             alert_retention_days = retention_days
         self._writer_number(alert_retention_days, 'alert_retention_days', minimum=0, maximum=365_000, integer=True)
@@ -767,9 +832,12 @@ class CampaignDatabase:
             now = datetime.fromisoformat(utc_now_iso().replace('Z', '+00:00'))
             cutoffs = {'checks': now - timedelta(days=retention_days),
                        'alerts': now - timedelta(days=alert_retention_days)}
+            if body_retention_days is not None:
+                cutoffs['bodies'] = now - timedelta(days=body_retention_days)
             result = {'complete': True, 'cutoff_utc': cutoffs['checks'].strftime('%Y-%m-%dT%H:%M:%SZ'),
                       'cutoffs_utc': {table: value.strftime('%Y-%m-%dT%H:%M:%SZ') for table, value in cutoffs.items()},
-                      'deleted': {}, 'retained_uninterpretable': {}}
+                      'deleted': {}, 'retained_uninterpretable': {},
+                      'expired_bodies': 0, 'uninterpretable_body_ids': []}
             for table, field in (('checks','check_time'), ('alerts','alert_time')):
                 rows = conn.execute(f'SELECT id,{field} FROM {table} ORDER BY id').fetchall()
                 if len({row[0] for row in rows}) != len(rows): raise ValueError('Ambiguous retention identifiers')
@@ -783,7 +851,14 @@ class CampaignDatabase:
                         parsed = datetime.fromisoformat(raw.replace('Z','+00:00')).astimezone(timezone.utc)
                     except (ValueError, OverflowError):
                         unusable.append(identifier); continue
-                    if parsed < cutoffs[table]: expired.append(identifier)
+                    if parsed < cutoffs[table]:
+                        expired.append(identifier)
+                    elif table == 'checks' and 'bodies' in cutoffs and parsed < cutoffs['bodies']:
+                        outcome = self._expire_check_body(conn, identifier)
+                        if outcome == 'expired':
+                            result['expired_bodies'] += 1
+                        elif outcome == 'uninterpretable':
+                            result['uninterpretable_body_ids'].append(identifier)
                 deleted = 0
                 for offset in range(0, len(expired), 500):
                     batch = expired[offset:offset+500]

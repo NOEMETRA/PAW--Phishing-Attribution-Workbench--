@@ -10,7 +10,14 @@ paw monitor history --campaign ID
 
 Sostituire `ID` con l’identificativo della campagna. Lo stato riepiloga campagne e avvisi salvati. La cronologia legge in una transazione gli ultimi dieci controlli e gli ultimi dieci avvisi della campagna, anche dopo la rimozione dall’elenco attivo. Ciascun elenco è ordinato per ID decrescente. Un elenco vuoto indica che per quel tipo di record non ci sono osservazioni. Un identificativo sconosciuto o un archivio illeggibile produce un errore.
 
-Nel JSON, `http_status` è il codice HTTP registrato. `content_hash` è il digest salvato, che può mancare. Un avviso `changed` emesso dal monitor indica una differenza tra contenuti confrontabili. Gli eventi `up` e `down` descrivono transizioni di classe HTTP. L’identità dell’operatore e le cause del cambiamento richiedono altre evidenze. I due elenchi hanno una numerazione indipendente.
+Nel JSON, `http_status` è il codice HTTP registrato. `content_hash` è il digest salvato, che può mancare. Un avviso `changed` emesso dal monitor indica una differenza tra contenuti confrontabili. Gli eventi `up` e `down` descrivono transizioni di classe HTTP. L’identità dell’operatore e le cause del cambiamento richiedono altre evidenze. I due elenchi hanno una numerazione indipendente. Per ogni avviso,
+`recorded_check_id` riporta il riferimento salvato. `source_check_available`
+vale `true` se quel controllo è ancora presente nella stessa campagna e
+`false` se manca. Entrambi i campi valgono `null` quando il riferimento manca
+o non è interpretabile. Il riferimento può sopravvivere alla scadenza del
+controllo. `external_delivery_at_commit` riporta lo stato registrato al
+salvataggio dell’avviso. Per gli archivi privi di questa informazione vale
+`unknown`. La presa visione locale è registrata in `acknowledged`.
 
 Per controllare i casi locali a elaborazione conclusa:
 
@@ -67,13 +74,30 @@ di un journal pendente o di un archivio occupato può richiedere un nuovo tentat
 
 Nella sezione `storage` di `sentinel_config.json`, `retain_http_bodies: false`
 omette il corpo dai nuovi controlli mantenendo metadati e digest. Il default è
-`true`. I corpi già salvati scadono insieme alle rispettive osservazioni.
+`true`. Con la scadenza automatica, `body_retention_days` permette di eliminare
+i corpi HTTP prima delle rispettive osservazioni. Omettendo il campo,
+i corpi già salvati scadono insieme alle osservazioni. La rimozione riguarda
+il campo del record SQLite. Digest, intestazioni e riferimento usato per
+il confronto restano disponibili. Backup e copie precedenti hanno una
+conservazione propria.
 
 Il processo in primo piano applica la scadenza automatica solo con
 `automatic_retention: true`, all’inizio del primo ciclo e poi al primo ciclo
 dopo 24 ore. `retention_days` stabilisce la durata delle osservazioni
 (default 90 giorni). `alert_retention_days` stabilisce quella degli avvisi,
-inclusi quelli da riconoscere (default uguale alle osservazioni). Entrambe le
+inclusi quelli da riconoscere (default uguale alle osservazioni). Tutte le
 durate esplicite richiedono giorni interi positivi. L’evento `retention` riporta
-le due soglie UTC, le righe eliminate e il numero di date non interpretabili
+le soglie UTC, i corpi scaduti, i metadati dei corpi illeggibili, le righe eliminate e il numero di date non interpretabili
 conservate. La scadenza riguarda i record SQLite e lascia intatti i casi EML.
+
+### Recupero dopo un arresto durante una scrittura
+
+Il test Linux `tests/integration_sentinel_journal_recovery_real.py` interrompe
+l’unico writer durante una transazione e verifica che il lettore passivo di Sentinel rifiuti
+un database con journal pendente. Il recupero verificato parte da una copia
+dell’intera directory con writer fermo, mantenendo nello stesso percorso
+relativo il database e il suo rollback journal. SQLite apre in lettura e
+scrittura la copia, applica il rollback e supera `PRAGMA integrity_check`.
+Il test confronta le righe con l’ultimo stato confermato e riprende la scrittura
+sulla copia. L’originale e il journal conservano gli hash misurati subito dopo l’arresto.
+Questa prova copre il journal SQLite in modalità DELETE su filesystem locale.

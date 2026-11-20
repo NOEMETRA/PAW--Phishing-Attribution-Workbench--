@@ -52,7 +52,7 @@ def main():
         stack.callback(server.shutdown)
         origin = f'http://127.0.0.1:{server.server_port}'
         config = {'monitoring': {'check_interval_minutes': .005, 'timeout_seconds': 20},
-                  'storage': {'database_path': 'saved.db', 'retain_http_bodies': False},
+                  'storage': {'database_path': 'saved.db', 'retain_http_bodies': True},
                   'alerts': {'alert_on_up': True}}
         (root / 'sentinel_config.json').write_text(json.dumps(config))
         command = [sys.executable, '-I', '-B', '-m', 'paw', 'monitor']
@@ -130,11 +130,20 @@ def main():
         # After enabling automatic expiry, rows aged five days should expire
         # under the observation window (2 days) only, preserving the alert.
         with closing(sqlite3.connect(root / 'saved.db')) as conn, conn:
-            conn.execute("INSERT INTO checks(campaign_id,check_time,status) "
-                         "VALUES (?,strftime('%Y-%m-%dT%H:%M:%SZ','now','-5 days'),'error')", (campaign,))
-            conn.execute("INSERT INTO alerts(campaign_id,alert_time,alert_type,message) "
-                         "VALUES (?,strftime('%Y-%m-%dT%H:%M:%SZ','now','-5 days'),'legacy','saved')", (campaign,))
-        config['storage'].update(automatic_retention=True, retention_days=2, alert_retention_days=10)
+            conn.execute("UPDATE checks SET check_time=strftime('%Y-%m-%dT%H:%M:%SZ','now','-36 hours') "
+                         "WHERE id=?", (first_ids[-1],))
+            prior_raw, prior_digest = conn.execute(
+                'SELECT metadata,content_hash FROM checks WHERE id=?', (first_ids[-1],)).fetchone()
+            expected_metadata = json.loads(prior_raw)
+            prior_source = expected_metadata['source_metadata']
+            assert prior_source['http_observation'].pop('body_base64')
+            prior_source.update(retained_body_bytes=0, body_retention_status='expired')
+            expired_check = conn.execute("INSERT INTO checks(campaign_id,check_time,status) "
+                         "VALUES (?,strftime('%Y-%m-%dT%H:%M:%SZ','now','-5 days'),'error')", (campaign,)).lastrowid
+            conn.execute("INSERT INTO alerts(campaign_id,alert_time,alert_type,message,metadata) "
+                         "VALUES (?,strftime('%Y-%m-%dT%H:%M:%SZ','now','-5 days'),'legacy','saved',?)",
+                         (campaign,json.dumps({'check_id':expired_check})))
+        config['storage'].update(automatic_retention=True, retention_days=2, alert_retention_days=10, body_retention_days=1)
         (root / 'sentinel_config.json').write_text(json.dumps(config))
         second = launch()
         receive(second)[0].put((200, b'C'))
@@ -142,11 +151,20 @@ def main():
         second_ids, second_alerts = stop(second)
         final = history()
         assert second_alerts == [final['alerts'][0]['id']]
+        assert final['alerts'][0]['recorded_check_id'] == second_ids[0]
+        assert final['alerts'][0]['source_check_available'] is True
+        assert final['alerts'][0]['external_delivery_at_commit'] == 'not_attempted'
+        legacy, = [r for r in final['alerts'] if r['alert_type'] == 'legacy']
+        assert legacy['external_delivery_at_commit'] == 'unknown'
+        assert legacy['recorded_check_id'] == expired_check and legacy['source_check_available'] is False
         assert len(second_ids) == 1 and second_ids[0] > first_ids[-1]
         assert [r['id'] for r in reversed(final['checks'])] == first_ids + second_ids
         assert final['alerts'][0]['alert_type'] == 'changed' and len(final['alerts']) == 5
         assert len([r for r in final['alerts'] if r['alert_type'] == 'legacy']) == 1
         with closing(sqlite3.connect(root / 'saved.db')) as conn:
+            saved_raw, digest = conn.execute(
+                'SELECT metadata,content_hash FROM checks WHERE id=?', (first_ids[-1],)).fetchone()
+            assert json.loads(saved_raw) == expected_metadata and digest == prior_digest
             metadata, = conn.execute('SELECT metadata FROM checks WHERE id=?', second_ids).fetchone()
             assert json.loads(metadata)['monitor_comparison']['previous_check_id'] == first_ids[-1]
         assert requests.empty()

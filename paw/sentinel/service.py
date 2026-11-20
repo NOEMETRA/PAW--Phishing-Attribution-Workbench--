@@ -41,8 +41,11 @@ class _LabMonitor(SentinelMonitor):
         if self.config.get('storage.automatic_retention', False) and time.monotonic() >= self.next_cleanup:
             result = self.db.cleanup_old_data(
                 self.config.get('storage.retention_days', 90),
-                alert_retention_days=self.config.get('storage.alert_retention_days'))
+                alert_retention_days=self.config.get('storage.alert_retention_days'),
+                body_retention_days=self.config.get('storage.body_retention_days'))
             _event('retention', cutoffs_utc=result['cutoffs_utc'], deleted=result['deleted'],
+                   expired_bodies=result['expired_bodies'],
+                   uninterpretable_bodies=len(result['uninterpretable_body_ids']),
                    uninterpretable={table: len(ids) for table, ids in result['retained_uninterpretable'].items()})
             self.next_cleanup = time.monotonic() + 86400
         super()._perform_checks()

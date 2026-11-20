@@ -122,6 +122,7 @@ jobs:
         working-directory: ${{ runner.temp }}
         run: |
           "$RUNNER_TEMP/paw-installed/bin/python" -I -B "$GITHUB_WORKSPACE/tests/integration_sentinel_foreground_real.py"
+          "$RUNNER_TEMP/paw-installed/bin/python" -I -B "$GITHUB_WORKSPACE/tests/integration_sentinel_journal_recovery_real.py"
       - name: Retain bounded installed-package logs
         if: always()
         uses: actions/upload-artifact@v4

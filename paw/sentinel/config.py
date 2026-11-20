@@ -84,7 +84,7 @@ class SentinelConfig:
             if not isinstance(config['storage'], dict):
                 raise ValueError('Sentinel storage configuration must be an object')
             if config['storage'].get('automatic_retention'):
-                for key in ('retention_days', 'alert_retention_days'):
+                for key in ('retention_days', 'alert_retention_days', 'body_retention_days'):
                     if key in config['storage']:
                         native_integer(config['storage'][key], key, 365_000)
             if 'database_path' in config['storage']:
