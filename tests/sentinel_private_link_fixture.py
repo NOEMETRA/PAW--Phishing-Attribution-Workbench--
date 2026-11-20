@@ -179,6 +179,8 @@ def foreground(phase):
         (directory / 'sentinel_config.json').write_text(json.dumps(config))
         subprocess.run([sys.executable, '-I', '-m', 'paw', 'monitor', 'add', '--case', 'lab',
                         '--url', origin + '/foreground'], cwd=directory, check=True, timeout=15)
+    if phase == 'restored':
+        Path('state').write_text('200 replacement')
     path = directory / 'saved.db'
     before = len(http_events())
     with closing(sqlite3.connect(path)) as db:
@@ -202,6 +204,14 @@ def foreground(phase):
         status, code, metadata = rows[-1]
         assert (status, code) == (('error', None) if phase == 'blocked' else ('up', 200))
         assert json.loads(metadata)['monitor_comparison']['previous_check_id'] == (initial or None)
+        saved_alerts = db.execute('SELECT alert_type,metadata FROM alerts ORDER BY id').fetchall()
+        if phase in ('restored','unchanged'):
+            alert, = saved_alerts
+            assert alert[0] == 'changed'
+            receipt = json.loads(alert[1])
+            assert (receipt['previous_check_id'], receipt['digest_reference_check_id'], receipt['check_id']) == (2,1,3)
+        else:
+            assert not saved_alerts
     extra = http_events()[before:]
     if phase == 'blocked':
         assert not extra

@@ -75,6 +75,7 @@ nft list chain inet paw_foreground output > foreground-denial.log
 grep -Eq 'counter packets [1-9][0-9]* ' foreground-denial.log
 nft delete table inet paw_foreground
 "${unpriv[@]}" "$python" -I "$fixture" foreground restored
+"${unpriv[@]}" "$python" -I "$fixture" foreground unchanged
 kill "$server"
 wait "$server" || test "$?" -eq 143
 NAMESPACE

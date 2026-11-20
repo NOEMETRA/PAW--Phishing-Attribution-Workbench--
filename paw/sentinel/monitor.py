@@ -224,7 +224,7 @@ class SentinelMonitor:
                  (('enabled',True),('alert_on_down',True),('alert_on_up',False),('alert_on_changes',True))}
         try: receipt = self.db._record_monitor_result(result,flags,commit_guard=self._publication_commit)
         except _PublicationCanceled: return None
-        published = {**result,**{key:receipt[key] for key in ('check_id','previous_check_id','content_changed')}}
+        published = {**result,**{key:receipt[key] for key in ('check_id','previous_check_id','digest_reference_check_id','content_changed')}}
         self._emit('on_check_complete',published)
         for event in receipt['events']:
             self._emit({'up':'on_campaign_up','down':'on_campaign_down','changed':'on_content_changed'}[event],published)

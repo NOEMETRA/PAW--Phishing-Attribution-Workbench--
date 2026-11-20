@@ -72,6 +72,44 @@ class SentinelModuleAudit(unittest.TestCase):
         self.monitor._handle_check_result(self.result('error',None,None))
         self.assertEqual(self.db.get_unacknowledged_alerts(),[])
 
+    def test_content_change_across_transport_errors_keeps_both_source_ids(self):
+        first = self.monitor._handle_check_result(self.result())
+        for _ in range(2):
+            last_error = self.monitor._handle_check_result(self.result('error',None,None))
+        recovered = self.monitor._handle_check_result(self.result(digest='b'*64))
+        self.assertTrue(recovered['content_changed'])
+        self.assertEqual(recovered['previous_check_id'], last_error['check_id'])
+        self.assertEqual(recovered['digest_reference_check_id'], first['check_id'])
+        alert, = self.db.get_unacknowledged_alerts()
+        self.assertEqual(alert['alert_type'], 'changed')
+        self.assertEqual(alert['metadata']['digest_reference_check_id'], first['check_id'])
+        history, = self.db.get_campaign_history(self.campaign)['alerts']
+        self.assertEqual((history['digest_reference_check_id'], history['recorded_check_id']),
+                         (first['check_id'], recovered['check_id']))
+        self.monitor._handle_check_result(self.result(digest='b'*64))
+        self.assertEqual(len(self.db.get_unacknowledged_alerts()), 1)
+
+    def test_changed_gap_reference_during_insert_rolls_back_check_and_alert(self):
+        first = self.monitor._handle_check_result(self.result())
+        self.monitor._handle_check_result(self.result('error',None,None))
+        before = self.db.get_recent_checks(self.campaign)
+        with self.db.connection() as conn:
+            conn.execute(f"CREATE TRIGGER mutate_reference AFTER INSERT ON checks BEGIN "
+                         f"UPDATE checks SET content_hash='altered' WHERE id={first['check_id']}; END")
+        with self.assertRaises(RuntimeError):
+            self.monitor._handle_check_result(self.result(digest='b'*64))
+        self.assertEqual(self.db.get_recent_checks(self.campaign), before)
+        self.assertEqual(self.db.get_unacknowledged_alerts(), [])
+
+    def test_expired_digest_reference_cannot_generate_an_alert(self):
+        first = self.monitor._handle_check_result(self.result())
+        self.monitor._handle_check_result(self.result('error',None,None))
+        with self.db.connection() as conn:
+            conn.execute('DELETE FROM checks WHERE id=?', (first['check_id'],))
+        recovered = self.monitor._handle_check_result(self.result(digest='b'*64))
+        self.assertFalse(recovered['content_changed'])
+        self.assertIsNone(recovered['digest_reference_check_id'])
+
     def test_alert_disable_and_callback_copies_preserve_observation(self):
         self.config._config['alerts']['enabled'] = False
         second = []

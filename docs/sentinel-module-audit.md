@@ -57,9 +57,13 @@ campaigns and failed known row effects roll back together. Callbacks run after
 commit, each with a separate copy; bounded error diagnostics do not undo source
 rows. Alert flags control stored/local alert delivery.
 
-The comparison source is the greatest prior stored check id, not an arbitrary
-claimed timestamp. Only matching source URI contracts admit status comparison;
-content digests also require matching representation contracts. Legacy rows
+HTTP status comparison uses the greatest prior stored check ID and requires
+matching source URI contracts. Content comparison also requires a matching
+representation. Error rows can carry the last complete digest's source ID.
+When another result arrives, Sentinel reopens that source in the publication
+transaction and checks its campaign, URL and representation. An expired
+source or a legacy gap without a reference yields no digest comparison.
+The previous check ID and the digest reference ID are recorded separately. Legacy rows
 without that contract stay readable but do not become evidence of a transition.
 Stored timestamps are not silently reinterpreted as collection chronology.
 Concurrent instances serialize publication, not remote observation time.

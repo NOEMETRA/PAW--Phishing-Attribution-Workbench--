@@ -15,7 +15,11 @@ Nel JSON, `http_status` è il codice HTTP registrato. `content_hash` è il diges
 vale `true` se quel controllo è ancora presente nella stessa campagna e
 `false` se manca. Entrambi i campi valgono `null` quando il riferimento manca
 o non è interpretabile. Il riferimento può sopravvivere alla scadenza del
-controllo. `external_delivery_at_commit` riporta lo stato registrato al
+controllo. Un avviso `changed` riporta anche `digest_reference_check_id`
+quando è disponibile il riferimento al contenuto precedente. Dopo un errore
+di trasporto Sentinel può confrontare le due risposte complete della stessa
+campagna, URL e rappresentazione. Durante il fermo il momento del cambio resta
+sconosciuto. `external_delivery_at_commit` riporta lo stato registrato al
 salvataggio dell’avviso. Per gli archivi privi di questa informazione vale
 `unknown`. La presa visione locale è registrata in `acknowledged`.
 

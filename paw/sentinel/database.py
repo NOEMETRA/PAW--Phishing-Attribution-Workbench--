@@ -552,6 +552,14 @@ class CampaignDatabase:
             self._assert_writer_record(conn, 'checks', columns, values, rowid)
             conn.commit()
 
+    def _stored_monitor_comparison(self, raw):
+        metadata, evidence = self._decode_json_field(raw, {})
+        comparison = metadata.get('monitor_comparison') if isinstance(metadata, dict) else None
+        if evidence['status'] != 'decoded' or not isinstance(comparison, dict):
+            return {}
+        version = comparison.get('schema_version')
+        return comparison if type(version) is int and version == 1 else {}
+
     def _record_monitor_result(self, result, flags, *, commit_guard=None):
         """Compare, record and alert in one actual SQLite write transaction."""
         _require_active()
@@ -585,7 +593,8 @@ class CampaignDatabase:
         representation = ('http_entity_bytes_no_content_decoding_v1' if type(observation) is dict and
             observation.get('body_representation') == 'HTTP entity bytes, without content decoding'
             else 'caller_supplied_digest_unverified')
-        receipt = {'check_id':None,'events':[],'alerts':[],'previous_check_id':None,'content_changed':False}
+        receipt = {'check_id':None,'events':[],'alerts':[],'previous_check_id':None,
+                   'digest_reference_check_id':None,'content_changed':False}
         columns = ('campaign_id','check_time','status','response_time','http_status','content_hash',
                    'screenshot_path','error_message','metadata')
         alert_columns = ('campaign_id','alert_time','alert_type','severity','message','metadata')
@@ -597,19 +606,36 @@ class CampaignDatabase:
             previous = conn.execute('SELECT id,status,http_status,content_hash,metadata FROM checks WHERE campaign_id=? COLLATE BINARY '
                                     'ORDER BY id DESC LIMIT 1',(campaign_id,)).fetchone()
             prior_status = None; same_source = False; same_representation = False
+            reference = None
             if previous:
                 receipt['previous_check_id'] = previous[0]
-                prior_metadata,evidence = self._decode_json_field(previous[4],{})
-                prior = prior_metadata.get('monitor_comparison') if type(prior_metadata) is dict else None
-                same_source = (evidence['status']=='decoded' and type(prior) is dict and
-                    type(prior.get('schema_version')) is int and prior['schema_version'] == 1 and
-                    prior.get('observation_url') == result['url'])
+                prior = self._stored_monitor_comparison(previous[4])
+                same_source = prior.get('observation_url') == result['url']
                 same_representation = same_source and prior.get('content_representation') == representation
                 if same_source and type(previous[2]) is int and 100 <= previous[2] <= 599:
                     expected = 'up' if previous[2] < 400 else 'down'
                     if previous[1] == expected: prior_status = expected
-                receipt['content_changed'] = bool(same_representation and digest and type(previous[3]) is str and
-                    re.fullmatch('[0-9a-f]{64}',previous[3]) and digest != previous[3])
+                if same_representation and prior_status is not None:
+                    reference = previous
+                elif same_representation and previous[1] == 'error' and previous[3] is None:
+                    # Carry a source ID across transport failures only. Resolve
+                    # it again inside this transaction to respect expiry.
+                    source_id = prior.get('digest_reference_check_id')
+                    if type(source_id) is int and 0 < source_id < previous[0]:
+                        candidate = conn.execute(
+                            'SELECT id,status,http_status,content_hash,metadata FROM checks '
+                            'WHERE campaign_id=? COLLATE BINARY AND id=?',
+                            (campaign_id, source_id),
+                        ).fetchone()
+                        if (candidate and type(candidate[2]) is int and 100 <= candidate[2] <= 599
+                                and candidate[1] == ('up' if candidate[2] < 400 else 'down')):
+                            saved = self._stored_monitor_comparison(candidate[4])
+                            if (saved.get('observation_url') == result['url']
+                                    and saved.get('content_representation') == representation):
+                                reference = candidate
+                if reference and isinstance(reference[3], str) and re.fullmatch('[0-9a-f]{64}', reference[3]):
+                    receipt['digest_reference_check_id'] = reference[0]
+                    receipt['content_changed'] = digest is not None and digest != reference[3]
             if status in ('up','down') and prior_status in ('up','down') and status != prior_status:
                 receipt['events'].append(status)
             if receipt['content_changed']: receipt['events'].append('changed')
@@ -617,7 +643,8 @@ class CampaignDatabase:
             comparison = {'schema_version':1,'observation_url':result['url'],
                 'content_representation':representation,'same_source':same_source,
                 'same_representation':same_representation,'previous_check_id':receipt['previous_check_id'],
-                'scope':'Previous stored id, unverified HTTP status classes and literal digest comparison; not chronological history, campaign liveness or identity',
+                'digest_reference_check_id':receipt['digest_reference_check_id'],
+                'scope':'HTTP class compared to previous check; digest compared to referenced complete observation. Change time and campaign liveness are unverified.',
                 'verified':False}
             metadata = self._encode_writer_json({'source_metadata':result.get('metadata',{}),
                                                  'monitor_comparison':comparison},'metadata')
@@ -643,9 +670,14 @@ class CampaignDatabase:
                 self._assert_writer_record(conn,'alerts',alert_columns,alert_values,alert_id)
             if conn.execute('SELECT status,url,last_check FROM campaigns WHERE id=? COLLATE BINARY',(campaign_id,)).fetchall() != [('active',result['url'],timestamp)]:
                 raise RuntimeError('Monitor parent changed or timestamp reverted; transaction rolled back')
-            if previous and conn.execute('SELECT id,status,http_status,content_hash,metadata FROM checks WHERE id=?',
-                                         (previous[0],)).fetchall() != [previous]:
-                raise RuntimeError('Monitor comparison source changed; transaction rolled back')
+            sources = [previous] if previous else []
+            if reference is not None and reference is not previous:
+                sources.append(reference)
+            for source in sources:
+                rows = conn.execute('SELECT id,status,http_status,content_hash,metadata FROM checks '
+                                    'WHERE id=? AND campaign_id=? COLLATE BINARY', (source[0], campaign_id)).fetchall()
+                if rows != [source]:
+                    raise RuntimeError('Monitor comparison source changed; transaction rolled back')
             for _ in _json_chunks(receipt,self.limits['max_output_bytes']): pass
             with commit_guard() if commit_guard is not None else nullcontext():
                 conn.commit()
@@ -712,6 +744,11 @@ class CampaignDatabase:
                 alert['external_delivery_at_commit'] = (
                     'not_attempted' if isinstance(metadata, dict)
                     and metadata.get('external_delivery_at_commit') == 'not_attempted' else 'unknown'
+                )
+                reference_id = metadata.get('digest_reference_check_id') if isinstance(metadata, dict) else None
+                alert['digest_reference_check_id'] = (
+                    reference_id if alert['alert_type'] == 'changed' and type(reference_id) is int
+                    and check_id is not None and 0 < reference_id < check_id else None
                 )
                 alert['recorded_check_id'] = check_id
                 alert['source_check_available'] = None if check_id is None else bool(conn.execute(
