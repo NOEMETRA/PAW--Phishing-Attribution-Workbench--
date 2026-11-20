@@ -49,6 +49,26 @@ La raccolta HTTP manuale e il controller Python hanno collaudi su servizi di pro
 
 [Contratti verificati del modulo](docs/sentinel-module-audit.md) · [Stato del controllo di servizio](docs/sentinel-cli-lifecycle.md)
 
+## Consegna di un avviso a un ricevitore di laboratorio
+
+```bash
+paw monitor deliver --campaign ID --alert-id 42 --destination http://127.0.0.1:8080/alerts
+```
+
+Il comando consegna un singolo avviso già salvato a un ricevitore su indirizzo
+loopback letterale. Invia per POST soltanto ID evento, ID campagna, ID avviso e
+tipo. Il ricevitore deve usare l'header `Idempotency-Key` per riconoscere i
+tentativi dello stesso evento, salvare l'evento una volta e rispondere con
+HTTP 2xx e `Sentinel-Receipt` uguale alla chiave. I redirect non vengono seguiti.
+
+La prima esecuzione associa l'avviso al destinatario e salva l'ID prima
+della richiesta. Se il processo si interrompe o manca una ricevuta valida,
+ripetere lo stesso comando riusa la chiave. Una ricevuta confermata impedisce
+ulteriori richieste per l'evento. La sezione `webhook_delivery` della
+cronologia mostra stato, tentativi, esito HTTP ed eventuale errore. La
+deduplicazione sul destinatario dipende dal suo rispetto del protocollo.
+La consegna con endpoint pubblici e l'invio automatico restano aperti.
+
 ## Collaudo Linux con egress privato
 
 Il collaudo usa due namespace collegati da una coppia veth. Il peer ospita DNS, HTTP e HTTPS; entrambe le estremità hanno soltanto una rotta locale. Il certificato della fixture è valido per `sentinel.test`. Dopo tre osservazioni e un redirect, il test verifica gli errori DNS e TLS, il rifiuto del firewall e il recupero del collegamento. Verifica anche il TTL osservato dal modulo DNS di PAW e il comportamento offline del comando `full` con il peer raggiungibile.

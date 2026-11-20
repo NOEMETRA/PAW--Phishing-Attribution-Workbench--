@@ -9,6 +9,7 @@ import json
 import math
 import re
 import weakref
+import uuid
 from contextvars import ContextVar
 import os
 from pathlib import Path
@@ -767,6 +768,9 @@ class CampaignDatabase:
                     reference_id if alert['alert_type'] == 'changed' and type(reference_id) is int
                     and check_id is not None and 0 < reference_id < check_id else None
                 )
+                delivery = metadata.get('webhook_delivery') if isinstance(metadata, dict) else None
+                if self._valid_delivery_state(delivery):
+                    alert['webhook_delivery'] = delivery
                 alert['recorded_check_id'] = check_id
                 alert['source_check_available'] = None if check_id is None else bool(conn.execute(
                     "SELECT 1 FROM checks WHERE id = ? AND campaign_id = ? COLLATE BINARY LIMIT 1",
@@ -846,6 +850,87 @@ class CampaignDatabase:
         if result == 'rejected':
             raise RuntimeError('Sentinel acknowledgment did not persist; transaction rolled back')
         return 'acknowledged' if result == 'updated' else 'already_acknowledged'
+
+    @staticmethod
+    def _valid_delivery_state(state):
+        if not isinstance(state, dict) or set(state) != {
+                'event_id','destination_sha256','status','attempts','http_status','error','updated_at'}:
+            return False
+        event_id, target = state['event_id'], state['destination_sha256']
+        return (isinstance(event_id, str) and re.fullmatch('[0-9a-f]{32}', event_id) is not None
+                and isinstance(target, str) and re.fullmatch('[0-9a-f]{64}', target) is not None
+                and state['status'] in ('pending','receipt_confirmed','receipt_unconfirmed')
+                and type(state['attempts']) is int and 0 < state['attempts'] < 2**63
+                and (state['http_status'] is None or
+                     type(state['http_status']) is int and 100 <= state['http_status'] <= 599)
+                and state['error'] in (None,'http_status','receipt_missing','transport_error')
+                and isinstance(state['updated_at'], str)
+                and re.fullmatch(r'\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ', state['updated_at']) is not None
+                and (state['status'] != 'receipt_confirmed' or
+                     state['http_status'] is not None and 200 <= state['http_status'] < 300
+                     and state['error'] is None))
+
+    @contextmanager
+    def _alert_delivery_row(self, campaign_id, alert_id):
+        self._writer_text(campaign_id, 'campaign_id', nonblank=True)
+        self._writer_number(alert_id, 'alert_id', minimum=1, integer=True)
+        keys = (alert_id, campaign_id)
+        select = ('SELECT alert_type,metadata FROM alerts '
+                  'WHERE id=? AND campaign_id=? COLLATE BINARY')
+        with self.connection() as conn:
+            conn.execute('BEGIN IMMEDIATE')
+            if conn.execute("SELECT type FROM sqlite_master WHERE name='alerts' COLLATE NOCASE").fetchone() != ('table',):
+                raise ValueError('Sentinel delivery requires a saved alert table')
+            rows = conn.execute(select, keys).fetchall()
+            if len(rows) != 1:
+                raise ValueError('Expected one saved alert for the selected campaign')
+            alert_type, raw = rows[0]
+            metadata, evidence = self._decode_json_field(raw, {})
+            if evidence['status'] not in ('decoded','sql_null') or not isinstance(metadata, dict):
+                raise ValueError('Unreadable alert metadata; delivery state cannot be saved')
+            before = self._encode_writer_json(metadata, 'metadata')
+            yield alert_type, metadata
+            encoded = self._encode_writer_json(metadata, 'metadata')
+            if encoded != before:
+                cursor = conn.execute('UPDATE alerts SET metadata=? WHERE id=? AND campaign_id=? COLLATE BINARY',
+                                      (encoded,*keys))
+                if cursor.rowcount != 1 or conn.execute(select, keys).fetchall() != [(alert_type,encoded)]:
+                    raise RuntimeError('Sentinel delivery state did not persist')
+            conn.commit()
+
+    def start_alert_delivery(self, campaign_id, alert_id, destination_hash):
+        _require_active()
+        with self._alert_delivery_row(campaign_id, alert_id) as (alert_type, metadata):
+            if type(alert_type) is not str or not 0 < len(alert_type) <= 128:
+                raise ValueError('A short text alert type is required for webhook delivery')
+            if 'webhook_delivery' in metadata:
+                state = metadata['webhook_delivery']
+                if not self._valid_delivery_state(state):
+                    raise ValueError('Unreadable saved webhook state')
+            else:
+                state = {'event_id':uuid.uuid4().hex, 'destination_sha256':destination_hash,
+                         'attempts':0, 'status':'pending'}
+                metadata['webhook_delivery'] = state
+            if state['destination_sha256'] != destination_hash:
+                raise ValueError('Saved alert delivery is already bound to another recipient')
+            if state['status'] != 'receipt_confirmed':
+                state.update(status='pending', attempts=state['attempts']+1,
+                             http_status=None, error=None, updated_at=utc_now_iso())
+            return dict(state), alert_type
+
+    def finish_alert_delivery(self, campaign_id, alert_id, attempt, outcome, code):
+        _require_active()
+        with self._alert_delivery_row(campaign_id, alert_id) as (_, metadata):
+            state = metadata.get('webhook_delivery', {})
+            if (not self._valid_delivery_state(state) or state['event_id'] != attempt['event_id']
+                    or state['destination_sha256'] != attempt['destination_sha256']):
+                raise RuntimeError('Saved alert delivery changed before its result could be recorded')
+            if state['status'] != 'receipt_confirmed' and (
+                    outcome == 'receipt_confirmed' or state['attempts'] == attempt['attempts']):
+                state.update(status='receipt_confirmed' if outcome == 'receipt_confirmed' else 'receipt_unconfirmed',
+                             http_status=code, error=None if outcome == 'receipt_confirmed' else outcome,
+                             updated_at=utc_now_iso())
+            return dict(state)
 
     def _expire_check_body(self, conn, identifier):
         # Only rewrite text metadata in the format emitted by the monitor.

@@ -352,13 +352,14 @@ For help: paw help <command>
 
         # MONITOR command (Sentinel)
         p_monitor = sub.add_parser("monitor", help="Sentinel campaign monitoring and local evidence")
-        p_monitor.add_argument("action", choices=["run", "start", "stop", "status", "add", "remove", "list", "check", "files", "integrity", "history", "acknowledge"],
+        p_monitor.add_argument("action", choices=["run", "start", "stop", "status", "add", "remove", "list", "check", "files", "integrity", "history", "acknowledge", "deliver"],
                               help="Monitoring action (start/stop unavailable; no persistent service control)")
         p_monitor.add_argument("--origin", action="append", help="Owned literal loopback/private HTTP(S) origin for foreground run (repeatable)")
         p_monitor.add_argument("--case", help="Case ID to monitor (for add action)")
         p_monitor.add_argument("--url", help="URL to monitor (for add action)")
-        p_monitor.add_argument("--campaign", help="Campaign ID (required for history and acknowledge, optional for check)")
-        p_monitor.add_argument("--alert-id", type=int, help="Alert ID (required for acknowledge)")
+        p_monitor.add_argument("--campaign", help="Campaign ID (required for history, acknowledge and deliver, optional for check)")
+        p_monitor.add_argument("--alert-id", type=int, help="Alert ID (required for acknowledge and deliver)")
+        p_monitor.add_argument("--destination", help="Owned numeric loopback webhook URL for deliver")
 
         # GEOGRAPHIC command (Sentinel Intelligence)
         p_geo = sub.add_parser("geographic", aliases=["geo"], help="Describe unverified stored geographic observations")
@@ -563,20 +564,29 @@ For help: paw help <command>
             from .core.trace import update_report
             update_report(args.case)
         elif args.cmd == "monitor":
-            if args.action == "acknowledge":
+            if args.destination is not None and args.action != "deliver":
+                raise ValueError("--destination applies only to monitor deliver")
+            if args.action in ("acknowledge", "deliver"):
                 if not args.campaign or not args.campaign.strip() or args.alert_id is None:
-                    raise ValueError("--campaign and --alert-id are required for acknowledge")
+                    raise ValueError("--campaign and --alert-id are required")
                 if not 0 < args.alert_id < 2**63:
                     raise ValueError("--alert-id must fit a positive SQLite integer")
                 if args.case is not None or args.url is not None or args.origin:
-                    raise ValueError("acknowledge accepts only --campaign and --alert-id")
+                    raise ValueError("Only campaign, alert ID and delivery destination are accepted")
+                if args.action == "deliver":
+                    from .sentinel.delivery import deliver_saved_alert
+                    result = deliver_saved_alert(args.campaign, args.alert_id, args.destination)
+                    print(json.dumps(result))
+                    if result['status'] != 'receipt_confirmed':
+                        sys.exit(1)
+                    return
                 from .sentinel import CampaignDatabase, SentinelConfig
                 database = CampaignDatabase(**SentinelConfig().get_database_options(), initialize=False)
                 result = database.acknowledge_campaign_alert(args.campaign, args.alert_id)
                 print(json.dumps({'campaign_id':args.campaign, 'alert_id':args.alert_id, 'status':result}))
                 return
             if args.alert_id is not None:
-                raise ValueError("--alert-id applies only to monitor acknowledge")
+                raise ValueError("--alert-id applies only to monitor acknowledge and deliver")
             if args.action == "run":
                 if any(value is not None for value in (args.case, args.campaign, args.url)):
                     raise ValueError("monitor run selects all active campaigns and accepts only --origin")
@@ -775,6 +785,7 @@ USAGE:
 
 ACTIONS:
   acknowledge         Mark a local alert as seen; requires --campaign and --alert-id
+  deliver             Deliver one saved alert to an owned loopback receiver
   run                 Foreground Linux lab monitor; requires --origin, stops on SIGTERM/SIGINT
   start, stop         Unavailable: no supervised persistent service control
   list, status        Passive stored campaign/count reads; runtime state unknown
