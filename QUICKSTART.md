@@ -1,124 +1,61 @@
-# PAW - Phishing Attribution Workbench
+# PAW quick start
 
-🐾 **PAW** is a comprehensive tool for analyzing phishing emails and attributing them to threat actors through advanced intelligence gathering and forensic analysis.
+PAW builds a local forensic case from an email. Start with an EML file and use an offline preset to inspect the message, its attachments and the evidence available locally.
 
-## Quick Start (5 minutes)
+## Install from source
 
-### 1. Install PAW
+On Linux or macOS with Python 3.11 or later, use a dedicated environment.
+
 ```bash
-pip install paw-forensics
-# or from source
-git clone https://github.com/your-org/paw.git
+git clone https://github.com/NOEMETRA/PAW--Phishing-Attribution-Workbench--.git paw
 cd paw
-pip install -r requirements.txt
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install .
+paw --help
 ```
 
-### 2. Analyze Your First Email
+On Windows, create the environment with `py -3 -m venv .venv` and activate it in PowerShell with `.\.venv\Scripts\Activate.ps1`. See the [installation validation record](docs/linux-r08-validation.md) for tested runtimes and component limitations.
+
+## Analyze an email offline
+
+Run PAW from a working directory where you want to keep the case. Replace `sample.eml` with the path to your message.
+
 ```bash
-# Quick analysis (recommended for most users)
-paw analyze suspicious.eml
-
-# Fast analysis without network calls
-paw quick suspicious.eml
-
-# Complete analysis with all features
-paw full suspicious.eml
-
-# Maximum detail forensic analysis
-paw forensic suspicious.eml
+paw quick sample.eml
 ```
 
-### 3. View Results
-PAW creates a case directory with comprehensive reports:
-```
-cases/case-20251029-abc123/
-├── report/
-│   ├── executive.md      # Human-readable summary
-│   └── technical.md      # Detailed technical analysis
-├── evidence/             # Forensic evidence
-├── graphs/              # Visual attribution graphs
-└── [analysis files]     # JSON data from intelligence modules
-```
+Use the strict review profile to include local report drafts.
 
-### 4. Key Findings
-After analysis, you'll see a beautiful terminal summary showing:
-- **Verdict**: Malicious/Suspicious/Low Risk with confidence score
-- **Origin**: IP, ASN, Country of the attacking infrastructure
-- **Key Findings**: Criminal infrastructure, TLS fingerprints, etc.
-- **Operator Hypothesis**: AI-generated attribution with confidence
-- **Next Steps**: Recommended actions
-
-## Analysis Modes
-
-| Command | Purpose | Network | Exports | Speed |
-|---------|---------|---------|---------|-------|
-| `paw quick` | Fast triage | ❌ | ❌ | ⚡ Fast |
-| `paw analyze` | Standard analysis | ⚠️ | Optional | 🔄 Medium |
-| `paw full` | Complete analysis | ✅ | ✅ | 🐌 Slow |
-| `paw forensic` | Maximum detail | ✅ | ✅ | 🐌 Slowest |
-
-## Common Workflows
-
-### Incident Response
 ```bash
-# 1. Quick triage
-paw quick suspicious.eml
-
-# 2. If suspicious, do full analysis
-paw full suspicious.eml
-
-# 3. Export for sharing
-paw export --case case-20251029-abc123 --format zip
+paw full sample.eml --no-egress
 ```
 
-### Threat Hunting
+Use the same offline policy for a directory of messages.
+
 ```bash
-# Analyze multiple emails
-paw analyze inbox/ --profile strict
-
-# Search for related cases
-paw query --by ip --value 192.168.1.1
+paw analyze inbox/ --profile strict --no-egress
 ```
 
-### Forensic Investigation
+Each invocation creates its own cases. The quick preset always uses the offline policy. Analyze, full, forensic and trace also default to offline. Keep `--no-egress` in development scripts to record intent. Their `--allow-egress` option permits enrichment and automatic URL detonation in an isolated environment. The offline policy skips URL detonation and network enrichment. See the [offline scope and isolation limits](README.md#offline-analysis---no-egress).
+
+## Read and verify a case
+
+PAW prints the path of the case it creates. Start with `report/executive.md`. Use `report/score.json` for the scoring profile, decision thresholds and component contributions, and `execution.json` for skipped stages. The score is an uncalibrated heuristic. An inconclusive result leaves the message’s legitimacy unresolved. Sender headers and candidate infrastructure require independent verification before attribution.
+
+Use the actual case path in both commands below.
+
 ```bash
-# Maximum detail analysis
-paw forensic evidence.eml
-
-# Detonate URLs safely
-paw detonate --case case-20251029-abc123
-
+paw verify --case cases/CASE_DIRECTORY
+paw export --case cases/CASE_DIRECTORY --format zip
 ```
 
-Canary deployment is currently unavailable. The legacy collector invalidated
-sealed cases by appending new observations. Its CLI and launcher reject startup;
-see [canary status](docs/canary-status.md). Collection awaits separate observation
-storage in the isolated lab.
+Verification checks the local evidence inventory and file hashes. The ZIP contains case evidence, including the original email. Review its contents before sharing. Abuse reports are local drafts. STIX generation and canary deployment are currently unavailable.
 
-## Understanding Results
+See the [score explanations](docs/score-explanations.md) for interpretation and the [canary status](docs/canary-status.md) for the collector’s current scope.
 
-### Verdict Levels
-- **🚨 LIKELY MALICIOUS** (0.8+): High confidence phishing
-- **⚠️ SUSPICIOUS** (0.6-0.8): Potential phishing, needs review
-- **✅ LOW RISK** (<0.6): Probably legitimate
-
-### Intelligence Modules
-PAW integrates multiple intelligence sources:
-- **Criminal Hunter**: Identifies known malicious infrastructure
-- **Infrastructure Mapper**: Maps attacker network topology
-- **Threat Intelligence**: Correlates with global threat feeds
-- **SSL Analysis**: Certificate fingerprinting
-- **Deobfuscation**: Reveals hidden malicious content
-
-## Next Steps
-
-1. **Read the executive summary**: `cat cases/*/report/executive.md`
-2. **Review technical details**: `cat cases/*/report/technical.md`
-3. **Submit abuse reports**: Use the generated abuse packages
-4. **Export STIX**: `paw export --case <id> --format stix`
-
-## Need Help?
-
-- `paw help` - Show all commands
-- `paw help <command>` - Detailed help for specific command
-- Check the troubleshooting guide below for common issues
+For API indicator searches, POST a JSON object with `query_type` and `value` to
+`/api/query`. Each page examines up to 100 indexed cases by default. Set
+`limit` to 1–1000 to choose a page size. Pass the returned `next_after` as
+`after` with the same query to continue until the cursor is null. A page may be
+empty while a cursor is present when its cases have active workers.

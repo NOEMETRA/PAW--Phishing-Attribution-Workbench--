@@ -403,7 +403,9 @@ Use detonation only from an isolated research environment with an appropriate ou
 
 ## Offline analysis: `--no-egress`
 
-`analyze`, `trace`, `full`, `forensic`, and `quick` apply the offline policy.
+`analyze`, `trace`, `full`, `forensic`, and `quick` default to the offline policy. The first four accept mutually exclusive
+`--no-egress` and `--allow-egress` flags. The latter permits network enrichment and automatic URL detonation.
+`quick` always runs offline.
 Offline runs skip detonation, RDAP/DNS enrichment, canary deployment and remote anchoring.
 
 Offline signature verification can use explicitly supplied local public key
@@ -590,13 +592,13 @@ python -m paw --help
 ### Email analysis
 
 ```bash
-python -m paw analyze sample.eml
+python -m paw analyze sample.eml --no-egress
 ```
 
 A directory can be analyzed through the legacy `trace` interface:
 
 ```bash
-python -m paw trace --src samples/
+python -m paw trace --src samples/ --no-egress
 ```
 
 ### Verify a case
@@ -633,12 +635,12 @@ The CLI currently contains `quick`, `full`, and `forensic` shortcuts.
 
 These names describe requested workflow depth, not validation levels.
 
-Because network gating is currently incomplete, inspect the code before assuming that a preset is offline or passive.
+Email analysis presets default to offline. Active collection requires a separate isolation boundary.
 
 ## Known limitations
 
 - `--no-egress` uses application enforcement; native-code containment needs OS isolation.
-- The main trace path automatically detonates discovered URLs in the current implementation.
+- When egress is enabled, the main trace path can automatically detonate discovered URLs.
 - Several network enrichments run from the same process as forensic parsing.
 - Authentication handling primarily interprets reported results rather than independently reproducing every authentication protocol.
 - Received-path origin selection is heuristic.

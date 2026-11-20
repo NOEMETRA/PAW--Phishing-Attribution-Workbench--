@@ -17,6 +17,9 @@ dist/
 .env.*
 !.env.example
 cases/
+/uploads/
+/jobs/
+/exports/
 logs/
 *.log
 

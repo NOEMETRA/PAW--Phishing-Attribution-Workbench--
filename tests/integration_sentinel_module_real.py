@@ -141,6 +141,21 @@ class SentinelModuleIntegration(unittest.TestCase):
         self.assertFalse(first['metadata']['http_observation']['verified'])
         self.assertEqual(first['metadata']['screenshot']['status'],'unavailable')
 
+    def test_observation_without_body_retains_change_evidence(self):
+        self.config.set('storage.retain_http_bodies', False)
+        first, = self.monitor.check_now(self.campaign)
+        self.assertEqual(first['content_hash'], hashlib.sha256(self.body).hexdigest())
+        type(self).body = b'changed privately'
+        second, = self.monitor.check_now(self.campaign)
+        self.assertTrue(second['content_changed'])
+        with self.db.connection() as conn:
+            rows = conn.execute('SELECT metadata FROM checks ORDER BY id').fetchall()
+        self.assertEqual(len(rows), 2)
+        for row in rows:
+            source = json.loads(row[0])['source_metadata']
+            self.assertEqual(source['retained_body_bytes'], 0)
+            self.assertNotIn('body_base64', source['http_observation'])
+
     def test_redirect_does_not_follow_external_location(self):
         before = len(self.visits); result = fetch_http(self.base+'/redirect',timeout=.5)
         self.assertEqual(result['http_status'],302); self.assertFalse(result['redirects_followed'])

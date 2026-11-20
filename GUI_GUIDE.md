@@ -161,4 +161,4 @@ Per segnalare bug o richiedere funzionalità, apri un issue nel repository GitHu
 
 ## Licenza
 
-Questo progetto è distribuito sotto licenza MIT. Vedi il file LICENSE per dettagli.
+Per i termini applicabili a questa versione, consultare il file LICENSE.

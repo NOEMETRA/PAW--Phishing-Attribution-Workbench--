@@ -74,7 +74,7 @@ class SentinelConfig:
             if key in monitoring: positive_number(monitoring[key],key,maximum)
         if 'max_concurrent_checks' in monitoring:
             native_integer(monitoring['max_concurrent_checks'],'max_concurrent_checks',64)
-        for section,keys in (('monitoring',('enabled',)),
+        for section,keys in (('monitoring',('enabled',)), ('storage',('retain_http_bodies','automatic_retention')),
                 ('alerts',('enabled','email_alerts','alert_on_changes','alert_on_down','alert_on_up')),
                 ('analysis',('enable_screenshots','enable_content_diff','enable_fingerprinting'))):
             for key in keys:
@@ -83,6 +83,10 @@ class SentinelConfig:
         if 'storage' in config:
             if not isinstance(config['storage'], dict):
                 raise ValueError('Sentinel storage configuration must be an object')
+            if config['storage'].get('automatic_retention'):
+                for key in ('retention_days', 'alert_retention_days'):
+                    if key in config['storage']:
+                        native_integer(config['storage'][key], key, 365_000)
             if 'database_path' in config['storage']:
                 _storage_path(config['storage']['database_path'], base=self._base_dir)
             if 'limits' in config['storage']:
@@ -112,6 +116,8 @@ class SentinelConfig:
                 "database_path": "sentinel.db",
                 "screenshots_dir": "screenshots",
                 "max_screenshots_per_campaign": 50,
+                "retain_http_bodies": True,
+                "automatic_retention": False,
                 "retention_days": 90,         # Keep data for 90 days
             },
             "analysis": {

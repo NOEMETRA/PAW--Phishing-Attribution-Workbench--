@@ -9,6 +9,8 @@ import os
 from pathlib import Path
 import shutil
 import sqlite3
+import re
+import tempfile
 import sys
 import uuid
 import time
@@ -28,6 +30,14 @@ from ..core.consumer_views import read_artifact_json, read_artifact_text, assess
 
 @asynccontextmanager
 async def lifespan(application):
+    # This API owns a single process per data directory. Reclaim only its
+    # reserved download directories before accepting new requests.
+    for directory in EXPORT_DIR.glob('paw-download-*'):
+        if (re.fullmatch(r'paw-download-[a-z0-9_]{8}', directory.name)
+                and directory.is_dir() and not directory.is_symlink()):
+            (directory / 'case.zip').unlink(missing_ok=True)
+            if not any(directory.iterdir()):
+                directory.rmdir()
     # Recover before accepting requests; a killed API may leave POSIX writers.
     identifiers = {path.stem for path in JOBS_DIR.glob('analysis_*.json') if path.stem[9:].isalnum()}
     identifiers.update(identifier for identifier,_ in controls(DATA_DIR,JOBS_DIR))
@@ -47,13 +57,14 @@ async def local_boundary(request: Request, call_next):
     origin = request.headers.get('origin')
     if origin and origin != str(request.base_url).rstrip('/'):
         return JSONResponse({'detail':'Same-origin requests required'}, status_code=403)
-    if request.method == 'POST' and request.url.path == '/api/sources/upload':
+    upload_limits = {'/api/upload': 25 * 1024**2, '/api/sources/upload': 16 * 1024**2}
+    if request.method == 'POST' and request.url.path in upload_limits:
         length = request.headers.get('content-length', '')
         # Bound the multipart envelope before FastAPI spools/parses any body.
         if request.headers.get('transfer-encoding') or not length.isascii() or not length.isdecimal():
-            return JSONResponse({'detail': 'Fixed Content-Length required for source upload'}, status_code=411)
-        if len(length) > 10 or int(length) > 16*1024**2+65536:
-            return JSONResponse({'detail': 'Source multipart envelope exceeds budget'}, status_code=413)
+            return JSONResponse({'detail': 'Fixed Content-Length required for upload'}, status_code=411)
+        if len(length) > 10 or int(length) > upload_limits[request.url.path] + 65536:
+            return JSONResponse({'detail': 'Multipart envelope exceeds budget'}, status_code=413)
     response = await call_next(request)
     response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
     response.headers['X-Content-Type-Options'] = 'nosniff'
@@ -205,6 +216,8 @@ class AnalysisRequest(BaseModel):
 class CaseQuery(BaseModel):
     query_type: Literal['ip', 'domain', 'asn']
     value: str
+    limit: int = Field(default=100, ge=1, le=1000)
+    after: str | None = None
 
 class SourceInspectionRequest(BaseModel):
     file_path: str
@@ -589,27 +602,37 @@ async def get_case_detail(case_id: str):
 
 @app.post('/api/query')
 async def query_cases(query: CaseQuery):
-    database, matches = CASES_DIR/'index.db', []
+    database = CASES_DIR/'index.db'
+    rows = []
     if database.exists():
+        statement = ('SELECT c.* FROM indicators i JOIN cases c ON c.id=i.case_id '
+                     "WHERE i.type=? AND i.value=? AND typeof(c.id)='text' ")
+        parameters = [query.query_type, query.value]
+        if query.after is not None:
+            statement += 'AND i.case_id COLLATE BINARY > ? '
+            parameters.append(query.after)
         with closing(sqlite3.connect(f'{database.as_uri()}?mode=ro', uri=True)) as connection:
             connection.row_factory = sqlite3.Row
-            matches = [describe_fingerprint(dict(row)) for row in connection.execute(
-                'SELECT c.* FROM cases c JOIN indicators i ON c.id=i.case_id WHERE i.type=? AND i.value=?',
-                (query.query_type,query.value))]
+            rows = connection.execute(statement + 'ORDER BY i.case_id COLLATE BINARY LIMIT ?',
+                                      [*parameters, query.limit + 1]).fetchall()
     stable_matches = []
-    for match in matches:
-        identifier = 'case-' + match['id']
+    for row in rows[:query.limit]:
+        identifier = 'case-' + row['id']
         if Path(identifier).name == identifier:
-            match['execution_status'] = await stable_case_status(CASES_DIR/identifier)
-            if match['execution_status'] in UNSTABLE_CASE_STATUSES: continue
-            stable_matches.append(match)
-    return {'query_type':query.query_type,'value':query.value,'matches':stable_matches}
+            status = await stable_case_status(CASES_DIR/identifier)
+            if status in UNSTABLE_CASE_STATUSES: continue
+            stable_matches.append(dict(describe_fingerprint(dict(row)), execution_status=status))
+    return {'query_type':query.query_type, 'value':query.value, 'matches':stable_matches,
+            'next_after':rows[query.limit - 1]['id'] if len(rows) > query.limit else None}
 
 @app.get('/api/statistics')
 async def get_statistics():
-    paths = list(CASES_DIR.glob('*/manifest.json'))
+    total = 0
     countries, asns, errors, budget = Counter(), Counter(), {}, ReadBudget()
-    for path in paths:
+    for path in CASES_DIR.glob('*/manifest.json'):
+        total += 1
+        if total % 32 == 0:
+            await asyncio.sleep(0)
         if await stable_case_status(path.parent) != 'completed': continue
         origin = path.parent/'origin.json'
         if origin.exists():
@@ -622,8 +645,36 @@ async def get_statistics():
                 if type(data['asn']) in (int, str): asns[str(data['asn'])] += 1
                 else: case_errors['asn'] = 'Expected ASN integer or string'
             if case_errors: errors[path.parent.name] = case_errors
-    return {'total_cases':len(paths),'top_countries':countries.most_common(10),
+    return {'total_cases':total,'top_countries':countries.most_common(10),
         'top_asns':asns.most_common(10),'operator_attribution':'not established', 'artifact_errors':errors}
+
+class DownloadArchive(FileResponse):
+    """Own one temporary archive until its last response byte or disconnect."""
+
+    def __init__(self, directory, case):
+        self.directory = directory
+        archive = shutil.make_archive(str(Path(directory.name) / 'case'), 'zip', str(case))
+        super().__init__(archive, filename=case.name + '.zip', media_type='application/zip')
+
+    async def __call__(self, scope, receive, send):
+        # Stream through FileResponse so an asynchronous pathsend cannot
+        # outlive the named file. Range and content-length support remain.
+        extensions = dict(scope.get('extensions', {}))
+        extensions.pop('http.response.pathsend', None)
+        try:
+            await super().__call__(dict(scope, extensions=extensions), receive, send)
+        finally:
+            self.directory.cleanup()
+
+
+def prepare_download(case):
+    directory = tempfile.TemporaryDirectory(prefix='paw-download-', dir=EXPORT_DIR)
+    try:
+        return DownloadArchive(directory, case)
+    except BaseException:
+        directory.cleanup()
+        raise
+
 
 @app.get('/api/export/{case_id}')
 async def export_case(case_id: str, format: str = 'zip'):
@@ -633,9 +684,7 @@ async def export_case(case_id: str, format: str = 'zip'):
     from ..core.evidence import file_inventory
     try: await asyncio.to_thread(file_inventory,directory)
     except ValueError as exc: raise HTTPException(409,str(exc)) from exc
-    archive = await asyncio.to_thread(shutil.make_archive,
-        str(EXPORT_DIR/(case_id+'-'+uuid.uuid4().hex)), 'zip', str(directory))
-    return FileResponse(archive, filename=case_id+'.zip', media_type='application/zip')
+    return await asyncio.to_thread(prepare_download, directory)
 
 if __name__ == '__main__':
     import uvicorn

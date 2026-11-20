@@ -1,0 +1,51 @@
+name: PAW Windows installed package
+
+on:
+  workflow_dispatch:
+  pull_request:
+  push:
+    branches: [main, 'audit/windows-*']
+
+permissions:
+  contents: read
+
+jobs:
+  installed-offline:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Build and install wheel outside checkout
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          python -m pip wheel --no-deps --wheel-dir "$env:RUNNER_TEMP/wheels" .
+          python -m venv "$env:RUNNER_TEMP/paw-installed"
+          $wheel = (Get-ChildItem "$env:RUNNER_TEMP/wheels/paw-*.whl").FullName
+          & "$env:RUNNER_TEMP/paw-installed/Scripts/python.exe" -m pip install $wheel
+      - name: Verify installed CLI, API and sealed exports
+        shell: pwsh
+        working-directory: ${{ runner.temp }}
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          $python = "$env:RUNNER_TEMP/paw-installed/Scripts/python.exe"
+          $wheel = (Get-ChildItem "$env:RUNNER_TEMP/wheels/paw-*.whl").FullName
+          & $python -I -B "$env:GITHUB_WORKSPACE/tests/test_cli_egress_consent.py"
+          & $python -I -B -m unittest discover -s "$env:GITHUB_WORKSPACE/tests" -p test_api_transfer_lifecycle.py
+          & $python -I -B "$env:GITHUB_WORKSPACE/tests/integration_installed_package_real.py" --wheel $wheel --output "$env:RUNNER_TEMP/results"
+
+      - name: Retain Windows acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installed-${{ matrix.python-version }}
+          path: ${{ runner.temp }}/results
+          if-no-files-found: ignore
+          retention-days: 7

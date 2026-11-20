@@ -117,7 +117,7 @@ class DNSEnrichmentAnalyzer:
             for answer in answers:
                 record_info = {
                     'value': str(answer),
-                    'ttl': answer.ttl if hasattr(answer, 'ttl') else None
+                    'ttl': answers.rrset.ttl
                 }
 
                 # Add type-specific fields

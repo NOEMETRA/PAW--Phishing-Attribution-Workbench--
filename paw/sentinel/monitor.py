@@ -181,13 +181,15 @@ class SentinelMonitor:
         _,_,timeout = self._settings()
         observed = fetch_http(campaign['url'],timeout=timeout,max_bytes=128*1024,stop_event=self._stop_event)
         body = observed.pop('body'); code = observed['http_status']
-        observed['body_base64'] = base64.b64encode(body).decode('ascii')
+        retain_body = self.config.get('storage.retain_http_bodies', True) is True
+        if retain_body:
+            observed['body_base64'] = base64.b64encode(body).decode('ascii')
         status = ('up' if code < 400 else 'down') if observed['status']=='observed' else 'error'
         digest = observed['content_sha256'] if self.config.get('analysis.enable_content_diff',True) is True else None
         return {'campaign_id':campaign['id'],'url':campaign['url'],'status':status,
             'http_status':code,'response_time':observed['elapsed_seconds'],'content_hash':digest,
             'screenshot_path':None,'error_message':observed['error'],
-            'metadata':{'http_observation':observed,'retained_body_bytes':len(body),
+            'metadata':{'http_observation':observed,'retained_body_bytes':len(body) if retain_body else 0,
                 'screenshot':{'status':'unavailable' if self.config.get('analysis.enable_screenshots',True) is True else 'not_requested',
                               'reason':'Browser capture requires the isolated collector validation'},
                 'assessment':{'status':'unavailable','reason':'HTTP observations do not establish campaign liveness or identity'}}}

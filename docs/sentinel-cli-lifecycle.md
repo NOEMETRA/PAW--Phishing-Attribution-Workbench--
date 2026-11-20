@@ -1,5 +1,7 @@
 # Sentinel CLI service control
 
+`monitor run --origin ORIGIN` is the Linux foreground entry point for owned laboratory origins. Its installed CLI integration verifies signal shutdown during HTTP, per-database process exclusion, restart continuity and retained evidence. See [the operating guide](../SENTINEL_README.md).
+
 The existing `monitor start` and `monitor stop` actions are explicitly unavailable.
 They exit nonzero before importing Sentinel, loading configuration, opening or
 initializing a database, creating a thread, or invoking a collector. Optional

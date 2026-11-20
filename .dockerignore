@@ -49,6 +49,9 @@ Thumbs.db
 # Project specific
 SAVE/
 cases/
+/uploads/
+/jobs/
+/exports/
 vault/
 *.log
 *.enc

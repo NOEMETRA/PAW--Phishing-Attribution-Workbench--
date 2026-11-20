@@ -58,6 +58,7 @@ def _init_db(conn):
             PRIMARY KEY (case_id, type, value)
         )
     """)
+    conn.execute('CREATE INDEX IF NOT EXISTS indicators_lookup ON indicators(type, value, case_id)')
     columns = {row[1] for row in conn.execute('PRAGMA table_info(cases)')}
     for name in ('simhash_method', 'simhash_status'):
         if name not in columns:

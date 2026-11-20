@@ -163,7 +163,7 @@ Examples:
   paw analyze email.eml --forensic         # Request optional anchoring
   paw analyze email.eml --stix --abuse     # With exports
   paw quick email.eml                      # Fast preset
-  paw full email.eml                       # Complete analysis
+  paw full email.eml                       # Strict offline analysis with exports
   paw forensic email.eml                   # Strict profile, exports, optional anchoring
 
 For help: paw help <command>
@@ -189,26 +189,23 @@ For help: paw help <command>
         p_analyze.add_argument("--stix", action="store_true", help="Request STIX export; conformance currently unavailable")
         p_analyze.add_argument("--abuse", action="store_true", help="Generate abuse package")
         p_analyze.add_argument("--forensic", action="store_true", help="Request optional Rekor anchoring; does not change profile or enable exports")
-        p_analyze.add_argument("--no-egress", action="store_true", help="Do not contact suspicious infra")
         p_analyze.add_argument("--lang", default="en", help="Abuse-package language: it or en fallback; main reports remain English")
 
         # PRESET commands (shortcuts)
         p_quick = sub.add_parser("quick", help="Fast analysis, no egress")
         p_quick.add_argument("email", help="Path to .eml file")
 
-        p_full = sub.add_parser("full", help="Complete analysis with detonation")
+        p_full = sub.add_parser("full", help="Strict offline analysis with exports")
         p_full.add_argument("email", help="Path to .eml file")
         p_full.add_argument("--lang", default="en", help="Abuse-package language: it or en fallback; main reports remain English")
         p_full.add_argument("--stix", action="store_true", help="Compatibility flag: STIX is always requested by full; conformance unavailable")
         p_full.add_argument("--abuse", action="store_true", help="Compatibility flag: abuse package is always enabled by full")
-        p_full.add_argument("--no-egress", action="store_true", help="Do not contact suspicious infra")
 
         p_forensic = sub.add_parser("forensic", help="Strict profile + exports + optional anchoring")
         p_forensic.add_argument("email", help="Path to .eml file")
         p_forensic.add_argument("--lang", default="en", help="Abuse-package language: it or en fallback; main reports remain English")
         p_forensic.add_argument("--stix", action="store_true", help="Compatibility flag: STIX is always requested by forensic; conformance unavailable")
         p_forensic.add_argument("--abuse", action="store_true", help="Compatibility flag: abuse package is always enabled by forensic")
-        p_forensic.add_argument("--no-egress", action="store_true", help="Do not contact suspicious infra")
 
         # Legacy TRACE command (keep for compatibility)
         p_trace = sub.add_parser("trace", help="Legacy: use 'analyze' instead")
@@ -217,7 +214,6 @@ For help: paw help <command>
         p_trace.add_argument("--stix", action="store_true", help="Request STIX export; conformance currently unavailable")
         p_trace.add_argument("--abuse", action="store_true", help="Generate abuse package")
         p_trace.add_argument("--anchor", action="store_true", help="(Optional) Anchor Merkle root to Rekor")
-        p_trace.add_argument("--no-egress", action="store_true", help="Do not contact suspicious infra")
         p_trace.add_argument("--profile", choices=["default", "strict", "conservative"], default="default", help="Scoring profile")
         p_trace.add_argument("--deob-weight", type=validate_deobfuscation_weight, default=0.30, help="Finite deobfuscation weight between 0 and 1")
 
@@ -356,11 +352,12 @@ For help: paw help <command>
 
         # MONITOR command (Sentinel)
         p_monitor = sub.add_parser("monitor", help="Stored campaigns/local integrity; service start/stop unavailable")
-        p_monitor.add_argument("action", choices=["start", "stop", "status", "add", "remove", "list", "check", "files", "integrity"],
+        p_monitor.add_argument("action", choices=["run", "start", "stop", "status", "add", "remove", "list", "check", "files", "integrity", "history"],
                               help="Monitoring action (start/stop unavailable; no persistent service control)")
+        p_monitor.add_argument("--origin", action="append", help="Owned literal loopback/private HTTP(S) origin for foreground run (repeatable)")
         p_monitor.add_argument("--case", help="Case ID to monitor (for add action)")
         p_monitor.add_argument("--url", help="URL to monitor (for add action)")
-        p_monitor.add_argument("--campaign", help="Campaign ID (for check action)")
+        p_monitor.add_argument("--campaign", help="Campaign ID (required for history, optional for check)")
 
         # GEOGRAPHIC command (Sentinel Intelligence)
         p_geo = sub.add_parser("geographic", aliases=["geo"], help="Describe unverified stored geographic observations")
@@ -368,6 +365,14 @@ For help: paw help <command>
         p_geo.add_argument("--case", help="Case ID to analyze (optional)")
         p_geo.add_argument("--min-confidence", type=float, default=0.0, help="Stored confidence threshold (0 disables filtering; otherwise 0.0-1.0)")
         p_geo.add_argument("--output", choices=["html", "json", "both"], default="both", help="Output format")
+
+        for analysis_parser in (p_analyze, p_full, p_forensic, p_trace):
+            policy = analysis_parser.add_mutually_exclusive_group()
+            policy.add_argument('--no-egress', dest='no_egress', action='store_true',
+                                help='Keep analysis offline (default)')
+            policy.add_argument('--allow-egress', dest='no_egress', action='store_false',
+                                help='Permit existing network enrichment and automatic URL detonation')
+            analysis_parser.set_defaults(no_egress=True)
 
         for analysis_parser in (p_analyze, p_quick, p_full, p_forensic, p_trace):
             analysis_parser.add_argument('--dkim-keys', help='Local JSON key evidence; no DNS lookup or implied key trust')
@@ -557,6 +562,14 @@ For help: paw help <command>
             from .core.trace import update_report
             update_report(args.case)
         elif args.cmd == "monitor":
+            if args.action == "run":
+                if any(value is not None for value in (args.case, args.campaign, args.url)):
+                    raise ValueError("monitor run selects all active campaigns and accepts only --origin")
+                from .sentinel.service import run_foreground
+                run_foreground(args.origin)
+                return
+            if args.origin:
+                raise ValueError("--origin applies only to monitor run")
             if args.action == "add" and (not args.case or not args.case.strip() or
                                          not args.url or not args.url.strip()):
                 raise ValueError("--case and --url must be nonblank for add action")
@@ -566,10 +579,15 @@ For help: paw help <command>
                 raise RuntimeError("Sentinel service control is unavailable. "
                                    f"'{args.action}' has no supervised persistent service "
                                    "or cross-process stop protocol.")
-            if args.action in ("list", "status"):
+            if args.action in ("list", "status", "history"):
+                if args.action == "history" and (not args.campaign or not args.campaign.strip()):
+                    raise ValueError("--campaign is required for history")
                 from .sentinel import CampaignDatabase, SentinelConfig
                 config = SentinelConfig()
                 database = CampaignDatabase(**config.get_database_options(), read_only=True)
+                if args.action == "history":
+                    print(json.dumps(database.get_campaign_history(args.campaign), allow_nan=False))
+                    return
                 if args.action == "status":
                     stats = database.get_monitor_statistics()
                     print("📊 Sentinel Status (stored data):")
@@ -723,7 +741,7 @@ Examples:
   paw analyze email.eml --forensic         # Request optional anchoring
   paw analyze email.eml --stix --abuse     # With exports
   paw quick email.eml                      # Fast preset
-  paw full email.eml                       # Complete analysis
+  paw full email.eml                       # Strict offline analysis with exports
   paw forensic email.eml                   # Strict profile, exports, optional anchoring
 
 For detailed help: paw help <command>
@@ -741,10 +759,12 @@ USAGE:
   paw monitor <action> [options]
 
 ACTIONS:
+  run                 Foreground Linux lab monitor; requires --origin, stops on SIGTERM/SIGINT
   start, stop         Unavailable: no supervised persistent service control
   list, status        Passive stored campaign/count reads; runtime state unknown
   add, remove         Existing stored campaign management
-  check               Active HTTP/screenshot checks; isolation verification deferred
+  history             Last 10 stored checks and alerts each, by ID; requires --campaign ID
+  check               Active HTTP observation; network isolation acceptance pending
   files, integrity    Local case-file checks; owning workers must be stopped
 
 start/stop fail before Sentinel imports, configuration or database access.
@@ -765,7 +785,8 @@ OPTIONS:
   --stix               Request STIX; conformance currently unavailable
   --abuse              Generate abuse package
   --forensic           Request optional anchoring; profile/exports unchanged
-  --no-egress          Do not contact suspicious infrastructure
+  --no-egress          Keep analysis offline (default)
+  --allow-egress       Permit network enrichment and automatic URL detonation
   --lang LANG          Abuse-package language (it or en fallback); main reports English
 
 EXAMPLES:
@@ -789,7 +810,7 @@ Perfect for initial triage when you want results quickly.
         "full": """
 🐾 PAW FULL - Complete Analysis
 
-Perform comprehensive analysis including detonation and exports.
+Use strict offline analysis and request exports.
 
 USAGE:
   paw full <email>
@@ -798,14 +819,14 @@ This is equivalent to:
   paw analyze <email> --stix --abuse --profile strict
 
 Uses the common pipeline with strict scoring and both export packages.
-With --no-egress, detonation and network enrichment are skipped.
+The default is offline. --allow-egress permits network enrichment and automatic URL detonation.
 Unavailable checks remain explicit; this preset does not guarantee full coverage.
 """,
         "forensic": """
 🐾 PAW FORENSIC - Strict Profile and Optional Anchoring
 
 Use strict scoring and both exports, with optional anchoring if keys and network
-are available. --no-egress excludes anchoring and other external stages.
+are available. External stages require --allow-egress.
 
 USAGE:
   paw forensic <email>

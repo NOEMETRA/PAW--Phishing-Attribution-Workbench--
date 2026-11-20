@@ -27,7 +27,7 @@ setup(
     author='PAW Development Team',
     author_email='security@example.com',
     url='https://github.com/yourusername/paw',
-    license='MIT',
+    license='Proprietary',
 
     # Package configuration
     packages=find_packages(exclude=['tests', 'tests.*', 'SAVE', 'SAVE.*']),
@@ -48,9 +48,10 @@ setup(
             'isort>=5.12.0',
         ],
         'ml': [
-            'scikit-learn>=1.3.0',
-            'numpy>=1.24.0',
-            'pandas>=2.0.0',
+            'scikit-learn>=1.3,<2',
+            "numpy>=1.24,<2; python_version < '3.13'",
+            "numpy>=2,<3; python_version >= '3.13'",
+            'pandas>=2,<3',
         ],
         'docs': [
             'sphinx>=7.1.0',
@@ -81,7 +82,6 @@ setup(
         'Development Status :: 4 - Beta',
         'Intended Audience :: Information Technology',
         'Intended Audience :: System Administrators',
-        'License :: OSI Approved :: MIT License',
         'Operating System :: OS Independent',
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.8',

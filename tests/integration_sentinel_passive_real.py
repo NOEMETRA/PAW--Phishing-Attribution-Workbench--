@@ -18,7 +18,7 @@ def snapshot(root):
             for p in root.rglob('*')}
 
 
-def invoke(root, action='list'):
+def invoke(root, action='list', *options):
     env = dict(os.environ, PYTHONDONTWRITEBYTECODE='1', PYTHONUTF8='1')
     env.pop('PYTHONPATH', None)
     # Bootstrap imports before guarded dispatch, as in the existing actual CLI
@@ -27,7 +27,7 @@ def invoke(root, action='list'):
 sys.path.insert(0, %r)
 from paw.__main__ import main
 from paw.core.network_policy import offline_policy, violations
-sys.argv=['paw', 'monitor', %r]
+sys.argv=['paw', 'monitor'] + %r
 try:
     with offline_policy():
         main()
@@ -36,7 +36,7 @@ finally:
     for name in ('monitor', 'ip_analyzer', 'intelligence_analyzer', 'geographic_reports'):
         assert 'paw.sentinel.' + name not in sys.modules, name
     print('SENTINEL_PASSIVE_NO_BLOCKED_OPERATIONS')
-""" % (str(REPO), action)
+""" % (str(REPO), [action, *options])
     result = subprocess.run([sys.executable, '-X', 'utf8', '-c', code], cwd=root,
         env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=30)
     text = result.stdout.decode('utf-8')

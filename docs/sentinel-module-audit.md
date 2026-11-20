@@ -130,7 +130,7 @@ stored historical scores and supplied labels are preserved and remain readable.
 | Alert enabled/down/up/changes | Used by atomic local check/alert publication. Registered domain events remain separate from enabled alert delivery. |
 | Screenshots/resolution/directory/count | Capture unavailable before browser/argument/filesystem use; disabled requests are labelled not requested. Existing screenshot files are not deleted or rewritten. |
 | Fingerprinting, retries, webhook/email delivery | Unavailable; retained configuration does not activate a hidden worker or external publisher. Listed in `get_runtime_state()`. |
-| Retention days | No automatic cleanup scheduler. Existing explicit bounded database retention remains a separate local mutation. |
+| Retention days | The Linux foreground runner can apply separate observation and alert windows at the start of a cycle. Automatic deletion requires explicit configuration. The in-process controller keeps explicit cleanup. |
 | Database path/limits; local/file/report/diagnostic CLI | Existing configured passive contracts and no-egress admission preserved. |
 | CLI monitor start/stop; geographic map; legacy active publishers | Existing explicit unavailability retained. In-process API tests do not establish a persistent service. |
 

@@ -673,6 +673,32 @@ class CampaignDatabase:
             self._require_writer_campaign(conn, campaign_id)
             conn.commit()
 
+    @_bounded_report
+    def get_campaign_history(self, campaign_id: str) -> Dict[str, Any]:
+        """Read a bounded summary from one SQLite snapshot, including removed campaigns."""
+        self._writer_text(campaign_id, 'campaign_id', nonblank=True)
+        limit = 10
+        with self._json_read_connection() as conn:
+            campaign = conn.execute(
+                "SELECT id, case_id, status FROM campaigns WHERE id = ? COLLATE BINARY",
+                (campaign_id,),
+            ).fetchone()
+            if campaign is None:
+                raise ValueError("Unknown stored campaign ID")
+            checks = conn.execute("""
+                SELECT id, check_time, status, http_status, content_hash
+                FROM checks WHERE campaign_id = ? COLLATE BINARY ORDER BY id DESC LIMIT ?
+            """, (campaign_id, limit)).fetchall()
+            alerts = conn.execute("""
+                SELECT id, alert_time, alert_type, severity, acknowledged
+                FROM alerts WHERE campaign_id = ? COLLATE BINARY ORDER BY id DESC LIMIT ?
+            """, (campaign_id, limit)).fetchall()
+        return {
+            'campaign': dict(campaign), 'limit_per_kind': limit, 'order': 'id_desc',
+            'checks': [dict(row) for row in checks],
+            'alerts': [dict(row) for row in alerts],
+        }
+
     def get_recent_checks(self, campaign_id: str, limit: int = 10) -> List[Dict[str, Any]]:
         """Get recent checks for a campaign."""
         self._writer_text(campaign_id, 'campaign_id')
@@ -730,13 +756,19 @@ class CampaignDatabase:
         self._writer_number(alert_id, 'alert_id', minimum=1, integer=True)
         return self._transition('alerts', alert_id, 'acknowledged', 1)
 
-    def cleanup_old_data(self, retention_days: int = 90):
+    def cleanup_old_data(self, retention_days: int = 90, *, alert_retention_days: int | None = None):
         """Delete only interpretable expired check/alert rows; never case files."""
         self._writer_number(retention_days, 'retention_days', minimum=0, maximum=365_000, integer=True)
+        if alert_retention_days is None:
+            alert_retention_days = retention_days
+        self._writer_number(alert_retention_days, 'alert_retention_days', minimum=0, maximum=365_000, integer=True)
         with self.connection() as conn:
             conn.execute('BEGIN IMMEDIATE')
-            cutoff = datetime.fromisoformat(utc_now_iso().replace('Z', '+00:00')) - timedelta(days=retention_days)
-            result = {'complete': True, 'cutoff_utc': cutoff.strftime('%Y-%m-%dT%H:%M:%SZ'),
+            now = datetime.fromisoformat(utc_now_iso().replace('Z', '+00:00'))
+            cutoffs = {'checks': now - timedelta(days=retention_days),
+                       'alerts': now - timedelta(days=alert_retention_days)}
+            result = {'complete': True, 'cutoff_utc': cutoffs['checks'].strftime('%Y-%m-%dT%H:%M:%SZ'),
+                      'cutoffs_utc': {table: value.strftime('%Y-%m-%dT%H:%M:%SZ') for table, value in cutoffs.items()},
                       'deleted': {}, 'retained_uninterpretable': {}}
             for table, field in (('checks','check_time'), ('alerts','alert_time')):
                 rows = conn.execute(f'SELECT id,{field} FROM {table} ORDER BY id').fetchall()
@@ -751,7 +783,7 @@ class CampaignDatabase:
                         parsed = datetime.fromisoformat(raw.replace('Z','+00:00')).astimezone(timezone.utc)
                     except (ValueError, OverflowError):
                         unusable.append(identifier); continue
-                    if parsed < cutoff: expired.append(identifier)
+                    if parsed < cutoffs[table]: expired.append(identifier)
                 deleted = 0
                 for offset in range(0, len(expired), 500):
                     batch = expired[offset:offset+500]

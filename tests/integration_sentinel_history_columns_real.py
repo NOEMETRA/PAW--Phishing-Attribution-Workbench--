@@ -96,16 +96,22 @@ def main():
             before = snapshot(root)
             api(root, missing)
             assert snapshot(root) == before, mode
-            # Status counts are a separate unaffected consumer, not a history CLI.
+            exit_code, text = status_cli(root, 'history', '--campaign', 'saved-campaign')
+            assert exit_code == 0, text
+            history = json.loads(text.splitlines()[0])
+            assert history['campaign']['id'] == 'saved-campaign'
+            assert [r['id'] for r in history['checks']] == [2, 1]
+            assert [r['id'] for r in history['alerts']] == [2, 1]
+            assert snapshot(root) == before, mode
             exit_code, text = status_cli(root, 'status')
             assert exit_code == 0, text
             for field in ('Total campaigns: 2', 'Active campaigns: 2', 'Unacknowledged alerts: 2'):
                 assert field in text, text
             assert snapshot(root) == before, mode
-            checks.append({'layout': mode, 'cold_api': 1, 'guarded_status_cli': 1,
+            checks.append({'layout': mode, 'cold_api': 1, 'guarded_status_cli': 1, 'guarded_history_cli': 1,
                            'all_source_bytes_preserved': True})
-    print(json.dumps({'status': 'passed', 'cold_api_processes': 6, 'guarded_status_cli_processes': 6,
-        'checks': checks, 'scope': 'Actual declared SQLite storage fixtures and cold API history reads. Separate CLI status regression retains counts. Imports guarded for API; ordinary CLI bootstrap precedes policy. No active collection, private-layout prevalence, OS containment, live concurrency, authenticity or accuracy claim.'}, indent=2))
+    print(json.dumps({'status': 'passed', 'cold_api_processes': 6, 'guarded_status_cli_processes': 6, 'guarded_history_cli_processes': 6,
+        'checks': checks, 'scope': 'Actual declared SQLite storage fixtures and cold API history reads. CLI history reads the same saved campaign; status retains counts. Imports guarded for API; ordinary CLI bootstrap precedes policy. No active collection, private-layout prevalence, OS containment, live concurrency, authenticity or accuracy claim.'}, indent=2))
 
 
 if __name__ == '__main__':

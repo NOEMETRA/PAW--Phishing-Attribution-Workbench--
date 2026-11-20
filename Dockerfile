@@ -37,7 +37,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
 COPY paw/ ./paw/
-COPY setup.py .
+COPY setup.py pyproject.toml README.md LICENSE ./
 
 # Install PAW package
 RUN pip install -e .
