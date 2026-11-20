@@ -29,6 +29,7 @@ def main():
             if len(requests) == 1:
                 self.send_response(307)
                 self.send_header('Location', '/must-not-follow')
+                self.send_header('Content-Length', '9999')
             else:
                 accepted.setdefault(event_id, payload)
                 if len(requests) == 3:

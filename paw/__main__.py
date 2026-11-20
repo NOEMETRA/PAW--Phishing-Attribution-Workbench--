@@ -359,6 +359,7 @@ For help: paw help <command>
         p_monitor.add_argument("--url", help="URL to monitor (for add action)")
         p_monitor.add_argument("--campaign", help="Campaign ID (required for history, acknowledge and deliver, optional for check)")
         p_monitor.add_argument("--alert-id", type=int, help="Alert ID (required for acknowledge and deliver)")
+        p_monitor.add_argument("--webhook", help="Owned numeric loopback webhook URL for automatic delivery during run")
         p_monitor.add_argument("--destination", help="Owned numeric loopback webhook URL for deliver")
 
         # GEOGRAPHIC command (Sentinel Intelligence)
@@ -566,6 +567,8 @@ For help: paw help <command>
         elif args.cmd == "monitor":
             if args.destination is not None and args.action != "deliver":
                 raise ValueError("--destination applies only to monitor deliver")
+            if args.webhook is not None and args.action != "run":
+                raise ValueError("--webhook applies only to monitor run")
             if args.action in ("acknowledge", "deliver"):
                 if not args.campaign or not args.campaign.strip() or args.alert_id is None:
                     raise ValueError("--campaign and --alert-id are required")
@@ -589,9 +592,9 @@ For help: paw help <command>
                 raise ValueError("--alert-id applies only to monitor acknowledge and deliver")
             if args.action == "run":
                 if any(value is not None for value in (args.case, args.campaign, args.url)):
-                    raise ValueError("monitor run selects all active campaigns and accepts only --origin")
+                    raise ValueError("monitor run selects all active campaigns and accepts --origin and --webhook")
                 from .sentinel.service import run_foreground
-                run_foreground(args.origin)
+                run_foreground(args.origin, args.webhook)
                 return
             if args.origin:
                 raise ValueError("--origin applies only to monitor run")

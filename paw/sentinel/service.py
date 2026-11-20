@@ -10,7 +10,8 @@ from urllib.parse import urlsplit
 from .config import SentinelConfig
 from .contracts import (_admit_storage_path, _require_active, _storage_identity,
                         _storage_opener, _storage_path)
-from .database import CampaignDatabase
+from .database import AlertDeliveryMissing, CampaignDatabase
+from .delivery import send_saved_alert, webhook_destination
 from .monitor import SentinelMonitor
 
 
@@ -32,8 +33,8 @@ def _lab_origin(value):
 
 
 class _LabMonitor(SentinelMonitor):
-    def __init__(self, config, database, origins):
-        super().__init__(config, database)
+    def __init__(self, config, database, origins, *, webhook_fingerprint=None):
+        super().__init__(config, database, webhook_fingerprint=webhook_fingerprint)
         self.origins = origins
         self.next_cleanup = 0
 
@@ -63,7 +64,7 @@ def _event(name, **fields):
     sys.stdout.flush()
 
 
-def run_foreground(origins):
+def run_foreground(origins, webhook=None):
     _require_active()
     if not sys.platform.startswith('linux'):
         raise RuntimeError('Foreground Sentinel supervision currently requires Linux')
@@ -71,6 +72,7 @@ def run_foreground(origins):
     if not origins:
         raise ValueError('monitor run requires --origin for an owned laboratory HTTP service')
     origins = frozenset(_lab_origin(value) for value in origins)
+    target = webhook_destination(webhook) if webhook is not None else None
     config = SentinelConfig()
     options = config.get_database_options()
     path = _storage_path(options['db_path'])
@@ -86,7 +88,7 @@ def run_foreground(origins):
         database = CampaignDatabase(**options)
         if database._source_identity != identity:
             raise ValueError('Sentinel database replaced during service admission')
-        monitor = _LabMonitor(config, database, origins)
+        monitor = _LabMonitor(config, database, origins, webhook_fingerprint=target[1] if target else None)
         for campaign in database.get_active_campaigns():
             monitor._admit_campaign(campaign)
         monitor.on_check_complete(lambda row: _event('check_committed', campaign_id=row['campaign_id'],
@@ -105,10 +107,24 @@ def run_foreground(origins):
             monitor.start()
             try:
                 _event('started', pid=os.getpid())
+                next_delivery = time.monotonic()
                 while not stopping:
                     state = monitor.get_runtime_state()
                     if state['last_error'] or state['callback_errors'] or state['state'] != 'running':
                         raise RuntimeError(f"Sentinel cycle failed: {state['last_error'] or state['callback_errors'] or state['state']}")
+                    if target and time.monotonic() >= next_delivery:
+                        next_delivery = time.monotonic() + 1
+                        candidate = database.next_automatic_alert(target[1])
+                        if candidate and not stopping:
+                            campaign_id, alert_id = candidate
+                            try:
+                                receipt = send_saved_alert(database, campaign_id, alert_id, target)
+                            except AlertDeliveryMissing:
+                                _event('webhook_alert_missing', campaign_id=campaign_id, alert_id=alert_id)
+                            else:
+                                _event('webhook_delivery', campaign_id=campaign_id, alert_id=alert_id,
+                                       event_id=receipt['event_id'], status=receipt['status'],
+                                       attempts=receipt['attempts'], error=receipt['error'])
                     time.sleep(.1)
             finally:
                 while not monitor.stop(timeout=1):

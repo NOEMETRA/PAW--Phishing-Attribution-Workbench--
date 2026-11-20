@@ -44,6 +44,28 @@ class SentinelModuleAudit(unittest.TestCase):
                 with self.subTest(name=name),self.assertRaises(RuntimeError): method(**kwargs)
         self.assertEqual(self.db.get_recent_checks(self.campaign),[])
 
+    def test_automatic_delivery_retries_only_due_events_for_the_bound_receiver(self):
+        fingerprint = 'a'*64
+        monitor = SentinelMonitor(self.config, self.db, webhook_fingerprint=fingerprint)
+        monitor._handle_check_result(self.result())
+        monitor._handle_check_result(self.result(digest='b'*64))
+        alert, = self.db.get_unacknowledged_alerts()
+        key = (self.campaign, alert['id'])
+        event_id = alert['metadata']['webhook_delivery']['event_id']
+        self.assertIsNone(self.db.next_automatic_alert('b'*64))
+        for count in range(1,7):
+            self.assertEqual(self.db.next_automatic_alert(fingerprint), key)
+            attempt, _ = self.db.start_alert_delivery(*key, fingerprint)
+            self.assertEqual((attempt['attempts'], attempt['event_id']), (count, event_id))
+            self.assertIsNone(self.db.next_automatic_alert(fingerprint))
+            self.db.finish_alert_delivery(*key, attempt, 'transport_error', None)
+            with self.db.connection() as conn:
+                conn.execute("UPDATE alerts SET metadata=json_set(metadata,'$.webhook_delivery.updated_at',?)",
+                             ('2020-01-01T00:00:00Z',))
+        self.assertIsNone(self.db.next_automatic_alert(fingerprint))
+        manual, _ = self.db.start_alert_delivery(*key, fingerprint)
+        self.assertEqual((manual['attempts'], manual['event_id']), (7,event_id))
+
     def test_stop_interrupts_interval_and_confirms_thread_shutdown(self):
         self.assertIn('timeout',inspect.signature(self.monitor.stop).parameters)
         self.config._config['monitoring']['check_interval_minutes'] = 525600

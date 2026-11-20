@@ -28,6 +28,10 @@ class _InvalidUTF8Text(bytes):
     """Undecodable SQLite TEXT, distinct from a stored BLOB."""
 
 
+class AlertDeliveryMissing(ValueError):
+    """An alert disappeared before its delivery attempt could be stored."""
+
+
 class CampaignDatabase:
     """SQLite database for managing monitored phishing campaigns."""
 
@@ -578,11 +582,14 @@ class CampaignDatabase:
         version = comparison.get('schema_version')
         return comparison if type(version) is int and version == 1 else {}
 
-    def _record_monitor_result(self, result, flags, *, commit_guard=None):
+    def _record_monitor_result(self, result, flags, *, commit_guard=None, webhook_fingerprint=None):
         """Compare, record and alert in one actual SQLite write transaction."""
         _require_active()
         if self.read_only: raise RuntimeError('Read-only saved storage cannot publish monitor observations')
         if commit_guard is not None and not callable(commit_guard): raise ValueError('Callable monitor commit guard required')
+        if webhook_fingerprint is not None and (type(webhook_fingerprint) is not str
+                or not re.fullmatch('[0-9a-f]{64}', webhook_fingerprint)):
+            raise ValueError('Invalid queued webhook destination')
         if type(result) is not dict or type(flags) is not dict:
             raise ValueError('Native monitor result and alert flags required')
         result = _json_tree(result); flags = _json_tree(flags)
@@ -676,8 +683,14 @@ class CampaignDatabase:
                 if not enabled: continue
                 message = ('Stored content digest differs' if event == 'changed' else 'HTTP status class transitioned to '+event)
                 level = 'warning' if event == 'down' else 'info'
-                alert_metadata = self._encode_writer_json({**comparison, 'check_id':rowid,
-                    'external_delivery_at_commit':'not_attempted'}, 'metadata')
+                alert_data = {**comparison, 'check_id':rowid, 'external_delivery_at_commit':'not_attempted'}
+                if webhook_fingerprint is not None:
+                    alert_data['webhook_delivery'] = {
+                        'event_id':uuid.uuid4().hex, 'destination_sha256':webhook_fingerprint,
+                        'automatic':True, 'status':'queued', 'attempts':0, 'http_status':None,
+                        'error':None, 'updated_at':timestamp,
+                    }
+                alert_metadata = self._encode_writer_json(alert_data, 'metadata')
                 alert_values = (campaign_id,timestamp,event,level,message,alert_metadata)
                 alert_id = self._insert_writer_record(conn,'alerts',alert_columns,alert_values)
                 inserted.append((alert_id,alert_values))
@@ -853,14 +866,18 @@ class CampaignDatabase:
 
     @staticmethod
     def _valid_delivery_state(state):
-        if not isinstance(state, dict) or set(state) != {
-                'event_id','destination_sha256','status','attempts','http_status','error','updated_at'}:
+        required = {'event_id','destination_sha256','status','attempts','http_status','error','updated_at'}
+        if not isinstance(state, dict) or set(state) - {'automatic'} != required:
+            return False
+        if 'automatic' in state and state['automatic'] is not True:
             return False
         event_id, target = state['event_id'], state['destination_sha256']
         return (isinstance(event_id, str) and re.fullmatch('[0-9a-f]{32}', event_id) is not None
                 and isinstance(target, str) and re.fullmatch('[0-9a-f]{64}', target) is not None
-                and state['status'] in ('pending','receipt_confirmed','receipt_unconfirmed')
-                and type(state['attempts']) is int and 0 < state['attempts'] < 2**63
+                and state['status'] in ('queued','pending','receipt_confirmed','receipt_unconfirmed')
+                and type(state['attempts']) is int and 0 <= state['attempts'] < 2**63
+                and (state['attempts'] > 0 if state['status'] != 'queued'
+                     else state['attempts'] == 0 and state.get('automatic') is True)
                 and (state['http_status'] is None or
                      type(state['http_status']) is int and 100 <= state['http_status'] <= 599)
                 and state['error'] in (None,'http_status','receipt_missing','transport_error')
@@ -869,6 +886,29 @@ class CampaignDatabase:
                 and (state['status'] != 'receipt_confirmed' or
                      state['http_status'] is not None and 200 <= state['http_status'] < 300
                      and state['error'] is None))
+
+    def next_automatic_alert(self, fingerprint):
+        """Select one due event from the durable queue for the configured receiver."""
+        _require_active()
+        before = datetime.now(timezone.utc) - timedelta(seconds=5)
+        with self.connection() as conn:
+            # CASE guards JSON functions against legacy non-JSON metadata.
+            return conn.execute("""
+                WITH queue AS (
+                    SELECT id, campaign_id,
+                        CASE WHEN json_valid(metadata) THEN json_extract(metadata,'$.webhook_delivery') END AS delivery
+                    FROM alerts
+                )
+                SELECT campaign_id, id FROM queue
+                WHERE CASE WHEN json_valid(delivery) THEN
+                    json_type(delivery,'$.automatic') = 'true'
+                    AND json_extract(delivery,'$.destination_sha256') = ?
+                    AND json_extract(delivery,'$.status') IN ('queued','pending','receipt_unconfirmed')
+                    AND json_extract(delivery,'$.attempts') BETWEEN 0 AND 5
+                    AND (json_extract(delivery,'$.attempts') = 0 OR json_extract(delivery,'$.updated_at') <= ?)
+                END
+                ORDER BY id LIMIT 1
+            """, (fingerprint, before.strftime('%Y-%m-%dT%H:%M:%SZ'))).fetchone()
 
     @contextmanager
     def _alert_delivery_row(self, campaign_id, alert_id):
@@ -882,6 +922,8 @@ class CampaignDatabase:
             if conn.execute("SELECT type FROM sqlite_master WHERE name='alerts' COLLATE NOCASE").fetchone() != ('table',):
                 raise ValueError('Sentinel delivery requires a saved alert table')
             rows = conn.execute(select, keys).fetchall()
+            if not rows:
+                raise AlertDeliveryMissing('Alert not found for the selected campaign')
             if len(rows) != 1:
                 raise ValueError('Expected one saved alert for the selected campaign')
             alert_type, raw = rows[0]

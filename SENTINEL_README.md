@@ -67,7 +67,21 @@ ripetere lo stesso comando riusa la chiave. Una ricevuta confermata impedisce
 ulteriori richieste per l'evento. La sezione `webhook_delivery` della
 cronologia mostra stato, tentativi, esito HTTP ed eventuale errore. La
 deduplicazione sul destinatario dipende dal suo rispetto del protocollo.
-La consegna con endpoint pubblici e l'invio automatico restano aperti.
+Per abilitare la consegna automatica dei nuovi avvisi nel processo in primo piano:
+
+```bash
+paw monitor run --origin http://127.0.0.1:9000 --webhook http://127.0.0.1:8080/alerts
+```
+
+Sentinel salva l'entrata in coda nella stessa transazione dell'avviso. Al
+riavvio con lo stesso destinatario riprende le consegne senza ricevuta.
+La frequenza massima è un tentativo al secondo, con almeno cinque secondi
+tra tentativi dello stesso avviso e un massimo di sei tentativi automatici.
+Dopo questo limite lo stato rimane consultabile e il comando manuale può
+riprendere la consegna allo stesso destinatario. La scadenza degli avvisi
+rimuove anche il relativo stato di consegna. Il flag `--webhook` abilita
+l'invio soltanto per gli avvisi entrati in coda con quell'URL. La consegna
+automatica su endpoint pubblici resta aperta.
 
 ## Collaudo Linux con egress privato
 

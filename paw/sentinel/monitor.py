@@ -18,9 +18,10 @@ class _PublicationCanceled(RuntimeError):
 
 
 class SentinelMonitor:
-    def __init__(self, config=None, database=None):
+    def __init__(self, config=None, database=None, *, webhook_fingerprint=None):
         self.config = SentinelConfig() if config is None else config
         self.db = CampaignDatabase(**self.config.get_database_options()) if database is None else database
+        self._webhook_fingerprint = webhook_fingerprint
         self._running = False; self._thread = None; self._executor = None
         self._state = threading.Condition(threading.RLock())
         self._stop_event = threading.Event(); self._operation_lock = threading.RLock()
@@ -222,7 +223,9 @@ class SentinelMonitor:
         result = _json_tree(result)
         flags = {key:self.config.get('alerts.'+key,default) for key,default in
                  (('enabled',True),('alert_on_down',True),('alert_on_up',False),('alert_on_changes',True))}
-        try: receipt = self.db._record_monitor_result(result,flags,commit_guard=self._publication_commit)
+        try:
+            receipt = self.db._record_monitor_result(result, flags, commit_guard=self._publication_commit,
+                                                     webhook_fingerprint=self._webhook_fingerprint)
         except _PublicationCanceled: return None
         published = {**result,**{key:receipt[key] for key in ('check_id','previous_check_id','digest_reference_check_id','content_changed')}}
         self._emit('on_check_complete',published)

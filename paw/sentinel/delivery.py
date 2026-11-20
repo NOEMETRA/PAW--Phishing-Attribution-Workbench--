@@ -1,4 +1,4 @@
-"""Explicit one-shot delivery of a saved alert to an owned laboratory receiver."""
+"""Receipt-based delivery of saved alerts to an owned laboratory receiver."""
 import hashlib
 import ipaddress
 from urllib.parse import urlsplit, urlunsplit
@@ -26,15 +26,28 @@ def _destination(value):
     return urlunsplit((parsed.scheme, host, parsed.path or '/', '', ''))
 
 
-def deliver_saved_alert(campaign_id, alert_id, destination):
+def webhook_destination(value):
     _require_active()
     import requests
 
-    endpoint = _destination(destination)
-    # Use requests' normalized wire URL to bind retries to the same recipient.
-    endpoint = requests.Request('POST', endpoint).prepare().url
-    fingerprint = hashlib.sha256(endpoint.encode('utf-8')).hexdigest()
+    # Bind retries to the normalized wire URL.
+    endpoint = requests.Request('POST', _destination(value)).prepare().url
+    return endpoint, hashlib.sha256(endpoint.encode('utf-8')).hexdigest()
+
+
+def deliver_saved_alert(campaign_id, alert_id, destination):
+    target = webhook_destination(destination)
     database = CampaignDatabase(**SentinelConfig().get_database_options(), initialize=False)
+    return send_saved_alert(database, campaign_id, alert_id, target)
+
+
+def send_saved_alert(database, campaign_id, alert_id, target):
+    _require_active()
+    import requests
+
+    endpoint, fingerprint = webhook_destination(target[0])
+    if fingerprint != target[1]:
+        raise ValueError('Webhook destination fingerprint changed')
     state, alert_type = database.start_alert_delivery(campaign_id, alert_id, fingerprint)
     if state['status'] == 'receipt_confirmed':
         return state
@@ -43,9 +56,12 @@ def deliver_saved_alert(campaign_id, alert_id, destination):
     code = None
     try:
         with requests.Session() as session:
-            session.trust_env = False
-            with session.post(endpoint, json=payload, headers={'Idempotency-Key':event_id},
-                              timeout=3, allow_redirects=False, stream=True) as response:
+            request = requests.Request('POST', endpoint, json=payload,
+                                       headers={'Idempotency-Key':event_id}).prepare()
+            # The adapter performs a single request. It doesn't resolve redirects
+            # or consume the redirect body while preparing a potential next hop.
+            adapter = session.get_adapter(endpoint)
+            with adapter.send(request, timeout=3, stream=True, verify=True, proxies={}) as response:
                 code = response.status_code
                 if not 200 <= code < 300:
                     outcome = 'http_status'
