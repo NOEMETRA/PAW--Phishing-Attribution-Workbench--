@@ -380,3 +380,29 @@ Worker startup excludes the analysis working directory from Python imports (`-P`
 and literal admission validates UTF-8 encoding and byte length before bootstrap or
 transport creation. Real worker/CLI tests cover package/dependency shadowing and
 multibyte/surrogate rejection without replacing analysis results.
+
+### Evaluating a separately labelled holdout
+
+Use `tools/evaluate_mail_corpus.py` from the checkout with PAW installed.
+Supply one directory of stopped, sealed cases per profile. Keep the originals,
+label manifest and case directories in private storage. The manifest is a JSON
+array with one object per original. Each object records its `sha256`, its
+campaign or message-family `group`, its `split` (pilot, development or holdout),
+its independent `label` (phishing, legitimate or unresolved) and `label_basis`.
+Set aside holdout groups before adjusting the engine. Document the independent
+basis for each resolved label. A mail-provider folder alone cannot adjudicate
+phishing. The program checks group overlap and missing or duplicate originals.
+
+```bash
+python tools/evaluate_mail_corpus.py --labels /private/labels.json --split holdout \
+  --default /private/default/cases --strict /private/strict/cases \
+  --conservative /private/conservative/cases
+```
+
+For each profile the output counts all three saved decisions by independent
+label. The referral rule sends either elevated decision to analyst review.
+A legitimate message sent to review is a false referral. A phishing message
+with an inconclusive decision is missed by this rule. The matrix preserves the
+inconclusive decision in both cases. Unresolved labels contribute to the matrix
+and are excluded from rate denominators. An empty denominator yields JSON
+`null`. Pilot and development runs produce counts only.
