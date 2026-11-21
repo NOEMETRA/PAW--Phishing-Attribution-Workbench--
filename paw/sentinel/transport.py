@@ -30,6 +30,24 @@ def _source_url(value, secret_keys):
     return urlunsplit((parsed.scheme,netloc,parsed.path,query,parsed.fragment)) if secret_keys or '@' in parsed.netloc else value
 
 
+def _new_observation(url, proxies=None):
+    return {'status':'error','requested_url':_source_url(url,{'apikey'}),'response_url':None,
+        'observed_at':utc_now_iso(),'http_status':None,'body':b'','body_status':'not_evaluated',
+        'content_sha256':None,'verified':False,'elapsed_seconds':None,
+        'scope':'One unverified HTTP response; redirects, browser use and campaign liveness not evaluated',
+        'redirects_followed':False,'error':None,'retained_bytes':0,
+        'retained_sha256':hashlib.sha256(b'').hexdigest(),'body_representation':'HTTP entity bytes, without content decoding',
+        'transport_route':'explicit_proxy' if proxies else 'direct; environment proxies ignored',
+        'response_headers':{'status':'not_evaluated','entries':[],
+                            'scope':'Library-decoded response fields; not raw HTTP wire bytes','max_characters':16384}}
+
+
+def _finish_observation(result, body, started):
+    result.update(body=body, retained_bytes=len(body), retained_sha256=hashlib.sha256(body).hexdigest(),
+                  elapsed_seconds=time.monotonic()-started)
+    return result
+
+
 def fetch_http(url, *, timeout=30, max_bytes=2*1024**2, proxies=None, params=None, stop_event=None):
     _require_active()
     if type(url) is not str or http_url_status(url)[0] != 'completed':
@@ -45,15 +63,7 @@ def fetch_http(url, *, timeout=30, max_bytes=2*1024**2, proxies=None, params=Non
         raise ValueError('Explicit HTTP(S) proxy endpoints required')
     secrets = {'apikey'}
     started = time.monotonic()
-    result = {'status':'error','requested_url':_source_url(url,secrets),'response_url':None,
-        'observed_at':utc_now_iso(),'http_status':None,'body':b'','body_status':'not_evaluated',
-        'content_sha256':None,'verified':False,'elapsed_seconds':None,
-        'scope':'One unverified HTTP response; redirects, browser use and campaign liveness not evaluated',
-        'redirects_followed':False,'error':None,'retained_bytes':0,
-        'retained_sha256':hashlib.sha256(b'').hexdigest(),'body_representation':'HTTP entity bytes, without content decoding',
-        'transport_route':'explicit_proxy' if proxies else 'direct; environment proxies ignored',
-        'response_headers':{'status':'not_evaluated','entries':[],
-                            'scope':'Library-decoded response fields; not raw HTTP wire bytes','max_characters':16384}}
+    result = _new_observation(url, proxies)
     chunks = []
     try:
         if stop_event is not None and stop_event.is_set():
@@ -103,8 +113,4 @@ def fetch_http(url, *, timeout=30, max_bytes=2*1024**2, proxies=None, params=Non
         # transport/dependency failures for a remote campaign going down.
         result.update(status='error',error=type(error).__name__)
         if result['http_status'] is not None: result['body_status'] = 'partial'
-    result['body'] = b''.join(chunks)
-    result['retained_bytes'] = len(result['body'])
-    result['retained_sha256'] = hashlib.sha256(result['body']).hexdigest()
-    result['elapsed_seconds'] = time.monotonic()-started
-    return result
+    return _finish_observation(result, b''.join(chunks), started)

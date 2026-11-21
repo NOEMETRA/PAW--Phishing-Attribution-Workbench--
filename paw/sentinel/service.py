@@ -1,35 +1,17 @@
 """Foreground HTTP monitoring of explicitly selected laboratory origins on Linux."""
-import ipaddress
 import json
 import os
 import signal
 import sys
 import time
-from urllib.parse import urlsplit
 
 from .config import SentinelConfig
 from .contracts import (_admit_storage_path, _require_active, _storage_identity,
                         _storage_opener, _storage_path)
 from .database import AlertDeliveryMissing, CampaignDatabase
 from .delivery import send_saved_alert, webhook_destination
+from .lab_transport import fetch_lab_http, lab_origin as _lab_origin
 from .monitor import SentinelMonitor
-
-
-def _lab_origin(value):
-    parsed = urlsplit(value)
-    if parsed.scheme not in ('http', 'https') or not parsed.hostname or '%' in parsed.hostname:
-        raise ValueError('Specify an HTTP(S) origin with a literal laboratory address')
-    address = ipaddress.ip_address(parsed.hostname)
-    lab_ranges = ('10.0.0.0/8', '172.16.0.0/12', '192.168.0.0/16', 'fc00::/7',
-                  '192.0.2.0/24', '198.51.100.0/24', '203.0.113.0/24', '2001:db8::/32')
-    if not (address.is_loopback or any(address in ipaddress.ip_network(net) for net in lab_ranges)):
-        raise ValueError('Foreground monitoring requires a loopback, private or documentation-prefix address')
-    host = f'[{address}]' if address.version == 6 else str(address)
-    port = parsed.port
-    origin = f'{parsed.scheme}://{host}' + (f':{port}' if port is not None else '')
-    if value != origin:
-        raise ValueError('Specify the canonical origin without credentials, path, query or fragment')
-    return origin
 
 
 class _LabMonitor(SentinelMonitor):
@@ -57,6 +39,9 @@ class _LabMonitor(SentinelMonitor):
         if not any(url == origin or url.startswith(origin + '/') for origin in self.origins):
             raise ValueError('Active campaign outside the selected laboratory origins')
         return admitted
+
+    def _collect_http(self, url, *, timeout, max_bytes):
+        return fetch_lab_http(url, timeout=timeout, max_bytes=max_bytes, stop_event=self._stop_event)
 
 
 def _event(name, **fields):

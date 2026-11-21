@@ -127,6 +127,7 @@ jobs:
         working-directory: ${{ runner.temp }}
         run: |
           "$RUNNER_TEMP/paw-installed/bin/python" -I -B "$GITHUB_WORKSPACE/tests/integration_sentinel_foreground_real.py"
+          "$RUNNER_TEMP/paw-installed/bin/python" -I -B "$GITHUB_WORKSPACE/tests/integration_sentinel_campaign_deadline_real.py"
           "$RUNNER_TEMP/paw-installed/bin/python" -I -B "$GITHUB_WORKSPACE/tests/integration_sentinel_journal_recovery_real.py"
           "$RUNNER_TEMP/paw-installed/bin/python" -I -B "$GITHUB_WORKSPACE/tests/integration_sentinel_delivery_real.py"
           "$RUNNER_TEMP/paw-installed/bin/python" -I -B "$GITHUB_WORKSPACE/tests/integration_sentinel_automatic_delivery_real.py"

@@ -47,6 +47,14 @@ Il primo comando verifica l’integrità locale. La prima scansione di `files` s
 
 La raccolta HTTP manuale e il controller Python hanno collaudi su servizi di prova locali. La CLI di consultazione funziona sul database fermo e leggibile. Su Linux il comando `run` rimane in primo piano e riceve SIGINT o SIGTERM dal terminale o dal supervisore. Screenshot, notifiche esterne e impiego su infrastrutture reali hanno criteri di accettazione separati. Gli avvisi locali sono consultabili nello storico.
 
+Per `run`, `monitoring.timeout_seconds` dà a ogni richiesta un limite
+complessivo per connessione, TLS, intestazioni e corpo. Le intestazioni
+incomplete al termine producono un errore di trasporto senza codice HTTP.
+Se le intestazioni sono complete, il codice rimane disponibile e il corpo
+incompleto non produce un digest confrontabile. L'intervallo configurato
+decorre dopo l'ultimo controllo del ciclo. Un segnale di arresto chiude le
+connessioni in corso.
+
 [Contratti verificati del modulo](docs/sentinel-module-audit.md) · [Stato del controllo di servizio](docs/sentinel-cli-lifecycle.md)
 
 ## Consegna di un avviso a un ricevitore di laboratorio

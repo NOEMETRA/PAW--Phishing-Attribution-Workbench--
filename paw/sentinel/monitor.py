@@ -180,7 +180,7 @@ class SentinelMonitor:
     def _check_campaign(self, campaign):
         self._require_collector(); campaign = self._admit_campaign(campaign)
         _,_,timeout = self._settings()
-        observed = fetch_http(campaign['url'],timeout=timeout,max_bytes=128*1024,stop_event=self._stop_event)
+        observed = self._collect_http(campaign['url'],timeout=timeout,max_bytes=128*1024)
         body = observed.pop('body'); code = observed['http_status']
         retain_body = self.config.get('storage.retain_http_bodies', True) is True
         if retain_body:
@@ -194,6 +194,9 @@ class SentinelMonitor:
                 'screenshot':{'status':'unavailable' if self.config.get('analysis.enable_screenshots',True) is True else 'not_requested',
                               'reason':'Browser capture requires the isolated collector validation'},
                 'assessment':{'status':'unavailable','reason':'HTTP observations do not establish campaign liveness or identity'}}}
+
+    def _collect_http(self, url, *, timeout, max_bytes):
+        return fetch_http(url,timeout=timeout,max_bytes=max_bytes,stop_event=self._stop_event)
 
     def _take_screenshot(self, url, campaign_id):
         _require_active()
