@@ -101,7 +101,13 @@ async def lifespan(application):
     identifiers.update(identifier for identifier,_ in controls(DATA_DIR,JOBS_DIR))
     for identifier in identifiers:
         await get_analysis_status(identifier)
-    yield
+    try:
+        yield
+    finally:
+        pending_statistics = _statistics_task
+        if pending_statistics is not None and not pending_statistics.done():
+            pending_statistics.cancel()
+            await asyncio.gather(pending_statistics, return_exceptions=True)
 
 app = FastAPI(title='PAW', version='2.0.0', lifespan=lifespan)
 app.add_middleware(UploadEnvelope)
@@ -133,6 +139,7 @@ _workers = asyncio.Semaphore(1)
 MAX_ANALYSIS_SECONDS = 900
 _cancel_events = {}
 _recovery_locks = {}
+_statistics_task = None
 UNSTABLE_CASE_STATUSES = {'queued','running','recovery_blocked'}
 
 class RuntimeOptions(BaseModel):
@@ -678,11 +685,29 @@ async def query_cases(query: CaseQuery):
 
 @app.get('/api/statistics')
 async def get_statistics():
+    global _statistics_task
+    if _statistics_task is None or _statistics_task.done():
+        _statistics_task = asyncio.create_task(_collect_statistics())
+        _statistics_task.add_done_callback(_release_statistics_task)
+    return await asyncio.shield(_statistics_task)
+
+
+def _release_statistics_task(task):
+    global _statistics_task
+    if _statistics_task is task:
+        _statistics_task = None
+    # A scan can outlive its waiting requests. Retrieve a failure even if all
+    # those requests were canceled, while still propagating it to any waiters.
+    if not task.cancelled():
+        task.exception()
+
+
+async def _collect_statistics():
     total = 0
     countries, asns, errors, budget = Counter(), Counter(), {}, ReadBudget()
     for path in CASES_DIR.glob('*/manifest.json'):
         total += 1
-        if total % 32 == 0:
+        if total % 8 == 0:
             await asyncio.sleep(0)
         if await stable_case_status(path.parent) != 'completed': continue
         origin = path.parent/'origin.json'

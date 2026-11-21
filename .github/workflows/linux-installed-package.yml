@@ -30,11 +30,12 @@ jobs:
       - name: Verify explicit CLI network consent on the installed wheel
         run: |
           "$RUNNER_TEMP/paw-installed/bin/python" -I -B "$GITHUB_WORKSPACE/tests/test_cli_egress_consent.py" -v
-      - name: Verify installed upload limits and export cleanup
+      - name: Verify installed API transfers and case summaries
         working-directory: ${{ runner.temp }}
         run: |
           "$RUNNER_TEMP/paw-installed/bin/python" -I -B -m unittest discover -s "$GITHUB_WORKSPACE/tests" -p test_api_transfer_lifecycle.py
           "$RUNNER_TEMP/paw-installed/bin/python" -I -B -m unittest discover -s "$GITHUB_WORKSPACE/tests" -p test_api_query_pagination.py
+          "$RUNNER_TEMP/paw-installed/bin/python" -I -B -m unittest discover -s "$GITHUB_WORKSPACE/tests" -p test_api_statistics_concurrency.py
       - name: Verify static mail triage and evidence bindings
         working-directory: ${{ runner.temp }}
         run: |

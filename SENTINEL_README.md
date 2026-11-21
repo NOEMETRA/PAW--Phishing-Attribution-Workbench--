@@ -55,6 +55,12 @@ incompleto non produce un digest confrontabile. L'intervallo configurato
 decorre dopo l'ultimo controllo del ciclo. Un segnale di arresto chiude le
 connessioni in corso.
 
+La supervisione mediante un'unità temporanea systemd utente con
+`Restart=on-failure` è stata collaudata su Linux. Dopo un arresto forzato
+systemd ha avviato un nuovo processo, che ha ripreso lo stesso archivio e
+il confronto con il contenuto precedente. Durante lo stop ordinato il
+servizio ha confermato zero operazioni attive.
+
 [Contratti verificati del modulo](docs/sentinel-module-audit.md) · [Stato del controllo di servizio](docs/sentinel-cli-lifecycle.md)
 
 ## Consegna di un avviso a un ricevitore di laboratorio
