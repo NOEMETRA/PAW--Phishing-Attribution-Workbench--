@@ -142,7 +142,7 @@ def _model_bytes(directory, name, size, digest):
     return data
 
 
-def _infer(text, directory):
+def _load_model(directory):
     # ONNX Runtime can initialize its native uploader during import.
     os.environ['ORT_DISABLE_TELEMETRY'] = '1'
     try:
@@ -157,40 +157,58 @@ def _infer(text, directory):
                                                   TOKENIZER_SHA256))
     tokenizer.no_padding()
     tokenizer.enable_truncation(max_length=TOKEN_LIMIT)
-    encoded = tokenizer.encode(text)
     options = ort.SessionOptions()
     options.intra_op_num_threads = 4
     session = ort.InferenceSession(
         _model_bytes(directory, 'model_quantized.onnx', MODEL_BYTES, MODEL_SHA256),
         options, providers=['CPUExecutionProvider'],
     )
-    inputs = {'input_ids': encoded.ids, 'attention_mask': encoded.attention_mask}
-    logits, = session.run(['logits'], {name: np.array([value], dtype=np.int64)
-                                       for name, value in inputs.items()})
-    if logits.shape != (1, len(LABELS)) or not np.isfinite(logits).all():
-        raise ValueError('Local text model returned invalid scores')
-    values = np.exp(logits[0] - logits[0].max())
-    scores = dict(zip(LABELS, map(float, values / values.sum())))
-    return scores, len(encoded.ids), bool(encoded.overflowing), ort.__version__
+    def infer(text):
+        encoded = tokenizer.encode(text)
+        inputs = {'input_ids': encoded.ids, 'attention_mask': encoded.attention_mask}
+        logits, = session.run(['logits'], {name: np.array([value], dtype=np.int64)
+                                           for name, value in inputs.items()})
+        if logits.shape != (1, len(LABELS)) or not np.isfinite(logits).all():
+            raise ValueError('Local text model returned invalid scores')
+        values = np.exp(logits[0] - logits[0].max())
+        scores = dict(zip(LABELS, map(float, values / values.sum())))
+        return scores, len(encoded.ids), bool(encoded.overflowing), ort.__version__
+
+    return infer
+
+
+class TextCaseAssessor:
+    """Assess stopped cases sequentially using one locally verified model session."""
+
+    def __init__(self, model_directory):
+        with offline_policy():
+            self._directory = admit_path(model_directory).resolve(strict=True)
+            if not self._directory.is_dir():
+                raise ValueError('Model path must be a local directory')
+        self._infer = None
+
+    def assess(self, case_directory):
+        with offline_policy():
+            case = admit_path(case_directory).resolve(strict=True)
+            if not case.is_dir():
+                raise ValueError('Case path must be a local directory')
+            text, evidence = _case_text(case)
+            result = {
+                'schema_version': 1, 'status': 'not_evaluated',
+                'scope': 'multilingual text scores for analyst review',
+                'calibrated': False, 'evidence': evidence, 'scores': None,
+                'model': {'id': MODEL_ID, 'revision': MODEL_REVISION, 'sha256': MODEL_SHA256,
+                          'tokenizer_sha256': TOKENIZER_SHA256, 'max_tokens': TOKEN_LIMIT},
+            }
+            if not text:
+                return dict(result, reason='No subject or captured MIME text available')
+            if self._infer is None:
+                self._infer = _load_model(self._directory)
+            scores, tokens, truncated, runtime = self._infer(text)
+            return dict(result, status='completed', scores=scores, tokens=tokens, truncated=truncated,
+                        onnxruntime_version=runtime)
 
 
 def assess_case(case_directory, model_directory):
     """Return a descriptive score record without writing to the source case."""
-    with offline_policy():
-        case = admit_path(case_directory).resolve(strict=True)
-        directory = admit_path(model_directory).resolve(strict=True)
-        if not case.is_dir() or not directory.is_dir():
-            raise ValueError('Case and model paths must be local directories')
-        text, evidence = _case_text(case)
-        result = {
-            'schema_version': 1, 'status': 'not_evaluated',
-            'scope': 'multilingual text scores for analyst review',
-            'calibrated': False, 'evidence': evidence, 'scores': None,
-            'model': {'id': MODEL_ID, 'revision': MODEL_REVISION, 'sha256': MODEL_SHA256,
-                      'tokenizer_sha256': TOKENIZER_SHA256, 'max_tokens': TOKEN_LIMIT},
-        }
-        if not text:
-            return dict(result, reason='No subject or captured MIME text available')
-        scores, tokens, truncated, runtime = _infer(text, directory)
-        return dict(result, status='completed', scores=scores, tokens=tokens, truncated=truncated,
-                    onnxruntime_version=runtime)
+    return TextCaseAssessor(model_directory).assess(case_directory)

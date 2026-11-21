@@ -407,6 +407,26 @@ inconclusive decision in both cases. Unresolved labels contribute to the matrix
 and are excluded from rate denominators. An empty denominator yields JSON
 `null`. Pilot and development runs produce counts only.
 
+#### Evaluating local text referrals
+
+Install PAW with the `text-triage` extra and prepare the pinned local model
+directory described in [Content assessment](content-assessment.md). Run the
+evaluator in an OS network boundary when processing untrusted evidence for
+native code. `--text-model` accepts one or more profile directories.
+
+```bash
+python -I tools/evaluate_mail_corpus.py --labels /private/labels.json \
+  --default /private/default/cases --text-model /private/horizon
+```
+
+The evaluator reads the same stopped, sealed cases as `paw assess-text`.
+It loads one tokenizer and model session per invocation, then links every
+assessment to the seal and original used for the label lookup. It reports
+aggregate referrals at fixed `fraud` thresholds of 0.5 and 0.9. Messages
+without usable text appear as `not_evaluated` and remain in the denominator
+for missed referrals. Unresolved labels stay visible in the counts. Keep
+aggregate results outside the case directory to preserve its seal.
+
 #### Historical reference holdout, 21 November 2026
 
 The wheel from local commit `d32f58b` was run with `--no-egress` inside a Linux

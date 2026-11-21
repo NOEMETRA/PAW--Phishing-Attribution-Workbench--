@@ -39,16 +39,16 @@ class CaseTextTriage(unittest.TestCase):
         (self.case/filename).write_text(json.dumps(value), encoding='utf-8')
 
     def test_scores_link_to_seal_and_runs_under_offline_policy(self):
-        def infer(text, directory):
+        def infer(text):
             self.assertEqual(text, 'Subject\nText-only fixture')
-            self.assertEqual(directory, self.model.resolve())
             with self.assertRaises(EgressDenied):
                 socket.socket().close()
             return {'legitimate': 0.2, 'spam': 0.1, 'fraud': 0.7}, 9, True, 'fixture'
 
         snapshot = {path: path.read_bytes() for path in self.case.rglob('*') if path.is_file()}
-        with patch.object(text_triage, '_infer', side_effect=infer):
+        with patch.object(text_triage, '_load_model', return_value=infer) as load:
             result = text_triage.assess_case(self.case, self.model)
+        load.assert_called_once_with(self.model.resolve())
         self.assertEqual(result['status'], 'completed')
         self.assertFalse(result['calibrated'])
         self.assertTrue(result['truncated'])
@@ -62,18 +62,18 @@ class CaseTextTriage(unittest.TestCase):
 
     def test_invalid_seal_and_changed_mime_metadata_refused_before_inference(self):
         self.text_path.write_text('Edited text', encoding='utf-8')
-        with patch.object(text_triage, '_infer') as infer:
+        with patch.object(text_triage, '_load_model') as load:
             with self.assertRaisesRegex(ValueError, 'seal failed'):
                 text_triage.assess_case(self.case, self.model)
             seal_case(self.case)
             with self.assertRaisesRegex(ValueError, 'MIME text hash mismatch'):
                 text_triage.assess_case(self.case, self.model)
-            infer.assert_not_called()
+            load.assert_not_called()
 
     def test_incomplete_or_currently_owned_case_refused_before_inference(self):
         self.write('execution.json', {'status': 'interrupted'})
         seal_case(self.case)
-        with patch.object(text_triage, '_infer') as infer:
+        with patch.object(text_triage, '_load_model') as load:
             with self.assertRaisesRegex(ValueError, 'completed, sealed'):
                 text_triage.assess_case(self.case, self.model)
             self.write('manifest.json', {'analysis_job': 'analysis_fixture'})
@@ -83,15 +83,15 @@ class CaseTextTriage(unittest.TestCase):
             seal_case(self.case)
             with self.assertRaisesRegex(RuntimeError, 'shutdown not confirmed'):
                 text_triage.assess_case(self.case, self.model)
-            infer.assert_not_called()
+            load.assert_not_called()
 
     def test_empty_text_explicitly_not_evaluated(self):
         self.write('headers.json', {'subject': ''})
         self.write('mime_body_evidence.json', {'status': 'completed', 'parts': []})
         seal_case(self.case)
-        with patch.object(text_triage, '_infer') as infer:
+        with patch.object(text_triage, '_load_model') as load:
             result = text_triage.assess_case(self.case, self.model)
-        infer.assert_not_called()
+        load.assert_not_called()
         self.assertEqual(result['status'], 'not_evaluated')
         self.assertIsNone(result['scores'])
 
@@ -103,9 +103,11 @@ class CaseTextTriage(unittest.TestCase):
         self.write('mime_body_evidence.json', {'status': 'partial', 'parts': [self.part]})
         seal_case(self.case)
         scores = {'legitimate': 0.1, 'spam': 0.2, 'fraud': 0.7}
-        with patch.object(text_triage, '_infer', return_value=(scores, 9, False, 'fixture')) as infer:
+        with patch.object(text_triage, '_load_model') as load:
+            infer = load.return_value
+            infer.return_value = scores, 9, False, 'fixture'
             text_triage.assess_case(self.case, self.model)
-        infer.assert_called_once_with('Subject\nYour account has been suspended today', self.model.resolve())
+        infer.assert_called_once_with('Subject\nYour account has been suspended today')
 
     def test_model_loader_checks_exact_bytes_even_at_expected_size(self):
         (self.model/'tokenizer.json').write_bytes(b'inert')
@@ -127,7 +129,7 @@ class CaseTextTriage(unittest.TestCase):
         with patch.dict(os.environ, {'ORT_DISABLE_TELEMETRY': '0'}):
             with patch('builtins.__import__', side_effect=check_runtime_import) as importer:
                 with self.assertRaisesRegex(RuntimeError, 'text-triage'):
-                    text_triage._infer('fixture', self.model)
+                    text_triage._load_model(self.model)
                 self.assertIn('onnxruntime', [call.args[0] for call in importer.call_args_list])
 
 
