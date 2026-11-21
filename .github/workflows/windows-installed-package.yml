@@ -38,6 +38,7 @@ jobs:
           $python = "$env:RUNNER_TEMP/paw-installed/Scripts/python.exe"
           $wheel = (Get-ChildItem "$env:RUNNER_TEMP/wheels/paw-*.whl").FullName
           & $python -I -B "$env:GITHUB_WORKSPACE/tests/test_cli_egress_consent.py"
+          & $python -I -B "$env:GITHUB_WORKSPACE/tests/test_text_triage.py" -v
           & $python -I -B -m unittest discover -s "$env:GITHUB_WORKSPACE/tests" -p test_api_transfer_lifecycle.py
           & $python -I -B "$env:GITHUB_WORKSPACE/tests/integration_installed_package_real.py" --wheel $wheel --output "$env:RUNNER_TEMP/results"
 

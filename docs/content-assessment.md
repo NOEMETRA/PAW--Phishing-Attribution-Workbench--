@@ -138,3 +138,33 @@ The parser admits a bounded subset of inline formatting and stops retaining
 anchors after 256 candidates per document. Tracking redirects and link
 rewriting can produce the same observed difference. The result describes
 static markup and leaves the analyst to assess its context.
+
+## Local multilingual text assessment
+
+Install the optional dependencies in the PAW environment with
+`python -m pip install '.[text-triage]'`. Stage `onnx/model_quantized.onnx`
+and `tokenizer.json` from the pinned model revision in the same local
+directory. The two files use about 675 MB of disk. The model is licensed
+under Apache-2.0. [Model files and license](https://huggingface.co/Horizon-Labs/phishing-scam-detector-base/tree/c294bf142ff53db24dc9ef07f20149ffeddeae6d)
+
+Run against a completed local case after the analysis worker has stopped.
+
+```bash
+paw assess-text --case cases/CASE_DIRECTORY --model-dir /path/to/horizon-model
+```
+
+The command checks the case seal and the model files' SHA-256 digests, runs
+inference on CPU and prints a separate JSON record to stdout. Store any
+redirected output outside the case directory to preserve its seal. The record
+contains separate `legitimate`, `spam` and `fraud` scores, model identifiers,
+the case root, references to captured MIME text and token coverage. The
+command has no download step. The application offline policy is active during
+inference. Use a network-isolated host or process when the operating system
+must enforce the restriction for native code.
+
+Model input is the subject and normalized plain text from parser-selected
+outer MIME parts. HTML is reduced to textual content. Inference uses the
+first 384 tokens and reports truncation. Attachments, image content, sender
+authentication and link destinations fall outside this score's scope.
+The scores are uncalibrated for PAW and intended for analyst review. The
+existing case's reports and attribution decision remain unchanged.

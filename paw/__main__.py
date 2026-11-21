@@ -221,6 +221,10 @@ For help: paw help <command>
         p_verify = sub.add_parser("verify", help="Verify evidence integrity for a case")
         p_verify.add_argument("--case", required=True, help="Path to case directory")
 
+        p_text_triage = sub.add_parser('assess-text', help='Score sealed case text for local multilingual review')
+        p_text_triage.add_argument('--case', required=True, help='Completed, sealed PAW case directory')
+        p_text_triage.add_argument('--model-dir', required=True, help='Local Horizon Labs ONNX and tokenizer directory')
+
         p_export = sub.add_parser("export", help="Export case as zip or capsule")
         p_export.add_argument("--case", required=True)
         p_export.add_argument("--format", choices=["zip"], default="zip")
@@ -450,6 +454,10 @@ For help: paw help <command>
             require_stopped_case(args.case)
             ok = verify_case(args.case)
             sys.exit(0 if ok else 2)
+
+        elif args.cmd == 'assess-text':
+            from .core.text_triage import assess_case
+            print(json.dumps(assess_case(args.case, args.model_dir), allow_nan=False, indent=2))
 
         elif args.cmd == "export":
             require_stopped_case(args.case)
@@ -762,6 +770,7 @@ Commands:
   query       Search case database
   export      Export case in various formats
   verify      Verify evidence integrity
+  assess-text Score sealed case text for local multilingual review
   help        Show help for commands
 
 Examples:

@@ -76,6 +76,9 @@ Verification checks the local evidence inventory and file hashes. The ZIP contai
 
 See the [score explanations](docs/score-explanations.md) for interpretation and the [canary status](docs/canary-status.md) for the collector’s current scope.
 
+For an optional multilingual text assessment of a sealed case, use
+`paw assess-text`. See the [local model setup and output](docs/content-assessment.md#local-multilingual-text-assessment).
+
 For API indicator searches, POST a JSON object with `query_type` and `value` to
 `/api/query`. Each page examines up to 100 indexed cases by default. Set
 `limit` to 1–1000 to choose a page size. Pass the returned `next_after` as

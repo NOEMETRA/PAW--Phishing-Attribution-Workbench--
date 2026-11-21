@@ -59,6 +59,7 @@ jobs:
         run: |
           "$RUNNER_TEMP/paw-installed/bin/python" -I -B "$GITHUB_WORKSPACE/tests/integration_mail_triage_real.py"
           "$RUNNER_TEMP/paw-installed/bin/python" -I -B -m unittest discover -s "$GITHUB_WORKSPACE/tests" -p test_mail_corpus_evaluation.py
+          "$RUNNER_TEMP/paw-installed/bin/python" -I -B "$GITHUB_WORKSPACE/tests/test_text_triage.py" -v
       - name: Verify installed console, presets, API, seals and exports outside checkout
         working-directory: ${{ runner.temp }}
         run: |
