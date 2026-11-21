@@ -14,6 +14,7 @@ from contextvars import ContextVar
 import os
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
+from time import monotonic
 from typing import List, Dict, Any, Optional
 from ..util.timeutil import utc_now_iso
 from .config import (_storage_path, _admit_storage_path, _storage_identity, _storage_opener,
@@ -21,11 +22,11 @@ from .config import (_storage_path, _admit_storage_path, _storage_identity, _sto
 
 
 _AUTOMATIC_ATTEMPT_LIMIT = 6
+_AUTOMATIC_INDEX_TIMEOUT_SECONDS = 10
 
 # SQLite matches the indexed expression to the lookup as written. Guard
 # legacy metadata before calling any JSON function that requires valid input.
-# Skip confirmed alerts early to keep index creation within the SQL budget
-# on archives dominated by completed deliveries.
+# Skip confirmed alerts early on archives dominated by completed deliveries.
 _AUTOMATIC_QUEUE_RECEIVER = f"""
     CASE WHEN json_valid(metadata) THEN
         CASE json_extract(metadata,'$.webhook_delivery.status')
@@ -917,11 +918,20 @@ class CampaignDatabase:
         """Index the eligible queue when the foreground sender is enabled."""
         _require_active()
         with self.connection() as conn:
-            conn.execute(f"""
-                CREATE INDEX IF NOT EXISTS sentinel_automatic_queue_receiver
-                ON alerts (({_AUTOMATIC_QUEUE_RECEIVER}), id)
-                WHERE ({_AUTOMATIC_QUEUE_RECEIVER}) IS NOT NULL
-            """)
+            # Initial index creation scans historical rows once. Bound this
+            # maintenance statement by elapsed time on its own connection.
+            deadline = monotonic() + _AUTOMATIC_INDEX_TIMEOUT_SECONDS
+            conn.set_progress_handler(lambda: monotonic() >= deadline, 1000)
+            try:
+                conn.execute(f"""
+                    CREATE INDEX IF NOT EXISTS sentinel_automatic_queue_receiver
+                    ON alerts (({_AUTOMATIC_QUEUE_RECEIVER}), id)
+                    WHERE ({_AUTOMATIC_QUEUE_RECEIVER}) IS NOT NULL
+                """)
+            except sqlite3.OperationalError as error:
+                if error.sqlite_errorcode != sqlite3.SQLITE_INTERRUPT:
+                    raise
+                raise TimeoutError('Sentinel automatic delivery index preparation timed out') from error
 
     def next_automatic_alert(self, fingerprint):
         """Select one due event from the durable queue for the configured receiver."""

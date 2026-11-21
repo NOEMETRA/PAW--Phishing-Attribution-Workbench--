@@ -103,6 +103,8 @@ riprendere la consegna allo stesso destinatario. La scadenza degli avvisi
 rimuove anche il relativo stato di consegna. Il flag `--webhook` abilita
 l'invio soltanto per gli avvisi entrati in coda con quell'URL. All'avvio
 Sentinel crea l'indice degli avvisi ancora candidati alla consegna automatica.
+La prima creazione attraversa la cronologia con un limite di dieci secondi.
+Il limite delle normali query SQLite continua a valere dopo l'avvio.
 Gli avvisi confermati o con tutti i tentativi automatici esauriti restano
 nella cronologia fino alla scadenza. La consegna
 automatica su endpoint pubblici resta aperta.

@@ -7,6 +7,7 @@ import json
 import os
 import sys
 from pathlib import Path
+import sqlite3
 import tempfile
 import threading
 import time
@@ -110,11 +111,19 @@ class SentinelModuleAudit(unittest.TestCase):
         monitor = SentinelMonitor(self.config, self.db, webhook_fingerprint=fingerprint)
         monitor._handle_check_result(self.result())
         monitor._handle_check_result(self.result(digest='b'*64))
-        self.db.prepare_automatic_delivery()
         bounded = CampaignDatabase(self.db.db_path, initialize=False, limits={'max_sql_steps': 500})
+        with patch('paw.sentinel.database._AUTOMATIC_INDEX_TIMEOUT_SECONDS', 0):
+            with self.assertRaisesRegex(TimeoutError, 'index preparation timed out'):
+                bounded.prepare_automatic_delivery()
+        with self.db.connection() as conn:
+            self.assertIsNone(conn.execute("SELECT name FROM sqlite_master WHERE name=?",
+                                           ('sentinel_automatic_queue_receiver',)).fetchone())
+        bounded.prepare_automatic_delivery()
         alert, = self.db.get_campaign_history(self.campaign)['alerts'][:1]
         self.assertEqual(bounded.next_automatic_alert(fingerprint), (self.campaign, alert['id']))
         self.assertIsNone(bounded.next_automatic_alert('b'*64))
+        with bounded.connection() as conn, self.assertRaisesRegex(sqlite3.OperationalError, 'interrupted'):
+            conn.execute('SELECT SUM(LENGTH(metadata)) FROM alerts').fetchone()
 
     def test_stop_interrupts_interval_and_confirms_thread_shutdown(self):
         self.assertIn('timeout',inspect.signature(self.monitor.stop).parameters)
