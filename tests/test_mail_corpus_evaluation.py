@@ -98,6 +98,10 @@ class CorpusEvaluation(unittest.TestCase):
         self.assertEqual(primary['false_referrals'], {'count':1,'denominator':1,'rate':1.0})
         self.assertEqual(secondary['false_referrals']['count'], 0)
         self.assertEqual(primary['missed_referrals']['count'], 1)
+        self.assertEqual(primary['recall'], 0.0)
+        self.assertEqual(primary['precision'], 0.0)
+        self.assertIsNone(secondary['precision'])
+        self.assertEqual(primary['abstention_rate'], 1 / 3)
         self.assertEqual(primary['decisions_by_independent_label']['phishing']['not_evaluated'], 1)
         self.assertEqual(secondary['decisions_by_independent_label']['unresolved']['below_threshold'], 1)
 

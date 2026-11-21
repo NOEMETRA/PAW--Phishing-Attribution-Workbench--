@@ -424,8 +424,10 @@ It loads one tokenizer and model session per invocation, then links every
 assessment to the seal and original used for the label lookup. It reports
 aggregate referrals at fixed `fraud` thresholds of 0.5 and 0.9. Messages
 without usable text appear as `not_evaluated` and remain in the denominator
-for missed referrals. Unresolved labels stay visible in the counts. Keep
-aggregate results outside the case directory to preserve its seal.
+for missed referrals. Holdout reports include recall, precision and the
+abstention rate. Precision requires referrals with resolved labels and both
+label classes in the cohort. Unresolved labels stay visible in the counts.
+Keep aggregate results outside the case directory to preserve its seal.
 
 #### Historical reference holdout, 21 November 2026
 

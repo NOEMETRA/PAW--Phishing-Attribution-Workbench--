@@ -70,6 +70,22 @@ def _report(outcomes, decisions, elevated, split, originals):
     return result
 
 
+def _text_report(outcomes, split, originals):
+    result = _report(outcomes, TEXT_DECISIONS, {'review'}, split, originals)
+    if split == 'holdout':
+        true_referrals = outcomes['phishing', 'review']
+        false_referrals = result['false_referrals']['count']
+        positive_labels = result['missed_referrals']['denominator']
+        negative_labels = result['false_referrals']['denominator']
+        adjudicated_referrals = true_referrals + false_referrals
+        abstentions = sum(count for (_, decision), count in outcomes.items() if decision == 'not_evaluated')
+        result['recall'] = true_referrals / positive_labels if positive_labels else None
+        result['precision'] = (true_referrals / adjudicated_referrals
+                               if positive_labels and negative_labels and adjudicated_referrals else None)
+        result['abstention_rate'] = abstentions / originals
+    return result
+
+
 def evaluate(labels, directory, profile, split, *, static_triage=False, text_assessor=None):
     if static_triage and text_assessor is not None:
         raise ValueError('Choose static triage or text assessment')
@@ -134,7 +150,7 @@ def evaluate(labels, directory, profile, split, *, static_triage=False, text_ass
         raise ValueError('Evaluation partition lacks saved decisions for one or more originals')
     if text_assessor is not None:
         return {'referral_rule':'horizon_fraud_score', 'model':model,
-                'thresholds':{str(threshold): _report(counter, TEXT_DECISIONS, {'review'}, split, len(observed))
+                'thresholds':{str(threshold): _text_report(counter, split, len(observed))
                               for threshold, counter in text_outcomes.items()}}
     elevated = {'review'} if static_triage else set(DECISIONS[1:])
     result = _report(outcomes, decisions, elevated, split, len(observed))
