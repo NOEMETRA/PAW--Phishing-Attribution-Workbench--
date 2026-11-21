@@ -1,8 +1,11 @@
 """Private-link fixture for the Linux namespace integration; all endpoint addresses are fixed."""
 import hashlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from ipaddress import ip_address
 import json
+import os
 from pathlib import Path
+import socket
 import socketserver
 import ssl
 import sqlite3
@@ -17,9 +20,14 @@ import dns.rcode
 import dns.rdatatype
 import dns.rrset
 
-PEER = "192.0.2.2"
-CLIENT = "192.0.2.1"
+PEER = os.environ["PAW_FIXTURE_PEER_IP"]
+CLIENT = os.environ["PAW_FIXTURE_CLIENT_IP"]
+IPV6 = ip_address(PEER).version == 6
+PEER_AUTHORITY = f"[{PEER}]" if IPV6 else PEER
+ADDRESS_TYPE = "AAAA" if IPV6 else "A"
+ADDRESS_FAMILY = socket.AF_INET6 if IPV6 else socket.AF_INET
 CAMPAIGN = "https://sentinel.test:8443/campaign"
+UNTRUSTED_TLS_NAME = "wrong-name.test" if IPV6 else PEER_AUTHORITY
 EVENTS = Path("events.jsonl")
 
 
@@ -39,10 +47,10 @@ class Resolver(socketserver.BaseRequestHandler):
         question, = query.question
         name = question.name.to_text()
         answer = dns.message.make_response(query)
-        if name != "sentinel.test.":
+        if name != "sentinel.test." and not (IPV6 and name == "wrong-name.test."):
             answer.set_rcode(dns.rcode.NXDOMAIN)
-        elif question.rdtype == dns.rdatatype.A:
-            answer.answer.append(dns.rrset.from_text(name, 37, "IN", "A", PEER))
+        elif question.rdtype == dns.rdatatype.from_text(ADDRESS_TYPE):
+            answer.answer.append(dns.rrset.from_text(name, 37, "IN", ADDRESS_TYPE, PEER))
         record(dict(kind="dns", peer=self.client_address[0], name=name,
                     type=dns.rdatatype.to_text(question.rdtype), rcode=answer.rcode()))
         sock.sendto(answer.to_wire(), self.client_address)
@@ -50,7 +58,7 @@ class Resolver(socketserver.BaseRequestHandler):
 
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        record(dict(kind="http", peer=self.client_address[0], path=self.path,
+        record(dict(kind="http", peer=self.client_address[0], path=self.path, host=self.headers["Host"],
                     tls=self.connection.version() if isinstance(self.connection, ssl.SSLSocket) else None))
         if self.path == "/redirect":
             self.send_response(302)
@@ -65,11 +73,19 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
+class FixtureUDPServer(socketserver.UDPServer):
+    address_family = ADDRESS_FAMILY
+
+
+class FixtureHTTPServer(ThreadingHTTPServer):
+    address_family = ADDRESS_FAMILY
+
+
 def serve():
     EVENTS.touch()
-    with socketserver.UDPServer((PEER, 53), Resolver) as resolver, \
-         ThreadingHTTPServer((PEER, 8080), Handler) as http, \
-         ThreadingHTTPServer((PEER, 8443), Handler) as https:
+    with FixtureUDPServer((PEER, 53), Resolver) as resolver, \
+         FixtureHTTPServer((PEER, 8080), Handler) as http, \
+         FixtureHTTPServer((PEER, 8443), Handler) as https:
         tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         tls.load_cert_chain("fixture.pem", "fixture.key")
         https.socket = tls.wrap_socket(https.socket, server_side=True)
@@ -106,7 +122,7 @@ def observe():
     enrichment = DNSEnrichmentAnalyzer(timeout=2).analyze_domain_dns("sentinel.test")
     Path("paw-dns.json").write_text(json.dumps(enrichment, indent=2))
     assert not enrichment["errors"], enrichment["errors"]
-    assert enrichment["records"]["A"] == [{"value": PEER, "ttl": 37}], enrichment["records"]
+    assert enrichment["records"][ADDRESS_TYPE] == [{"value": PEER, "ttl": 37}], enrichment["records"]
     identifier = register("private-https", CAMPAIGN)
     Path("campaign-id").write_text(identifier)
     for code, body in [(200, "first"), (503, "second"), (200, "second")]:
@@ -120,7 +136,7 @@ def observe():
     redirect = register("private-redirect", "http://sentinel.test:8080/redirect")
     assert check(redirect)["checks"][0]["http_status"] == 302
     before = http_events()
-    for name, url in [("wrong-name", "https://192.0.2.2:8443/campaign"),
+    for name, url in [("wrong-name", f"https://{UNTRUSTED_TLS_NAME}:8443/campaign"),
                       ("missing-dns", "https://absent.test:8443/campaign")]:
         ident = register(name, url)
         result = check(ident)
@@ -173,7 +189,9 @@ def restored():
 def foreground(phase):
     directory = Path('foreground')
     directory.mkdir(exist_ok=True)
-    origin = f'http://{PEER}:8080'
+    scheme, port = ('https', 8443) if IPV6 else ('http', 8080)
+    authority = f'{PEER_AUTHORITY}:{port}'
+    origin = f'{scheme}://{authority}'
     if phase == 'initial':
         config = {'storage': {'database_path': 'saved.db'}, 'monitoring': {'check_interval_minutes': 60}}
         (directory / 'sentinel_config.json').write_text(json.dumps(config))
@@ -218,7 +236,9 @@ def foreground(phase):
     else:
         event, = extra
         assert (event['peer'], event['path']) == (CLIENT, '/foreground')
-    print(f'PASS foreground {phase}: {status}, HTTP {code}, {len(extra)} peer requests')
+        assert event['host'] == authority
+        assert bool(event['tls']) == IPV6
+    print(f'PASS foreground {phase} on {origin}: {status}, HTTP {code}, {len(extra)} peer requests')
 
 
 if __name__ == "__main__":
