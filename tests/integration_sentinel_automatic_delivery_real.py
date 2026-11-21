@@ -1,10 +1,11 @@
-"""Exercise durable automatic webhook delivery across two foreground processes."""
+"""Exercise durable automatic HTTPS webhook delivery across foreground processes."""
 from contextlib import closing
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
 import signal
 import sqlite3
+import ssl
 import subprocess
 import sys
 import tempfile
@@ -46,8 +47,15 @@ def main():
 
     with tempfile.TemporaryDirectory() as temp, ThreadingHTTPServer(('127.0.0.1', 0), Receiver) as receiver:
         root = Path(temp)
+        cert, key = root/'fixture.pem', root/'fixture.key'
+        subprocess.run(['openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-days', '1',
+                        '-subj', '/CN=sentinel fixture', '-addext', 'subjectAltName=IP:127.0.0.1',
+                        '-keyout', str(key), '-out', str(cert)], check=True, capture_output=True)
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(cert, key)
+        receiver.socket = context.wrap_socket(receiver.socket, server_side=True)
         database = root/'sentinel.db'
-        origin = f'http://127.0.0.1:{receiver.server_port}'
+        origin = f'https://127.0.0.1:{receiver.server_port}'
         webhook = origin+'/alerts'
         (root/'sentinel_config.json').write_text(json.dumps({
             'storage':{'database_path':'sentinel.db'},
@@ -61,7 +69,7 @@ def main():
         processes = []
         try:
             def run(args, out):
-                process = subprocess.Popen(cli+['run','--origin',origin,*args],
+                process = subprocess.Popen(cli+['run','--origin',origin,'--ca-file',str(cert),*args],
                                            cwd=root, stdout=out, stderr=out)
                 processes.append(process)
                 return process

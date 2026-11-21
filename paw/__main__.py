@@ -365,6 +365,7 @@ For help: paw help <command>
         p_monitor.add_argument("--alert-id", type=int, help="Alert ID (required for acknowledge and deliver)")
         p_monitor.add_argument("--webhook", help="Owned numeric loopback webhook URL for automatic delivery during run")
         p_monitor.add_argument("--destination", help="Owned numeric loopback webhook URL for deliver")
+        p_monitor.add_argument("--ca-file", help="Local PEM trust bundle for HTTPS in monitor run or deliver")
 
         # GEOGRAPHIC command (Sentinel Intelligence)
         p_geo = sub.add_parser("geographic", aliases=["geo"], help="Describe unverified stored geographic observations")
@@ -577,6 +578,8 @@ For help: paw help <command>
                 raise ValueError("--destination applies only to monitor deliver")
             if args.webhook is not None and args.action != "run":
                 raise ValueError("--webhook applies only to monitor run")
+            if args.ca_file is not None and args.action not in ("run", "deliver"):
+                raise ValueError("--ca-file applies only to monitor run and monitor deliver")
             if args.action in ("acknowledge", "deliver"):
                 if not args.campaign or not args.campaign.strip() or args.alert_id is None:
                     raise ValueError("--campaign and --alert-id are required")
@@ -586,7 +589,8 @@ For help: paw help <command>
                     raise ValueError("Only campaign, alert ID and delivery destination are accepted")
                 if args.action == "deliver":
                     from .sentinel.delivery import deliver_saved_alert
-                    result = deliver_saved_alert(args.campaign, args.alert_id, args.destination)
+                    result = deliver_saved_alert(args.campaign, args.alert_id, args.destination,
+                                                 ca_file=args.ca_file)
                     print(json.dumps(result))
                     if result['status'] != 'receipt_confirmed':
                         sys.exit(1)
@@ -600,9 +604,9 @@ For help: paw help <command>
                 raise ValueError("--alert-id applies only to monitor acknowledge and deliver")
             if args.action == "run":
                 if any(value is not None for value in (args.case, args.campaign, args.url)):
-                    raise ValueError("monitor run selects all active campaigns and accepts --origin and --webhook")
+                    raise ValueError("monitor run selects all active campaigns and accepts --origin, --webhook and --ca-file")
                 from .sentinel.service import run_foreground
-                run_foreground(args.origin, args.webhook)
+                run_foreground(args.origin, args.webhook, ca_file=args.ca_file)
                 return
             if args.origin:
                 raise ValueError("--origin applies only to monitor run")
@@ -806,6 +810,7 @@ ACTIONS:
   check               Active HTTP observation; network isolation acceptance pending
   files, integrity    Local case-file checks; owning workers must be stopped
 
+Use --ca-file with run or deliver to trust a local PEM bundle for HTTPS.
 start/stop fail before Sentinel imports, configuration or database access.
 They neither start a service nor stop an independently running instance.
 Active collection and in-process monitor lifecycle remain unvalidated for S14.

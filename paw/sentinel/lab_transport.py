@@ -39,17 +39,34 @@ def lab_origin(value):
     return origin
 
 
+def load_lab_ca(path):
+    from ..core.source_inspection import SourceLimits, acquire_source
+
+    source = acquire_source(path, SourceLimits(input_bytes=1024**2))
+    try:
+        return ssl.create_default_context(cadata=source.raw.decode('ascii'))
+    except (UnicodeDecodeError, ssl.SSLError):
+        raise ValueError('Laboratory CA file must contain PEM certificates') from None
+
+
+def lab_tls_context(context):
+    if context is not None:
+        return context
+    import certifi
+
+    return ssl.create_default_context(cafile=certifi.where())
+
+
 class _Canceled(Exception):
     pass
 
 
-async def _collect(request, address, result, body, max_bytes):
-    import certifi
+async def _collect(request, address, result, body, max_bytes, tls_context):
     import h11
 
     parsed = urlsplit(request.url)
     secure = parsed.scheme == 'https'
-    context = ssl.create_default_context(cafile=certifi.where()) if secure else None
+    context = lab_tls_context(tls_context) if secure else None
     port = parsed.port if parsed.port is not None else (443 if secure else 80)
     conn = h11.Connection(h11.CLIENT, max_incomplete_event_size=_HEADER_BYTES)
     packet = conn.send(h11.Request(method=b'GET', target=request.path_url.encode('ascii'), headers=[
@@ -117,7 +134,7 @@ async def _bounded_collect(args, stop_event, timeout):
             await asyncio.gather(task, return_exceptions=True)
 
 
-def fetch_lab_http(url, *, timeout, max_bytes, stop_event):
+def fetch_lab_http(url, *, timeout, max_bytes, stop_event, tls_context=None):
     _require_active()
     started = time.monotonic()
     result = _new_observation(url)
@@ -135,7 +152,7 @@ def fetch_lab_http(url, *, timeout, max_bytes, stop_event):
         remaining = timeout - (time.monotonic() - started)
         if remaining <= 0:
             raise TimeoutError
-        asyncio.run(_bounded_collect((request, address, result, body, max_bytes), stop_event, remaining))
+        asyncio.run(_bounded_collect((request, address, result, body, max_bytes, tls_context), stop_event, remaining))
     except EgressDenied:
         raise
     except _Canceled:

@@ -100,6 +100,13 @@ rimuove anche il relativo stato di consegna. Il flag `--webhook` abilita
 l'invio soltanto per gli avvisi entrati in coda con quell'URL. La consegna
 automatica su endpoint pubblici resta aperta.
 
+Per HTTPS con una CA privata, passare a `monitor run` o `monitor deliver`
+`--ca-file /percorso/ca-laboratorio.pem`. Il file deve essere locale,
+in formato PEM e al massimo di 1 MiB. Quando presente, quel bundle è
+la fonte di fiducia per le connessioni HTTPS del comando, inclusa la
+consegna automatica di `run`. Sentinel verifica la catena e l'identità
+IP del peer. Senza opzione usa il normale bundle certifi.
+
 ## Collaudo Linux con egress privato
 
 Il collaudo usa due namespace collegati da una coppia veth. Il peer ospita DNS, HTTP e HTTPS; entrambe le estremità hanno soltanto una rotta locale. Il certificato della fixture è valido per `sentinel.test`. Dopo tre osservazioni e un redirect, il test verifica gli errori DNS e TLS, il rifiuto del firewall e il recupero del collegamento. Verifica anche il TTL osservato dal modulo DNS di PAW e il comportamento offline del comando `full` con il peer raggiungibile.

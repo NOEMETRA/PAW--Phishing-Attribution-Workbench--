@@ -10,14 +10,15 @@ from .contracts import (_admit_storage_path, _require_active, _storage_identity,
                         _storage_opener, _storage_path)
 from .database import AlertDeliveryMissing, CampaignDatabase
 from .delivery import send_saved_alert, webhook_destination
-from .lab_transport import fetch_lab_http, lab_origin as _lab_origin
+from .lab_transport import fetch_lab_http, lab_origin as _lab_origin, load_lab_ca
 from .monitor import SentinelMonitor
 
 
 class _LabMonitor(SentinelMonitor):
-    def __init__(self, config, database, origins, *, webhook_fingerprint=None):
+    def __init__(self, config, database, origins, *, webhook_fingerprint=None, tls_context=None):
         super().__init__(config, database, webhook_fingerprint=webhook_fingerprint)
         self.origins = origins
+        self.tls_context = tls_context
         self.next_cleanup = 0
 
     def _perform_checks(self):
@@ -41,7 +42,8 @@ class _LabMonitor(SentinelMonitor):
         return admitted
 
     def _collect_http(self, url, *, timeout, max_bytes):
-        return fetch_lab_http(url, timeout=timeout, max_bytes=max_bytes, stop_event=self._stop_event)
+        return fetch_lab_http(url, timeout=timeout, max_bytes=max_bytes,
+                              stop_event=self._stop_event, tls_context=self.tls_context)
 
 
 def _event(name, **fields):
@@ -49,7 +51,7 @@ def _event(name, **fields):
     sys.stdout.flush()
 
 
-def run_foreground(origins, webhook=None):
+def run_foreground(origins, webhook=None, *, ca_file=None):
     _require_active()
     if not sys.platform.startswith('linux'):
         raise RuntimeError('Foreground Sentinel supervision currently requires Linux')
@@ -58,6 +60,7 @@ def run_foreground(origins, webhook=None):
         raise ValueError('monitor run requires --origin for an owned laboratory HTTP service')
     origins = frozenset(_lab_origin(value) for value in origins)
     target = webhook_destination(webhook) if webhook is not None else None
+    tls_context = load_lab_ca(ca_file) if ca_file is not None else None
     config = SentinelConfig()
     options = config.get_database_options()
     path = _storage_path(options['db_path'])
@@ -73,7 +76,8 @@ def run_foreground(origins, webhook=None):
         database = CampaignDatabase(**options)
         if database._source_identity != identity:
             raise ValueError('Sentinel database replaced during service admission')
-        monitor = _LabMonitor(config, database, origins, webhook_fingerprint=target[1] if target else None)
+        monitor = _LabMonitor(config, database, origins, webhook_fingerprint=target[1] if target else None,
+                              tls_context=tls_context)
         for campaign in database.get_active_campaigns():
             monitor._admit_campaign(campaign)
         monitor.on_check_complete(lambda row: _event('check_committed', campaign_id=row['campaign_id'],
@@ -107,7 +111,8 @@ def run_foreground(origins, webhook=None):
                         if candidate and not stopping:
                             campaign_id, alert_id = candidate
                             try:
-                                receipt = send_saved_alert(database, campaign_id, alert_id, target)
+                                receipt = send_saved_alert(database, campaign_id, alert_id, target,
+                                                           tls_context=tls_context)
                             except AlertDeliveryMissing:
                                 _event('webhook_alert_missing', campaign_id=campaign_id, alert_id=alert_id)
                             else:

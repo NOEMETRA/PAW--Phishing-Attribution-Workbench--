@@ -201,11 +201,12 @@ def foreground(phase):
         Path('state').write_text('200 replacement')
     path = directory / 'saved.db'
     before = len(http_events())
+    trust = ['--ca-file', str(Path('fixture.pem').absolute())] if IPV6 else []
     with closing(sqlite3.connect(path)) as db:
         initial, = db.execute('SELECT COUNT(*) FROM checks').fetchone()
         with (directory / f'{phase}.log').open('w') as log:
             process = subprocess.Popen([sys.executable, '-I', '-m', 'paw', 'monitor', 'run',
-                                        '--origin', origin], cwd=directory, stdout=log, stderr=log)
+                                        '--origin', origin, *trust], cwd=directory, stdout=log, stderr=log)
             try:
                 deadline = time.monotonic() + 15
                 while db.execute('SELECT COUNT(*) FROM checks').fetchone()[0] == initial:

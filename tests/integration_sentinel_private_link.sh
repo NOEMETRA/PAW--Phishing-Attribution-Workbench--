@@ -83,6 +83,9 @@ nft list chain inet paw_fixture output > denial.log
 grep -Eq 'counter packets [1-9][0-9]* ' denial.log
 nft delete table inet paw_fixture
 "${unpriv[@]}" "$python" -I "$fixture" restored
+if [[ "$nft_family" == ip6 ]]; then
+    umount "$bundle"
+fi
 "${unpriv[@]}" "$python" -I "$fixture" foreground initial
 nft add table inet paw_foreground
 nft 'add chain inet paw_foreground output { type filter hook output priority 0; policy accept; }'

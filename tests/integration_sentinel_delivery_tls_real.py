@@ -5,8 +5,11 @@ import gzip
 import hashlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from ipaddress import ip_address
+import json
 from pathlib import Path
 import ssl
+import subprocess
+import sys
 import tempfile
 import threading
 from unittest.mock import patch
@@ -16,6 +19,7 @@ from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
+from paw.sentinel.database import CampaignDatabase
 from paw.sentinel.delivery import _request_receipt
 from paw.sentinel.lab_transport import fetch_lab_http
 
@@ -36,6 +40,32 @@ def fixture_certificate(root, address):
     key_file.write_bytes(key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8,
                                            serialization.NoEncryption()))
     return cert_file, key_file
+
+
+def check_cli(root, origin, cert):
+    database = CampaignDatabase(str(root/'sentinel.db'))
+    campaign = database.add_campaign('fixture', origin+'/observation')
+    database.record_alert(campaign, 'changed', 'synthetic alert')
+    alert, = database.get_unacknowledged_alerts()
+    path = root/'invalid.pem'
+    path.write_text('Not a certificate')
+    invalid = (str(path), str(root/'absent.pem'), 'https://example.invalid/ca.pem')
+    cli = [sys.executable, '-I', '-B', '-m', 'paw', 'monitor']
+    deliver = ['deliver', '--campaign', campaign, '--alert-id', str(alert['id']),
+               '--destination', origin+'/manual-cli']
+    for value in invalid:
+        result = subprocess.run(cli+deliver+['--ca-file', value], cwd=root,
+                                capture_output=True, text=True, timeout=15)
+        assert result.returncode == 1
+    assert 'webhook_delivery' not in database.get_campaign_history(campaign)['alerts'][0]
+    result = subprocess.run(cli+deliver, cwd=root, capture_output=True, text=True, timeout=15)
+    assert result.returncode == 1 and json.loads(result.stdout)['error'] == 'transport_error'
+    first = json.loads(result.stdout)
+    result = subprocess.run(cli+deliver+['--ca-file', str(cert)], cwd=root,
+                            check=True, capture_output=True, text=True, timeout=15)
+    confirmed = json.loads(result.stdout)
+    assert (confirmed['status'], confirmed['attempts'], confirmed['event_id']) == (
+        'receipt_confirmed', 2, first['event_id'])
 
 
 def main():
@@ -105,12 +135,14 @@ def main():
                             assert response['http_status'] == 302 and not response['redirects_followed']
                         else:
                             assert observe('/wrong-ip')['http_status'] is None
+                    if address == '127.0.0.1':
+                        check_cli(Path(work), origin, cert)
                 finally:
                     server.shutdown()
                     thread.join()
-    assert accepted == ['/notify','/duplicate']
+    assert accepted == ['/notify','/duplicate','/manual-cli']
     assert observations == ['/observation?apikey=fixture','/body-limit','/redirect']
-    print('PASS: HTTPS identity, receipts, retained raw entity, byte cap and unfollowed redirect.')
+    print('PASS: HTTPS identity, CLI private CA trust, receipts, retained raw entity, byte cap and unfollowed redirect.')
 
 
 if __name__ == '__main__':

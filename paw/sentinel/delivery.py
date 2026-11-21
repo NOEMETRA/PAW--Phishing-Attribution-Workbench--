@@ -3,12 +3,12 @@ import asyncio
 import hashlib
 import ipaddress
 import json
-import ssl
 from urllib.parse import urlsplit, urlunsplit
 
 from .config import SentinelConfig
 from .contracts import _require_active
 from .database import CampaignDatabase
+from .lab_transport import lab_tls_context, load_lab_ca
 
 
 def _destination(value):
@@ -38,13 +38,14 @@ def webhook_destination(value):
     return endpoint, hashlib.sha256(endpoint.encode('utf-8')).hexdigest()
 
 
-def deliver_saved_alert(campaign_id, alert_id, destination):
+def deliver_saved_alert(campaign_id, alert_id, destination, *, ca_file=None):
     target = webhook_destination(destination)
+    tls_context = load_lab_ca(ca_file) if ca_file is not None else None
     database = CampaignDatabase(**SentinelConfig().get_database_options(), initialize=False)
-    return send_saved_alert(database, campaign_id, alert_id, target)
+    return send_saved_alert(database, campaign_id, alert_id, target, tls_context=tls_context)
 
 
-def send_saved_alert(database, campaign_id, alert_id, target):
+def send_saved_alert(database, campaign_id, alert_id, target, *, tls_context=None):
     _require_active()
 
     endpoint, fingerprint = webhook_destination(target[0])
@@ -55,18 +56,17 @@ def send_saved_alert(database, campaign_id, alert_id, target):
         return state
     event_id = state['event_id']
     payload = {'event_id':event_id, 'campaign_id':campaign_id, 'alert_id':alert_id, 'alert_type':alert_type}
-    code, outcome = asyncio.run(_request_receipt(endpoint, payload))
+    code, outcome = asyncio.run(_request_receipt(endpoint, payload, tls_context=tls_context))
     return database.finish_alert_delivery(campaign_id, alert_id, state, outcome, code)
 
 
-async def _request_receipt(endpoint, payload):
+async def _request_receipt(endpoint, payload, *, tls_context=None):
     """Use one wall-clock deadline for connect, TLS, write and response headers."""
-    import certifi
     import h11
 
     parsed = urlsplit(endpoint)
     secure = parsed.scheme == 'https'
-    context = ssl.create_default_context(cafile=certifi.where()) if secure else None
+    context = lab_tls_context(tls_context) if secure else None
     port = parsed.port if parsed.port is not None else (443 if secure else 80)
     key = payload['event_id'].encode('ascii')
     body = json.dumps(payload, separators=(',', ':')).encode('ascii')
