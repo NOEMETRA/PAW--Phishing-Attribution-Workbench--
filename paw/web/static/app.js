@@ -2,6 +2,12 @@
 const $ = id => document.getElementById(id);
 const state = {file:null, job:null, case:null, offset:0, poll:0, busy:false, jobsBusy:false};
 const labels = {queued:'In coda',running:'In corso',completed:'Completata',failed:'Fallita',timed_out:'Tempo esaurito',cancelled:'Annullata',resource_limited:'Limite risorse',interrupted:'Interrotta',incomplete:'Incompleta',partial:'Parziale',skipped:'Escluso',not_evaluated:'Non valutato',parsed_unverified:'Letto, non verificato',reported_only:'Dichiarato negli header',unavailable:'Non disponibile',verified:'Verificata',available:'Disponibile'};
+const decisionLabels = new Map([
+  ['Inconclusive', 'Inconclusiva'],
+  ['Suspicious or compromised account', 'Account sospetto o compromesso'],
+  ['Likely malicious infrastructure', 'Infrastruttura probabilmente malevola'],
+  ['Benign', 'Basso rischio'], ['Suspicious', 'Sospetta'], ['Malicious', 'Elevato rischio']
+]);
 const stages = {imports:'Preparazione del motore',mime_parsing:'Struttura MIME',ingest:'Conservazione originale',deobfuscation:'Contenuto e link',detonation:'Detonazione',attachment_metadata:'Metadati allegati',headers_authentication:'Header e autenticazione',ip_enrichment:'Arricchimento IP',domain_enrichment:'Arricchimento domini',scoring:'Valutazione',reports:'Report',exports:'Pacchetto evidenze',evidence_seal:'Sigillatura evidenze',completed:'Esecuzione terminata'};
 const active = job => job && ['queued','running'].includes(job.status);
 function el(tag, className, text){ const n=document.createElement(tag); if(className)n.className=className; if(text!==undefined)n.textContent=String(text); return n; }
@@ -112,7 +118,7 @@ async function openCase(id,keepJob=false){
   state.case=data;$('verify-case').disabled=false;$('intake-view').hidden=true;$('case-view').hidden=false;if(!keepJob)$('job-view').hidden=true;
   $('case-id').textContent=id;$('case-title').textContent=data.email?.subject||'Evidenze del caso';$('case-status').textContent=labels[data.status]||data.status;
   $('case-scope').textContent=data.execution?.no_egress?'Analisi locale offline':(data.execution?.scope||'Ambito non disponibile');
-  $('case-decision').textContent=({Inconclusive:'Inconclusiva',Benign:'Basso rischio',Suspicious:'Sospetta',Malicious:'Elevato rischio'})[data.score?.decision]||data.score?.decision||'Non disponibile';
+  $('case-decision').textContent=decisionLabels.get(data.score?.decision)||data.score?.decision||'Non disponibile';
   $('case-score').textContent=Number.isFinite(data.score?.score)?`Indice euristico ${data.score.score.toFixed(2)} · non una probabilità`:'Indice non disponibile';
   $('case-coverage').textContent=labels[data.execution?.assessment_status||data.score?.assessment_status]||'Non disponibile';
   $('case-integrity').textContent='Da verificare';$('integrity-description').textContent='Coerenza dei file, distinta dall’origine.';

@@ -1,0 +1,23 @@
+services:
+  paw:
+    build:
+      context: .
+      dockerfile: Dockerfile.offline
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs:
+      - /tmp
+    volumes:
+      - type: bind
+        source: ${PAW_INPUT_DIR:?Set PAW_INPUT_DIR to the directory containing the original EML files}
+        target: /input
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${PAW_OUTPUT_DIR:?Set PAW_OUTPUT_DIR to the writable case output directory}
+        target: /data
+        bind:
+          create_host_path: false

@@ -1,5 +1,8 @@
 # PAW v2.0 Migration Guide
 
+> Historical record. For the current offline installation and container
+> instructions, see the [Quick Start](QUICKSTART.md).
+
 ## Overview
 This guide documents the critical security fixes and refactoring applied to PAW to prepare it for production deployment with real phishing analysis.
 
@@ -47,17 +50,9 @@ Created complete Docker infrastructure:
 - Network isolation via bridge network
 - Tmpfs for Chrome temporary files
 
-**Usage:**
-```bash
-# Build image
-docker-compose build
-
-# Run analysis (interactive)
-docker-compose run --rm paw-analyzer python -m paw.modules.encrypted_clicking.encrypted_clicker https://phishing-site.com
-
-# With environment file
-docker-compose --env-file .env up
-```
+The browser container described above was retired. The [offline container
+instructions](QUICKSTART.md#analyze-offline-in-a-linux-container) cover the
+current service.
 
 ### 3. Package Installation ✅
 **Status: COMPLETED**
@@ -676,17 +671,10 @@ flake8 paw/ --max-line-length=100 --count
 black --check paw/
 mypy paw/ --ignore-missing-imports
 
-# 5. Docker build
-docker-compose build
-docker-compose run --rm paw-analyzer python -c "from paw.modules.encrypted_clicking.encrypted_clicker import EncryptedClickAnalyzer; print('OK')"
-
-# 6. Real phishing analysis test (in isolated environment!)
-docker-compose run --rm \
-    -e CRYPTO_PASSWORD="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')" \
-    paw-analyzer \
-    python -m paw.modules.encrypted_clicking.encrypted_clicker \
-    "https://known-phishing-site.com" --observe
 ```
+
+Use the [offline container instructions](QUICKSTART.md#analyze-offline-in-a-linux-container)
+for the current build and analysis check.
 
 ## DEPLOYMENT CHECKLIST
 

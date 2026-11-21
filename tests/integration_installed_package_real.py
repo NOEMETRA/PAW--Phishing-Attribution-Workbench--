@@ -188,6 +188,7 @@ def main():
                 assert check_case(case) == numeric['full']
                 detail = json.loads(request('/api/cases/' + case.name))
                 assert detail['score'] == read(case / 'report/score.json')
+                assert detail['mail_triage'] == read(case / 'mail_triage.json')
                 with zipfile.ZipFile(io.BytesIO(request('/api/export/' + case.name))) as archive:
                     for path in case.rglob('*'):
                         if path.is_file(): assert archive.read(path.relative_to(case).as_posix()) == path.read_bytes()

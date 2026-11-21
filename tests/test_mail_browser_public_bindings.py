@@ -73,7 +73,7 @@ class Bindings(unittest.TestCase):
                'MemoryMax':str(192*1024**2),'MemorySwapMax':'0','TasksMax':'24','CPUQuotaPerSecUSec':'350ms'}
         worker=str(n.HERE.parents[2]/'lab/s14/vm_operator_worker.py')
         argv=['/usr/bin/python3','-I','-B',worker,'--recipe','vm-acceptance-v1','--job',J]
-        for altered,foreign_recipe in [({},False),({'MainPID':'1'},False),({},True)]:
+        for altered,foreign_recipe in [({},False),({'MainPID':str(ppid + 1)},False),({},True)]:
             fake=Mock();fake.getVersion.return_value=12000000
             def read(path):
                 if str(path).startswith('/proc/'):

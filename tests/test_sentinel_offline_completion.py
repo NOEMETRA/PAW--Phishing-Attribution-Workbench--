@@ -43,6 +43,28 @@ class SentinelOfflineCompletion(unittest.TestCase):
         self.assertFalse(self.db.acknowledge_alert(1)); self.assertEqual(self.source(), before)
         self.assertEqual(self.db.get_campaign(self.other)['status'], 'active')
 
+    def test_acknowledgment_opens_existing_alert_table_without_migration(self):
+        saved = self.root/'legacy.db'
+        with closing(sqlite3.connect(saved)) as conn, conn:
+            conn.execute("CREATE TABLE alerts (id INTEGER, campaign_id TEXT COLLATE NOCASE, acknowledged INTEGER)")
+            conn.execute("INSERT INTO alerts VALUES (1,'legacy',0)")
+        writer = CampaignDatabase(str(saved), initialize=False)
+        before = saved.read_bytes()
+        with self.assertRaisesRegex(ValueError, 'Alert not found'):
+            writer.acknowledge_campaign_alert('LEGACY', 1)
+        self.assertEqual(saved.read_bytes(), before)
+        with writer.connection() as conn:
+            conn.execute("CREATE TRIGGER refused BEFORE UPDATE ON alerts BEGIN SELECT RAISE(IGNORE); END")
+        with self.assertRaisesRegex(RuntimeError, 'acknowledgment did not persist'):
+            writer.acknowledge_campaign_alert('legacy', 1)
+        with writer.connection() as conn:
+            self.assertEqual(conn.execute("SELECT * FROM alerts").fetchone(), (1, 'legacy', 0))
+            conn.execute("DROP TRIGGER refused")
+        self.assertEqual(writer.acknowledge_campaign_alert('legacy', 1), 'acknowledged')
+        self.assertEqual(writer.acknowledge_campaign_alert('legacy', 1), 'already_acknowledged')
+        with writer.connection() as conn:
+            self.assertEqual(conn.execute("SELECT name FROM sqlite_master").fetchall(), [('alerts',)])
+
     def test_mutator_admission_precedes_database_access(self):
         operations = [lambda: self.db.update_campaign_status(True, 'paused'),
             lambda: self.db.update_campaign_status(self.campaign, ''),
@@ -86,6 +108,28 @@ class SentinelOfflineCompletion(unittest.TestCase):
                 self.assertEqual(conn.execute('SELECT id FROM '+table+' ORDER BY id').fetchall(), [(3,),(4,),(5,),(6,),(7,)])
         self.assertTrue(result['complete']); self.assertEqual(result['cutoff_utc'], '2026-10-23T00:00:00Z')
 
+    def test_body_expiry_preserves_unreadable_metadata_and_rolls_back_on_alert_failure(self):
+        body = {'source_metadata': {'retained_body_bytes':1, 'http_observation':{'body_base64':'eA=='}},
+                'monitor_comparison':{'schema_version':1}}
+        with self.db.connection() as conn:
+            conn.execute("UPDATE checks SET metadata=?, check_time='2026-10-19T00:00:00Z'", (json.dumps(body),))
+            conn.execute("INSERT INTO checks(campaign_id,check_time,status,metadata) "
+                         "VALUES (?,'2026-10-19T00:00:00Z','error',CAST(X'80' AS TEXT))", (self.other,))
+            conn.execute("UPDATE alerts SET alert_time='2000-01-01T00:00:00Z'")
+            conn.execute("CREATE TRIGGER refused BEFORE DELETE ON alerts BEGIN SELECT RAISE(ABORT,'fault'); END")
+        with patch('paw.sentinel.database.utc_now_iso', return_value='2026-10-23T00:00:00Z'):
+            before = self.source()
+            with self.assertRaises(sqlite3.IntegrityError):
+                self.db.cleanup_old_data(10, body_retention_days=2)
+            self.assertEqual(self.source(), before)
+            with self.db.connection() as conn: conn.execute('DROP TRIGGER refused')
+            result = self.db.cleanup_old_data(10, body_retention_days=2)
+            self.assertEqual(result['expired_bodies'], 1)
+            self.assertEqual(result['uninterpretable_body_ids'], [2])
+            self.assertEqual(self.db.cleanup_old_data(10, body_retention_days=2)['expired_bodies'], 0)
+        with self.db.connection() as conn:
+            self.assertEqual(conn.execute("SELECT hex(metadata) FROM checks WHERE id=2").fetchone(), ('80',))
+
     def test_failed_retention_rolls_back_both_tables(self):
         with self.db.connection() as conn:
             conn.execute("UPDATE checks SET check_time='2000-01-01T00:00:00Z'")
@@ -101,6 +145,17 @@ class SentinelOfflineCompletion(unittest.TestCase):
             conn.execute("CREATE TRIGGER ignored BEFORE DELETE ON checks BEGIN SELECT RAISE(IGNORE); END")
         before = self.source()
         with self.assertRaises(RuntimeError): self.db.cleanup_old_data(1)
+        self.assertEqual(self.source(), before)
+
+    def test_retention_rolls_back_when_alert_cleanup_changes_a_check(self):
+        with self.db.connection() as conn:
+            conn.execute("UPDATE checks SET check_time='uninterpretable'")
+            conn.execute("UPDATE alerts SET alert_time='2000-01-01T00:00:00Z'")
+            conn.execute("CREATE TRIGGER changed_check AFTER DELETE ON alerts "
+                         "BEGIN UPDATE checks SET check_time='UNINTERPRETABLE'; END")
+        before = self.source()
+        with self.assertRaisesRegex(RuntimeError, 'retention did not persist'):
+            self.db.cleanup_old_data(1)
         self.assertEqual(self.source(), before)
 
     def test_read_limits_are_validated_before_opening_sqlite(self):

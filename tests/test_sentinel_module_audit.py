@@ -1,10 +1,13 @@
 """Sentinel lifecycle, atomic observations and unavailable inference boundaries."""
 import inspect
 from contextlib import contextmanager
+from datetime import datetime, timezone
+from itertools import repeat
 import json
 import os
 import sys
 from pathlib import Path
+import sqlite3
 import tempfile
 import threading
 import time
@@ -44,6 +47,84 @@ class SentinelModuleAudit(unittest.TestCase):
                 with self.subTest(name=name),self.assertRaises(RuntimeError): method(**kwargs)
         self.assertEqual(self.db.get_recent_checks(self.campaign),[])
 
+    def test_automatic_delivery_retries_only_due_events_for_the_bound_receiver(self):
+        fingerprint = 'a'*64
+        self.db.prepare_automatic_delivery()
+        monitor = SentinelMonitor(self.config, self.db, webhook_fingerprint=fingerprint)
+        monitor._handle_check_result(self.result())
+        monitor._handle_check_result(self.result(digest='b'*64))
+        alert, = self.db.get_unacknowledged_alerts()
+        key = (self.campaign, alert['id'])
+        event_id = alert['metadata']['webhook_delivery']['event_id']
+        self.assertIsNone(self.db.next_automatic_alert('b'*64))
+        for count in range(1,7):
+            self.assertEqual(self.db.next_automatic_alert(fingerprint), key)
+            attempt, _ = self.db.start_alert_delivery(*key, fingerprint, automatic=True)
+            self.assertEqual((attempt['attempts'], attempt['event_id']), (count, event_id))
+            self.assertIsNone(self.db.next_automatic_alert(fingerprint))
+            self.db.finish_alert_delivery(*key, attempt, 'transport_error', None)
+            with self.db.connection() as conn:
+                conn.execute("UPDATE alerts SET metadata=json_set(metadata,'$.webhook_delivery.updated_at',?)",
+                             ('2020-01-01T00:00:00Z',))
+        self.assertIsNone(self.db.next_automatic_alert(fingerprint))
+        manual, _ = self.db.start_alert_delivery(*key, fingerprint)
+        self.assertEqual((manual['attempts'], manual['event_id']), (7,event_id))
+
+    def test_automatic_delivery_rechecks_cooldown_and_attempt_limit_at_claim(self):
+        fingerprint = 'a'*64
+        monitor = SentinelMonitor(self.config, self.db, webhook_fingerprint=fingerprint)
+        monitor._handle_check_result(self.result())
+        monitor._handle_check_result(self.result(digest='b'*64))
+        self.db.prepare_automatic_delivery()
+        key = self.db.next_automatic_alert(fingerprint)
+        manual = CampaignDatabase(self.db.db_path, initialize=False)
+
+        with patch('paw.sentinel.database.utc_now_iso', return_value='2026-11-21T12:00:00Z'):
+            for _ in range(5):
+                previous, _ = manual.start_alert_delivery(*key, fingerprint)
+        with patch('paw.sentinel.database.datetime', wraps=datetime) as clock:
+            clock.now.return_value = datetime(2026, 11, 21, 12, 0, 5, 900000, tzinfo=timezone.utc)
+            self.assertIsNone(self.db.next_automatic_alert(fingerprint))
+            self.assertIsNone(self.db.start_alert_delivery(*key, fingerprint, automatic=True))
+            clock.now.return_value = datetime(2026, 11, 21, 12, 0, 6, tzinfo=timezone.utc)
+            self.assertEqual(self.db.next_automatic_alert(fingerprint), key)
+
+        claimed, _ = manual.start_alert_delivery(*key, fingerprint)
+        self.assertEqual(claimed['attempts'], 6)
+        self.assertEqual(claimed['event_id'], previous['event_id'])
+        self.assertIsNone(self.db.start_alert_delivery(*key, fingerprint, automatic=True))
+        alert, = self.db.get_campaign_history(self.campaign)['alerts']
+        self.assertEqual(alert['webhook_delivery'], claimed)
+
+    def test_automatic_delivery_finds_pending_event_without_scanning_archived_alerts(self):
+        fingerprint = 'a'*64
+        archived = {
+            'automatic': True, 'event_id': 'c'*32, 'destination_sha256': fingerprint,
+            'status': 'receipt_confirmed', 'attempts': 1, 'http_status': 202,
+            'error': None, 'updated_at': '2020-01-01T00:00:00Z',
+        }
+        with self.db.connection() as conn:
+            insert = """INSERT INTO alerts (campaign_id, alert_time, alert_type, message, metadata)
+                        VALUES (?, '2020-01-01T00:00:00Z', 'changed', 'fixture', ?)"""
+            conn.executemany(insert, repeat((self.campaign, json.dumps({'webhook_delivery': archived})), 10_000))
+            conn.execute(insert, (self.campaign, '{legacy text'))
+        monitor = SentinelMonitor(self.config, self.db, webhook_fingerprint=fingerprint)
+        monitor._handle_check_result(self.result())
+        monitor._handle_check_result(self.result(digest='b'*64))
+        bounded = CampaignDatabase(self.db.db_path, initialize=False, limits={'max_sql_steps': 500})
+        with patch('paw.sentinel.database._AUTOMATIC_INDEX_TIMEOUT_SECONDS', 0):
+            with self.assertRaisesRegex(TimeoutError, 'index preparation timed out'):
+                bounded.prepare_automatic_delivery()
+        with self.db.connection() as conn:
+            self.assertIsNone(conn.execute("SELECT name FROM sqlite_master WHERE name=?",
+                                           ('sentinel_automatic_queue_receiver',)).fetchone())
+        bounded.prepare_automatic_delivery()
+        alert, = self.db.get_campaign_history(self.campaign)['alerts'][:1]
+        self.assertEqual(bounded.next_automatic_alert(fingerprint), (self.campaign, alert['id']))
+        self.assertIsNone(bounded.next_automatic_alert('b'*64))
+        with bounded.connection() as conn, self.assertRaisesRegex(sqlite3.OperationalError, 'interrupted'):
+            conn.execute('SELECT SUM(LENGTH(metadata)) FROM alerts').fetchone()
+
     def test_stop_interrupts_interval_and_confirms_thread_shutdown(self):
         self.assertIn('timeout',inspect.signature(self.monitor.stop).parameters)
         self.config._config['monitoring']['check_interval_minutes'] = 525600
@@ -71,6 +152,44 @@ class SentinelModuleAudit(unittest.TestCase):
         self.monitor._handle_check_result(self.result())
         self.monitor._handle_check_result(self.result('error',None,None))
         self.assertEqual(self.db.get_unacknowledged_alerts(),[])
+
+    def test_content_change_across_transport_errors_keeps_both_source_ids(self):
+        first = self.monitor._handle_check_result(self.result())
+        for _ in range(2):
+            last_error = self.monitor._handle_check_result(self.result('error',None,None))
+        recovered = self.monitor._handle_check_result(self.result(digest='b'*64))
+        self.assertTrue(recovered['content_changed'])
+        self.assertEqual(recovered['previous_check_id'], last_error['check_id'])
+        self.assertEqual(recovered['digest_reference_check_id'], first['check_id'])
+        alert, = self.db.get_unacknowledged_alerts()
+        self.assertEqual(alert['alert_type'], 'changed')
+        self.assertEqual(alert['metadata']['digest_reference_check_id'], first['check_id'])
+        history, = self.db.get_campaign_history(self.campaign)['alerts']
+        self.assertEqual((history['digest_reference_check_id'], history['recorded_check_id']),
+                         (first['check_id'], recovered['check_id']))
+        self.monitor._handle_check_result(self.result(digest='b'*64))
+        self.assertEqual(len(self.db.get_unacknowledged_alerts()), 1)
+
+    def test_changed_gap_reference_during_insert_rolls_back_check_and_alert(self):
+        first = self.monitor._handle_check_result(self.result())
+        self.monitor._handle_check_result(self.result('error',None,None))
+        before = self.db.get_recent_checks(self.campaign)
+        with self.db.connection() as conn:
+            conn.execute(f"CREATE TRIGGER mutate_reference AFTER INSERT ON checks BEGIN "
+                         f"UPDATE checks SET content_hash='altered' WHERE id={first['check_id']}; END")
+        with self.assertRaises(RuntimeError):
+            self.monitor._handle_check_result(self.result(digest='b'*64))
+        self.assertEqual(self.db.get_recent_checks(self.campaign), before)
+        self.assertEqual(self.db.get_unacknowledged_alerts(), [])
+
+    def test_expired_digest_reference_cannot_generate_an_alert(self):
+        first = self.monitor._handle_check_result(self.result())
+        self.monitor._handle_check_result(self.result('error',None,None))
+        with self.db.connection() as conn:
+            conn.execute('DELETE FROM checks WHERE id=?', (first['check_id'],))
+        recovered = self.monitor._handle_check_result(self.result(digest='b'*64))
+        self.assertFalse(recovered['content_changed'])
+        self.assertIsNone(recovered['digest_reference_check_id'])
 
     def test_alert_disable_and_callback_copies_preserve_observation(self):
         self.config._config['alerts']['enabled'] = False

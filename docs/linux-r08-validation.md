@@ -197,3 +197,15 @@ Before closing R08:
 S14 follows as a separate [two-PC Linux architecture proposal](s14-two-pc-linux.md),
 with an isolation gate before any real detonation. No access to or validated
 configuration of the second PC is claimed here.
+
+## Local release candidate, 20 November 2026
+
+Fresh base wheel installations on Linux x86-64 with CPython 3.11–3.14 passed
+the installed CLI/API, original-byte, ZIP, seal and interrupted-worker checks.
+The candidate removes PGPy from base requirements. PAW's signing path still
+reports PGP unavailability. The optional `ml` dependency set uses NumPy 1.x on
+3.11/3.12 and 2.x on 3.13/3.14. In four additional Linux environments, wheel
+installation and a numeric transformation using pandas, scikit-learn and NumPy
+succeeded on each runtime. This probe exercises dependency compatibility.
+Classifier performance requires independent evaluation. Native Windows
+acceptance remains open.

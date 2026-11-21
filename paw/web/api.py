@@ -9,6 +9,8 @@ import os
 from pathlib import Path
 import shutil
 import sqlite3
+import re
+import tempfile
 import sys
 import uuid
 import time
@@ -17,6 +19,7 @@ from typing import Literal
 from fastapi import BackgroundTasks, FastAPI, File, HTTPException, UploadFile, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.datastructures import Headers
 from urllib.parse import urlsplit
 from pydantic import BaseModel, Field
 from ..core.runtime import RunLimits, supervise, preserve_interrupted, read_progress
@@ -26,16 +29,88 @@ from ..core.dkim_keys import snapshot_key_bundle
 from ..core.index import describe_fingerprint
 from ..core.consumer_views import read_artifact_json, read_artifact_text, assessment_view, ReadBudget
 
+EMAIL_UPLOAD_BYTES = 25 * 1024**2
+SOURCE_UPLOAD_BYTES = 16 * 1024**2
+UPLOAD_ENVELOPE_BYTES = {
+    '/api/upload': EMAIL_UPLOAD_BYTES + 65536,
+    '/api/sources/upload': SOURCE_UPLOAD_BYTES + 65536,
+}
+
+
+class UploadEnvelope:
+    """Validate framing and cap the stream before multipart parsing."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope['type'] != 'http' or scope['method'] != 'POST':
+            await self.app(scope, receive, send)
+            return
+        path = scope['path']
+        prefix = scope.get('root_path', '').rstrip('/')
+        if prefix and path.startswith(prefix + '/'):
+            path = path[len(prefix):]
+        limit = UPLOAD_ENVELOPE_BYTES.get(path)
+        if limit is None:
+            await self.app(scope, receive, send)
+            return
+        headers = Headers(scope=scope)
+        lengths = headers.getlist('content-length')
+        if 'transfer-encoding' in headers or not lengths:
+            response = JSONResponse({'detail': 'Fixed Content-Length required for upload'}, status_code=411)
+            await response(scope, receive, send)
+            return
+        if len(lengths) != 1 or not lengths[0].isascii() or not lengths[0].isdecimal():
+            response = JSONResponse({'detail': 'Invalid Content-Length'}, status_code=400)
+            await response(scope, receive, send)
+            return
+        if len(lengths[0]) > 10 or int(lengths[0]) > limit:
+            response = JSONResponse({'detail': 'Multipart envelope exceeds budget'}, status_code=413)
+            await response(scope, receive, send)
+            return
+        declared = int(lengths[0])
+        received = 0
+
+        async def bounded_receive():
+            nonlocal received
+            message = await receive()
+            if message['type'] == 'http.request':
+                received += len(message.get('body', b''))
+                if received > limit:
+                    raise HTTPException(413, 'Multipart envelope exceeds budget')
+                if received > declared or (not message.get('more_body') and received != declared):
+                    raise HTTPException(400, 'Multipart length differs from Content-Length')
+            return message
+
+        await self.app(scope, bounded_receive, send)
+
+
 @asynccontextmanager
 async def lifespan(application):
+    # This API owns a single process per data directory. Reclaim only its
+    # reserved download directories before accepting new requests.
+    for directory in EXPORT_DIR.glob('paw-download-*'):
+        if (re.fullmatch(r'paw-download-[a-z0-9_]{8}', directory.name)
+                and directory.is_dir() and not directory.is_symlink()):
+            (directory / 'case.zip').unlink(missing_ok=True)
+            if not any(directory.iterdir()):
+                directory.rmdir()
     # Recover before accepting requests; a killed API may leave POSIX writers.
     identifiers = {path.stem for path in JOBS_DIR.glob('analysis_*.json') if path.stem[9:].isalnum()}
     identifiers.update(identifier for identifier,_ in controls(DATA_DIR,JOBS_DIR))
     for identifier in identifiers:
         await get_analysis_status(identifier)
-    yield
+    try:
+        yield
+    finally:
+        pending_statistics = _statistics_task
+        if pending_statistics is not None and not pending_statistics.done():
+            pending_statistics.cancel()
+            await asyncio.gather(pending_statistics, return_exceptions=True)
 
 app = FastAPI(title='PAW', version='2.0.0', lifespan=lifespan)
+app.add_middleware(UploadEnvelope)
 STATIC_DIR = Path(__file__).parent/'static'
 app.mount('/assets', StaticFiles(directory=STATIC_DIR), name='assets')
 
@@ -47,13 +122,6 @@ async def local_boundary(request: Request, call_next):
     origin = request.headers.get('origin')
     if origin and origin != str(request.base_url).rstrip('/'):
         return JSONResponse({'detail':'Same-origin requests required'}, status_code=403)
-    if request.method == 'POST' and request.url.path == '/api/sources/upload':
-        length = request.headers.get('content-length', '')
-        # Bound the multipart envelope before FastAPI spools/parses any body.
-        if request.headers.get('transfer-encoding') or not length.isascii() or not length.isdecimal():
-            return JSONResponse({'detail': 'Fixed Content-Length required for source upload'}, status_code=411)
-        if len(length) > 10 or int(length) > 16*1024**2+65536:
-            return JSONResponse({'detail': 'Source multipart envelope exceeds budget'}, status_code=413)
     response = await call_next(request)
     response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
     response.headers['X-Content-Type-Options'] = 'nosniff'
@@ -71,6 +139,7 @@ _workers = asyncio.Semaphore(1)
 MAX_ANALYSIS_SECONDS = 900
 _cancel_events = {}
 _recovery_locks = {}
+_statistics_task = None
 UNSTABLE_CASE_STATUSES = {'queued','running','recovery_blocked'}
 
 class RuntimeOptions(BaseModel):
@@ -205,6 +274,8 @@ class AnalysisRequest(BaseModel):
 class CaseQuery(BaseModel):
     query_type: Literal['ip', 'domain', 'asn']
     value: str
+    limit: int = Field(default=100, ge=1, le=1000)
+    after: str | None = None
 
 class SourceInspectionRequest(BaseModel):
     file_path: str
@@ -238,20 +309,47 @@ async def inspect_uploaded_representations(request: RepresentationRequest, backg
     background_tasks.add_task(run_analysis, identifier, path, None, {}, limits)
     return {'status': 'queued', 'analysis_id': identifier, 'kind': job['kind']}
 
+def _open_private_upload(path, flags):
+    return os.open(path, flags, 0o600)
+
+
+def _save_upload_name(path, filename):
+    metadata = path.with_suffix(path.suffix + '.json')
+    temporary = metadata.with_suffix('.tmp')
+    stream = open(temporary, 'x', encoding='utf-8', opener=_open_private_upload)
+    try:
+        with stream:
+            json.dump({'filename': filename}, stream, indent=2)
+        temporary.replace(metadata)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+async def _persist_upload(file, path, limit, limit_error, *, original_name=None, chunk_size=65536):
+    size = 0
+    stream = open(path, 'xb', opener=_open_private_upload)
+    try:
+        with stream:
+            while chunk := await file.read(chunk_size):
+                size += len(chunk)
+                if size > limit:
+                    raise HTTPException(413, limit_error)
+                stream.write(chunk)
+        if original_name is not None:
+            if not size:
+                raise HTTPException(400, 'Empty email')
+            _save_upload_name(path, original_name)
+    except BaseException:
+        path.unlink(missing_ok=True)
+        raise
+    return size
+
+
 @app.post('/api/sources/upload')
 async def upload_source(file: UploadFile = File(...)):
     """Opaque bytes, including empty/binary; no MIME or extension admission."""
     path = UPLOAD_DIR / (uuid.uuid4().hex + '.source')
-    size = 0
-    try:
-        with os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), 'wb') as stream:
-            while chunk := await file.read(65536):
-                size += len(chunk)
-                if size > 16*1024**2: raise HTTPException(413, 'Source exceeds16MiB')
-                stream.write(chunk)
-    except Exception:
-        path.unlink(missing_ok=True)
-        raise
+    size = await _persist_upload(file, path, SOURCE_UPLOAD_BYTES, 'Source exceeds 16 MiB')
     return {'status': 'success', 'filename': path.name, 'path': str(path), 'size': size,
             'coverage': 'opaque bytes only; no interpretation or execution'}
 
@@ -293,20 +391,9 @@ async def upload_email(file: UploadFile = File(...)):
     if extension not in {'.eml', '.msg'}:
         raise HTTPException(400, 'Only .eml and .msg files supported')
     path = UPLOAD_DIR / (uuid.uuid4().hex + extension)
-    size = 0
-    try:
-        with path.open('xb') as stream:
-            while chunk := await file.read(1024 * 1024):
-                size += len(chunk)
-                if size > 25 * 1024 * 1024:
-                    raise HTTPException(413, 'Email exceeds 25 MiB')
-                stream.write(chunk)
-        if not size: raise HTTPException(400, 'Empty email')
-    except Exception:
-        path.unlink(missing_ok=True)
-        raise
     original_name = Path((file.filename or '').replace('\\','/')).name
-    save(path.with_suffix(path.suffix+'.json'),{'filename':original_name})
+    size = await _persist_upload(file, path, EMAIL_UPLOAD_BYTES, 'Email exceeds 25 MiB',
+                                 original_name=original_name, chunk_size=1024**2)
     return {'status':'success', 'filename':path.name, 'original_name':original_name, 'path':str(path), 'size':size}
 
 @app.post('/api/analyze')
@@ -571,7 +658,7 @@ async def get_case_detail(case_id: str):
         'criminal_intelligence':'criminal_intelligence.json','header_inventory':'header_inventory.json',
         'mime_body_evidence':'mime_body_evidence.json','mime_header_inventory':'mime_header_inventory.json',
         'url_source_inventory':'url_source_inventory.json','url_evidence':'url_evidence.json',
-        'mime_cid_inventory':'mime_cid_inventory.json'}
+        'mime_cid_inventory':'mime_cid_inventory.json', 'mail_triage':'mail_triage.json'}
     for key, name in files.items():
         if (directory/name).exists():
             result[key] = artifact(directory/name, result.setdefault('artifact_errors', {}),
@@ -589,27 +676,55 @@ async def get_case_detail(case_id: str):
 
 @app.post('/api/query')
 async def query_cases(query: CaseQuery):
-    database, matches = CASES_DIR/'index.db', []
+    database = CASES_DIR/'index.db'
+    rows = []
     if database.exists():
+        statement = ('SELECT c.* FROM indicators i JOIN cases c ON c.id=i.case_id '
+                     "WHERE i.type=? AND i.value=? AND typeof(c.id)='text' ")
+        parameters = [query.query_type, query.value]
+        if query.after is not None:
+            statement += 'AND i.case_id COLLATE BINARY > ? '
+            parameters.append(query.after)
         with closing(sqlite3.connect(f'{database.as_uri()}?mode=ro', uri=True)) as connection:
             connection.row_factory = sqlite3.Row
-            matches = [describe_fingerprint(dict(row)) for row in connection.execute(
-                'SELECT c.* FROM cases c JOIN indicators i ON c.id=i.case_id WHERE i.type=? AND i.value=?',
-                (query.query_type,query.value))]
+            rows = connection.execute(statement + 'ORDER BY i.case_id COLLATE BINARY LIMIT ?',
+                                      [*parameters, query.limit + 1]).fetchall()
     stable_matches = []
-    for match in matches:
-        identifier = 'case-' + match['id']
+    for row in rows[:query.limit]:
+        identifier = 'case-' + row['id']
         if Path(identifier).name == identifier:
-            match['execution_status'] = await stable_case_status(CASES_DIR/identifier)
-            if match['execution_status'] in UNSTABLE_CASE_STATUSES: continue
-            stable_matches.append(match)
-    return {'query_type':query.query_type,'value':query.value,'matches':stable_matches}
+            status = await stable_case_status(CASES_DIR/identifier)
+            if status in UNSTABLE_CASE_STATUSES: continue
+            stable_matches.append(dict(describe_fingerprint(dict(row)), execution_status=status))
+    return {'query_type':query.query_type, 'value':query.value, 'matches':stable_matches,
+            'next_after':rows[query.limit - 1]['id'] if len(rows) > query.limit else None}
 
 @app.get('/api/statistics')
 async def get_statistics():
-    paths = list(CASES_DIR.glob('*/manifest.json'))
+    global _statistics_task
+    if _statistics_task is None or _statistics_task.done():
+        _statistics_task = asyncio.create_task(_collect_statistics())
+        _statistics_task.add_done_callback(_release_statistics_task)
+    return await asyncio.shield(_statistics_task)
+
+
+def _release_statistics_task(task):
+    global _statistics_task
+    if _statistics_task is task:
+        _statistics_task = None
+    # A scan can outlive its waiting requests. Retrieve a failure even if all
+    # those requests were canceled, while still propagating it to any waiters.
+    if not task.cancelled():
+        task.exception()
+
+
+async def _collect_statistics():
+    total = 0
     countries, asns, errors, budget = Counter(), Counter(), {}, ReadBudget()
-    for path in paths:
+    for path in CASES_DIR.glob('*/manifest.json'):
+        total += 1
+        if total % 8 == 0:
+            await asyncio.sleep(0)
         if await stable_case_status(path.parent) != 'completed': continue
         origin = path.parent/'origin.json'
         if origin.exists():
@@ -622,8 +737,36 @@ async def get_statistics():
                 if type(data['asn']) in (int, str): asns[str(data['asn'])] += 1
                 else: case_errors['asn'] = 'Expected ASN integer or string'
             if case_errors: errors[path.parent.name] = case_errors
-    return {'total_cases':len(paths),'top_countries':countries.most_common(10),
+    return {'total_cases':total,'top_countries':countries.most_common(10),
         'top_asns':asns.most_common(10),'operator_attribution':'not established', 'artifact_errors':errors}
+
+class DownloadArchive(FileResponse):
+    """Own one temporary archive until its last response byte or disconnect."""
+
+    def __init__(self, directory, case):
+        self.directory = directory
+        archive = shutil.make_archive(str(Path(directory.name) / 'case'), 'zip', str(case))
+        super().__init__(archive, filename=case.name + '.zip', media_type='application/zip')
+
+    async def __call__(self, scope, receive, send):
+        # Stream through FileResponse so an asynchronous pathsend cannot
+        # outlive the named file. Range and content-length support remain.
+        extensions = dict(scope.get('extensions', {}))
+        extensions.pop('http.response.pathsend', None)
+        try:
+            await super().__call__(dict(scope, extensions=extensions), receive, send)
+        finally:
+            self.directory.cleanup()
+
+
+def prepare_download(case):
+    directory = tempfile.TemporaryDirectory(prefix='paw-download-', dir=EXPORT_DIR)
+    try:
+        return DownloadArchive(directory, case)
+    except BaseException:
+        directory.cleanup()
+        raise
+
 
 @app.get('/api/export/{case_id}')
 async def export_case(case_id: str, format: str = 'zip'):
@@ -633,9 +776,7 @@ async def export_case(case_id: str, format: str = 'zip'):
     from ..core.evidence import file_inventory
     try: await asyncio.to_thread(file_inventory,directory)
     except ValueError as exc: raise HTTPException(409,str(exc)) from exc
-    archive = await asyncio.to_thread(shutil.make_archive,
-        str(EXPORT_DIR/(case_id+'-'+uuid.uuid4().hex)), 'zip', str(directory))
-    return FileResponse(archive, filename=case_id+'.zip', media_type='application/zip')
+    return await asyncio.to_thread(prepare_download, directory)
 
 if __name__ == '__main__':
     import uvicorn

@@ -1,5 +1,8 @@
 # PAW v2.0 - Security Fixes Completed
 
+> Historical record from November 2025. Current installation and deployment
+> information is in the [Quick Start](QUICKSTART.md).
+
 ## Executive Summary
 
 **Status:** PRODUCTION READY ✅

@@ -93,3 +93,93 @@ POSIX skips) and eight real full-CLI cases. A fresh 20-original-EML offline run
 verified originals and seals, unchanged auxiliary artifacts, URL/evidence
 inventories and final scores. It took 23.803 s with 120.93 MiB sampled tree RSS;
 these observations do not establish a speedup or accuracy.
+
+## Evidence-linked mail review referral
+
+The installed mail analysis now saves `mail_triage.json` in the sealed case.
+The executive report and case API expose the result. The first rule refers a
+message for review when parser-selected outer HTML declares a POST form with a
+named password input and an absolute HTTP(S) action on a different registrable
+domain from the sole parsed From. Domain comparison uses the bundled public and
+private suffix snapshot. The From remains an unverified header identity.
+Findings identify the MIME part, the hash and path of its captured text, and the
+parser coordinates of the form and the input.
+
+Partial MIME/form evidence and nested forms limit coverage. A structurally
+admitted HTML part can supply positive evidence from its captured, charset-decoded
+text while its payload transfer remains partial. The finding retains that status.
+Without a finding, partial evidence yields `not_evaluated`. Duplicate action
+or method declarations, direct disabled or reassigned controls, and inert
+comment or template markup cannot satisfy the rule. Coverage refers to the
+supported parser view. External identity providers and forwarded material can
+look similar in static markup. The result is a human review referral with
+`calibrated: false`. Sender authentication, actual browser behavior and
+infrastructure attribution continue to have their own evidence.
+
+`tools/evaluate_mail_corpus.py --static-triage` evaluates this referral separately.
+Constructed CLI fixtures verify the evidence bindings and rule exclusions.
+Use independently labelled development data for rule changes and reserve a
+fresh holdout for estimating referral error rates.
+
+A second rule compares the complete literal HTTP(S) URL shown as an HTML
+anchor label with the absolute URL in its sole `href`. A different registrable
+domain yields a review referral. Both domains use the bundled public and
+private suffix snapshot. A literal IPv4 or IPv6 destination also yields a
+referral when the displayed URL has a registrable named site. Both full-URL
+comparisons work even when the From identity is ambiguous.
+
+The comparison also admits a whole ASCII domain name as the anchor label
+when the registered site of the named destination differs from both the
+displayed site and the single parsed From site. The source includes that
+unverified From domain. All variants record the endpoints and anchor
+coordinates in the hash-linked MIME text. Relative targets, duplicate hrefs,
+nested anchors, inert markup and labels in prose fall outside the comparison.
+The parser admits a bounded subset of inline formatting and stops retaining
+anchors after 256 candidates per document. Tracking redirects and link
+rewriting can produce the same observed difference. The result describes
+static markup and leaves the analyst to assess its context.
+
+## Local multilingual text assessment
+
+Install the optional dependencies in the PAW environment with
+`python -m pip install '.[text-triage]'`. Stage `onnx/model_quantized.onnx`
+and `tokenizer.json` from the pinned model revision in the same local
+directory. The two files use about 675 MB of disk. The model is licensed
+under Apache-2.0. [Model files and license](https://huggingface.co/Horizon-Labs/phishing-scam-detector-base/tree/c294bf142ff53db24dc9ef07f20149ffeddeae6d)
+
+Run against a completed local case after the analysis worker has stopped.
+
+```bash
+paw assess-text --case cases/CASE_DIRECTORY --model-dir /path/to/horizon-model
+```
+
+On Linux with Docker Compose, use the [offline container setup](../QUICKSTART.md#analyze-offline-in-a-linux-container)
+and put the two local model files under `$PAW_INPUT_DIR/model`. Build the
+optional image, then point it at an existing case under `$PAW_OUTPUT_DIR/cases`.
+
+```bash
+docker compose -f compose.text-triage.yaml build
+docker compose -f compose.text-triage.yaml run --rm paw assess-text \
+  --case /data/cases/CASE_DIRECTORY --model-dir /input/model
+```
+
+The image installs inference dependencies at build time. The mounted model
+files are read-only and the container has only its loopback interface.
+
+The command checks the case seal and the model files' SHA-256 digests, runs
+inference on CPU and prints a separate JSON record to stdout. Store any
+redirected output outside the case directory to preserve its seal. The record
+contains separate `legitimate`, `spam` and `fraud` scores, model identifiers,
+the case root, references to captured MIME text and token coverage. The
+command has no download step. PAW sets `ORT_DISABLE_TELEMETRY=1` before loading
+ONNX Runtime and calls its telemetry-disable API before scoring. The application
+offline policy is active during inference. Use a network-isolated host or process
+when the operating system must enforce the restriction for native code.
+[ONNX Runtime telemetry controls](https://github.com/microsoft/onnxruntime/blob/main/docs/Privacy.md)
+
+Model input is the subject and normalized plain text from parser-selected
+outer MIME parts. HTML is reduced to textual content. Inference uses the
+first 384 tokens and reports truncation. Attachments, image content, sender
+authentication and link destinations fall outside this score's scope.
+The scores are uncalibrated for PAW and intended for analyst review. The
+existing case's reports and attribution decision remain unchanged.

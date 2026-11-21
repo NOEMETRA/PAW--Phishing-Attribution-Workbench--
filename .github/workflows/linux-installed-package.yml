@@ -9,6 +9,25 @@ permissions:
   contents: read
 
 jobs:
+  compose-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build and verify the offline Compose profile
+        env:
+          PAW_INPUT_DIR: ${{ runner.temp }}/paw-compose-input
+          PAW_OUTPUT_DIR: ${{ runner.temp }}/paw-compose-output
+        run: |
+          mkdir -m 0755 "$PAW_INPUT_DIR"
+          sudo install -d -m 0755 -o 1000 -g 1000 "$PAW_OUTPUT_DIR"
+          docker compose version
+          docker compose build
+          docker compose -f compose.text-triage.yaml build
+          python3 tests/integration_compose_offline_real.py
+
   installed-offline:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -21,12 +40,29 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Build the current wheel
-        run: python -m pip wheel --no-deps --wheel-dir "$RUNNER_TEMP/paw-wheel" .
+      - name: Build the source distribution and its wheel
+        run: |
+          python -m pip install build
+          python -m build --outdir "$RUNNER_TEMP/paw-wheel"
       - name: Install wheel and declared dependencies in a clean virtualenv
         run: |
           python -m venv "$RUNNER_TEMP/paw-installed"
           "$RUNNER_TEMP/paw-installed/bin/python" -m pip install "$RUNNER_TEMP"/paw-wheel/paw-*.whl
+      - name: Verify explicit CLI network consent on the installed wheel
+        run: |
+          "$RUNNER_TEMP/paw-installed/bin/python" -I -B "$GITHUB_WORKSPACE/tests/test_cli_egress_consent.py" -v
+      - name: Verify installed API transfers and case summaries
+        working-directory: ${{ runner.temp }}
+        run: |
+          "$RUNNER_TEMP/paw-installed/bin/python" -I -B -m unittest discover -s "$GITHUB_WORKSPACE/tests" -p test_api_transfer_lifecycle.py
+          "$RUNNER_TEMP/paw-installed/bin/python" -I -B -m unittest discover -s "$GITHUB_WORKSPACE/tests" -p test_api_query_pagination.py
+          "$RUNNER_TEMP/paw-installed/bin/python" -I -B -m unittest discover -s "$GITHUB_WORKSPACE/tests" -p test_api_statistics_concurrency.py
+      - name: Verify static mail triage and evidence bindings
+        working-directory: ${{ runner.temp }}
+        run: |
+          "$RUNNER_TEMP/paw-installed/bin/python" -I -B "$GITHUB_WORKSPACE/tests/integration_mail_triage_real.py"
+          "$RUNNER_TEMP/paw-installed/bin/python" -I -B -m unittest discover -s "$GITHUB_WORKSPACE/tests" -p test_mail_corpus_evaluation.py
+          "$RUNNER_TEMP/paw-installed/bin/python" -I -B "$GITHUB_WORKSPACE/tests/test_text_triage.py" -v
       - name: Verify installed console, presets, API, seals and exports outside checkout
         working-directory: ${{ runner.temp }}
         run: |
@@ -110,6 +146,16 @@ jobs:
           env -u PYTHONPATH -u PYTHONHOME PYTHONNOUSERSITE=1 \
             "$RUNNER_TEMP/paw-installed/bin/python" -P -B -m unittest discover \
             -s "$GITHUB_WORKSPACE/tests" -p 'test_mail_browser_public*.py' -v
+      - name: Verify installed foreground Sentinel on a local HTTP fixture
+        working-directory: ${{ runner.temp }}
+        run: |
+          "$RUNNER_TEMP/paw-installed/bin/python" -I -B "$GITHUB_WORKSPACE/tests/integration_sentinel_foreground_real.py"
+          "$RUNNER_TEMP/paw-installed/bin/python" -I -B "$GITHUB_WORKSPACE/tests/integration_sentinel_campaign_deadline_real.py"
+          "$RUNNER_TEMP/paw-installed/bin/python" -I -B "$GITHUB_WORKSPACE/tests/integration_sentinel_journal_recovery_real.py"
+          "$RUNNER_TEMP/paw-installed/bin/python" -I -B "$GITHUB_WORKSPACE/tests/integration_sentinel_delivery_real.py"
+          "$RUNNER_TEMP/paw-installed/bin/python" -I -B "$GITHUB_WORKSPACE/tests/integration_sentinel_automatic_delivery_real.py"
+          "$RUNNER_TEMP/paw-installed/bin/python" -I -B "$GITHUB_WORKSPACE/tests/integration_sentinel_delivery_deadline_real.py"
+          "$RUNNER_TEMP/paw-installed/bin/python" -I -B "$GITHUB_WORKSPACE/tests/integration_sentinel_delivery_tls_real.py"
       - name: Retain bounded installed-package logs
         if: always()
         uses: actions/upload-artifact@v4

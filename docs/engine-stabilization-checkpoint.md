@@ -250,8 +250,13 @@ to produce this inventory.
 
 | Source | Ownership and observed behavior | Disposition and closure |
 | --- | --- | --- |
-| [deploy.sh](../deploy.sh) | S12 entry point; S13 dependency/package installation; S14 Docker build/container test and advertised analysis/detonation/canary commands. Its Python 3.8 version check differs from the current >=3.11 package requirement. | **Unvalidated/deferred.** Review actual dependency/version/configuration handling, advertised available commands and container/egress behavior, then decide supported replacement or archival status. Earlier clean Windows installation/wheel checks do not validate this launcher. No Docker or deployment was started here. |
-| [paw/modules/encrypted_clicking/init_crypto.sh](../paw/modules/encrypted_clicking/init_crypto.sh) | S14 privileged storage/bootstrap: creates keys and a vault image, formats/opens/mounts a LUKS filesystem and executes the clicker. | **Unvalidated/deferred.** Storage lifecycle, key handling, privileges and active worker isolation need a separate contract and a support/archival decision in the controlled environment. A crypto primitive test does not validate this script; it was read without execution. |
+| [deploy.sh](../deploy.sh) | Historical S12 launcher for S13 installs and the S14 Docker workflow. It sourced `.env` as shell code and printed a password prefix. | **Retired.** The entry point reports retirement and exits before configuration, process launch or filesystem writes. [Quick Start](../QUICKSTART.md) documents supported installation and the offline container profile. |
+| [paw/modules/encrypted_clicking/init_crypto.sh](../paw/modules/encrypted_clicking/init_crypto.sh) | Historical S14 privileged bootstrap for key generation, vault formatting, mounting and browser launch. | **Retired.** The entry point reports retirement before touching keys, mounts or evidence. The module builder and its Compose services are retired too. The authenticated evidence reader remains available. S14 controlled runtime acceptance remains open. |
+
+`tests/test_legacy_shell_boundaries.py` exercises the retained entry points
+from a clean working directory with a decoy `.env`, fake dependency
+commands and existing evidence. The active isolation and release gates
+apply to the supported profiles.
 
 Container/deployment configuration belongs to S13/S14, and frontend assets and
 build configuration to S16; they are outside the Python/script counts. Tests of

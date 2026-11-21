@@ -57,9 +57,13 @@ campaigns and failed known row effects roll back together. Callbacks run after
 commit, each with a separate copy; bounded error diagnostics do not undo source
 rows. Alert flags control stored/local alert delivery.
 
-The comparison source is the greatest prior stored check id, not an arbitrary
-claimed timestamp. Only matching source URI contracts admit status comparison;
-content digests also require matching representation contracts. Legacy rows
+HTTP status comparison uses the greatest prior stored check ID and requires
+matching source URI contracts. Content comparison also requires a matching
+representation. Error rows can carry the last complete digest's source ID.
+When another result arrives, Sentinel reopens that source in the publication
+transaction and checks its campaign, URL and representation. An expired
+source or a legacy gap without a reference yields no digest comparison.
+The previous check ID and the digest reference ID are recorded separately. Legacy rows
 without that contract stay readable but do not become evidence of a transition.
 Stored timestamps are not silently reinterpreted as collection chronology.
 Concurrent instances serialize publication, not remote observation time.
@@ -130,7 +134,7 @@ stored historical scores and supplied labels are preserved and remain readable.
 | Alert enabled/down/up/changes | Used by atomic local check/alert publication. Registered domain events remain separate from enabled alert delivery. |
 | Screenshots/resolution/directory/count | Capture unavailable before browser/argument/filesystem use; disabled requests are labelled not requested. Existing screenshot files are not deleted or rewritten. |
 | Fingerprinting, retries, webhook/email delivery | Unavailable; retained configuration does not activate a hidden worker or external publisher. Listed in `get_runtime_state()`. |
-| Retention days | No automatic cleanup scheduler. Existing explicit bounded database retention remains a separate local mutation. |
+| Retention days | The Linux foreground runner can apply separate observation and alert windows at the start of a cycle. Automatic deletion requires explicit configuration. The in-process controller keeps explicit cleanup. |
 | Database path/limits; local/file/report/diagnostic CLI | Existing configured passive contracts and no-egress admission preserved. |
 | CLI monitor start/stop; geographic map; legacy active publishers | Existing explicit unavailability retained. In-process API tests do not establish a persistent service. |
 

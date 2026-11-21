@@ -19,6 +19,8 @@ jobs:
           python-version: "3.11"
       - name: Compile project sources
         run: python -m compileall -q paw
+      - name: Verify retired deployment launchers stop before side effects
+        run: python -B -m unittest discover -s tests -p 'test_legacy_shell_boundaries.py' -v
       - name: Compile inert S14 validation tools without launching a guest or network
         run: python -m py_compile lab/s14/*.py
       - name: Verify inert S14 target admission and quarantine contracts
@@ -76,7 +78,7 @@ jobs:
       - name: Verify Python requirement and sources in the actual built wheel
         run: python tests/integration_wheel_metadata_real.py
       - name: Install evidence hashing dependency
-        run: python -m pip install 'blake3>=1.0.0,<2.0.0' 'dnspython>=2.4.2,<3.0.0' 'tldextract>=5,<6' 'dkimpy>=1.1.4,<2' 'cryptography>=42,<47' 'psutil>=5.9,<8' 'beautifulsoup4>=4.12,<5'
+        run: python -m pip install 'blake3>=1.0.0,<2.0.0' 'dnspython>=2.4.2,<3.0.0' 'tldextract>=5,<6' 'dkimpy>=1.1.4,<2' 'cryptography>=50.0.2,<51' 'psutil>=5.9,<8' 'beautifulsoup4>=4.12,<5'
       - name: Verify execution and evidence contracts
         run: python -m unittest discover -s tests -p 'test_execution_contracts.py' -v
       - name: Verify offline synthetic case linkage and protected producer admission
@@ -597,7 +599,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install offline engine and loopback API test dependencies
-        run: python -m pip install 'blake3>=1,<2' 'dnspython>=2.4.2,<3' 'tldextract>=5,<6' 'dkimpy>=1.1.4,<2' 'cryptography>=42,<47' 'psutil>=5.9,<8' 'beautifulsoup4>=4.12,<5' 'fastapi>=0.104,<1' 'python-multipart>=0.0.9,<1' 'requests>=2.31,<3' 'rich>=13.7,<14' 'ipwhois>=1.2,<2' 'python-dateutil>=2.8.2,<3' 'uvicorn>=0.24,<1'
+        run: python -m pip install 'blake3>=1,<2' 'dnspython>=2.4.2,<3' 'tldextract>=5,<6' 'dkimpy>=1.1.4,<2' 'cryptography>=50.0.2,<51' 'psutil>=5.9,<8' 'beautifulsoup4>=4.12,<5' 'fastapi>=0.104,<1' 'python-multipart>=0.0.9,<1' 'requests>=2.31,<3' 'rich>=13.7,<14' 'ipwhois>=1.2,<2' 'python-dateutil>=2.8.2,<3' 'uvicorn>=0.24,<1'
       - name: Verify Unicode ZIP parser views and bounded name accounting
         run: python -m unittest discover -s tests -p 'test_archive_inventory.py' -v
       - name: Verify actual offline Unicode ZIP CLI and HTTP exports

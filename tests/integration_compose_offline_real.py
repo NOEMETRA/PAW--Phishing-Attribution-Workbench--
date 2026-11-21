@@ -1,0 +1,135 @@
+"""Exercise the documented Compose profile with a newly generated EML."""
+
+import json
+import os
+from pathlib import Path
+import socket
+import subprocess
+from zipfile import ZipFile
+
+
+ISOLATION_PROBE = """
+import errno
+import os
+from pathlib import Path
+import socket
+import sys
+
+assert (os.getuid(), os.getgid()) == (1000, 1000)
+status = dict(line.split(':', 1) for line in Path('/proc/self/status').read_text().splitlines())
+assert status['NoNewPrivs'].strip() == '1'
+for key in ('CapEff', 'CapPrm', 'CapBnd'):
+    assert int(status[key], 16) == 0, key
+assert {name for _, name in socket.if_nameindex()} == {'lo'}
+
+try:
+    socket.create_connection(('127.0.0.1', int(sys.argv[1])), timeout=2).close()
+except ConnectionRefusedError:
+    pass
+else:
+    raise AssertionError('Container reached a TCP listener on the host')
+
+for directory in ('/input', '/opt/paw'):
+    try:
+        Path(directory, 'compose-write-probe').touch(exist_ok=False)
+    except OSError as exc:
+        assert exc.errno == errno.EROFS, (directory, exc)
+    else:
+        raise AssertionError(f'{directory} is writable')
+
+assert any(line.split()[1:3] == ['/tmp', 'tmpfs']
+           for line in Path('/proc/mounts').read_text().splitlines())
+Path('/tmp/compose-write-probe').write_text('tmpfs is writable')
+print('Compose runtime: non-root, no capabilities, no-new-privileges, isolated network and read-only mounts')
+"""
+
+
+def main():
+    default = ["docker", "compose"]
+    explicit = [*default, "-f", "compose.offline.yaml"]
+    text_triage = [*default, "-f", "compose.text-triage.yaml"]
+    config_args = ["config", "--format", "json"]
+
+    def resolved(command):
+        config = json.loads(subprocess.check_output([*command, *config_args]))
+        # Some Compose versions return inherited bind mounts in target order.
+        config["services"]["paw"]["volumes"].sort(key=lambda mount: mount["target"])
+        return config
+
+    config = resolved(default)
+    assert config == resolved(explicit)
+    assert set(config["services"]) == {"paw"}
+    assert config["services"]["paw"]["network_mode"] == "none"
+    print("Compose config: default and explicit entry points resolve to the same offline service")
+    base = config["services"]["paw"]
+    expected_text_triage = base | {
+        "image": "paw-offline:text-triage",
+        "pull_policy": "never",
+        "build": base["build"] | {"args": {"PAW_TEXT_TRIAGE": "1"}},
+    }
+    assert resolved(text_triage) == config | {"services": {"paw": expected_text_triage}}
+    print("Compose config: the text-triage image inherits the offline runtime")
+    compose = [*default, "run", "--rm", "-T"]
+    compose_text_triage = [*text_triage, "run", "--rm", "-T"]
+    input_file = Path(os.environ["PAW_INPUT_DIR"], "sample.eml")
+    output = Path(os.environ["PAW_OUTPUT_DIR"])
+
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        _, port = listener.getsockname()
+        original = (
+            "From: Sender <sender@example.invalid>\r\n"
+            "To: Recipient <recipient@example.invalid>\r\n"
+            "Subject: Offline Compose integration fixture\r\n"
+            "Content-Type: text/plain; charset=utf-8\r\n\r\n"
+            f"Local test endpoint http://127.0.0.1:{port}/fixture\r\n"
+        ).encode("ascii")
+        input_file.write_bytes(original)
+        for profile in (compose, compose_text_triage):
+            subprocess.run(
+                [*profile, "--entrypoint", "/opt/paw/bin/python", "paw", "-c", ISOLATION_PROBE, str(port)],
+                check=True,
+            )
+        subprocess.run([*compose, "paw", "full", "/input/sample.eml", "--no-egress"], check=True)
+        listener.setblocking(False)
+        try:
+            connection, _ = listener.accept()
+        except BlockingIOError:
+            pass
+        else:
+            connection.close()
+            raise AssertionError("The runtime contacted the host fixture")
+
+    case, = (path for path in (output / "cases").glob("case-*") if path.is_dir())
+    stored_input = case / "input.eml"
+    assert input_file.read_bytes() == stored_input.read_bytes() == original
+    assert json.loads((case / "execution.json").read_text())["no_egress"] is True
+
+    container_case = f"/data/cases/{case.name}"
+    subprocess.run([*compose, "paw", "verify", "--case", container_case], check=True)
+    subprocess.run([*compose, "paw", "export", "--case", container_case, "--format", "zip"], check=True)
+    with ZipFile(case.with_suffix(".zip")) as archive:
+        assert archive.testzip() is None
+        assert archive.read(f"{case.name}/input.eml") == original
+    print("Compose case: original preserved, offline policy recorded, seal and ZIP verified")
+
+    model = input_file.parent / "model"
+    model.mkdir()
+    (model / "tokenizer.json").write_bytes(b"inert invalid model fixture")
+    result = subprocess.run(
+        [*compose_text_triage, "paw", "assess-text", "--case", container_case,
+         "--model-dir", "/input/model"],
+        capture_output=True, text=True, timeout=30,
+    )
+    assert result.returncode == 1, result
+    # Rich can wrap the error across several lines within a bordered panel.
+    error = " ".join((result.stdout + result.stderr).replace("│", " ").split())
+    assert "File does not match the approved Horizon Labs revision: tokenizer.json" in error, result
+    subprocess.run([*compose_text_triage, "paw", "verify", "--case", container_case], check=True)
+    assert stored_input.read_bytes() == original
+    print("Compose text assessment: dependencies available and mismatched model rejected before scoring")
+
+
+if __name__ == "__main__":
+    main()

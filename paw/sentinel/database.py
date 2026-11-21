@@ -9,14 +9,42 @@ import json
 import math
 import re
 import weakref
+import uuid
 from contextvars import ContextVar
 import os
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
+from time import monotonic
 from typing import List, Dict, Any, Optional
 from ..util.timeutil import utc_now_iso
 from .config import (_storage_path, _admit_storage_path, _storage_identity, _storage_opener,
                      _resource_limits, _json_tree, _json_chunks, _encode_writer_json, _bounded_report, _require_active)
+
+
+_AUTOMATIC_ATTEMPT_LIMIT = 6
+_AUTOMATIC_INDEX_TIMEOUT_SECONDS = 10
+
+# SQLite matches the indexed expression to the lookup as written. Guard
+# legacy metadata before calling any JSON function that requires valid input.
+# Skip confirmed alerts early on archives dominated by completed deliveries.
+_AUTOMATIC_QUEUE_RECEIVER = f"""
+    CASE WHEN json_valid(metadata) THEN
+        CASE json_extract(metadata,'$.webhook_delivery.status')
+            WHEN 'receipt_confirmed' THEN NULL
+            ELSE CASE WHEN json_type(metadata,'$.webhook_delivery.automatic') = 'true'
+                AND json_extract(metadata,'$.webhook_delivery.attempts') BETWEEN 0 AND {_AUTOMATIC_ATTEMPT_LIMIT - 1}
+                AND json_extract(metadata,'$.webhook_delivery.status') IN ('queued','pending','receipt_unconfirmed')
+            THEN json_extract(metadata,'$.webhook_delivery.destination_sha256') END
+        END
+    END
+"""
+
+
+def _automatic_retry_cutoff():
+    # Stored timestamps omit fractions. A retry must wait five seconds
+    # beyond the entire recorded second, including its unknown fraction.
+    before = datetime.now(timezone.utc) - timedelta(seconds=6)
+    return before.strftime('%Y-%m-%dT%H:%M:%SZ')
 
 
 class _StoredJSONError(ValueError):
@@ -27,17 +55,23 @@ class _InvalidUTF8Text(bytes):
     """Undecodable SQLite TEXT, distinct from a stored BLOB."""
 
 
+class AlertDeliveryMissing(ValueError):
+    """An alert disappeared before its delivery attempt could be stored."""
+
+
 class CampaignDatabase:
     """SQLite database for managing monitored phishing campaigns."""
 
-    def __init__(self, db_path: str = "sentinel.db", *, read_only: bool = False, limits=None):
-        if type(read_only) is not bool: raise ValueError('read_only must be a boolean')
+    def __init__(self, db_path: str = "sentinel.db", *, read_only: bool = False, limits=None, initialize: bool = True):
+        if type(read_only) is not bool or type(initialize) is not bool:
+            raise ValueError('read_only and initialize must be booleans')
         self.limits = _resource_limits(limits)
         self._json_budget = ContextVar('sentinel_json_budget', default=None)
         path = _storage_path(db_path)
         self.db_path = str(path)
         self.read_only = read_only
-        metadata = _admit_storage_path(path, must_exist=read_only, directory_as_missing=read_only)
+        existing_only = read_only or not initialize
+        metadata = _admit_storage_path(path, must_exist=existing_only, directory_as_missing=existing_only)
         created = metadata is None
         if created:
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -58,7 +92,8 @@ class CampaignDatabase:
         # Failed creation leaves its target for inspection: another initializer
         # can acquire the same file after rollback, so unlink is not safe here.
         self._require_stopped_storage()
-        self._init_db()
+        if initialize:
+            self._init_db()
 
     def _admit_database(self):
         metadata = _admit_storage_path(Path(self.db_path), must_exist=True)
@@ -503,22 +538,36 @@ class CampaignDatabase:
         """Update campaign status."""
         self._writer_text(campaign_id, 'campaign_id', nonblank=True)
         self._writer_text(status, 'status', optional=True, nonblank=True)
-        return self._transition('campaigns', campaign_id, 'status', status)
+        return self._transition('campaigns', campaign_id, 'status', status) == 'updated'
 
-    def _transition(self, table, identifier, column, value):
+    def _transition(self, table, identifier, column, value, *, campaign_id=None):
+        # Table and column names come from fixed internal callers.
+        where = 'id=? COLLATE BINARY'
+        keys = (identifier,)
+        if campaign_id is not None:
+            where += ' AND campaign_id=? COLLATE BINARY'
+            keys += (campaign_id,)
+        select = f'SELECT {column} FROM {table} WHERE {where}'
         with self.connection() as conn:
             conn.execute('BEGIN IMMEDIATE')
-            rows = conn.execute(f'SELECT {column} FROM {table} WHERE id=? COLLATE BINARY', (identifier,)).fetchall()
-            if len(rows) > 1: raise ValueError('Ambiguous Sentinel transition target')
-            if not rows or rows == [(value,)]:
-                conn.rollback(); return False
-            cursor = conn.execute(f'UPDATE {table} SET {column}=? WHERE id=? COLLATE BINARY', (value, identifier))
+            kind = conn.execute('SELECT type FROM sqlite_master WHERE name=? COLLATE NOCASE',
+                                (table,)).fetchone()
+            if kind != ('table',):
+                raise ValueError('Sentinel transition requires a saved table')
+            rows = conn.execute(select, keys).fetchall()
+            if len(rows) > 1:
+                raise ValueError('Ambiguous Sentinel transition target')
+            if not rows:
+                return 'missing'
+            if rows == [(value,)]:
+                return 'unchanged'
+            cursor = conn.execute(f'UPDATE {table} SET {column}=? WHERE {where}', (value, *keys))
             if cursor.rowcount == 0:
-                conn.rollback(); return False
-            if (cursor.rowcount != 1 or conn.execute(f'SELECT {column} FROM {table} WHERE id=? COLLATE BINARY',
-                    (identifier,)).fetchall() != [(value,)]):
+                conn.rollback()
+                return 'rejected'
+            if cursor.rowcount != 1 or conn.execute(select, keys).fetchall() != [(value,)]:
                 raise RuntimeError('Sentinel transition did not persist; transaction rolled back')
-            return True
+            return 'updated'
 
     def record_check(self, campaign_id: str, status: str, response_time: float = None,
                     http_status: int = None, content_hash: str = None,
@@ -552,11 +601,22 @@ class CampaignDatabase:
             self._assert_writer_record(conn, 'checks', columns, values, rowid)
             conn.commit()
 
-    def _record_monitor_result(self, result, flags, *, commit_guard=None):
+    def _stored_monitor_comparison(self, raw):
+        metadata, evidence = self._decode_json_field(raw, {})
+        comparison = metadata.get('monitor_comparison') if isinstance(metadata, dict) else None
+        if evidence['status'] != 'decoded' or not isinstance(comparison, dict):
+            return {}
+        version = comparison.get('schema_version')
+        return comparison if type(version) is int and version == 1 else {}
+
+    def _record_monitor_result(self, result, flags, *, commit_guard=None, webhook_fingerprint=None):
         """Compare, record and alert in one actual SQLite write transaction."""
         _require_active()
         if self.read_only: raise RuntimeError('Read-only saved storage cannot publish monitor observations')
         if commit_guard is not None and not callable(commit_guard): raise ValueError('Callable monitor commit guard required')
+        if webhook_fingerprint is not None and (type(webhook_fingerprint) is not str
+                or not re.fullmatch('[0-9a-f]{64}', webhook_fingerprint)):
+            raise ValueError('Invalid queued webhook destination')
         if type(result) is not dict or type(flags) is not dict:
             raise ValueError('Native monitor result and alert flags required')
         result = _json_tree(result); flags = _json_tree(flags)
@@ -585,7 +645,8 @@ class CampaignDatabase:
         representation = ('http_entity_bytes_no_content_decoding_v1' if type(observation) is dict and
             observation.get('body_representation') == 'HTTP entity bytes, without content decoding'
             else 'caller_supplied_digest_unverified')
-        receipt = {'check_id':None,'events':[],'alerts':[],'previous_check_id':None,'content_changed':False}
+        receipt = {'check_id':None,'events':[],'alerts':[],'previous_check_id':None,
+                   'digest_reference_check_id':None,'content_changed':False}
         columns = ('campaign_id','check_time','status','response_time','http_status','content_hash',
                    'screenshot_path','error_message','metadata')
         alert_columns = ('campaign_id','alert_time','alert_type','severity','message','metadata')
@@ -597,19 +658,36 @@ class CampaignDatabase:
             previous = conn.execute('SELECT id,status,http_status,content_hash,metadata FROM checks WHERE campaign_id=? COLLATE BINARY '
                                     'ORDER BY id DESC LIMIT 1',(campaign_id,)).fetchone()
             prior_status = None; same_source = False; same_representation = False
+            reference = None
             if previous:
                 receipt['previous_check_id'] = previous[0]
-                prior_metadata,evidence = self._decode_json_field(previous[4],{})
-                prior = prior_metadata.get('monitor_comparison') if type(prior_metadata) is dict else None
-                same_source = (evidence['status']=='decoded' and type(prior) is dict and
-                    type(prior.get('schema_version')) is int and prior['schema_version'] == 1 and
-                    prior.get('observation_url') == result['url'])
+                prior = self._stored_monitor_comparison(previous[4])
+                same_source = prior.get('observation_url') == result['url']
                 same_representation = same_source and prior.get('content_representation') == representation
                 if same_source and type(previous[2]) is int and 100 <= previous[2] <= 599:
                     expected = 'up' if previous[2] < 400 else 'down'
                     if previous[1] == expected: prior_status = expected
-                receipt['content_changed'] = bool(same_representation and digest and type(previous[3]) is str and
-                    re.fullmatch('[0-9a-f]{64}',previous[3]) and digest != previous[3])
+                if same_representation and prior_status is not None:
+                    reference = previous
+                elif same_representation and previous[1] == 'error' and previous[3] is None:
+                    # Carry a source ID across transport failures only. Resolve
+                    # it again inside this transaction to respect expiry.
+                    source_id = prior.get('digest_reference_check_id')
+                    if type(source_id) is int and 0 < source_id < previous[0]:
+                        candidate = conn.execute(
+                            'SELECT id,status,http_status,content_hash,metadata FROM checks '
+                            'WHERE campaign_id=? COLLATE BINARY AND id=?',
+                            (campaign_id, source_id),
+                        ).fetchone()
+                        if (candidate and type(candidate[2]) is int and 100 <= candidate[2] <= 599
+                                and candidate[1] == ('up' if candidate[2] < 400 else 'down')):
+                            saved = self._stored_monitor_comparison(candidate[4])
+                            if (saved.get('observation_url') == result['url']
+                                    and saved.get('content_representation') == representation):
+                                reference = candidate
+                if reference and isinstance(reference[3], str) and re.fullmatch('[0-9a-f]{64}', reference[3]):
+                    receipt['digest_reference_check_id'] = reference[0]
+                    receipt['content_changed'] = digest is not None and digest != reference[3]
             if status in ('up','down') and prior_status in ('up','down') and status != prior_status:
                 receipt['events'].append(status)
             if receipt['content_changed']: receipt['events'].append('changed')
@@ -617,7 +695,8 @@ class CampaignDatabase:
             comparison = {'schema_version':1,'observation_url':result['url'],
                 'content_representation':representation,'same_source':same_source,
                 'same_representation':same_representation,'previous_check_id':receipt['previous_check_id'],
-                'scope':'Previous stored id, unverified HTTP status classes and literal digest comparison; not chronological history, campaign liveness or identity',
+                'digest_reference_check_id':receipt['digest_reference_check_id'],
+                'scope':'HTTP class compared to previous check; digest compared to referenced complete observation. Change time and campaign liveness are unverified.',
                 'verified':False}
             metadata = self._encode_writer_json({'source_metadata':result.get('metadata',{}),
                                                  'monitor_comparison':comparison},'metadata')
@@ -631,7 +710,14 @@ class CampaignDatabase:
                 if not enabled: continue
                 message = ('Stored content digest differs' if event == 'changed' else 'HTTP status class transitioned to '+event)
                 level = 'warning' if event == 'down' else 'info'
-                alert_metadata = self._encode_writer_json({**comparison,'check_id':rowid},'metadata')
+                alert_data = {**comparison, 'check_id':rowid, 'external_delivery_at_commit':'not_attempted'}
+                if webhook_fingerprint is not None:
+                    alert_data['webhook_delivery'] = {
+                        'event_id':uuid.uuid4().hex, 'destination_sha256':webhook_fingerprint,
+                        'automatic':True, 'status':'queued', 'attempts':0, 'http_status':None,
+                        'error':None, 'updated_at':timestamp,
+                    }
+                alert_metadata = self._encode_writer_json(alert_data, 'metadata')
                 alert_values = (campaign_id,timestamp,event,level,message,alert_metadata)
                 alert_id = self._insert_writer_record(conn,'alerts',alert_columns,alert_values)
                 inserted.append((alert_id,alert_values))
@@ -642,9 +728,14 @@ class CampaignDatabase:
                 self._assert_writer_record(conn,'alerts',alert_columns,alert_values,alert_id)
             if conn.execute('SELECT status,url,last_check FROM campaigns WHERE id=? COLLATE BINARY',(campaign_id,)).fetchall() != [('active',result['url'],timestamp)]:
                 raise RuntimeError('Monitor parent changed or timestamp reverted; transaction rolled back')
-            if previous and conn.execute('SELECT id,status,http_status,content_hash,metadata FROM checks WHERE id=?',
-                                         (previous[0],)).fetchall() != [previous]:
-                raise RuntimeError('Monitor comparison source changed; transaction rolled back')
+            sources = [previous] if previous else []
+            if reference is not None and reference is not previous:
+                sources.append(reference)
+            for source in sources:
+                rows = conn.execute('SELECT id,status,http_status,content_hash,metadata FROM checks '
+                                    'WHERE id=? AND campaign_id=? COLLATE BINARY', (source[0], campaign_id)).fetchall()
+                if rows != [source]:
+                    raise RuntimeError('Monitor comparison source changed; transaction rolled back')
             for _ in _json_chunks(receipt,self.limits['max_output_bytes']): pass
             with commit_guard() if commit_guard is not None else nullcontext():
                 conn.commit()
@@ -672,6 +763,65 @@ class CampaignDatabase:
             ))
             self._require_writer_campaign(conn, campaign_id)
             conn.commit()
+
+    @_bounded_report
+    def get_campaign_history(self, campaign_id: str) -> Dict[str, Any]:
+        """Read a bounded summary from one SQLite snapshot, including removed campaigns."""
+        self._writer_text(campaign_id, 'campaign_id', nonblank=True)
+        limit = 10
+        with self._json_read_connection() as conn:
+            campaign = conn.execute(
+                "SELECT id, case_id, status FROM campaigns WHERE id = ? COLLATE BINARY",
+                (campaign_id,),
+            ).fetchone()
+            if campaign is None:
+                raise ValueError("Unknown stored campaign ID")
+            checks = conn.execute("""
+                SELECT id, check_time, status, http_status, content_hash
+                FROM checks WHERE campaign_id = ? COLLATE BINARY ORDER BY id DESC LIMIT ?
+            """, (campaign_id, limit)).fetchall()
+            has_metadata = conn.execute(
+                "SELECT 1 FROM pragma_table_info('alerts') WHERE name = 'metadata' COLLATE NOCASE"
+            ).fetchone()
+            # Some legacy alert tables contain only summary columns. Keep the
+            # same read-only view and cap the bytes read from optional metadata.
+            source = ("CASE WHEN length(CAST(metadata AS BLOB)) <= ? THEN metadata END"
+                      if has_metadata else "NULL")
+            parameters = [self.limits['max_json_bytes']] if has_metadata else []
+            rows = conn.execute(f"""
+                SELECT id, alert_time, alert_type, severity, acknowledged, {source} AS metadata
+                FROM alerts WHERE campaign_id = ? COLLATE BINARY ORDER BY id DESC LIMIT ?
+            """, [*parameters, campaign_id, limit]).fetchall()
+            alerts = []
+            for row in rows:
+                alert = dict(row)
+                metadata, _ = self._decode_json_field(alert.pop('metadata'), {})
+                check_id = metadata.get('check_id') if isinstance(metadata, dict) else None
+                if type(check_id) is not int or not 1 <= check_id <= 2**63 - 1:
+                    check_id = None
+                alert['external_delivery_at_commit'] = (
+                    'not_attempted' if isinstance(metadata, dict)
+                    and metadata.get('external_delivery_at_commit') == 'not_attempted' else 'unknown'
+                )
+                reference_id = metadata.get('digest_reference_check_id') if isinstance(metadata, dict) else None
+                alert['digest_reference_check_id'] = (
+                    reference_id if alert['alert_type'] == 'changed' and type(reference_id) is int
+                    and check_id is not None and 0 < reference_id < check_id else None
+                )
+                delivery = metadata.get('webhook_delivery') if isinstance(metadata, dict) else None
+                if self._valid_delivery_state(delivery):
+                    alert['webhook_delivery'] = delivery
+                alert['recorded_check_id'] = check_id
+                alert['source_check_available'] = None if check_id is None else bool(conn.execute(
+                    "SELECT 1 FROM checks WHERE id = ? AND campaign_id = ? COLLATE BINARY LIMIT 1",
+                    (check_id, campaign_id),
+                ).fetchone())
+                alerts.append(alert)
+        return {
+            'campaign': dict(campaign), 'limit_per_kind': limit, 'order': 'id_desc',
+            'checks': [dict(row) for row in checks],
+            'alerts': alerts,
+        }
 
     def get_recent_checks(self, campaign_id: str, limit: int = 10) -> List[Dict[str, Any]]:
         """Get recent checks for a campaign."""
@@ -728,39 +878,270 @@ class CampaignDatabase:
     def acknowledge_alert(self, alert_id: int) -> bool:
         """Mark an alert as acknowledged."""
         self._writer_number(alert_id, 'alert_id', minimum=1, integer=True)
-        return self._transition('alerts', alert_id, 'acknowledged', 1)
+        return self._transition('alerts', alert_id, 'acknowledged', 1) == 'updated'
 
-    def cleanup_old_data(self, retention_days: int = 90):
-        """Delete only interpretable expired check/alert rows; never case files."""
-        self._writer_number(retention_days, 'retention_days', minimum=0, maximum=365_000, integer=True)
+    def acknowledge_campaign_alert(self, campaign_id: str, alert_id: int) -> str:
+        """Acknowledge the selected campaign alert in one transaction."""
+        self._writer_text(campaign_id, 'campaign_id', nonblank=True)
+        self._writer_number(alert_id, 'alert_id', minimum=1, integer=True)
+        result = self._transition('alerts', alert_id, 'acknowledged', 1, campaign_id=campaign_id)
+        if result == 'missing':
+            raise ValueError('Alert not found for the selected campaign')
+        if result == 'rejected':
+            raise RuntimeError('Sentinel acknowledgment did not persist; transaction rolled back')
+        return 'acknowledged' if result == 'updated' else 'already_acknowledged'
+
+    @staticmethod
+    def _valid_delivery_state(state):
+        required = {'event_id','destination_sha256','status','attempts','http_status','error','updated_at'}
+        if not isinstance(state, dict) or set(state) - {'automatic'} != required:
+            return False
+        if 'automatic' in state and state['automatic'] is not True:
+            return False
+        event_id, target = state['event_id'], state['destination_sha256']
+        return (isinstance(event_id, str) and re.fullmatch('[0-9a-f]{32}', event_id) is not None
+                and isinstance(target, str) and re.fullmatch('[0-9a-f]{64}', target) is not None
+                and state['status'] in ('queued','pending','receipt_confirmed','receipt_unconfirmed')
+                and type(state['attempts']) is int and 0 <= state['attempts'] < 2**63
+                and (state['attempts'] > 0 if state['status'] != 'queued'
+                     else state['attempts'] == 0 and state.get('automatic') is True)
+                and (state['http_status'] is None or
+                     type(state['http_status']) is int and 100 <= state['http_status'] <= 599)
+                and state['error'] in (None,'http_status','receipt_missing','transport_error','deadline_exceeded')
+                and isinstance(state['updated_at'], str)
+                and re.fullmatch(r'\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ', state['updated_at']) is not None
+                and (state['status'] != 'receipt_confirmed' or
+                     state['http_status'] is not None and 200 <= state['http_status'] < 300
+                     and state['error'] is None))
+
+    def prepare_automatic_delivery(self):
+        """Index the eligible queue when the foreground sender is enabled."""
+        _require_active()
+        with self.connection() as conn:
+            # Initial index creation scans historical rows once. Bound this
+            # maintenance statement by elapsed time on its own connection.
+            deadline = monotonic() + _AUTOMATIC_INDEX_TIMEOUT_SECONDS
+            conn.set_progress_handler(lambda: monotonic() >= deadline, 1000)
+            try:
+                conn.execute(f"""
+                    CREATE INDEX IF NOT EXISTS sentinel_automatic_queue_receiver
+                    ON alerts (({_AUTOMATIC_QUEUE_RECEIVER}), id)
+                    WHERE ({_AUTOMATIC_QUEUE_RECEIVER}) IS NOT NULL
+                """)
+            except sqlite3.OperationalError as error:
+                if error.sqlite_errorcode != sqlite3.SQLITE_INTERRUPT:
+                    raise
+                raise TimeoutError('Sentinel automatic delivery index preparation timed out') from error
+
+    def next_automatic_alert(self, fingerprint):
+        """Select one due event from the durable queue for the configured receiver."""
+        _require_active()
+        with self.connection() as conn:
+            return conn.execute(f"""
+                SELECT campaign_id, id FROM alerts
+                WHERE ({_AUTOMATIC_QUEUE_RECEIVER}) = ?
+                    AND CASE WHEN json_valid(metadata) THEN
+                        json_extract(metadata,'$.webhook_delivery.attempts') = 0
+                        OR json_extract(metadata,'$.webhook_delivery.updated_at') <= ?
+                    END
+                ORDER BY id LIMIT 1
+            """, (fingerprint, _automatic_retry_cutoff())).fetchone()
+
+    @contextmanager
+    def _alert_delivery_row(self, campaign_id, alert_id):
+        self._writer_text(campaign_id, 'campaign_id', nonblank=True)
+        self._writer_number(alert_id, 'alert_id', minimum=1, integer=True)
+        keys = (alert_id, campaign_id)
+        select = ('SELECT alert_type,metadata FROM alerts '
+                  'WHERE id=? AND campaign_id=? COLLATE BINARY')
         with self.connection() as conn:
             conn.execute('BEGIN IMMEDIATE')
-            cutoff = datetime.fromisoformat(utc_now_iso().replace('Z', '+00:00')) - timedelta(days=retention_days)
-            result = {'complete': True, 'cutoff_utc': cutoff.strftime('%Y-%m-%dT%H:%M:%SZ'),
-                      'deleted': {}, 'retained_uninterpretable': {}}
-            for table, field in (('checks','check_time'), ('alerts','alert_time')):
-                rows = conn.execute(f'SELECT id,{field} FROM {table} ORDER BY id').fetchall()
-                if len({row[0] for row in rows}) != len(rows): raise ValueError('Ambiguous retention identifiers')
-                expired = []; unusable = []
-                for identifier, raw in rows:
-                    self._writer_number(identifier, 'retention identifier', integer=True)
-                    try:
-                        if (not isinstance(raw,str) or len(raw)>64 or not re.fullmatch(
-                                r'\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)', raw)):
-                            raise ValueError('Uninterpreted time')
-                        parsed = datetime.fromisoformat(raw.replace('Z','+00:00')).astimezone(timezone.utc)
-                    except (ValueError, OverflowError):
-                        unusable.append(identifier); continue
-                    if parsed < cutoff: expired.append(identifier)
+            if conn.execute("SELECT type FROM sqlite_master WHERE name='alerts' COLLATE NOCASE").fetchone() != ('table',):
+                raise ValueError('Sentinel delivery requires a saved alert table')
+            rows = conn.execute(select, keys).fetchall()
+            if not rows:
+                raise AlertDeliveryMissing('Alert not found for the selected campaign')
+            if len(rows) != 1:
+                raise ValueError('Expected one saved alert for the selected campaign')
+            alert_type, raw = rows[0]
+            metadata, evidence = self._decode_json_field(raw, {})
+            if evidence['status'] not in ('decoded','sql_null') or not isinstance(metadata, dict):
+                raise ValueError('Unreadable alert metadata; delivery state cannot be saved')
+            before = self._encode_writer_json(metadata, 'metadata')
+            yield alert_type, metadata
+            encoded = self._encode_writer_json(metadata, 'metadata')
+            if encoded != before:
+                cursor = conn.execute('UPDATE alerts SET metadata=? WHERE id=? AND campaign_id=? COLLATE BINARY',
+                                      (encoded,*keys))
+                if cursor.rowcount != 1 or conn.execute(select, keys).fetchall() != [(alert_type,encoded)]:
+                    raise RuntimeError('Sentinel delivery state did not persist')
+            conn.commit()
+
+    def start_alert_delivery(self, campaign_id, alert_id, destination_hash, *, automatic=False):
+        _require_active()
+        with self._alert_delivery_row(campaign_id, alert_id) as (alert_type, metadata):
+            if type(alert_type) is not str or not 0 < len(alert_type) <= 128:
+                raise ValueError('A short text alert type is required for webhook delivery')
+            if 'webhook_delivery' in metadata:
+                state = metadata['webhook_delivery']
+                if not self._valid_delivery_state(state):
+                    raise ValueError('Unreadable saved webhook state')
+            else:
+                if automatic:
+                    return None
+                state = {'event_id':uuid.uuid4().hex, 'destination_sha256':destination_hash,
+                         'attempts':0, 'status':'pending'}
+                metadata['webhook_delivery'] = state
+            if state['destination_sha256'] != destination_hash:
+                raise ValueError('Saved alert delivery is already bound to another recipient')
+            # A manual delivery may have changed eligibility after the queue lookup.
+            if automatic and (not state.get('automatic') or state['status'] == 'receipt_confirmed'
+                              or state['attempts'] >= _AUTOMATIC_ATTEMPT_LIMIT
+                              or (state['attempts'] > 0 and state['updated_at'] > _automatic_retry_cutoff())):
+                return None
+            if state['status'] != 'receipt_confirmed':
+                state.update(status='pending', attempts=state['attempts']+1,
+                             http_status=None, error=None, updated_at=utc_now_iso())
+            return dict(state), alert_type
+
+    def finish_alert_delivery(self, campaign_id, alert_id, attempt, outcome, code):
+        _require_active()
+        with self._alert_delivery_row(campaign_id, alert_id) as (_, metadata):
+            state = metadata.get('webhook_delivery', {})
+            if (not self._valid_delivery_state(state) or state['event_id'] != attempt['event_id']
+                    or state['destination_sha256'] != attempt['destination_sha256']):
+                raise RuntimeError('Saved alert delivery changed before its result could be recorded')
+            if state['status'] != 'receipt_confirmed' and (
+                    outcome == 'receipt_confirmed' or state['attempts'] == attempt['attempts']):
+                state.update(status='receipt_confirmed' if outcome == 'receipt_confirmed' else 'receipt_unconfirmed',
+                             http_status=code, error=None if outcome == 'receipt_confirmed' else outcome,
+                             updated_at=utc_now_iso())
+            return dict(state)
+
+    def _expire_check_body(self, conn, identifier):
+        # Only rewrite text metadata in the format emitted by the monitor.
+        # Reading bytes keeps invalid legacy TEXT from aborting SQLite decoding.
+        kind, raw = conn.execute(
+            "SELECT typeof(metadata), CASE WHEN length(CAST(metadata AS BLOB)) <= ? "
+            "THEN CAST(metadata AS BLOB) END FROM checks WHERE id = ?",
+            (self.limits['max_json_bytes'], identifier),
+        ).fetchone()
+        if kind == 'null':
+            return 'absent'
+        if kind != 'text' or raw is None:
+            return 'uninterpretable'
+        try:
+            original = raw.decode('utf-8')
+        except UnicodeDecodeError:
+            return 'uninterpretable'
+        metadata, evidence = self._decode_json_field(original, {})
+        if evidence['status'] != 'decoded' or not isinstance(metadata, dict):
+            return 'uninterpretable'
+        source = metadata.get('source_metadata')
+        observation = source.get('http_observation') if isinstance(source, dict) else None
+        if not isinstance(observation, dict) or 'body_base64' not in observation:
+            return 'absent'
+        comparison = metadata.get('monitor_comparison')
+        version = comparison.get('schema_version') if isinstance(comparison, dict) else None
+        if type(version) is not int or version != 1:
+            return 'uninterpretable'
+        del observation['body_base64']
+        source.update(retained_body_bytes=0, body_retention_status='expired')
+        encoded = self._encode_writer_json(metadata, 'metadata')
+        changed = conn.execute('UPDATE checks SET metadata=? WHERE id=?', (encoded, identifier))
+        stored = conn.execute('SELECT metadata FROM checks WHERE id=?', (identifier,)).fetchone()
+        if changed.rowcount != 1 or stored != (encoded,):
+            raise RuntimeError('Sentinel body expiry did not persist; transaction rolled back')
+        return 'expired'
+
+    def _retention_pages(self, conn, snapshot):
+        limit = min(self.limits['max_rows'], 500)
+        select = f'SELECT id, recorded_at FROM temp.{snapshot}'
+        rows = conn.execute(f'{select} ORDER BY id LIMIT ?', (limit,)).fetchall()
+        while rows:
+            yield rows
+            rows = conn.execute(f'{select} WHERE id > ? ORDER BY id LIMIT ?',
+                                (rows[-1][0], limit)).fetchall()
+
+    @staticmethod
+    def _retention_time(raw):
+        if not isinstance(raw, str) or len(raw) > 64 or not re.fullmatch(
+                r'\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)', raw):
+            return None
+        try:
+            return datetime.fromisoformat(raw.replace('Z', '+00:00')).astimezone(timezone.utc)
+        except (ValueError, OverflowError):
+            return None
+
+    def cleanup_old_data(self, retention_days: int = 90, *, alert_retention_days: int | None = None,
+                         body_retention_days: int | None = None):
+        """Delete only interpretable expired check/alert rows; never case files."""
+        self._writer_number(retention_days, 'retention_days', minimum=0, maximum=365_000, integer=True)
+        if body_retention_days is not None:
+            self._writer_number(body_retention_days, 'body_retention_days', minimum=0, maximum=365_000, integer=True)
+        if alert_retention_days is None:
+            alert_retention_days = retention_days
+        self._writer_number(alert_retention_days, 'alert_retention_days', minimum=0, maximum=365_000, integer=True)
+        with self.connection() as conn:
+            conn.execute('BEGIN IMMEDIATE')
+            now = datetime.fromisoformat(utc_now_iso().replace('Z', '+00:00'))
+            cutoffs = {'checks': now - timedelta(days=retention_days),
+                       'alerts': now - timedelta(days=alert_retention_days)}
+            if body_retention_days is not None:
+                cutoffs['bodies'] = now - timedelta(days=body_retention_days)
+            result = {'complete': True, 'cutoff_utc': cutoffs['checks'].strftime('%Y-%m-%dT%H:%M:%SZ'),
+                      'cutoffs_utc': {table: value.strftime('%Y-%m-%dT%H:%M:%SZ') for table, value in cutoffs.items()},
+                      'deleted': {}, 'retained_uninterpretable': {},
+                      'expired_bodies': 0, 'uninterpretable_body_ids': []}
+            sources = (('checks', 'check_time', 'retention_checks'),
+                       ('alerts', 'alert_time', 'retention_alerts'))
+            # Keep the expected ID/time pairs in SQLite, including rows whose
+            # timestamps cannot be interpreted. Compare both tables after all
+            # writes so a trigger cannot silently change the other table.
+            for table, field, snapshot in sources:
+                conn.execute(f'CREATE TEMP TABLE {snapshot} (id PRIMARY KEY, recorded_at) WITHOUT ROWID')
+                try:
+                    conn.execute(f'INSERT INTO temp.{snapshot} SELECT id, {field} FROM main.{table}')
+                except sqlite3.IntegrityError as exc:
+                    raise ValueError('Ambiguous retention identifiers') from exc
+            for table, _, snapshot in sources:
                 deleted = 0
-                for offset in range(0, len(expired), 500):
-                    batch = expired[offset:offset+500]
-                    deleted += conn.execute(f"DELETE FROM {table} WHERE id IN ({','.join('?' for _ in batch)})", batch).rowcount
-                remaining = conn.execute(f'SELECT id,{field} FROM {table} ORDER BY id').fetchall()
-                expired_ids = set(expired)
-                if deleted != len(expired) or remaining != [row for row in rows if row[0] not in expired_ids]:
+                unusable = []
+                for rows in self._retention_pages(conn, snapshot):
+                    expired = []
+                    for identifier, raw in rows:
+                        self._writer_number(identifier, 'retention identifier', integer=True)
+                        parsed = self._retention_time(raw)
+                        if parsed is None:
+                            unusable.append(identifier)
+                        elif parsed < cutoffs[table]:
+                            expired.append(identifier)
+                        elif table == 'checks' and 'bodies' in cutoffs and parsed < cutoffs['bodies']:
+                            outcome = self._expire_check_body(conn, identifier)
+                            if outcome == 'expired':
+                                result['expired_bodies'] += 1
+                            elif outcome == 'uninterpretable':
+                                result['uninterpretable_body_ids'].append(identifier)
+                    if expired:
+                        selection = f"WHERE id IN ({','.join('?' for _ in expired)})"
+                        count = conn.execute(f'DELETE FROM main.{table} {selection}', expired).rowcount
+                        if count != len(expired):
+                            raise RuntimeError('Sentinel retention did not persist exactly; transaction rolled back')
+                        conn.execute(f'DELETE FROM temp.{snapshot} {selection}', expired)
+                        deleted += count
+                result['deleted'][table] = deleted
+                result['retained_uninterpretable'][table] = unusable
+            for table, field, snapshot in sources:
+                actual, expected, matching = conn.execute(f'''
+                    SELECT (SELECT count(*) FROM main.{table}),
+                           (SELECT count(*) FROM temp.{snapshot}),
+                           (SELECT count(*) FROM (
+                               SELECT id, {field} COLLATE BINARY FROM main.{table}
+                               INTERSECT SELECT id, recorded_at FROM temp.{snapshot}
+                           ))
+                ''').fetchone()
+                if actual != expected or matching != expected:
                     raise RuntimeError('Sentinel retention did not persist exactly; transaction rolled back')
-                result['deleted'][table] = deleted; result['retained_uninterpretable'][table] = unusable
             self.check_report(result)
         return result
 

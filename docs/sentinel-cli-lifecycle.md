@@ -1,5 +1,22 @@
 # Sentinel CLI service control
 
+`monitor run --origin ORIGIN` is the Linux foreground entry point for owned laboratory origins. Its installed CLI integration verifies signal shutdown during HTTP, per-database process exclusion, restart continuity and retained evidence. See [the operating guide](../SENTINEL_README.md).
+
+The installed-wheel integration can also exercise a private link in two fresh
+Linux network namespaces, without default routes. With the wheel installed in
+a virtual environment, run:
+
+```sh
+bash tests/integration_sentinel_private_link.sh /path/to/venv/bin/python /tmp/paw-link-v4 ipv4
+bash tests/integration_sentinel_private_link.sh /path/to/venv/bin/python /tmp/paw-link-v6 ipv6
+```
+
+Use new output directories. The harness requires user and network namespace
+support, `ip`, `nft` and `openssl`. It measures DNS and TLS against an owned
+fixture, counts firewall-denied traffic, checks that redirects are never
+followed, and verifies the recovery alert after restarting the foreground
+monitor. The IPv6 foreground check uses HTTPS with a bracketed IP literal.
+
 The existing `monitor start` and `monitor stop` actions are explicitly unavailable.
 They exit nonzero before importing Sentinel, loading configuration, opening or
 initializing a database, creating a thread, or invoking a collector. Optional

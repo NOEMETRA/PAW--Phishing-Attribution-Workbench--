@@ -74,6 +74,45 @@ class SentinelHistoryColumns(unittest.TestCase):
         self.temporary.cleanup()
         self.assertEqual(blocked, [])
 
+    def test_campaign_history_is_scoped_bounded_and_passive_after_removal(self):
+        writer = history_database(self.root/'history.db', 'reversed')
+        selected = writer.add_campaign('saved-case', 'https://one.invalid/')
+        neighbor = writer.add_campaign('other-case', 'https://two.invalid/')
+        empty = writer.add_campaign('empty-case', 'https://empty.invalid/')
+        for table in COLUMNS:
+            for index in range(1, 13):
+                seed_history(writer, table, id=index, campaign_id=selected)
+            seed_history(writer, table, id=13, campaign_id=neighbor)
+        self.assertTrue(writer.remove_campaign(selected))
+        before = Path(writer.db_path).read_bytes()
+        reader = CampaignDatabase(writer.db_path, read_only=True)
+        result = reader.get_campaign_history(selected)
+        self.assertEqual(result['campaign']['status'], 'removed')
+        for table in COLUMNS:
+            self.assertEqual([row['id'] for row in result[table]], list(range(12, 2, -1)))
+            self.assertNotIn('metadata', result[table][0])
+            self.assertEqual(reader.get_campaign_history(empty)[table], [])
+        self.assertEqual(result['checks'][0]['http_status'], 403)
+        self.assertEqual(result['alerts'][0]['alert_type'], 'stored type')
+        with self.assertRaisesRegex(ValueError, 'Unknown stored campaign'):
+            reader.get_campaign_history('missing')
+        self.assertEqual(Path(writer.db_path).read_bytes(), before)
+
+    def test_history_resolves_only_positive_stored_check_ids_in_the_same_campaign(self):
+        writer = history_database(self.root/'links.db', 'reversed')
+        selected = writer.add_campaign('saved-case', 'https://one.invalid/')
+        neighbor = writer.add_campaign('other-case', 'https://two.invalid/')
+        seed_history(writer, 'checks', id=11, campaign_id=selected)
+        seed_history(writer, 'checks', id=12, campaign_id=neighbor)
+        metadata = ['{"check_id":11}', '{"check_id":12}', '{"check_id":13}', '{"check_id":true}',
+                    '{"check_id":9223372036854775808}', '{"check_id":11,"check_id":12}', 'null']
+        for index, value in enumerate(metadata, 1):
+            seed_history(writer, 'alerts', id=index, campaign_id=selected, metadata=value)
+        reader = CampaignDatabase(writer.db_path, read_only=True)
+        alerts = reversed(reader.get_campaign_history(selected)['alerts'])
+        self.assertEqual([(a['recorded_check_id'], a['source_check_available']) for a in alerts],
+                         [(11, True), (12, False), (13, False)] + [(None, None)] * 4)
+
     def test_every_field_matches_independent_named_sql_in_both_reader_modes(self):
         for layout in LAYOUTS:
             writer = history_database(self.root/(layout+'.db'), layout)

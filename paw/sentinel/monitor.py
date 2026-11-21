@@ -18,9 +18,10 @@ class _PublicationCanceled(RuntimeError):
 
 
 class SentinelMonitor:
-    def __init__(self, config=None, database=None):
+    def __init__(self, config=None, database=None, *, webhook_fingerprint=None):
         self.config = SentinelConfig() if config is None else config
         self.db = CampaignDatabase(**self.config.get_database_options()) if database is None else database
+        self._webhook_fingerprint = webhook_fingerprint
         self._running = False; self._thread = None; self._executor = None
         self._state = threading.Condition(threading.RLock())
         self._stop_event = threading.Event(); self._operation_lock = threading.RLock()
@@ -179,18 +180,23 @@ class SentinelMonitor:
     def _check_campaign(self, campaign):
         self._require_collector(); campaign = self._admit_campaign(campaign)
         _,_,timeout = self._settings()
-        observed = fetch_http(campaign['url'],timeout=timeout,max_bytes=128*1024,stop_event=self._stop_event)
+        observed = self._collect_http(campaign['url'],timeout=timeout,max_bytes=128*1024)
         body = observed.pop('body'); code = observed['http_status']
-        observed['body_base64'] = base64.b64encode(body).decode('ascii')
+        retain_body = self.config.get('storage.retain_http_bodies', True) is True
+        if retain_body:
+            observed['body_base64'] = base64.b64encode(body).decode('ascii')
         status = ('up' if code < 400 else 'down') if observed['status']=='observed' else 'error'
         digest = observed['content_sha256'] if self.config.get('analysis.enable_content_diff',True) is True else None
         return {'campaign_id':campaign['id'],'url':campaign['url'],'status':status,
             'http_status':code,'response_time':observed['elapsed_seconds'],'content_hash':digest,
             'screenshot_path':None,'error_message':observed['error'],
-            'metadata':{'http_observation':observed,'retained_body_bytes':len(body),
+            'metadata':{'http_observation':observed,'retained_body_bytes':len(body) if retain_body else 0,
                 'screenshot':{'status':'unavailable' if self.config.get('analysis.enable_screenshots',True) is True else 'not_requested',
                               'reason':'Browser capture requires the isolated collector validation'},
                 'assessment':{'status':'unavailable','reason':'HTTP observations do not establish campaign liveness or identity'}}}
+
+    def _collect_http(self, url, *, timeout, max_bytes):
+        return fetch_http(url,timeout=timeout,max_bytes=max_bytes,stop_event=self._stop_event)
 
     def _take_screenshot(self, url, campaign_id):
         _require_active()
@@ -220,9 +226,11 @@ class SentinelMonitor:
         result = _json_tree(result)
         flags = {key:self.config.get('alerts.'+key,default) for key,default in
                  (('enabled',True),('alert_on_down',True),('alert_on_up',False),('alert_on_changes',True))}
-        try: receipt = self.db._record_monitor_result(result,flags,commit_guard=self._publication_commit)
+        try:
+            receipt = self.db._record_monitor_result(result, flags, commit_guard=self._publication_commit,
+                                                     webhook_fingerprint=self._webhook_fingerprint)
         except _PublicationCanceled: return None
-        published = {**result,**{key:receipt[key] for key in ('check_id','previous_check_id','content_changed')}}
+        published = {**result,**{key:receipt[key] for key in ('check_id','previous_check_id','digest_reference_check_id','content_changed')}}
         self._emit('on_check_complete',published)
         for event in receipt['events']:
             self._emit({'up':'on_campaign_up','down':'on_campaign_down','changed':'on_content_changed'}[event],published)

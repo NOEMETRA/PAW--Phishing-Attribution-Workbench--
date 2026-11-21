@@ -44,6 +44,7 @@ class TextDeobfuscationContracts(unittest.TestCase):
 
     def test_text_observations_do_not_inflate_final_attribution_score(self):
         engine = DeobfuscationEngine()
+        prior_violations = violations()
         with offline_policy(True):
             for text in ('Hello world. Version 1234!', 'URGENT verify your account', 'рayраl login'):
                 result = engine.analyze_artifacts({'text':text})
@@ -53,7 +54,7 @@ class TextDeobfuscationContracts(unittest.TestCase):
                 self.assertEqual(score['decision_score'], .05)
                 self.assertIsNone(result['suspicion_score'])
                 self.assertEqual(result['techniques_detected'], [])
-                self.assertEqual(violations(), [])
+                self.assertEqual(violations(), prior_violations)
 
     def test_repeated_analysis_does_not_change_text_or_create_layers(self):
         sample = 'ALL CAPS! ID: 12345.\nEmail: hello@example.invalid.  2,95 €'

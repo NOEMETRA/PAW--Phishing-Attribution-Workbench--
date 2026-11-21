@@ -153,6 +153,11 @@ Run `paw gui` (or `python -m paw gui`) to open the replacement interface at `htt
 
 The old Tkinter workflow has been replaced. The new interface uploads original EML files, starts actual offline workers, displays observed stages and total elapsed time, cancels jobs, reopens persisted history/cases, verifies evidence and exports real ZIP packages. It separates execution status, assessment coverage, heuristic score and local file integrity. Attachments are metadata only; reports and captured content are inert text, with no clickable email URLs. Desktop/mobile layouts and keyboard-operated tabs are included. All assets are packaged locally, without a CDN or a frontend build step.
 
+The local API accepts up to 25 MiB per email and 16 MiB per opaque source.
+It removes partial uploads when the final copy is canceled or the filename
+metadata cannot be saved. On POSIX, saved uploads and filename metadata
+are accessible only to the account that owns the files.
+
 The UI always requests `no_egress=true` and excludes detonation, network enrichment and anchoring. It does not offer MSG conversion, active investigation controls or local DKIM-key ingestion. Local resource controls do not establish an OS network sandbox. The local API enforces loopback Host and same-origin requests, plus CSP and non-sniffing headers; it is intended for a single local user. `tests/integration_gui_real.py` exercises actual Chromium, API, worker and ZIP export, including hostile email bytes, timeout and cancellation. Its separate authentication-rendering contract uses real RSA DKIM results without replacing API responses.
 
 ## Repository philosophy
@@ -403,7 +408,9 @@ Use detonation only from an isolated research environment with an appropriate ou
 
 ## Offline analysis: `--no-egress`
 
-`analyze`, `trace`, `full`, `forensic`, and `quick` apply the offline policy.
+`analyze`, `trace`, `full`, `forensic`, and `quick` default to the offline policy. The first four accept mutually exclusive
+`--no-egress` and `--allow-egress` flags. The latter permits network enrichment and automatic URL detonation.
+`quick` always runs offline.
 Offline runs skip detonation, RDAP/DNS enrichment, canary deployment and remote anchoring.
 
 Offline signature verification can use explicitly supplied local public key
@@ -590,13 +597,13 @@ python -m paw --help
 ### Email analysis
 
 ```bash
-python -m paw analyze sample.eml
+python -m paw analyze sample.eml --no-egress
 ```
 
 A directory can be analyzed through the legacy `trace` interface:
 
 ```bash
-python -m paw trace --src samples/
+python -m paw trace --src samples/ --no-egress
 ```
 
 ### Verify a case
@@ -633,12 +640,12 @@ The CLI currently contains `quick`, `full`, and `forensic` shortcuts.
 
 These names describe requested workflow depth, not validation levels.
 
-Because network gating is currently incomplete, inspect the code before assuming that a preset is offline or passive.
+Email analysis presets default to offline. Active collection requires a separate isolation boundary.
 
 ## Known limitations
 
 - `--no-egress` uses application enforcement; native-code containment needs OS isolation.
-- The main trace path automatically detonates discovered URLs in the current implementation.
+- When egress is enabled, the main trace path can automatically detonate discovered URLs.
 - Several network enrichments run from the same process as forensic parsing.
 - Authentication handling primarily interprets reported results rather than independently reproducing every authentication protocol.
 - Received-path origin selection is heuristic.
