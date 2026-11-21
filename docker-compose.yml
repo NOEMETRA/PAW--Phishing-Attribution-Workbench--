@@ -1,3 +1,6 @@
 # Default to the same offline service as `docker compose -f compose.offline.yaml`.
-include:
-  - compose.offline.yaml
+services:
+  paw:
+    extends:
+      file: compose.offline.yaml
+      service: paw

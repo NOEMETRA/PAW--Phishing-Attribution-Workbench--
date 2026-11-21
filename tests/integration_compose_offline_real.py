@@ -48,8 +48,15 @@ def main():
     default = ["docker", "compose"]
     explicit = [*default, "-f", "compose.offline.yaml"]
     config_args = ["config", "--format", "json"]
-    config = json.loads(subprocess.check_output([*default, *config_args]))
-    assert config == json.loads(subprocess.check_output([*explicit, *config_args]))
+
+    def resolved(command):
+        config = json.loads(subprocess.check_output([*command, *config_args]))
+        # Some Compose versions return inherited bind mounts in target order.
+        config["services"]["paw"]["volumes"].sort(key=lambda mount: mount["target"])
+        return config
+
+    config = resolved(default)
+    assert config == resolved(explicit)
     assert set(config["services"]) == {"paw"}
     assert config["services"]["paw"]["network_mode"] == "none"
     print("Compose config: default and explicit entry points resolve to the same offline service")
