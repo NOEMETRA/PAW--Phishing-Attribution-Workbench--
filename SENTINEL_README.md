@@ -161,7 +161,9 @@ dopo 24 ore. `retention_days` stabilisce la durata delle osservazioni
 inclusi quelli da riconoscere (default uguale alle osservazioni). Tutte le
 durate esplicite richiedono giorni interi positivi. L’evento `retention` riporta
 le soglie UTC, i corpi scaduti, i metadati dei corpi illeggibili, le righe eliminate e il numero di date non interpretabili
-conservate. La scadenza riguarda i record SQLite e lascia intatti i casi EML.
+conservate. Sentinel esamina i record in gruppi e verifica gli ID e le date
+attesi prima di confermare la transazione. Un errore annulla l'intera
+scadenza. I casi EML restano intatti.
 
 ### Recupero dopo un arresto durante una scrittura
 

@@ -147,6 +147,17 @@ class SentinelOfflineCompletion(unittest.TestCase):
         with self.assertRaises(RuntimeError): self.db.cleanup_old_data(1)
         self.assertEqual(self.source(), before)
 
+    def test_retention_rolls_back_when_alert_cleanup_changes_a_check(self):
+        with self.db.connection() as conn:
+            conn.execute("UPDATE checks SET check_time='uninterpretable'")
+            conn.execute("UPDATE alerts SET alert_time='2000-01-01T00:00:00Z'")
+            conn.execute("CREATE TRIGGER changed_check AFTER DELETE ON alerts "
+                         "BEGIN UPDATE checks SET check_time='UNINTERPRETABLE'; END")
+        before = self.source()
+        with self.assertRaisesRegex(RuntimeError, 'retention did not persist'):
+            self.db.cleanup_old_data(1)
+        self.assertEqual(self.source(), before)
+
     def test_read_limits_are_validated_before_opening_sqlite(self):
         for limits in ({'max_rows':0}, {'max_rows':True}, {'unknown':1}, [], {'max_output_bytes':-1}):
             with self.subTest(limits=limits), patch('paw.sentinel.database.sqlite3.connect', side_effect=AssertionError('SQLite opened')):

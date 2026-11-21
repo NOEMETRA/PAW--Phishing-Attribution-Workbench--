@@ -81,12 +81,15 @@ def main():
             assert path == '/owned', path
             return control, arrived
 
-        def stop(proc):
+        def stop(proc, *, retention_deleted=None):
             proc.send_signal(signal.SIGTERM)
             output = proc.communicate(timeout=10)[0]
             assert proc.returncode == 0, output
             events = [json.loads(line) for line in output.splitlines() if line.startswith('{')]
             assert events[-1] == {'event': 'stopped', 'active_operations': 0}, events
+            if retention_deleted is not None:
+                retention, = [event for event in events if event['event'] == 'retention']
+                assert retention['deleted'] == retention_deleted and retention['expired_bodies'] == 1
             check_ids = [e['check_id'] for e in events if e['event'] == 'check_committed']
             for event in events:
                 if event['event'] == 'alert_committed':
@@ -140,9 +143,16 @@ def main():
             conn.execute("UPDATE campaigns SET last_check='pending'")
             assert 'sidecars' in invoke('history', '--campaign', campaign, expected=1)
             conn.rollback()
-        # After enabling automatic expiry, rows aged five days should expire
-        # under the observation window (2 days) only, preserving the alert.
+        # The first retention pass also has to handle a backlog larger than a
+        # single bounded query. Keep the five-day-old alert on its longer window.
+        backlog = 10_001
         with closing(sqlite3.connect(root / 'saved.db')) as conn, conn:
+            conn.executemany("INSERT INTO checks(campaign_id,check_time,status) "
+                             "VALUES (?,'2000-01-01T00:00:00Z','error')",
+                             ((campaign,) for _ in range(backlog)))
+            conn.executemany("INSERT INTO alerts(campaign_id,alert_time,alert_type,message) "
+                             "VALUES (?,'2000-01-01T00:00:00Z','expired','saved')",
+                             ((campaign,) for _ in range(backlog)))
             conn.execute("UPDATE checks SET check_time=strftime('%Y-%m-%dT%H:%M:%SZ','now','-36 hours') "
                          "WHERE id=?", (first_ids[-1],))
             prior_raw, prior_digest = conn.execute(
@@ -161,7 +171,7 @@ def main():
         second = launch()
         receive(second)[0].put((200, b'C'))
         receive(second)[0].put('stream')
-        second_ids, second_alerts = stop(second)
+        second_ids, second_alerts = stop(second, retention_deleted={'checks': backlog + 1, 'alerts': backlog})
         final = history()
         assert second_alerts == [final['alerts'][0]['id']]
         assert next(alert for alert in final['alerts'] if alert['id'] == selected['id']) == expected_alerts[0]
@@ -176,6 +186,8 @@ def main():
         assert final['alerts'][0]['alert_type'] == 'changed' and len(final['alerts']) == 5
         assert len([r for r in final['alerts'] if r['alert_type'] == 'legacy']) == 1
         with closing(sqlite3.connect(root / 'saved.db')) as conn:
+            assert conn.execute('SELECT COUNT(*) FROM checks').fetchone() == (len(first_ids) + 1,)
+            assert conn.execute('SELECT COUNT(*) FROM alerts').fetchone() == (5,)
             saved_raw, digest = conn.execute(
                 'SELECT metadata,content_hash FROM checks WHERE id=?', (first_ids[-1],)).fetchone()
             assert json.loads(saved_raw) == expected_metadata and digest == prior_digest
@@ -184,6 +196,7 @@ def main():
         assert requests.empty()
         print(json.dumps({'checks_before_restart': first_ids, 'checks_after_restart': second_ids,
                           'expected_alerts': 4, 'observed_alerts': len([r for r in final['alerts'] if r['alert_type'] != 'legacy']),
+                          'expired_backlog_per_table': backlog,
                           'fixture_release_to_visible_check_seconds': commit_delays,
                           'request_intervals_seconds': [round(b-a, 3) for a,b in zip(arrivals, arrivals[1:])]}))
 

@@ -1010,6 +1010,25 @@ class CampaignDatabase:
             raise RuntimeError('Sentinel body expiry did not persist; transaction rolled back')
         return 'expired'
 
+    def _retention_pages(self, conn, snapshot):
+        limit = min(self.limits['max_rows'], 500)
+        select = f'SELECT id, recorded_at FROM temp.{snapshot}'
+        rows = conn.execute(f'{select} ORDER BY id LIMIT ?', (limit,)).fetchall()
+        while rows:
+            yield rows
+            rows = conn.execute(f'{select} WHERE id > ? ORDER BY id LIMIT ?',
+                                (rows[-1][0], limit)).fetchall()
+
+    @staticmethod
+    def _retention_time(raw):
+        if not isinstance(raw, str) or len(raw) > 64 or not re.fullmatch(
+                r'\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)', raw):
+            return None
+        try:
+            return datetime.fromisoformat(raw.replace('Z', '+00:00')).astimezone(timezone.utc)
+        except (ValueError, OverflowError):
+            return None
+
     def cleanup_old_data(self, retention_days: int = 90, *, alert_retention_days: int | None = None,
                          body_retention_days: int | None = None):
         """Delete only interpretable expired check/alert rows; never case files."""
@@ -1030,36 +1049,55 @@ class CampaignDatabase:
                       'cutoffs_utc': {table: value.strftime('%Y-%m-%dT%H:%M:%SZ') for table, value in cutoffs.items()},
                       'deleted': {}, 'retained_uninterpretable': {},
                       'expired_bodies': 0, 'uninterpretable_body_ids': []}
-            for table, field in (('checks','check_time'), ('alerts','alert_time')):
-                rows = conn.execute(f'SELECT id,{field} FROM {table} ORDER BY id').fetchall()
-                if len({row[0] for row in rows}) != len(rows): raise ValueError('Ambiguous retention identifiers')
-                expired = []; unusable = []
-                for identifier, raw in rows:
-                    self._writer_number(identifier, 'retention identifier', integer=True)
-                    try:
-                        if (not isinstance(raw,str) or len(raw)>64 or not re.fullmatch(
-                                r'\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d+)?(?:Z|[+-]\d\d:\d\d)', raw)):
-                            raise ValueError('Uninterpreted time')
-                        parsed = datetime.fromisoformat(raw.replace('Z','+00:00')).astimezone(timezone.utc)
-                    except (ValueError, OverflowError):
-                        unusable.append(identifier); continue
-                    if parsed < cutoffs[table]:
-                        expired.append(identifier)
-                    elif table == 'checks' and 'bodies' in cutoffs and parsed < cutoffs['bodies']:
-                        outcome = self._expire_check_body(conn, identifier)
-                        if outcome == 'expired':
-                            result['expired_bodies'] += 1
-                        elif outcome == 'uninterpretable':
-                            result['uninterpretable_body_ids'].append(identifier)
+            sources = (('checks', 'check_time', 'retention_checks'),
+                       ('alerts', 'alert_time', 'retention_alerts'))
+            # Keep the expected ID/time pairs in SQLite, including rows whose
+            # timestamps cannot be interpreted. Compare both tables after all
+            # writes so a trigger cannot silently change the other table.
+            for table, field, snapshot in sources:
+                conn.execute(f'CREATE TEMP TABLE {snapshot} (id PRIMARY KEY, recorded_at) WITHOUT ROWID')
+                try:
+                    conn.execute(f'INSERT INTO temp.{snapshot} SELECT id, {field} FROM main.{table}')
+                except sqlite3.IntegrityError as exc:
+                    raise ValueError('Ambiguous retention identifiers') from exc
+            for table, _, snapshot in sources:
                 deleted = 0
-                for offset in range(0, len(expired), 500):
-                    batch = expired[offset:offset+500]
-                    deleted += conn.execute(f"DELETE FROM {table} WHERE id IN ({','.join('?' for _ in batch)})", batch).rowcount
-                remaining = conn.execute(f'SELECT id,{field} FROM {table} ORDER BY id').fetchall()
-                expired_ids = set(expired)
-                if deleted != len(expired) or remaining != [row for row in rows if row[0] not in expired_ids]:
+                unusable = []
+                for rows in self._retention_pages(conn, snapshot):
+                    expired = []
+                    for identifier, raw in rows:
+                        self._writer_number(identifier, 'retention identifier', integer=True)
+                        parsed = self._retention_time(raw)
+                        if parsed is None:
+                            unusable.append(identifier)
+                        elif parsed < cutoffs[table]:
+                            expired.append(identifier)
+                        elif table == 'checks' and 'bodies' in cutoffs and parsed < cutoffs['bodies']:
+                            outcome = self._expire_check_body(conn, identifier)
+                            if outcome == 'expired':
+                                result['expired_bodies'] += 1
+                            elif outcome == 'uninterpretable':
+                                result['uninterpretable_body_ids'].append(identifier)
+                    if expired:
+                        selection = f"WHERE id IN ({','.join('?' for _ in expired)})"
+                        count = conn.execute(f'DELETE FROM main.{table} {selection}', expired).rowcount
+                        if count != len(expired):
+                            raise RuntimeError('Sentinel retention did not persist exactly; transaction rolled back')
+                        conn.execute(f'DELETE FROM temp.{snapshot} {selection}', expired)
+                        deleted += count
+                result['deleted'][table] = deleted
+                result['retained_uninterpretable'][table] = unusable
+            for table, field, snapshot in sources:
+                actual, expected, matching = conn.execute(f'''
+                    SELECT (SELECT count(*) FROM main.{table}),
+                           (SELECT count(*) FROM temp.{snapshot}),
+                           (SELECT count(*) FROM (
+                               SELECT id, {field} COLLATE BINARY FROM main.{table}
+                               INTERSECT SELECT id, recorded_at FROM temp.{snapshot}
+                           ))
+                ''').fetchone()
+                if actual != expected or matching != expected:
                     raise RuntimeError('Sentinel retention did not persist exactly; transaction rolled back')
-                result['deleted'][table] = deleted; result['retained_uninterpretable'][table] = unusable
             self.check_report(result)
         return result
 
