@@ -41,25 +41,28 @@ Each invocation creates its own cases. The quick preset always uses the offline 
 
 ## Analyze offline in a Linux container
 
-From a local checkout, point Compose at two existing directories. The input
-directory is mounted read-only. The output directory must be writable by
-UID 1000, the container's runtime user.
+From a local checkout, point Docker Compose 2.20.3 or later at two existing
+directories. The input directory is mounted read-only. The output directory
+must be writable by UID 1000, the container's runtime user.
 
 ```bash
 export PAW_INPUT_DIR=/absolute/path/to/originals
 export PAW_OUTPUT_DIR=/absolute/path/to/case-output
-docker compose -f compose.offline.yaml build
-docker compose -f compose.offline.yaml run --rm paw full /input/sample.eml --no-egress
+docker compose build
+docker compose run --rm paw full /input/sample.eml --no-egress
 ```
 
 The build downloads the Python base image and dependencies. At runtime this
 profile has no external network, drops capabilities and mounts the image
 filesystem read-only. Cases are written under `PAW_OUTPUT_DIR/cases`.
-`Dockerfile` and `docker-compose.yml` are the legacy encrypted-clicking
-profile. Active browser and uplink acceptance are tracked in the
-[S14 isolation protocol](docs/s14-controlled-uplink.md).
-The historical `deploy.sh` launcher is retired. Use the installation and
-offline container commands above.
+The default configuration loads `compose.offline.yaml`, which you can also
+select with `docker compose -f compose.offline.yaml`. The image recipe is
+`Dockerfile.offline`.
+
+The legacy encrypted-clicking container and the `deploy.sh` launcher are
+retired. If an earlier deployment is still running `paw-encrypted-analyzer`,
+stop that container separately before switching profiles. Browser and uplink
+acceptance are tracked in the [S14 isolation protocol](docs/s14-controlled-uplink.md).
 
 ## Read and verify a case
 

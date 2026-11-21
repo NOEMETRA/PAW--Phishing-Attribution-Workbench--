@@ -24,7 +24,7 @@ jobs:
           mkdir -m 0755 "$PAW_INPUT_DIR"
           sudo install -d -m 0755 -o 1000 -g 1000 "$PAW_OUTPUT_DIR"
           docker compose version
-          docker compose -f compose.offline.yaml build
+          docker compose build
           python3 tests/integration_compose_offline_real.py
 
   installed-offline:

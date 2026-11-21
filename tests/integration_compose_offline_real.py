@@ -45,7 +45,15 @@ print('Compose runtime: non-root, no capabilities, no-new-privileges, isolated n
 
 
 def main():
-    compose = ["docker", "compose", "-f", "compose.offline.yaml", "run", "--rm", "-T"]
+    default = ["docker", "compose"]
+    explicit = [*default, "-f", "compose.offline.yaml"]
+    config_args = ["config", "--format", "json"]
+    config = json.loads(subprocess.check_output([*default, *config_args]))
+    assert config == json.loads(subprocess.check_output([*explicit, *config_args]))
+    assert set(config["services"]) == {"paw"}
+    assert config["services"]["paw"]["network_mode"] == "none"
+    print("Compose config: default and explicit entry points resolve to the same offline service")
+    compose = [*default, "run", "--rm", "-T"]
     input_file = Path(os.environ["PAW_INPUT_DIR"], "sample.eml")
     output = Path(os.environ["PAW_OUTPUT_DIR"])
 
