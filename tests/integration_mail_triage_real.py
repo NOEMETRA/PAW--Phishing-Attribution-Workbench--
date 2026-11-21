@@ -30,6 +30,23 @@ def main():
         'anchor-non-url': (anchor.replace('https://example.com/','Open page'), False, 'no_supported_signal'),
         'anchor-inert': ('<template>'+anchor+'</template><!--'+anchor+'-->', False, 'no_supported_signal'),
         'anchor-unclosed': (anchor.replace('</a>',''), False, 'not_evaluated'),
+        'anchor-ipv4': (anchor.replace('example.org','192.0.2.2'), False, 'review'),
+        'anchor-ipv6': (anchor.replace('example.org','[2001:db8::2]'), False, 'review'),
+        'anchor-bare-external': (anchor.replace('https://example.com/','example.net'), False, 'review'),
+        'anchor-bare-related-sender': (anchor.replace('example.org','links.example.com')
+                                       .replace('https://example.com/','example.net'), False, 'no_supported_signal'),
+        'anchor-bare-equal': (anchor.replace('https://example.com/','example.org'), False, 'no_supported_signal'),
+        'anchor-bare-ambiguous-sender': (anchor.replace('https://example.com/','example.net'), True, 'not_evaluated'),
+        'anchor-bare-path': (anchor.replace('https://example.com/','example.net/account'), False, 'no_supported_signal'),
+        'anchor-ipv4-text-action': (anchor.replace('example.org','192.0.2.2')
+                                    .replace('https://example.com/','Open page'), False, 'no_supported_signal'),
+    }
+    expected_links = {
+        'anchor-mismatch': ('displayed_link_hostname_mismatch', 'example.com', 'example.org'),
+        'anchor-ambiguous-sender': ('displayed_link_hostname_mismatch', 'example.com', 'example.org'),
+        'anchor-ipv4': ('displayed_domain_links_to_ip_address', 'example.com', '192.0.2.2'),
+        'anchor-ipv6': ('displayed_domain_links_to_ip_address', 'example.com', '2001:db8::2'),
+        'anchor-bare-external': ('bare_link_hostname_mismatch', 'example.net', 'example.org'),
     }
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
@@ -69,10 +86,12 @@ def main():
                 for key,value in [('form','<form'),('named_password_input','<input')]:
                     coords = finding[key]
                     assert text.decode().splitlines()[coords['line']-1][coords['column']:].startswith(value)
-            elif title in ('anchor-mismatch','anchor-ambiguous-sender'):
+            elif title in expected_links:
                 finding, = triage['findings']
-                assert finding['rule'] == 'displayed_link_hostname_mismatch'
-                assert (finding['displayed_hostname'], finding['destination_hostname']) == ('example.com','example.org')
+                assert (finding['rule'], finding['displayed_hostname'],
+                        finding['destination_hostname']) == expected_links[title]
+                if title == 'anchor-bare-external':
+                    assert finding['from_domain'] == 'example.com'
                 evidence = finding['source']
                 text = (case/evidence['text_path']).read_bytes()
                 assert sha256(text).hexdigest() == evidence['text_sha256']
@@ -83,7 +102,8 @@ def main():
             assert triage['referral_status'] in (case/'report/executive.md').read_text()
             subprocess.run(cli+['verify','--case',str(case)], cwd=root, check=True, capture_output=True, timeout=10)
         assert seen == tests.keys()
-    print('PASS: evidence-linked static review for four supported referrals, eleven comparison cases, fifteen valid seals.')
+    positives = sum(result == 'review' for _, _, result in tests.values())
+    print(f'PASS: {positives} evidence-linked referrals, {len(tests)-positives} comparison cases, {len(tests)} valid seals.')
 
 
 if __name__ == '__main__':

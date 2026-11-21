@@ -1,4 +1,5 @@
 """Evidence-linked review referrals from static email content."""
+from ipaddress import ip_address
 from urllib.parse import urlsplit
 
 from tldextract import TLDExtract
@@ -22,14 +23,35 @@ def _password_control(node):
     return (attrs.get('type') or '').casefold() == 'password' and bool((attrs.get('name') or '').strip())
 
 
-def _url_hostname(value):
+def _declared_host(value):
     if not value or http_url_status(value)[0] != 'completed':
         return None
     parsed = urlsplit(value)
-    return normalize_domain(parsed.hostname) if parsed.username is None else None
+    return parsed.hostname if parsed.username is None else None
 
 
-def _compare_links(text, registrable, evidence):
+def _url_hostname(value):
+    return normalize_domain(_declared_host(value))
+
+
+def _bare_hostname(label):
+    if label.isascii() and '.' in label:
+        normalized = normalize_domain(label)
+        if normalized and normalized == label.lower():
+            return normalized
+    return None
+
+
+def _literal_address(host):
+    if host and '%' not in host:
+        try:
+            return str(ip_address(host))
+        except ValueError:
+            pass
+    return None
+
+
+def _compare_links(text, registrable, evidence, sender, sender_site):
     parser = LinkLabels()
     try:
         parser.feed(text)
@@ -39,18 +61,35 @@ def _compare_links(text, registrable, evidence):
     findings = []
     compared = 0
     for href,label,(line,column) in parser.links:
-        displayed, target = _url_hostname(label), _url_hostname(href)
+        displayed = _url_hostname(label)
+        bare = displayed is None
+        if bare:
+            displayed = _bare_hostname(label)
+        declared = _declared_host(href)
+        address = _literal_address(declared)
+        target = address or normalize_domain(declared)
         if not displayed or not target:
             continue
-        displayed_site, target_site = registrable(displayed), registrable(target)
-        if not displayed_site or not target_site:
+        # A bare label is more ambiguous than a full URL. Its comparison
+        # requires a registrable From and a named destination outside it.
+        if bare and (address or sender_site is None):
+            continue
+        displayed_site = registrable(displayed)
+        target_site = None if address else registrable(target)
+        if not displayed_site or (not address and not target_site):
             parser.partial = True
             continue
         compared += 1
-        if displayed_site != target_site:
-            findings.append({'rule':'displayed_link_hostname_mismatch',
-                             'displayed_hostname':displayed,'destination_hostname':target,
-                             'anchor':{'line':line,'column':column}, **evidence})
+        if not address and (displayed_site == target_site or (bare and target_site == sender_site)):
+            continue
+        finding = {'displayed_hostname':displayed,'destination_hostname':target,
+                   'anchor':{'line':line,'column':column}, **evidence}
+        if address:
+            findings.append({'rule':'displayed_domain_links_to_ip_address', **finding})
+        elif bare:
+            findings.append({'rule':'bare_link_hostname_mismatch', 'from_domain':sender, **finding})
+        else:
+            findings.append({'rule':'displayed_link_hostname_mismatch', **finding})
     return findings, {'status':'partial' if parser.partial else 'completed', 'links_compared':compared}
 
 
@@ -121,7 +160,7 @@ def evaluate_mail_triage(html_result, body_inventory, headers, from_domain, mime
             'domain_comparison':'bundled public and private suffix snapshot',
         }
         text = document['original_html']
-        links, link_coverage = _compare_links(text, registrable, evidence)
+        links, link_coverage = _compare_links(text, registrable, evidence, sender, sender_site)
         forms, form_coverage = _compare_forms(text, analyzer.analyze_forms, sender, sender_site, registrable, evidence)
         referral['findings'].extend(links+forms)
         coverage.update(links=link_coverage, forms=form_coverage)
