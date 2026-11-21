@@ -158,9 +158,11 @@ inference on CPU and prints a separate JSON record to stdout. Store any
 redirected output outside the case directory to preserve its seal. The record
 contains separate `legitimate`, `spam` and `fraud` scores, model identifiers,
 the case root, references to captured MIME text and token coverage. The
-command has no download step. The application offline policy is active during
-inference. Use a network-isolated host or process when the operating system
-must enforce the restriction for native code.
+command has no download step. PAW sets `ORT_DISABLE_TELEMETRY=1` before loading
+ONNX Runtime and calls its telemetry-disable API before scoring. The application
+offline policy is active during inference. Use a network-isolated host or process
+when the operating system must enforce the restriction for native code.
+[ONNX Runtime telemetry controls](https://github.com/microsoft/onnxruntime/blob/main/docs/Privacy.md)
 
 Model input is the subject and normalized plain text from parser-selected
 outer MIME parts. HTML is reduced to textual content. Inference uses the

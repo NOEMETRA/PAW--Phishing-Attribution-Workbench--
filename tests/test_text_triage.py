@@ -1,6 +1,8 @@
 """Regression checks for the offline model's saved-case admission."""
+import builtins
 from hashlib import sha256
 import json
+import os
 from pathlib import Path
 import socket
 import tempfile
@@ -110,6 +112,23 @@ class CaseTextTriage(unittest.TestCase):
         digest = sha256(b'other').hexdigest()
         with self.assertRaisesRegex(ValueError, 'approved Horizon Labs revision'):
             text_triage._model_bytes(self.model, 'tokenizer.json', 5, digest)
+
+    def test_telemetry_is_disabled_before_importing_onnxruntime(self):
+        real_import = builtins.__import__
+
+        def check_runtime_import(name, *args, **kwargs):
+            if name == 'numpy':
+                return object()
+            if name == 'onnxruntime':
+                self.assertEqual(os.environ.get('ORT_DISABLE_TELEMETRY'), '1')
+                raise ImportError('fixture stops before loading the native runtime')
+            return real_import(name, *args, **kwargs)
+
+        with patch.dict(os.environ, {'ORT_DISABLE_TELEMETRY': '0'}):
+            with patch('builtins.__import__', side_effect=check_runtime_import) as importer:
+                with self.assertRaisesRegex(RuntimeError, 'text-triage'):
+                    text_triage._infer('fixture', self.model)
+                self.assertIn('onnxruntime', [call.args[0] for call in importer.call_args_list])
 
 
 if __name__ == '__main__':

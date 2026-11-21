@@ -3,6 +3,7 @@ from contextlib import redirect_stdout
 from hashlib import sha256
 import io
 import json
+import os
 import re
 
 from blake3 import blake3
@@ -142,6 +143,8 @@ def _model_bytes(directory, name, size, digest):
 
 
 def _infer(text, directory):
+    # ONNX Runtime can initialize its native uploader during import.
+    os.environ['ORT_DISABLE_TELEMETRY'] = '1'
     try:
         import numpy as np
         import onnxruntime as ort
@@ -149,12 +152,12 @@ def _infer(text, directory):
     except ImportError as exc:
         raise RuntimeError('Install PAW with the [text-triage] extra to run local inference') from exc
 
+    ort.disable_telemetry_events()
     tokenizer = Tokenizer.from_buffer(_model_bytes(directory, 'tokenizer.json', TOKENIZER_BYTES,
                                                   TOKENIZER_SHA256))
     tokenizer.no_padding()
     tokenizer.enable_truncation(max_length=TOKEN_LIMIT)
     encoded = tokenizer.encode(text)
-    ort.disable_telemetry_events()
     options = ort.SessionOptions()
     options.intra_op_num_threads = 4
     session = ort.InferenceSession(
