@@ -114,13 +114,14 @@ def run_foreground(origins, webhook=None, *, ca_file=None):
                             campaign_id, alert_id = candidate
                             try:
                                 receipt = send_saved_alert(database, campaign_id, alert_id, target,
-                                                           tls_context=tls_context)
+                                                           tls_context=tls_context, automatic=True)
                             except AlertDeliveryMissing:
                                 _event('webhook_alert_missing', campaign_id=campaign_id, alert_id=alert_id)
                             else:
-                                _event('webhook_delivery', campaign_id=campaign_id, alert_id=alert_id,
-                                       event_id=receipt['event_id'], status=receipt['status'],
-                                       attempts=receipt['attempts'], error=receipt['error'])
+                                if receipt is not None:
+                                    _event('webhook_delivery', campaign_id=campaign_id, alert_id=alert_id,
+                                           event_id=receipt['event_id'], status=receipt['status'],
+                                           attempts=receipt['attempts'], error=receipt['error'])
                     time.sleep(.1)
             finally:
                 while not monitor.stop(timeout=1):

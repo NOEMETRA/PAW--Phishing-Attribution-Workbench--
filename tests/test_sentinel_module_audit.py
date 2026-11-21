@@ -1,6 +1,7 @@
 """Sentinel lifecycle, atomic observations and unavailable inference boundaries."""
 import inspect
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from itertools import repeat
 import json
 import os
@@ -57,7 +58,7 @@ class SentinelModuleAudit(unittest.TestCase):
         self.assertIsNone(self.db.next_automatic_alert('b'*64))
         for count in range(1,7):
             self.assertEqual(self.db.next_automatic_alert(fingerprint), key)
-            attempt, _ = self.db.start_alert_delivery(*key, fingerprint)
+            attempt, _ = self.db.start_alert_delivery(*key, fingerprint, automatic=True)
             self.assertEqual((attempt['attempts'], attempt['event_id']), (count, event_id))
             self.assertIsNone(self.db.next_automatic_alert(fingerprint))
             self.db.finish_alert_delivery(*key, attempt, 'transport_error', None)
@@ -67,6 +68,32 @@ class SentinelModuleAudit(unittest.TestCase):
         self.assertIsNone(self.db.next_automatic_alert(fingerprint))
         manual, _ = self.db.start_alert_delivery(*key, fingerprint)
         self.assertEqual((manual['attempts'], manual['event_id']), (7,event_id))
+
+    def test_automatic_delivery_rechecks_cooldown_and_attempt_limit_at_claim(self):
+        fingerprint = 'a'*64
+        monitor = SentinelMonitor(self.config, self.db, webhook_fingerprint=fingerprint)
+        monitor._handle_check_result(self.result())
+        monitor._handle_check_result(self.result(digest='b'*64))
+        self.db.prepare_automatic_delivery()
+        key = self.db.next_automatic_alert(fingerprint)
+        manual = CampaignDatabase(self.db.db_path, initialize=False)
+
+        with patch('paw.sentinel.database.utc_now_iso', return_value='2026-11-21T12:00:00Z'):
+            for _ in range(5):
+                previous, _ = manual.start_alert_delivery(*key, fingerprint)
+        with patch('paw.sentinel.database.datetime', wraps=datetime) as clock:
+            clock.now.return_value = datetime(2026, 11, 21, 12, 0, 5, 900000, tzinfo=timezone.utc)
+            self.assertIsNone(self.db.next_automatic_alert(fingerprint))
+            self.assertIsNone(self.db.start_alert_delivery(*key, fingerprint, automatic=True))
+            clock.now.return_value = datetime(2026, 11, 21, 12, 0, 6, tzinfo=timezone.utc)
+            self.assertEqual(self.db.next_automatic_alert(fingerprint), key)
+
+        claimed, _ = manual.start_alert_delivery(*key, fingerprint)
+        self.assertEqual(claimed['attempts'], 6)
+        self.assertEqual(claimed['event_id'], previous['event_id'])
+        self.assertIsNone(self.db.start_alert_delivery(*key, fingerprint, automatic=True))
+        alert, = self.db.get_campaign_history(self.campaign)['alerts']
+        self.assertEqual(alert['webhook_delivery'], claimed)
 
     def test_automatic_delivery_finds_pending_event_without_scanning_archived_alerts(self):
         fingerprint = 'a'*64

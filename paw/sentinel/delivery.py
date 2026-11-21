@@ -45,13 +45,16 @@ def deliver_saved_alert(campaign_id, alert_id, destination, *, ca_file=None):
     return send_saved_alert(database, campaign_id, alert_id, target, tls_context=tls_context)
 
 
-def send_saved_alert(database, campaign_id, alert_id, target, *, tls_context=None):
+def send_saved_alert(database, campaign_id, alert_id, target, *, tls_context=None, automatic=False):
     _require_active()
 
     endpoint, fingerprint = webhook_destination(target[0])
     if fingerprint != target[1]:
         raise ValueError('Webhook destination fingerprint changed')
-    state, alert_type = database.start_alert_delivery(campaign_id, alert_id, fingerprint)
+    attempt = database.start_alert_delivery(campaign_id, alert_id, fingerprint, automatic=automatic)
+    if attempt is None:
+        return None
+    state, alert_type = attempt
     if state['status'] == 'receipt_confirmed':
         return state
     event_id = state['event_id']

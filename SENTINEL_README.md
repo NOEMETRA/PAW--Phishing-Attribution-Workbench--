@@ -94,6 +94,10 @@ Sentinel salva l'entrata in coda nella stessa transazione dell'avviso. Al
 riavvio con lo stesso destinatario riprende le consegne senza ricevuta.
 La frequenza massima è un tentativo al secondo, con almeno cinque secondi
 tra tentativi dello stesso avviso e un massimo di sei tentativi automatici.
+Dopo un tentativo, la ripresa automatica attende almeno cinque secondi
+dalla fine del secondo UTC registrato nell'archivio. Il mittente verifica
+di nuovo il limite prima di registrare il tentativo, anche se un comando
+manuale ha agito sullo stesso avviso nel frattempo.
 Dopo questo limite lo stato rimane consultabile e il comando manuale può
 riprendere la consegna allo stesso destinatario. La scadenza degli avvisi
 rimuove anche il relativo stato di consegna. Il flag `--webhook` abilita

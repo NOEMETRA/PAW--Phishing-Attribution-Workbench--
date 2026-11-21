@@ -20,21 +20,30 @@ from .config import (_storage_path, _admit_storage_path, _storage_identity, _sto
                      _resource_limits, _json_tree, _json_chunks, _encode_writer_json, _bounded_report, _require_active)
 
 
+_AUTOMATIC_ATTEMPT_LIMIT = 6
+
 # SQLite matches the indexed expression to the lookup as written. Guard
 # legacy metadata before calling any JSON function that requires valid input.
 # Skip confirmed alerts early to keep index creation within the SQL budget
 # on archives dominated by completed deliveries.
-_AUTOMATIC_QUEUE_RECEIVER = """
+_AUTOMATIC_QUEUE_RECEIVER = f"""
     CASE WHEN json_valid(metadata) THEN
         CASE json_extract(metadata,'$.webhook_delivery.status')
             WHEN 'receipt_confirmed' THEN NULL
             ELSE CASE WHEN json_type(metadata,'$.webhook_delivery.automatic') = 'true'
-                AND json_extract(metadata,'$.webhook_delivery.attempts') BETWEEN 0 AND 5
+                AND json_extract(metadata,'$.webhook_delivery.attempts') BETWEEN 0 AND {_AUTOMATIC_ATTEMPT_LIMIT - 1}
                 AND json_extract(metadata,'$.webhook_delivery.status') IN ('queued','pending','receipt_unconfirmed')
             THEN json_extract(metadata,'$.webhook_delivery.destination_sha256') END
         END
     END
 """
+
+
+def _automatic_retry_cutoff():
+    # Stored timestamps omit fractions. A retry must wait five seconds
+    # beyond the entire recorded second, including its unknown fraction.
+    before = datetime.now(timezone.utc) - timedelta(seconds=6)
+    return before.strftime('%Y-%m-%dT%H:%M:%SZ')
 
 
 class _StoredJSONError(ValueError):
@@ -917,7 +926,6 @@ class CampaignDatabase:
     def next_automatic_alert(self, fingerprint):
         """Select one due event from the durable queue for the configured receiver."""
         _require_active()
-        before = datetime.now(timezone.utc) - timedelta(seconds=5)
         with self.connection() as conn:
             return conn.execute(f"""
                 SELECT campaign_id, id FROM alerts
@@ -927,7 +935,7 @@ class CampaignDatabase:
                         OR json_extract(metadata,'$.webhook_delivery.updated_at') <= ?
                     END
                 ORDER BY id LIMIT 1
-            """, (fingerprint, before.strftime('%Y-%m-%dT%H:%M:%SZ'))).fetchone()
+            """, (fingerprint, _automatic_retry_cutoff())).fetchone()
 
     @contextmanager
     def _alert_delivery_row(self, campaign_id, alert_id):
@@ -959,7 +967,7 @@ class CampaignDatabase:
                     raise RuntimeError('Sentinel delivery state did not persist')
             conn.commit()
 
-    def start_alert_delivery(self, campaign_id, alert_id, destination_hash):
+    def start_alert_delivery(self, campaign_id, alert_id, destination_hash, *, automatic=False):
         _require_active()
         with self._alert_delivery_row(campaign_id, alert_id) as (alert_type, metadata):
             if type(alert_type) is not str or not 0 < len(alert_type) <= 128:
@@ -969,11 +977,18 @@ class CampaignDatabase:
                 if not self._valid_delivery_state(state):
                     raise ValueError('Unreadable saved webhook state')
             else:
+                if automatic:
+                    return None
                 state = {'event_id':uuid.uuid4().hex, 'destination_sha256':destination_hash,
                          'attempts':0, 'status':'pending'}
                 metadata['webhook_delivery'] = state
             if state['destination_sha256'] != destination_hash:
                 raise ValueError('Saved alert delivery is already bound to another recipient')
+            # A manual delivery may have changed eligibility after the queue lookup.
+            if automatic and (not state.get('automatic') or state['status'] == 'receipt_confirmed'
+                              or state['attempts'] >= _AUTOMATIC_ATTEMPT_LIMIT
+                              or (state['attempts'] > 0 and state['updated_at'] > _automatic_retry_cutoff())):
+                return None
             if state['status'] != 'receipt_confirmed':
                 state.update(status='pending', attempts=state['attempts']+1,
                              http_status=None, error=None, updated_at=utc_now_iso())
