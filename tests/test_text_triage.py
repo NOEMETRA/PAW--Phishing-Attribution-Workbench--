@@ -93,6 +93,18 @@ class CaseTextTriage(unittest.TestCase):
         self.assertEqual(result['status'], 'not_evaluated')
         self.assertIsNone(result['scores'])
 
+    def test_html_line_and_cell_boundaries_preserve_inline_words(self):
+        text = ('Your<br>account<br/>has<table><tr><td>been</td>'
+                '<td>sus<strong>pend</strong>ed</td></tr></table>today')
+        self.text_path.write_bytes(text.encode())
+        self.part['text_sha256'] = sha256(text.encode()).hexdigest()
+        self.write('mime_body_evidence.json', {'status': 'partial', 'parts': [self.part]})
+        seal_case(self.case)
+        scores = {'legitimate': 0.1, 'spam': 0.2, 'fraud': 0.7}
+        with patch.object(text_triage, '_infer', return_value=(scores, 9, False, 'fixture')) as infer:
+            text_triage.assess_case(self.case, self.model)
+        infer.assert_called_once_with('Subject\nYour account has been suspended today', self.model.resolve())
+
     def test_model_loader_checks_exact_bytes_even_at_expected_size(self):
         (self.model/'tokenizer.json').write_bytes(b'inert')
         digest = sha256(b'other').hexdigest()

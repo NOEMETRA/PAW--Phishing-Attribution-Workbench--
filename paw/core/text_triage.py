@@ -9,8 +9,8 @@ from blake3 import blake3
 
 from .batch import read_source_bytes
 from .evidence import file_inventory
+from .html_contexts import HTMLTextContextParser
 from .job_registry import require_stopped_case
-from .mime_analysis import HtmlEvidenceParser
 from .network_policy import offline_policy
 from .source_inspection import admit_path
 from .verify import verify_case
@@ -25,6 +25,31 @@ TOKENIZER_BYTES = 34_363_286
 LABELS = ('legitimate', 'spam', 'fraud')
 TOKEN_LIMIT = 384
 TEXT_BYTE_LIMIT = 8 * 1024**2
+
+
+class _ModelTextParser(HTMLTextContextParser):
+    _BOUNDARIES = frozenset({
+        'address', 'article', 'aside', 'blockquote', 'br', 'dd', 'div', 'dl', 'dt',
+        'fieldset', 'figcaption', 'figure', 'footer', 'form', 'h1', 'h2', 'h3', 'h4',
+        'h5', 'h6', 'header', 'hr', 'li', 'main', 'nav', 'ol', 'p', 'pre', 'section',
+        'table', 'tbody', 'td', 'tfoot', 'th', 'thead', 'tr', 'ul',
+    })
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.fragments = []
+
+    def handle_starttag(self, tag, attrs):
+        if tag in self._BOUNDARIES:
+            self.fragments.append(' ')
+
+    def handle_endtag(self, tag):
+        if tag in self._BOUNDARIES:
+            self.fragments.append(' ')
+
+    def handle_data(self, data):
+        if self.cdata_elem not in ('script', 'style'):
+            self.fragments.append(self.text_data(data))
 
 
 def _case_text(case):
@@ -86,10 +111,10 @@ def _case_text(case):
             raise ValueError('Case MIME text hash mismatch')
         text = raw.decode('utf-8')
         if media_type == 'text/html':
-            parser = HtmlEvidenceParser()
+            parser = _ModelTextParser()
             parser.feed(text)
             parser.close()
-            text = ''.join(parser.text)
+            text = ''.join(parser.fragments)
         normalized = ' '.join(text.split())
         if normalized and normalized not in seen:
             seen.add(normalized)
