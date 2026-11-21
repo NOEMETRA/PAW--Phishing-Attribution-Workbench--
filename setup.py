@@ -27,7 +27,6 @@ setup(
     author='PAW Development Team',
     author_email='security@example.com',
     url='https://github.com/yourusername/paw',
-    license='Proprietary',
 
     # Package configuration
     packages=find_packages(exclude=['tests', 'tests.*', 'SAVE', 'SAVE.*']),
