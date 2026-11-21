@@ -1,7 +1,10 @@
 import asyncio
 import io
+import json
+import os
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 import zipfile
@@ -78,6 +81,64 @@ class TransferLifecycle(unittest.IsolatedAsyncioTestCase):
                         self.assertEqual(saved[0].read_bytes(), b'x' * (1024**2 + 1))
                     else:
                         self.assertFalse(list(directory.iterdir()))
+
+    async def test_cancelled_upload_copy_releases_its_output(self):
+        for route in (api.upload_email, api.upload_source):
+            with self.subTest(route=route.__name__), tempfile.TemporaryDirectory() as tmp:
+                directory = Path(tmp)
+                copying = asyncio.Event()
+                wait = asyncio.Event()
+
+                class InterruptedFile:
+                    filename = 'fixture.eml'
+
+                    async def read(self, _size):
+                        if not copying.is_set():
+                            copying.set()
+                            return b'fixture'
+                        await wait.wait()
+                        return b''
+
+                with patch.object(api, 'UPLOAD_DIR', directory):
+                    task = asyncio.create_task(route(InterruptedFile()))
+                    await asyncio.wait_for(copying.wait(), 1)
+                    self.assertEqual(len(list(directory.iterdir())), 1)
+                    task.cancel()
+                    with self.assertRaises(asyncio.CancelledError):
+                        await task
+                self.assertFalse(list(directory.iterdir()))
+
+    async def test_email_name_failure_rolls_back_and_success_files_are_private(self):
+        data = b'From: fixture@example.invalid\r\n\r\nFixture body\r\n'
+        with tempfile.TemporaryDirectory() as tmp, patch.object(api, 'UPLOAD_DIR', Path(tmp)):
+            filename = 'fixture.eml'
+            with patch.object(Path, 'replace', side_effect=OSError('fixture rename failure')):
+                with self.assertRaisesRegex(OSError, 'fixture rename failure'):
+                    await api.upload_email(api.UploadFile(io.BytesIO(data), filename=filename))
+            self.assertFalse(list(Path(tmp).iterdir()))
+            result = await api.upload_email(api.UploadFile(io.BytesIO(data), filename=filename))
+            path = Path(result['path'])
+            metadata = path.with_suffix('.eml.json')
+            self.assertEqual(path.read_bytes(), data)
+            self.assertEqual(json.loads(metadata.read_text()), {'filename': filename})
+            self.assertEqual(set(Path(tmp).iterdir()), {path, metadata})
+            if os.name == 'posix':
+                self.assertEqual(path.stat().st_mode & 0o077, 0)
+                self.assertEqual(metadata.stat().st_mode & 0o077, 0)
+
+    async def test_exclusive_upload_creation_keeps_an_existing_file(self):
+        for route, suffix in ((api.upload_email, '.eml'), (api.upload_source, '.source')):
+            with self.subTest(route=route.__name__), tempfile.TemporaryDirectory() as tmp:
+                directory = Path(tmp)
+                identifier = '0' * 32
+                existing = directory / (identifier + suffix)
+                existing.write_bytes(b'previously saved data')
+                with patch.object(api, 'UPLOAD_DIR', directory), patch.object(
+                        api.uuid, 'uuid4', return_value=SimpleNamespace(hex=identifier)):
+                    with self.assertRaises(FileExistsError):
+                        await route(api.UploadFile(io.BytesIO(b'new data'), filename='fixture.eml'))
+                self.assertEqual(existing.read_bytes(), b'previously saved data')
+                self.assertEqual(list(directory.iterdir()), [existing])
 
     async def test_distinct_downloads_disconnect_and_crash_recovery(self):
         with tempfile.TemporaryDirectory() as tmp:

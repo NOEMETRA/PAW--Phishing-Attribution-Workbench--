@@ -153,6 +153,11 @@ Run `paw gui` (or `python -m paw gui`) to open the replacement interface at `htt
 
 The old Tkinter workflow has been replaced. The new interface uploads original EML files, starts actual offline workers, displays observed stages and total elapsed time, cancels jobs, reopens persisted history/cases, verifies evidence and exports real ZIP packages. It separates execution status, assessment coverage, heuristic score and local file integrity. Attachments are metadata only; reports and captured content are inert text, with no clickable email URLs. Desktop/mobile layouts and keyboard-operated tabs are included. All assets are packaged locally, without a CDN or a frontend build step.
 
+The local API accepts up to 25 MiB per email and 16 MiB per opaque source.
+It removes partial uploads when the final copy is canceled or the filename
+metadata cannot be saved. On POSIX, saved uploads and filename metadata
+are accessible only to the account that owns the files.
+
 The UI always requests `no_egress=true` and excludes detonation, network enrichment and anchoring. It does not offer MSG conversion, active investigation controls or local DKIM-key ingestion. Local resource controls do not establish an OS network sandbox. The local API enforces loopback Host and same-origin requests, plus CSP and non-sniffing headers; it is intended for a single local user. `tests/integration_gui_real.py` exercises actual Chromium, API, worker and ZIP export, including hostile email bytes, timeout and cancellation. Its separate authentication-rendering contract uses real RSA DKIM results without replacing API responses.
 
 ## Repository philosophy

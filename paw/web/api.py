@@ -309,20 +309,47 @@ async def inspect_uploaded_representations(request: RepresentationRequest, backg
     background_tasks.add_task(run_analysis, identifier, path, None, {}, limits)
     return {'status': 'queued', 'analysis_id': identifier, 'kind': job['kind']}
 
+def _open_private_upload(path, flags):
+    return os.open(path, flags, 0o600)
+
+
+def _save_upload_name(path, filename):
+    metadata = path.with_suffix(path.suffix + '.json')
+    temporary = metadata.with_suffix('.tmp')
+    stream = open(temporary, 'x', encoding='utf-8', opener=_open_private_upload)
+    try:
+        with stream:
+            json.dump({'filename': filename}, stream, indent=2)
+        temporary.replace(metadata)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+async def _persist_upload(file, path, limit, limit_error, *, original_name=None, chunk_size=65536):
+    size = 0
+    stream = open(path, 'xb', opener=_open_private_upload)
+    try:
+        with stream:
+            while chunk := await file.read(chunk_size):
+                size += len(chunk)
+                if size > limit:
+                    raise HTTPException(413, limit_error)
+                stream.write(chunk)
+        if original_name is not None:
+            if not size:
+                raise HTTPException(400, 'Empty email')
+            _save_upload_name(path, original_name)
+    except BaseException:
+        path.unlink(missing_ok=True)
+        raise
+    return size
+
+
 @app.post('/api/sources/upload')
 async def upload_source(file: UploadFile = File(...)):
     """Opaque bytes, including empty/binary; no MIME or extension admission."""
     path = UPLOAD_DIR / (uuid.uuid4().hex + '.source')
-    size = 0
-    try:
-        with os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), 'wb') as stream:
-            while chunk := await file.read(65536):
-                size += len(chunk)
-                if size > SOURCE_UPLOAD_BYTES: raise HTTPException(413, 'Source exceeds 16 MiB')
-                stream.write(chunk)
-    except Exception:
-        path.unlink(missing_ok=True)
-        raise
+    size = await _persist_upload(file, path, SOURCE_UPLOAD_BYTES, 'Source exceeds 16 MiB')
     return {'status': 'success', 'filename': path.name, 'path': str(path), 'size': size,
             'coverage': 'opaque bytes only; no interpretation or execution'}
 
@@ -364,20 +391,9 @@ async def upload_email(file: UploadFile = File(...)):
     if extension not in {'.eml', '.msg'}:
         raise HTTPException(400, 'Only .eml and .msg files supported')
     path = UPLOAD_DIR / (uuid.uuid4().hex + extension)
-    size = 0
-    try:
-        with path.open('xb') as stream:
-            while chunk := await file.read(1024 * 1024):
-                size += len(chunk)
-                if size > EMAIL_UPLOAD_BYTES:
-                    raise HTTPException(413, 'Email exceeds 25 MiB')
-                stream.write(chunk)
-        if not size: raise HTTPException(400, 'Empty email')
-    except Exception:
-        path.unlink(missing_ok=True)
-        raise
     original_name = Path((file.filename or '').replace('\\','/')).name
-    save(path.with_suffix(path.suffix+'.json'),{'filename':original_name})
+    size = await _persist_upload(file, path, EMAIL_UPLOAD_BYTES, 'Email exceeds 25 MiB',
+                                 original_name=original_name, chunk_size=1024**2)
     return {'status':'success', 'filename':path.name, 'original_name':original_name, 'path':str(path), 'size':size}
 
 @app.post('/api/analyze')
