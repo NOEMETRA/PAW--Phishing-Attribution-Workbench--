@@ -12,7 +12,7 @@ from .evidence import file_inventory
 from .job_registry import require_stopped_case
 from .mime_analysis import HtmlEvidenceParser
 from .network_policy import offline_policy
-from .source_inspection import SourceLimits, acquire_source, admit_path
+from .source_inspection import admit_path
 from .verify import verify_case
 
 
@@ -27,10 +27,6 @@ TOKEN_LIMIT = 384
 TEXT_BYTE_LIMIT = 8 * 1024**2
 
 
-def _capture(path, limit):
-    return acquire_source(path, SourceLimits(input_bytes=limit)).raw
-
-
 def _case_text(case):
     files = file_inventory(case)
     scope_name = 'evidence/inventory_scope.json'
@@ -41,20 +37,21 @@ def _case_text(case):
     require_stopped_case(case)
     index_path = case/'evidence/merkle_index.json'
     root_path = case/'evidence/merkle_root.bin'
-    index_bytes = _capture(index_path, 8 * 1024**2)
-    root_bytes = _capture(root_path, 128)
+    index_bytes = read_source_bytes(index_path, 8 * 1024**2)
+    root_bytes = read_source_bytes(root_path, 128)
     index = json.loads(index_bytes)
     with redirect_stdout(io.StringIO()):
         valid = verify_case(case)
     if not valid:
         raise ValueError('Case evidence seal failed verification')
-    if _capture(index_path, 8 * 1024**2) != index_bytes or _capture(root_path, 128) != root_bytes:
+    if (read_source_bytes(index_path, 8 * 1024**2) != index_bytes
+            or read_source_bytes(root_path, 128) != root_bytes):
         raise ValueError('Case evidence seal changed during verification')
 
     def sealed(relative, limit):
         if relative not in index or relative not in files:
             raise ValueError(f'Case evidence missing from inventory: {relative}')
-        raw = _capture(files[relative], limit)
+        raw = read_source_bytes(files[relative], limit)
         if blake3(raw).hexdigest() != index[relative]:
             raise ValueError(f'Case evidence changed during reading: {relative}')
         return raw
