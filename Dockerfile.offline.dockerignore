@@ -3,6 +3,7 @@
 !paw/**
 !pyproject.toml
 !setup.py
+!MANIFEST.in
 !requirements.txt
 !README.md
 !LICENSE

@@ -47,6 +47,7 @@ print('Compose runtime: non-root, no capabilities, no-new-privileges, isolated n
 def main():
     default = ["docker", "compose"]
     explicit = [*default, "-f", "compose.offline.yaml"]
+    text_triage = [*default, "-f", "compose.text-triage.yaml"]
     config_args = ["config", "--format", "json"]
 
     def resolved(command):
@@ -60,7 +61,16 @@ def main():
     assert set(config["services"]) == {"paw"}
     assert config["services"]["paw"]["network_mode"] == "none"
     print("Compose config: default and explicit entry points resolve to the same offline service")
+    base = config["services"]["paw"]
+    expected_text_triage = base | {
+        "image": "paw-offline:text-triage",
+        "pull_policy": "never",
+        "build": base["build"] | {"args": {"PAW_TEXT_TRIAGE": "1"}},
+    }
+    assert resolved(text_triage) == config | {"services": {"paw": expected_text_triage}}
+    print("Compose config: the text-triage image inherits the offline runtime")
     compose = [*default, "run", "--rm", "-T"]
+    compose_text_triage = [*text_triage, "run", "--rm", "-T"]
     input_file = Path(os.environ["PAW_INPUT_DIR"], "sample.eml")
     output = Path(os.environ["PAW_OUTPUT_DIR"])
 
@@ -76,10 +86,11 @@ def main():
             f"Local test endpoint http://127.0.0.1:{port}/fixture\r\n"
         ).encode("ascii")
         input_file.write_bytes(original)
-        subprocess.run(
-            [*compose, "--entrypoint", "/opt/paw/bin/python", "paw", "-c", ISOLATION_PROBE, str(port)],
-            check=True,
-        )
+        for profile in (compose, compose_text_triage):
+            subprocess.run(
+                [*profile, "--entrypoint", "/opt/paw/bin/python", "paw", "-c", ISOLATION_PROBE, str(port)],
+                check=True,
+            )
         subprocess.run([*compose, "paw", "full", "/input/sample.eml", "--no-egress"], check=True)
         listener.setblocking(False)
         try:
@@ -102,6 +113,22 @@ def main():
         assert archive.testzip() is None
         assert archive.read(f"{case.name}/input.eml") == original
     print("Compose case: original preserved, offline policy recorded, seal and ZIP verified")
+
+    model = input_file.parent / "model"
+    model.mkdir()
+    (model / "tokenizer.json").write_bytes(b"inert invalid model fixture")
+    result = subprocess.run(
+        [*compose_text_triage, "paw", "assess-text", "--case", container_case,
+         "--model-dir", "/input/model"],
+        capture_output=True, text=True, timeout=30,
+    )
+    assert result.returncode == 1, result
+    assert "File does not match the approved Horizon Labs revision: tokenizer.json" in (
+        result.stdout + result.stderr
+    ), result
+    subprocess.run([*compose_text_triage, "paw", "verify", "--case", container_case], check=True)
+    assert stored_input.read_bytes() == original
+    print("Compose text assessment: dependencies available and mismatched model rejected before scoring")
 
 
 if __name__ == "__main__":

@@ -1,0 +1,10 @@
+services:
+  paw:
+    extends:
+      file: compose.offline.yaml
+      service: paw
+    image: paw-offline:text-triage
+    pull_policy: never
+    build:
+      args:
+        PAW_TEXT_TRIAGE: "1"

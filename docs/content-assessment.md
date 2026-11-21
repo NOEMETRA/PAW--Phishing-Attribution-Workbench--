@@ -153,6 +153,19 @@ Run against a completed local case after the analysis worker has stopped.
 paw assess-text --case cases/CASE_DIRECTORY --model-dir /path/to/horizon-model
 ```
 
+On Linux with Docker Compose, use the [offline container setup](../QUICKSTART.md#analyze-offline-in-a-linux-container)
+and put the two local model files under `$PAW_INPUT_DIR/model`. Build the
+optional image, then point it at an existing case under `$PAW_OUTPUT_DIR/cases`.
+
+```bash
+docker compose -f compose.text-triage.yaml build
+docker compose -f compose.text-triage.yaml run --rm paw assess-text \
+  --case /data/cases/CASE_DIRECTORY --model-dir /input/model
+```
+
+The image installs inference dependencies at build time. The mounted model
+files are read-only and the container has only its loopback interface.
+
 The command checks the case seal and the model files' SHA-256 digests, runs
 inference on CPU and prints a separate JSON record to stdout. Store any
 redirected output outside the case directory to preserve its seal. The record
