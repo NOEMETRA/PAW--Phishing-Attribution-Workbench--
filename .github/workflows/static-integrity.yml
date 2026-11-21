@@ -19,6 +19,8 @@ jobs:
           python-version: "3.11"
       - name: Compile project sources
         run: python -m compileall -q paw
+      - name: Verify retired deployment launchers stop before side effects
+        run: python -B -m unittest discover -s tests -p 'test_legacy_shell_boundaries.py' -v
       - name: Compile inert S14 validation tools without launching a guest or network
         run: python -m py_compile lab/s14/*.py
       - name: Verify inert S14 target admission and quarantine contracts

@@ -58,6 +58,8 @@ filesystem read-only. Cases are written under `PAW_OUTPUT_DIR/cases`.
 `Dockerfile` and `docker-compose.yml` are the legacy encrypted-clicking
 profile. Active browser and uplink acceptance are tracked in the
 [S14 isolation protocol](docs/s14-controlled-uplink.md).
+The historical `deploy.sh` launcher is retired. Use the installation and
+offline container commands above.
 
 ## Read and verify a case
 

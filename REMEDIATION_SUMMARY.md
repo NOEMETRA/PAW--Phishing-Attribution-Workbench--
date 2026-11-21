@@ -1,5 +1,8 @@
 # PAW v2.0 - Security Remediation Summary
 
+> Historical record from November 2025. Current installation and deployment
+> information is in the [Quick Start](QUICKSTART.md).
+
 ## Executive Summary
 
 **Project:** PAW (Phishing Attribution Workbench)

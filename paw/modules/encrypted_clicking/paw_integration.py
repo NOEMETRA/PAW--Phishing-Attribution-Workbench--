@@ -1,9 +1,6 @@
 # paw_integration.py - Integrazione del modulo encrypted clicking con PAW
-import docker
 import json
 import os
-import tempfile
-import subprocess
 import logging
 from datetime import datetime
 from typing import Dict, List, Optional, Any
@@ -12,66 +9,13 @@ logger = logging.getLogger(__name__)
 
 class PAWEncryptedClicking:
     def __init__(self):
-        self.docker_client = None
-        self.container_image = "paw-encrypted-clicker:latest"
         self.cases_dir = os.path.join(os.getcwd(), "cases")
         os.makedirs(self.cases_dir, exist_ok=True)
 
-    def _get_docker_client(self):
-        """Get Docker client lazily"""
-        if self.docker_client is None:
-            try:
-                import docker
-                self.docker_client = docker.from_env()
-            except Exception as e:
-                logger.error(f"Errore inizializzazione Docker: {e}")
-                raise
-        return self.docker_client
-
     def build_clicker_image(self):
-        """Costruisce l'immagine Docker per il clicking crittografato"""
-        try:
-            logger.info("Costruzione immagine Docker per encrypted clicking...")
-
-            dockerfile_content = """FROM selenium/standalone-chrome:latest
-RUN apt-get update && apt-get install -y \\
-    python3-pip \\
-    openssl \\
-    cryptsetup \\
-    && rm -rf /var/lib/apt/lists/*
-WORKDIR /app
-COPY requirements.txt .
-RUN pip3 install -r requirements.txt
-COPY encrypted_clicker.py .
-COPY paw_integration.py .
-RUN mkdir -p /encrypted_storage
-VOLUME /encrypted_storage
-COPY init_crypto.sh .
-RUN chmod +x init_crypto.sh
-CMD ["./init_crypto.sh"]"""
-
-            # Scrivi Dockerfile temporaneo
-            with tempfile.NamedTemporaryFile(mode='w', suffix='.dockerfile', delete=False) as f:
-                f.write(dockerfile_content)
-                dockerfile_path = f.name
-
-            # Costruisci immagine
-            self._get_docker_client().images.build(
-                path=os.path.dirname(__file__),
-                dockerfile=dockerfile_path,
-                tag=self.container_image,
-                rm=True
-            )
-
-            # Pulisci file temporaneo
-            os.unlink(dockerfile_path)
-
-            logger.info("Immagine Docker costruita con successo")
-            return True
-
-        except Exception as e:
-            logger.error(f"Errore costruzione immagine: {e}")
-            return False
+        """Retain the legacy caller's boolean failure contract."""
+        logger.warning("Legacy encrypted-clicking image build is retired.")
+        return False
 
     def analyze_url_safely(self, url: str, case_id: str, enable_js: bool = False,
                           interaction_script: Optional[List[Dict]] = None) -> Dict[str, Any]:
@@ -167,19 +111,17 @@ def main():
     parser = argparse.ArgumentParser(description='PAW Encrypted Clicking Module')
     parser.add_argument('url', help='URL da analizzare')
     parser.add_argument('--case-id', default='test_case', help='ID del caso')
-    parser.add_argument('--build', action='store_true', help='Costruisci immagine Docker')
+    parser.add_argument('--build', action='store_true', help='Opzione ritirata')
     parser.add_argument('--js', action='store_true', help='Abilita JavaScript')
     parser.add_argument('--phishing-type', choices=['generic', 'credential_harvesting', 'banking'],
                        default='generic', help='Tipo di phishing per script interazione')
 
     args = parser.parse_args()
 
-    paw_clicker = PAWEncryptedClicking()
-
     if args.build:
-        success = paw_clicker.build_clicker_image()
-        if not success:
-            exit(1)
+        parser.exit(1, "Legacy encrypted-clicking image build is retired. See the PAW Quick Start.\n")
+
+    paw_clicker = PAWEncryptedClicking()
 
     # Genera script interazione
     interaction_script = paw_clicker.generate_interaction_script(args.url, args.phishing_type)
