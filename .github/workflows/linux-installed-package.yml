@@ -9,6 +9,24 @@ permissions:
   contents: read
 
 jobs:
+  compose-offline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build and verify the offline Compose profile
+        env:
+          PAW_INPUT_DIR: ${{ runner.temp }}/paw-compose-input
+          PAW_OUTPUT_DIR: ${{ runner.temp }}/paw-compose-output
+        run: |
+          mkdir -m 0755 "$PAW_INPUT_DIR"
+          sudo install -d -m 0755 -o 1000 -g 1000 "$PAW_OUTPUT_DIR"
+          docker compose version
+          docker compose -f compose.offline.yaml build
+          python3 tests/integration_compose_offline_real.py
+
   installed-offline:
     runs-on: ubuntu-latest
     timeout-minutes: 10
