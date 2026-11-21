@@ -123,9 +123,9 @@ def main():
         capture_output=True, text=True, timeout=30,
     )
     assert result.returncode == 1, result
-    assert "File does not match the approved Horizon Labs revision: tokenizer.json" in (
-        result.stdout + result.stderr
-    ), result
+    # Rich can wrap the error across several lines within a bordered panel.
+    error = " ".join((result.stdout + result.stderr).replace("│", " ").split())
+    assert "File does not match the approved Horizon Labs revision: tokenizer.json" in error, result
     subprocess.run([*compose_text_triage, "paw", "verify", "--case", container_case], check=True)
     assert stored_input.read_bytes() == original
     print("Compose text assessment: dependencies available and mismatched model rejected before scoring")
