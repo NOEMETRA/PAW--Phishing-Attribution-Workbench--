@@ -80,6 +80,8 @@ def run_foreground(origins, webhook=None, *, ca_file=None):
                               tls_context=tls_context)
         for campaign in database.get_active_campaigns():
             monitor._admit_campaign(campaign)
+        if target:
+            database.prepare_automatic_delivery()
         monitor.on_check_complete(lambda row: _event('check_committed', campaign_id=row['campaign_id'],
                                                      check_id=row['check_id'], status=row['status']))
         monitor.on_alert(lambda row: _event('alert_committed', campaign_id=row['campaign_id'],

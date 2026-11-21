@@ -97,7 +97,10 @@ tra tentativi dello stesso avviso e un massimo di sei tentativi automatici.
 Dopo questo limite lo stato rimane consultabile e il comando manuale può
 riprendere la consegna allo stesso destinatario. La scadenza degli avvisi
 rimuove anche il relativo stato di consegna. Il flag `--webhook` abilita
-l'invio soltanto per gli avvisi entrati in coda con quell'URL. La consegna
+l'invio soltanto per gli avvisi entrati in coda con quell'URL. All'avvio
+Sentinel crea l'indice degli avvisi ancora candidati alla consegna automatica.
+Gli avvisi confermati o con tutti i tentativi automatici esauriti restano
+nella cronologia fino alla scadenza. La consegna
 automatica su endpoint pubblici resta aperta.
 
 Per HTTPS con una CA privata, passare a `monitor run` o `monitor deliver`

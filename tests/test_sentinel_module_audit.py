@@ -1,6 +1,7 @@
 """Sentinel lifecycle, atomic observations and unavailable inference boundaries."""
 import inspect
 from contextlib import contextmanager
+from itertools import repeat
 import json
 import os
 import sys
@@ -46,6 +47,7 @@ class SentinelModuleAudit(unittest.TestCase):
 
     def test_automatic_delivery_retries_only_due_events_for_the_bound_receiver(self):
         fingerprint = 'a'*64
+        self.db.prepare_automatic_delivery()
         monitor = SentinelMonitor(self.config, self.db, webhook_fingerprint=fingerprint)
         monitor._handle_check_result(self.result())
         monitor._handle_check_result(self.result(digest='b'*64))
@@ -65,6 +67,27 @@ class SentinelModuleAudit(unittest.TestCase):
         self.assertIsNone(self.db.next_automatic_alert(fingerprint))
         manual, _ = self.db.start_alert_delivery(*key, fingerprint)
         self.assertEqual((manual['attempts'], manual['event_id']), (7,event_id))
+
+    def test_automatic_delivery_finds_pending_event_without_scanning_archived_alerts(self):
+        fingerprint = 'a'*64
+        archived = {
+            'automatic': True, 'event_id': 'c'*32, 'destination_sha256': fingerprint,
+            'status': 'receipt_confirmed', 'attempts': 1, 'http_status': 202,
+            'error': None, 'updated_at': '2020-01-01T00:00:00Z',
+        }
+        with self.db.connection() as conn:
+            insert = """INSERT INTO alerts (campaign_id, alert_time, alert_type, message, metadata)
+                        VALUES (?, '2020-01-01T00:00:00Z', 'changed', 'fixture', ?)"""
+            conn.executemany(insert, repeat((self.campaign, json.dumps({'webhook_delivery': archived})), 10_000))
+            conn.execute(insert, (self.campaign, '{legacy text'))
+        monitor = SentinelMonitor(self.config, self.db, webhook_fingerprint=fingerprint)
+        monitor._handle_check_result(self.result())
+        monitor._handle_check_result(self.result(digest='b'*64))
+        self.db.prepare_automatic_delivery()
+        bounded = CampaignDatabase(self.db.db_path, initialize=False, limits={'max_sql_steps': 500})
+        alert, = self.db.get_campaign_history(self.campaign)['alerts'][:1]
+        self.assertEqual(bounded.next_automatic_alert(fingerprint), (self.campaign, alert['id']))
+        self.assertIsNone(bounded.next_automatic_alert('b'*64))
 
     def test_stop_interrupts_interval_and_confirms_thread_shutdown(self):
         self.assertIn('timeout',inspect.signature(self.monitor.stop).parameters)

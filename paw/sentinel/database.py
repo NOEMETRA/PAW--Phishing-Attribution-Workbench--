@@ -20,6 +20,23 @@ from .config import (_storage_path, _admit_storage_path, _storage_identity, _sto
                      _resource_limits, _json_tree, _json_chunks, _encode_writer_json, _bounded_report, _require_active)
 
 
+# SQLite matches the indexed expression to the lookup as written. Guard
+# legacy metadata before calling any JSON function that requires valid input.
+# Skip confirmed alerts early to keep index creation within the SQL budget
+# on archives dominated by completed deliveries.
+_AUTOMATIC_QUEUE_RECEIVER = """
+    CASE WHEN json_valid(metadata) THEN
+        CASE json_extract(metadata,'$.webhook_delivery.status')
+            WHEN 'receipt_confirmed' THEN NULL
+            ELSE CASE WHEN json_type(metadata,'$.webhook_delivery.automatic') = 'true'
+                AND json_extract(metadata,'$.webhook_delivery.attempts') BETWEEN 0 AND 5
+                AND json_extract(metadata,'$.webhook_delivery.status') IN ('queued','pending','receipt_unconfirmed')
+            THEN json_extract(metadata,'$.webhook_delivery.destination_sha256') END
+        END
+    END
+"""
+
+
 class _StoredJSONError(ValueError):
     """A syntactically accepted value is ambiguous or non-finite."""
 
@@ -887,26 +904,28 @@ class CampaignDatabase:
                      state['http_status'] is not None and 200 <= state['http_status'] < 300
                      and state['error'] is None))
 
+    def prepare_automatic_delivery(self):
+        """Index the eligible queue when the foreground sender is enabled."""
+        _require_active()
+        with self.connection() as conn:
+            conn.execute(f"""
+                CREATE INDEX IF NOT EXISTS sentinel_automatic_queue_receiver
+                ON alerts (({_AUTOMATIC_QUEUE_RECEIVER}), id)
+                WHERE ({_AUTOMATIC_QUEUE_RECEIVER}) IS NOT NULL
+            """)
+
     def next_automatic_alert(self, fingerprint):
         """Select one due event from the durable queue for the configured receiver."""
         _require_active()
         before = datetime.now(timezone.utc) - timedelta(seconds=5)
         with self.connection() as conn:
-            # CASE guards JSON functions against legacy non-JSON metadata.
-            return conn.execute("""
-                WITH queue AS (
-                    SELECT id, campaign_id,
-                        CASE WHEN json_valid(metadata) THEN json_extract(metadata,'$.webhook_delivery') END AS delivery
-                    FROM alerts
-                )
-                SELECT campaign_id, id FROM queue
-                WHERE CASE WHEN json_valid(delivery) THEN
-                    json_type(delivery,'$.automatic') = 'true'
-                    AND json_extract(delivery,'$.destination_sha256') = ?
-                    AND json_extract(delivery,'$.status') IN ('queued','pending','receipt_unconfirmed')
-                    AND json_extract(delivery,'$.attempts') BETWEEN 0 AND 5
-                    AND (json_extract(delivery,'$.attempts') = 0 OR json_extract(delivery,'$.updated_at') <= ?)
-                END
+            return conn.execute(f"""
+                SELECT campaign_id, id FROM alerts
+                WHERE ({_AUTOMATIC_QUEUE_RECEIVER}) = ?
+                    AND CASE WHEN json_valid(metadata) THEN
+                        json_extract(metadata,'$.webhook_delivery.attempts') = 0
+                        OR json_extract(metadata,'$.webhook_delivery.updated_at') <= ?
+                    END
                 ORDER BY id LIMIT 1
             """, (fingerprint, before.strftime('%Y-%m-%dT%H:%M:%SZ'))).fetchone()
 

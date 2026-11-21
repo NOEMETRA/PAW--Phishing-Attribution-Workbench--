@@ -83,6 +83,8 @@ def main():
             with (root/'service.log').open('w') as output, closing(sqlite3.connect(database)) as conn:
                 proc = run(['--webhook',webhook], output)
                 wait_for(lambda: conn.execute('SELECT COUNT(*) FROM checks').fetchone()[0] == 1)
+                assert conn.execute("SELECT 1 FROM sqlite_master WHERE type='index' "
+                                    "AND name='sentinel_automatic_queue_receiver'").fetchone() == (1,)
                 body = b'changed once'
                 wait_for(first_seen.is_set, timeout=10)
                 proc.kill()
